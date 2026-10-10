@@ -40,6 +40,12 @@ class Excel(DataFormat):
     extensions = (".xlsx", ".xlsm")
     # polars reads Excel from bytes, fetched with fsspec so any storage works.
     preferred_requirements = ((Polars, Fastexcel, Fsspec), (Pandas, Openpyxl))
+    query_requirements = (Polars, Fastexcel)
+
+    def scan(self, target: Target, limits: PreviewLimits) -> Any:
+        # Excel cannot be read lazily: the first sheet is read whole (within
+        # the size limit for whole files) and queried in memory.
+        return Polars().load().read_excel(target.read_whole(limits)).lazy()
 
     def preview(self, target: Target, limits: PreviewLimits) -> list[Preview]:
         requirements = self.installed_requirements()

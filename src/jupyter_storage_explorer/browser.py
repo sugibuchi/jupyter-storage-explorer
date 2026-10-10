@@ -18,6 +18,7 @@ import anywidget
 import traitlets
 from fsspec.core import url_to_fs
 
+from jupyter_storage_explorer import query
 from jupyter_storage_explorer.formats import (
     DEFAULT_FORMATS,
     DataFormat,
@@ -33,6 +34,8 @@ from jupyter_storage_explorer.formats import (
 )
 from jupyter_storage_explorer.formats import detect as detect_format
 from jupyter_storage_explorer.formats.base import jsonable
+from jupyter_storage_explorer.query import QuerySettingsStore
+from jupyter_storage_explorer.query import default_store as default_query_settings
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -241,6 +244,12 @@ class StorageExplorer(anywidget.AnyWidget):
     ``protocol://path`` otherwise. Replace it to e.g. resolve a
     ``DirFileSystem`` to its underlying location; with several
     ``filesystems``, tell them apart by ``fs``.
+
+    With polars installed, tabular data (Parquet, Delta Lake, CSV, ...) opens
+    in a data browser ("Query data") with paging, sorting, filters and column
+    selection. Its settings are remembered per dataset by ``query_settings``
+    (a ``QuerySettingsStore``; by default shared by the explorers in the
+    kernel, in memory; give one with a path to keep them across restarts).
     """
 
     _esm = _STATIC / "browser.js"
@@ -263,10 +272,14 @@ class StorageExplorer(anywidget.AnyWidget):
     # Format of the current directory itself (e.g. "Delta Lake table"), or ""
     # if it cannot be previewed; enables the Preview button when nothing is selected.
     current_format = traitlets.Unicode().tag(sync=True)
+    # Whether the current directory can be queried in the data browser
+    # ("Query data" instead of "Preview").
+    current_query = traitlets.Bool().tag(sync=True)
     # Format of the single selected item, for the Preview button's label:
-    # {"path", "format"} ("format" is "" if it cannot be previewed); empty
-    # unless exactly one item is selected. The path lets the frontend ignore
-    # an answer for a previous selection.
+    # {"path", "format", "query"} ("format" is "" if it cannot be previewed;
+    # "query": whether it opens in the data browser); empty unless exactly one
+    # item is selected. The path lets the frontend ignore an answer for a
+    # previous selection.
     selected_format = traitlets.Dict().tag(sync=True)
     # Largest file that can be uploaded from the user's computer (bytes), or
     # None for no limit. Files dragged from JupyterLab's file browser are
@@ -288,9 +301,13 @@ class StorageExplorer(anywidget.AnyWidget):
         preview_limits: PreviewLimits | None = None,
         max_upload_bytes: int | None = 10 * 1024 * 1024,
         url_for: UrlFor | None = None,
+        query_settings: QuerySettingsStore | None = None,
         **storage_options: Any,
     ) -> None:
         self._url_for: UrlFor = url_for or default_url_for
+        self.query_settings = query_settings or default_query_settings
+        # Data browser: path -> (LazyFrame, schema) of the data being queried.
+        self._queries: dict[str, tuple[Any, Any]] = {}
         self.formats = list(DEFAULT_FORMATS if formats is None else formats)
         self.preview_limits = preview_limits or PreviewLimits()
         # Uploads from the user's computer in progress: id -> {"file", "target", ...}.
@@ -342,6 +359,7 @@ class StorageExplorer(anywidget.AnyWidget):
         # One update for the frontend: separate ones would let it combine the
         # new root with the old folder (or the reverse) and ask the new
         # filesystem to list the old filesystem's paths.
+        self._queries.clear()
         with self.hold_sync():
             self.preview = {}
             self.tree = {}
@@ -375,10 +393,13 @@ class StorageExplorer(anywidget.AnyWidget):
         path = change["new"][0]
         try:
             _, formats = self._detect(path)
-            name = formats[0].name if formats else ""
         except Exception:
-            name = ""  # detection is best-effort; a failure just means no preview
-        self.selected_format = {"path": path, "format": name}
+            formats = []  # detection is best-effort; a failure just means no preview
+        self.selected_format = {
+            "path": path,
+            "format": formats[0].name if formats else "",
+            "query": bool(formats) and formats[0].can_query(),
+        }
 
     def _detect(self, path: str) -> tuple[Target, list[DataFormat]]:
         """The target at ``path`` and the formats matching it, best first."""
@@ -411,16 +432,95 @@ class StorageExplorer(anywidget.AnyWidget):
                 if not formats:
                     raise ValueError(f"{path} cannot be previewed as {format}")
             if formats:
-                base["format"] = formats[0].name
-                base["sections"] = [
-                    _section(s) for s in formats[0].preview(target, self.preview_limits)
-                ]
+                fmt = formats[0]
+                base["format"] = fmt.name
+                if fmt.can_query():
+                    base["query"] = self._open_query(path, fmt, target)
+                else:
+                    base["sections"] = [
+                        _section(s) for s in fmt.preview(target, self.preview_limits)
+                    ]
         except Exception as exc:
             base["error"] = f"{type(exc).__name__}: {exc}"
         self.preview = base
 
     def close_preview(self) -> None:
+        self._queries.clear()
         self.preview = {}
+
+    # --- Data browser ("Query data") ---
+
+    def _open_query(self, path: str, fmt: DataFormat, target: Target) -> dict[str, Any]:
+        """Open ``path`` in the data browser: its columns and remembered settings.
+
+        The frontend then asks for rows with "query_rows".
+        """
+        lf = fmt.scan(target, self.preview_limits)
+        schema = lf.collect_schema()
+        self._queries[path] = (lf, schema)
+        remembered = self.query_settings.get(self._url(path))
+        return {
+            "columns": query.columns_info(schema),
+            "settings": query.normalize_settings(remembered, schema),
+        }
+
+    def _query_save(self, content: dict[str, Any]) -> dict[str, Any]:
+        """Remember settings changed without fetching rows (e.g. column widths)."""
+        path = content["path"]
+        if path in self._queries:
+            _, schema = self._queries[path]
+            settings = query.normalize_settings(content.get("settings"), schema)
+            self.query_settings.set(self._url(path), settings)
+        return {}
+
+    def _query_check(self, content: dict[str, Any]) -> dict[str, Any]:
+        """Check one filter before the frontend applies it: {} if it can run,
+        else {"error": message} (e.g. an invalid regular expression)."""
+        path, column = content["path"], content["column"]
+        if path not in self._queries:
+            return {"error": "the data is no longer open; preview it again"}
+        _, schema = self._queries[path]
+        settings = query.normalize_settings(
+            {"filters": {column: content["filter"]}}, schema
+        )
+        if column not in settings["filters"]:
+            return {"error": f"this filter is not available for {column!r}"}
+        try:
+            query.check_filter(column, schema[column], settings["filters"][column])
+        except ValueError as exc:
+            return {"error": str(exc)}
+        return {}
+
+    def _query_rows(self, content: dict[str, Any]) -> dict[str, Any]:
+        """Rows ``offset`` to ``offset + window`` of the data, with the frontend's
+        settings applied; also remembers those settings for the dataset."""
+        path = content["path"]
+        if path not in self._queries:
+            return {"error": "the data is no longer open; preview it again"}
+        lf, schema = self._queries[path]
+        settings = query.normalize_settings(content.get("settings"), schema)
+        self.query_settings.set(self._url(path), settings)
+        offset = max(0, int(content.get("offset", 0)))
+        window = max(1, int(content.get("window", 1000)))
+        try:
+            # One extra row tells whether there are more.
+            df = (
+                query.build_query(lf, schema, settings)
+                .slice(offset, window + 1)
+                .collect()
+            )
+        except Exception as exc:
+            return {"error": f"{type(exc).__name__}: {exc}", "settings": settings}
+        more = df.height > window
+        df = df.head(window)
+        return {
+            "offset": offset,
+            "columns": df.columns,
+            "dtypes": [str(t) for t in df.dtypes],
+            "rows": [[jsonable(v) for v in row] for row in df.rows()],
+            "more": more,
+            "settings": settings,
+        }
 
     def recipes(self, path: str) -> list[Recipe]:
         """Ways to load ``path`` in the notebook, from its best-matching format.
@@ -449,6 +549,7 @@ class StorageExplorer(anywidget.AnyWidget):
             reply["editable"] = not target.is_dir and any(
                 isinstance(f, Text) for f in formats
             )
+            reply["query"] = bool(formats) and formats[0].can_query()
         except Exception as exc:
             reply["error"] = f"{type(exc).__name__}: {exc}"
         self.send(reply)
@@ -768,6 +869,9 @@ class StorageExplorer(anywidget.AnyWidget):
             "upload_done": lambda c, _: self._reply(c, self._upload_done(c["dest"])),
             "vendor": lambda c, _: self._reply(c, self._vendor_source(c["name"])),
             "move": lambda c, _: self._reply(c, self._move_request(c)),
+            "query_rows": lambda c, _: self._reply(c, self._query_rows(c)),
+            "query_check": lambda c, _: self._reply(c, self._query_check(c)),
+            "query_save": lambda c, _: self._reply(c, self._query_save(c)),
         }
 
     def _upload_done(self, dest: str) -> dict[str, Any]:
@@ -846,17 +950,43 @@ class StorageExplorer(anywidget.AnyWidget):
             self.entries = []
             self.selected = []
             self.current_format = ""
+            self.current_query = False
             return
         self.error = ""
         self._set_children(path, infos)
         self.entries = [
-            {**(e := _entry(i)), "url": self._url(e["path"])} for i in infos
+            {
+                **(e := _entry(i)),
+                "url": self._url(e["path"]),
+                "format": self._file_format(i),
+            }
+            for i in infos
         ]
         self.selected = []
-        self.current_format = self._directory_format(path, infos)
+        fmt = self._directory_format(path, infos)
+        self.current_format = fmt.name if fmt is not None else ""
+        self.current_query = fmt is not None and fmt.can_query()
 
-    def _directory_format(self, path: str, infos: list[dict[str, Any]]) -> str:
-        """Name of the format of directory ``path`` given its listing, or "" if none."""
+    def _file_format(self, info: dict[str, Any]) -> str:
+        """The format of a listed file as a CSS-friendly name, e.g. "json-lines".
+
+        Shown as the row's ``data-file-format``. Empty for folders (detecting
+        them would mean listing each one) and unrecognised files.
+        """
+        if info.get("type") == "directory":
+            return ""
+        path = _norm(info["name"])
+        target = Target(fs=self.fs, path=path, url=self._url(path), info=info)
+        try:
+            fmt = detect_format(target, self.formats)
+        except Exception:
+            return ""  # detection is best-effort
+        return fmt.name.lower().replace(" ", "-") if fmt is not None else ""
+
+    def _directory_format(
+        self, path: str, infos: list[dict[str, Any]]
+    ) -> DataFormat | None:
+        """The format of directory ``path`` given its listing, if any."""
         # The listing is all directory formats need, so skip fetching the
         # directory's own info.
         target = Target(
@@ -867,7 +997,6 @@ class StorageExplorer(anywidget.AnyWidget):
             children=infos,
         )
         try:
-            fmt = detect_format(target, self.formats)
+            return detect_format(target, self.formats)
         except Exception:
-            return ""  # detection is best-effort; a failure just means no preview
-        return fmt.name if fmt is not None else ""
+            return None  # detection is best-effort; a failure just means no preview

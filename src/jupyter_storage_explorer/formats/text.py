@@ -123,6 +123,7 @@ class Csv(DataFormat):
     name = "CSV"
     extensions = (".csv", ".tsv")
     preferred_requirements = ((Polars,), (Pandas,))
+    query_requirements = (Polars,)
 
     def _separator(self, target: Target, sample: str) -> str:
         if target.name.lower().endswith(".tsv"):
@@ -131,6 +132,20 @@ class Csv(DataFormat):
             return csv.Sniffer().sniff(sample, delimiters=",;\t|").delimiter
         except csv.Error:
             return ","
+
+    def scan(self, target: Target, limits: PreviewLimits) -> Any:
+        separator = self._separator(target, target.head_text(4096)[0])
+        # try_parse_dates: date columns get date filters (<, >, ...) instead of text ones.
+        return (
+            Polars()
+            .load()
+            .scan_csv(
+                target.url,
+                separator=separator,
+                truncate_ragged_lines=True,
+                try_parse_dates=True,
+            )
+        )
 
     def preview(self, target: Target, limits: PreviewLimits) -> list[Preview]:
         requirements = self.installed_requirements()
@@ -222,6 +237,10 @@ class JsonLines(DataFormat):
     name = "JSON Lines"
     extensions = (".jsonl", ".ndjson")
     preferred_requirements = ((Polars,), (Pandas,))
+    query_requirements = (Polars,)
+
+    def scan(self, target: Target, limits: PreviewLimits) -> Any:
+        return Polars().load().scan_ndjson(target.url)
 
     def preview(self, target: Target, limits: PreviewLimits) -> list[Preview]:
         requirements = self.installed_requirements()
