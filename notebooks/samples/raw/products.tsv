@@ -1,0 +1,6 @@
+product	category	caffeine
+Coffee	Hot	true
+Tea	Hot	true
+Cocoa	Hot	false
+Juice	Cold	false
+Water	Cold	false

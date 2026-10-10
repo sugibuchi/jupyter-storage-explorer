@@ -1,0 +1,60 @@
+{"ts": "2026-10-01T09:00:00Z", "user": 8, "event": "buy"}
+{"ts": "2026-10-01T09:01:00Z", "user": 31, "event": "view"}
+{"ts": "2026-10-01T09:02:00Z", "user": 46, "event": "view", "items": ["Coffee"]}
+{"ts": "2026-10-01T09:03:00Z", "user": 36, "event": "cart"}
+{"ts": "2026-10-01T09:04:00Z", "user": 25, "event": "cart"}
+{"ts": "2026-10-01T09:05:00Z", "user": 23, "event": "cart", "items": ["Tea"]}
+{"ts": "2026-10-01T09:06:00Z", "user": 30, "event": "view"}
+{"ts": "2026-10-01T09:07:00Z", "user": 47, "event": "cart"}
+{"ts": "2026-10-01T09:08:00Z", "user": 21, "event": "view", "items": ["Tea"]}
+{"ts": "2026-10-01T09:09:00Z", "user": 3, "event": "buy"}
+{"ts": "2026-10-01T09:10:00Z", "user": 48, "event": "view", "items": ["Tea"]}
+{"ts": "2026-10-01T09:11:00Z", "user": 19, "event": "view", "items": ["Coffee"]}
+{"ts": "2026-10-01T09:12:00Z", "user": 25, "event": "buy"}
+{"ts": "2026-10-01T09:13:00Z", "user": 32, "event": "buy"}
+{"ts": "2026-10-01T09:14:00Z", "user": 44, "event": "cart", "items": ["Tea"]}
+{"ts": "2026-10-01T09:15:00Z", "user": 47, "event": "buy"}
+{"ts": "2026-10-01T09:16:00Z", "user": 30, "event": "view"}
+{"ts": "2026-10-01T09:17:00Z", "user": 23, "event": "view", "items": ["Tea"]}
+{"ts": "2026-10-01T09:18:00Z", "user": 12, "event": "buy"}
+{"ts": "2026-10-01T09:19:00Z", "user": 4, "event": "buy", "items": ["Coffee"]}
+{"ts": "2026-10-01T09:20:00Z", "user": 43, "event": "view"}
+{"ts": "2026-10-01T09:21:00Z", "user": 27, "event": "view"}
+{"ts": "2026-10-01T09:22:00Z", "user": 15, "event": "view"}
+{"ts": "2026-10-01T09:23:00Z", "user": 1, "event": "view"}
+{"ts": "2026-10-01T09:24:00Z", "user": 24, "event": "view"}
+{"ts": "2026-10-01T09:25:00Z", "user": 43, "event": "buy"}
+{"ts": "2026-10-01T09:26:00Z", "user": 43, "event": "cart", "items": ["Tea"]}
+{"ts": "2026-10-01T09:27:00Z", "user": 1, "event": "view"}
+{"ts": "2026-10-01T09:28:00Z", "user": 18, "event": "buy"}
+{"ts": "2026-10-01T09:29:00Z", "user": 2, "event": "buy"}
+{"ts": "2026-10-01T09:30:00Z", "user": 44, "event": "cart"}
+{"ts": "2026-10-01T09:31:00Z", "user": 12, "event": "view"}
+{"ts": "2026-10-01T09:32:00Z", "user": 34, "event": "view", "items": ["Tea"]}
+{"ts": "2026-10-01T09:33:00Z", "user": 23, "event": "cart"}
+{"ts": "2026-10-01T09:34:00Z", "user": 6, "event": "cart"}
+{"ts": "2026-10-01T09:35:00Z", "user": 30, "event": "buy", "items": ["Coffee"]}
+{"ts": "2026-10-01T09:36:00Z", "user": 20, "event": "buy"}
+{"ts": "2026-10-01T09:37:00Z", "user": 6, "event": "buy"}
+{"ts": "2026-10-01T09:38:00Z", "user": 42, "event": "view", "items": ["Tea"]}
+{"ts": "2026-10-01T09:39:00Z", "user": 25, "event": "buy"}
+{"ts": "2026-10-01T09:40:00Z", "user": 41, "event": "view"}
+{"ts": "2026-10-01T09:41:00Z", "user": 6, "event": "cart"}
+{"ts": "2026-10-01T09:42:00Z", "user": 42, "event": "cart"}
+{"ts": "2026-10-01T09:43:00Z", "user": 7, "event": "buy"}
+{"ts": "2026-10-01T09:44:00Z", "user": 15, "event": "view"}
+{"ts": "2026-10-01T09:45:00Z", "user": 45, "event": "buy"}
+{"ts": "2026-10-01T09:46:00Z", "user": 3, "event": "view"}
+{"ts": "2026-10-01T09:47:00Z", "user": 18, "event": "buy"}
+{"ts": "2026-10-01T09:48:00Z", "user": 3, "event": "view"}
+{"ts": "2026-10-01T09:49:00Z", "user": 21, "event": "view"}
+{"ts": "2026-10-01T09:50:00Z", "user": 38, "event": "view"}
+{"ts": "2026-10-01T09:51:00Z", "user": 46, "event": "cart"}
+{"ts": "2026-10-01T09:52:00Z", "user": 20, "event": "view"}
+{"ts": "2026-10-01T09:53:00Z", "user": 37, "event": "cart"}
+{"ts": "2026-10-01T09:54:00Z", "user": 35, "event": "cart", "items": ["Coffee"]}
+{"ts": "2026-10-01T09:55:00Z", "user": 45, "event": "buy", "items": ["Tea"]}
+{"ts": "2026-10-01T09:56:00Z", "user": 4, "event": "view"}
+{"ts": "2026-10-01T09:57:00Z", "user": 5, "event": "cart"}
+{"ts": "2026-10-01T09:58:00Z", "user": 40, "event": "buy", "items": ["Tea"]}
+{"ts": "2026-10-01T09:59:00Z", "user": 2, "event": "buy", "items": ["Tea"]}

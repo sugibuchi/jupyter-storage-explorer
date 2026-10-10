@@ -1,0 +1,32 @@
+[
+  {
+    "name": "orders",
+    "owner": {
+      "team": "sales",
+      "contact": "sales@example.com"
+    },
+    "columns": [
+      "order_id",
+      "order_date",
+      "customer_id",
+      "product",
+      "quantity",
+      "unit_price"
+    ],
+    "refresh": "daily"
+  },
+  {
+    "name": "customers",
+    "owner": {
+      "team": "crm",
+      "contact": "crm@example.com"
+    },
+    "columns": [
+      "customer_id",
+      "name",
+      "country",
+      "since"
+    ],
+    "refresh": "weekly"
+  }
+]

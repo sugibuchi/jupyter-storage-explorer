@@ -1,0 +1,81 @@
+[project]
+name = "jupyter-storage-explorer"
+dynamic = ["version"]
+description = "A storage explorer for Jupyter: browse cloud storage and data lakes, preview Parquet, Delta Lake and more"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "anywidget>=0.9",
+    "fsspec>=2023.1.0",
+    "pygments>=2.12",
+    "traitlets>=5.4",
+]
+
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "vcs"
+raw-options = { 'version_scheme' = 'post-release' }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/jupyter_storage_explorer"]
+
+[dependency-groups]
+dev = [
+    "deltalake>=1.6.6",
+    "fastexcel>=0.21.0",
+    "jupyterlab>=4.6.4",
+    "openpyxl>=3.1.5",
+    "pandas>=3.0.6",
+    "polars>=2.0.0",
+    "pyarrow>=26.0.0",
+]
+
+[tool.uv]
+# Rebuild the project when its git commit or tags change, as its version
+# comes from git (hatch-vcs), not only when pyproject.toml changes.
+cache-keys = [{ file = "pyproject.toml" }, { git = { commit = true, tags = true } }]
+
+[tool.ruff]
+exclude = [
+    ".tox",
+    "build",
+    "src/jupyter_storage_explorer/_version",
+]
+line-length = 88
+
+[tool.ruff.lint]
+select = [
+    "ASYNC",
+    "B",
+    "C",
+    "G",
+    "E",
+    "F",
+    "FURB",
+    "I",
+    "LOG",
+    "PERF",
+    "PLC",
+    "PLE",
+    "PLR",
+    "PLW",
+    "PIE",
+    "PYI",
+    "RUF",
+    "SIM",
+    "SLOT",
+    "TC",
+    "UP",
+]
+ignore = [
+    "E501",
+    "PLR0911",
+    "PLR0912",
+    "PLR0913",
+    "PLR0915",
+    "PLR2004",
+    "SIM117",
+]

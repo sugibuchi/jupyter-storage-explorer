@@ -1,0 +1,5 @@
+pipeline: daily_orders
+schedule: "0 3 * * *"
+steps:
+  - ingest: raw/orders.csv
+  - write: lake/orders_by_month

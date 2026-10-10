@@ -1,0 +1,693 @@
+.jse-browser {
+  --jse-bg: var(--jp-layout-color1, #fff);
+  --jse-bg-alt: var(--jp-layout-color2, #f3f3f3);
+  --jse-fg: var(--jp-ui-font-color1, #222);
+  --jse-fg-muted: var(--jp-ui-font-color2, #666);
+  --jse-border: var(--jp-border-color2, #ddd);
+  --jse-hover: var(--jp-layout-color3, #e6e6e6);
+  --jse-accent: var(--jp-brand-color1, #1976d2);
+  --jse-accent-bg: var(--jp-brand-color3, #bbdefb);
+  --jse-error: var(--jp-error-color1, #d32f2f);
+
+  position: relative; /* the "Python code" dialog covers the widget */
+  display: flex;
+  flex-direction: column;
+  /* No fixed height: the widget is as tall as its areas (tree and list, and
+     the preview panel when open), each resizable by dragging. */
+  border: 1px solid var(--jse-border);
+  border-radius: 4px;
+  background: var(--jse-bg);
+  color: var(--jse-fg);
+  font-family: var(--jp-ui-font-family, system-ui, sans-serif);
+  font-size: var(--jp-ui-font-size1, 13px);
+  overflow: hidden;
+  outline: none; /* focusable only to receive Escape */
+}
+
+.jse-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--jse-border);
+  background: var(--jse-bg-alt);
+}
+
+.jse-fs-select {
+  max-width: 200px;
+  padding: 2px 4px;
+  border: 1px solid var(--jse-border);
+  border-radius: 3px;
+  background: var(--jse-bg);
+  color: var(--jse-fg);
+  font: inherit;
+}
+
+.jse-fs-select[hidden] {
+  display: none;
+}
+
+.jse-btn {
+  min-width: 26px;
+  padding: 2px 6px;
+  border: 1px solid var(--jse-border);
+  border-radius: 3px;
+  background: var(--jse-bg);
+  color: var(--jse-fg);
+  cursor: pointer;
+}
+
+.jse-btn:hover:not(:disabled) {
+  background: var(--jse-hover);
+}
+
+.jse-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.jse-path {
+  flex: 1;
+  min-width: 0;
+  margin-left: 6px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.jse-crumb {
+  cursor: pointer;
+  border-radius: 3px;
+  padding: 1px 3px;
+}
+
+.jse-crumb:hover {
+  background: var(--jse-hover);
+}
+
+.jse-sep {
+  color: var(--jse-fg-muted);
+  padding: 0 1px;
+}
+
+.jse-panes {
+  display: flex;
+  flex: none;
+  height: var(--jse-height, 400px); /* until resized by dragging */
+  min-height: 80px;
+}
+
+.jse-tree {
+  width: 260px;
+  min-width: 120px;
+  max-width: 70%;
+  overflow: auto;
+  resize: horizontal;
+  border-right: 1px solid var(--jse-border);
+  padding: 4px 0;
+}
+
+.jse-node {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px 2px 4px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.jse-node:hover {
+  background: var(--jse-hover);
+}
+
+.jse-node.jse-active {
+  background: var(--jse-accent-bg);
+}
+
+.jse-twisty {
+  display: inline-block;
+  width: 12px;
+  text-align: center;
+  color: var(--jse-fg-muted);
+}
+
+.jse-icon {
+  margin-right: 4px;
+}
+
+.jse-list {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+}
+
+.jse-list table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.jse-list th {
+  position: sticky;
+  top: 0;
+  background: var(--jse-bg-alt);
+  border-bottom: 1px solid var(--jse-border);
+  padding: 4px 8px;
+  text-align: left;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+
+.jse-list td {
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+.jse-list tbody tr {
+  cursor: default;
+  user-select: none;
+}
+
+.jse-list tbody tr:hover {
+  background: var(--jse-hover);
+}
+
+.jse-list tbody tr.jse-selected {
+  background: var(--jse-accent-bg);
+}
+
+.jse-col-name {
+  width: 100%;
+  max-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.jse-col-size {
+  text-align: right !important;
+}
+
+.jse-list td.jse-col-mtime {
+  color: var(--jse-fg-muted);
+}
+
+.jse-preview-panel {
+  display: flex;
+  flex-direction: column;
+  flex: none;
+  height: 300px; /* until resized by dragging */
+  min-height: 80px;
+  border-top: 1px solid var(--jse-border);
+  outline: none;
+}
+
+.jse-preview-panel[hidden] {
+  display: none;
+}
+
+/* In the panel, the previewed content fills its height and follows resizing:
+   the body is a column, and sections that show content (not the install
+   notice) share the height and scroll inside instead of stopping at a fixed
+   maximum. */
+.jse-preview-panel .jse-dialog-body {
+  display: flex;
+  flex-direction: column;
+}
+
+.jse-preview-panel .jse-section-markdown,
+.jse-preview-panel .jse-section-table,
+.jse-preview-panel .jse-section-text,
+.jse-preview-panel .jse-section-tree,
+.jse-preview-panel .jse-section-media {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 80px;
+  margin-bottom: 0;
+}
+
+.jse-preview-panel .jse-section-title,
+.jse-preview-panel .jse-note {
+  flex: none;
+}
+
+.jse-preview-panel .jse-markdown,
+.jse-preview-panel .jse-table-wrap,
+.jse-preview-panel .jse-text,
+.jse-preview-panel .jse-json {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  overflow: auto;
+}
+
+/* Fills the space; large images shrink to fit, small ones keep their size. */
+.jse-preview-panel .jse-media {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  max-height: none;
+  border: none;
+  object-fit: scale-down;
+  object-position: left top;
+}
+
+.jse-splitter {
+  flex: none;
+  height: 5px;
+  cursor: row-resize;
+  background: var(--jse-bg-alt);
+  border-bottom: 1px solid var(--jse-border);
+}
+
+.jse-splitter:hover,
+.jse-grip:hover {
+  background: var(--jse-accent-bg);
+}
+
+.jse-grip {
+  flex: none;
+  height: 6px;
+  cursor: ns-resize;
+  background: var(--jse-bg-alt);
+}
+
+/* Backdrop dimming the widget; the modal window is centred on it. */
+.jse-dialog {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.35);
+  outline: none;
+}
+
+.jse-dialog[hidden] {
+  display: none;
+}
+
+.jse-modal {
+  display: flex;
+  flex-direction: column;
+  width: min(640px, calc(100% - 32px));
+  max-height: calc(100% - 32px);
+  border: 1px solid var(--jse-border);
+  border-radius: 6px;
+  background: var(--jse-bg);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+}
+
+.jse-editor {
+  width: min(900px, calc(100% - 32px));
+  height: calc(100% - 32px);
+}
+
+.jse-editor-text {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 8px 10px;
+  border: none;
+  outline: none;
+  resize: none;
+  background: var(--jse-bg);
+  color: var(--jse-fg);
+  font-family: var(--jp-code-font-family, monospace);
+  font-size: var(--jp-code-font-size, 13px);
+  white-space: pre;
+  tab-size: 4;
+}
+
+.jse-editor-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-top: 1px solid var(--jse-border);
+  background: var(--jse-bg-alt);
+}
+
+.jse-editor-msg {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--jse-fg-muted);
+}
+
+.jse-editor-msg.jse-error-text {
+  color: var(--jse-error);
+  white-space: normal;
+}
+
+.jse-btn.jse-primary:not(:disabled) {
+  border-color: var(--jse-accent);
+  background: var(--jse-accent);
+  color: #fff;
+}
+
+/* Sized by its content (scrolling past max-height), unlike in the preview panel. */
+.jse-modal .jse-dialog-body {
+  flex: 1 1 auto;
+}
+
+.jse-dialog-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px 4px 10px;
+  border-bottom: 1px solid var(--jse-border);
+  background: var(--jse-bg-alt);
+}
+
+.jse-spacer {
+  flex: 1;
+}
+
+.jse-dialog-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px 10px;
+}
+
+.jse-placeholder {
+  color: var(--jse-fg-muted);
+  padding: 8px 0;
+}
+
+.jse-preview-name {
+  min-width: 0;
+  font-weight: 600;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.jse-badge {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: var(--jse-accent-bg);
+  font-size: 0.9em;
+}
+
+.jse-confirm {
+  width: min(460px, calc(100% - 32px));
+}
+
+/* Where files dragged in from JupyterLab's file browser will be uploaded. */
+.jse-list.jse-drop-target {
+  outline: 2px dashed var(--jse-accent);
+  outline-offset: -2px;
+}
+
+.jse-node.jse-drop-target,
+.jse-list tr.jse-drop-target {
+  background: var(--jse-accent-bg);
+  outline: 1px solid var(--jse-accent);
+  outline-offset: -1px;
+}
+
+.jse-install {
+  padding: 8px 10px 2px;
+  border-left: 3px solid var(--jse-accent);
+  background: var(--jse-bg-alt);
+}
+
+.jse-install .jse-recipe {
+  margin: 8px 0;
+}
+
+.jse-preview-error {
+  color: var(--jse-error);
+  white-space: pre-wrap;
+}
+
+.jse-section {
+  margin-bottom: 10px;
+}
+
+.jse-section-title {
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.jse-note {
+  color: var(--jse-fg-muted);
+  font-size: 0.9em;
+  margin-top: 2px;
+}
+
+.jse-table-wrap {
+  max-height: 360px;
+  overflow: auto;
+  border: 1px solid var(--jse-border);
+}
+
+.jse-data {
+  border-collapse: collapse;
+  font-family: var(--jp-code-font-family, monospace);
+  font-size: 0.9em;
+}
+
+.jse-data th,
+.jse-data td {
+  padding: 2px 8px;
+  border-bottom: 1px solid var(--jse-border);
+  text-align: left;
+  white-space: nowrap;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.jse-data thead th {
+  position: sticky;
+  top: 0;
+  background: var(--jse-bg-alt);
+}
+
+.jse-data .jse-dtypes th {
+  top: 1.6em;
+  font-weight: normal;
+  color: var(--jse-fg-muted);
+}
+
+.jse-null {
+  color: var(--jse-fg-muted);
+  font-style: italic;
+}
+
+.jse-text,
+.jse-code {
+  margin: 0;
+  padding: 6px 8px;
+  max-height: 260px;
+  overflow: auto;
+  background: var(--jse-bg-alt);
+  border: 1px solid var(--jse-border);
+  font-family: var(--jp-code-font-family, monospace);
+  font-size: 0.9em;
+  white-space: pre;
+}
+
+/* Syntax highlighting of text previews: Pygments' token classes, coloured
+   with JupyterLab's code colours (so they follow its theme, dark included),
+   with fallbacks for other frontends. */
+.jse-highlight .k, .jse-highlight .kc, .jse-highlight .kd, .jse-highlight .kn,
+.jse-highlight .kp, .jse-highlight .kr, .jse-highlight .ow {
+  color: var(--jp-mirror-editor-keyword-color, #008000);
+  font-weight: bold;
+}
+
+.jse-highlight .kt, .jse-highlight .nb, .jse-highlight .bp {
+  color: var(--jp-mirror-editor-builtin-color, #008000);
+}
+
+.jse-highlight .s, .jse-highlight .sa, .jse-highlight .sb, .jse-highlight .sc,
+.jse-highlight .dl, .jse-highlight .sd, .jse-highlight .s1, .jse-highlight .s2,
+.jse-highlight .se, .jse-highlight .sh, .jse-highlight .si, .jse-highlight .sx,
+.jse-highlight .sr, .jse-highlight .ss {
+  color: var(--jp-mirror-editor-string-color, #ba2121);
+}
+
+.jse-highlight .c, .jse-highlight .ch, .jse-highlight .cm, .jse-highlight .c1,
+.jse-highlight .cs, .jse-highlight .cpf {
+  color: var(--jp-mirror-editor-comment-color, #408080);
+  font-style: italic;
+}
+
+.jse-highlight .m, .jse-highlight .mb, .jse-highlight .mf, .jse-highlight .mh,
+.jse-highlight .mi, .jse-highlight .mo, .jse-highlight .il, .jse-highlight .kc {
+  color: var(--jp-mirror-editor-number-color, #080);
+}
+
+.jse-highlight .o {
+  color: var(--jp-mirror-editor-operator-color, #aa22ff);
+}
+
+/* YAML keys, XML/HTML tags and attributes, JSON keys */
+.jse-highlight .nt {
+  color: var(--jp-mirror-editor-keyword-color, #008000);
+}
+
+.jse-highlight .na, .jse-highlight .nv, .jse-highlight .vg, .jse-highlight .vi {
+  color: var(--jp-mirror-editor-variable-color, #19177c);
+}
+
+.jse-highlight .nf, .jse-highlight .nc, .jse-highlight .fm {
+  color: var(--jp-mirror-editor-def-color, #0000ff);
+}
+
+.jse-highlight .cp, .jse-highlight .nd, .jse-highlight .gh, .jse-highlight .gu {
+  color: var(--jp-mirror-editor-meta-color, #aa22ff);
+}
+
+.jse-highlight .err {
+  color: var(--jp-mirror-editor-error-color, #f00);
+}
+
+/* Rendered Markdown. Inside JupyterLab, jp-RenderedHTMLCommon styles it like
+   a Markdown cell; these keep it readable elsewhere. */
+.jse-markdown {
+  padding: 0 4px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.jse-markdown img {
+  max-width: 100%;
+}
+
+.jse-markdown pre {
+  overflow: auto;
+  padding: 6px 8px;
+  background: var(--jse-bg-alt);
+}
+
+.jse-markdown table {
+  border-collapse: collapse;
+}
+
+.jse-markdown th,
+.jse-markdown td {
+  padding: 2px 8px;
+  border: 1px solid var(--jse-border);
+}
+
+.jse-json {
+  font-family: var(--jp-code-font-family, monospace);
+  font-size: 0.9em;
+}
+
+.jse-json details > :not(summary) {
+  margin-left: 14px;
+}
+
+.jse-json summary {
+  cursor: pointer;
+}
+
+.jse-media {
+  max-width: 100%;
+  max-height: 300px;
+  border: 1px solid var(--jse-border);
+}
+
+.jse-recipe {
+  margin-bottom: 10px;
+}
+
+.jse-recipe-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2px;
+  font-weight: 600;
+}
+
+.jse-menu {
+  position: absolute;
+  z-index: 20; /* above the preview dialog */
+  min-width: 150px;
+  padding: 4px 0;
+  border: 1px solid var(--jse-border);
+  border-radius: 4px;
+  background: var(--jse-bg);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.jse-menu[hidden] {
+  display: none;
+}
+
+.jse-menu-item {
+  padding: 4px 14px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.jse-menu-item:hover:not(.jse-disabled) {
+  background: var(--jse-hover);
+}
+
+.jse-menu-item.jse-disabled {
+  color: var(--jse-fg-muted);
+  opacity: 0.6;
+  cursor: default;
+}
+
+.jse-menu-item.jse-has-sub {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.jse-menu .jse-menu-item[hidden] {
+  display: none;
+}
+
+.jse-sub-arrow {
+  color: var(--jse-fg-muted);
+}
+
+.jse-submenu {
+  display: none;
+  top: -5px;
+  left: 100%;
+}
+
+.jse-menu.jse-flip .jse-submenu {
+  left: auto;
+  right: 100%;
+}
+
+.jse-has-sub:hover > .jse-submenu {
+  display: block;
+}
+
+.jse-menu-sep {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--jse-border);
+}
+
+.jse-status {
+  padding: 3px 8px;
+  border-top: 1px solid var(--jse-border);
+  background: var(--jse-bg-alt);
+  color: var(--jse-fg-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.jse-status.jse-error {
+  color: var(--jse-error);
+}
