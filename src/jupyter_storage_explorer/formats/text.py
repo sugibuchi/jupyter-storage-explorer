@@ -43,7 +43,7 @@ def _highlight(text: str, language: str | None) -> str | None:
     """``text`` as HTML with syntax highlighting, or None if the language is unknown.
 
     Pygments escapes the text; tokens get its short CSS classes (k for
-    keywords, s for strings, ...), which browser.css colours.
+    keywords, s for strings, ...), which storage_explorer.css colours.
     """
     if language is None:
         return None
@@ -125,26 +125,25 @@ class Csv(DataFormat):
     preferred_requirements = ((Polars,), (Pandas,))
     query_requirements = (Polars,)
 
-    def _separator(self, target: Target, sample: str) -> str:
-        if target.name.lower().endswith(".tsv"):
+    def _separator(self, name: str, sample: str) -> str:
+        """The separator of a file named (or located at) ``name``, from a sample of it."""
+        if name.lower().endswith(".tsv"):
             return "\t"
         try:
             return csv.Sniffer().sniff(sample, delimiters=",;\t|").delimiter
         except csv.Error:
             return ","
 
-    def scan(self, target: Target, limits: PreviewLimits) -> Any:
-        separator = self._separator(target, target.head_text(4096)[0])
+    def scan(self, url: str) -> Any:
+        pl = Polars().load()
+        # The first lines, read by polars too, so any URL it reads works.
+        sample = "\n".join(pl.scan_lines(url).head(20).collect()["line"])
         # try_parse_dates: date columns get date filters (<, >, ...) instead of text ones.
-        return (
-            Polars()
-            .load()
-            .scan_csv(
-                target.url,
-                separator=separator,
-                truncate_ragged_lines=True,
-                try_parse_dates=True,
-            )
+        return pl.scan_csv(
+            url,
+            separator=self._separator(url, sample),
+            truncate_ragged_lines=True,
+            try_parse_dates=True,
         )
 
     def preview(self, target: Target, limits: PreviewLimits) -> list[Preview]:
@@ -162,7 +161,7 @@ class Csv(DataFormat):
         text, truncated = target.head_text(limits.max_bytes)
         df = pl.read_csv(
             io.BytesIO(text.encode()),
-            separator=self._separator(target, text),
+            separator=self._separator(target.name, text),
             n_rows=limits.max_rows,
             truncate_ragged_lines=True,
         )
@@ -178,7 +177,9 @@ class Csv(DataFormat):
         pd = Pandas().load()
         text, truncated = target.head_text(limits.max_bytes)
         df = pd.read_csv(
-            io.StringIO(text), sep=self._separator(target, text), nrows=limits.max_rows
+            io.StringIO(text),
+            sep=self._separator(target.name, text),
+            nrows=limits.max_rows,
         )
         return [
             pandas_table(
@@ -192,7 +193,7 @@ class Csv(DataFormat):
         requirements: Requirements,
         storage_options: Mapping[str, Any],
     ) -> str:
-        sep = self._separator(target, target.head_text(4096)[0])
+        sep = self._separator(target.name, target.head_text(4096)[0])
         sep = None if sep == "," else sep
         options = dict(storage_options) or None
         if Polars in requirements:
@@ -239,8 +240,8 @@ class JsonLines(DataFormat):
     preferred_requirements = ((Polars,), (Pandas,))
     query_requirements = (Polars,)
 
-    def scan(self, target: Target, limits: PreviewLimits) -> Any:
-        return Polars().load().scan_ndjson(target.url)
+    def scan(self, url: str) -> Any:
+        return Polars().load().scan_ndjson(url)
 
     def preview(self, target: Target, limits: PreviewLimits) -> list[Preview]:
         requirements = self.installed_requirements()

@@ -9,26 +9,16 @@ import importlib
 import importlib.util
 import math
 import types
-from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, ClassVar, TypeAlias
-
-from fsspec import AbstractFileSystem
+from typing import TYPE_CHECKING, Any, ClassVar, TypeAlias
 
 # Always installed: anywidget needs ipywidgets, which needs IPython.
 from IPython import get_ipython
 
-# Turns a path on a filesystem into the location that code (and users) use for
-# it, e.g. "s3://bucket/key". Customizable with StorageExplorer(url_for=...).
-UrlFor: TypeAlias = Callable[[AbstractFileSystem, str], str]
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Mapping, Sequence
 
-
-def default_url_for(fs: AbstractFileSystem, path: str) -> str:
-    """A plain path for local files, which every library reads; else ``protocol://path``."""
-    protocols = (fs.protocol,) if isinstance(fs.protocol, str) else fs.protocol
-    if "file" in protocols:
-        return path
-    return fs.unstrip_protocol(path)
+    from fsspec import AbstractFileSystem
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -38,7 +28,7 @@ class Target:
     fs: AbstractFileSystem
     path: str
     # Location to use in generated code and for libraries to read, e.g.
-    # "s3://bucket/key"; the browser sets it with its url_for.
+    # "s3://bucket/key"; set by StorageExplorer._url.
     url: str
     info: Mapping[str, Any]
     # Listing of the directory (fsspec ``ls(detail=True)`` entries); None for files.
@@ -51,25 +41,6 @@ class Target:
     @property
     def name(self) -> str:
         return self.path.rstrip("/").rsplit("/", 1)[-1]
-
-    def url_for(self, path: str) -> str:
-        """Like ``url``, for a path inside this directory (e.g. one of its files).
-
-        Appends the rest of ``path`` to ``url``: "s3://bucket/ds" for
-        "bucket/ds" gives "s3://bucket/ds/year=2025/part-0.parquet" for
-        "bucket/ds/year=2025/part-0.parquet".
-        """
-        base = self.path.rstrip("/")
-        if path.rstrip("/") == base:
-            return self.url
-        if base and not path.startswith(base + "/"):
-            raise ValueError(f"{path} is not inside {self.path}")
-        rest = path[len(base) :]
-        if not rest.startswith("/"):
-            rest = "/" + rest  # a top-level path of "" (e.g. a DirFileSystem's)
-        # Drop one trailing "/" only: "memory:///" + "/x" must give "memory:///x".
-        url = self.url.removesuffix("/")
-        return url + rest
 
     @property
     def size(self) -> int | None:
@@ -372,10 +343,12 @@ class DataFormat(abc.ABC):
             r().is_installed() for r in self.query_requirements
         )
 
-    def scan(self, target: Target, limits: PreviewLimits) -> Any:
-        """A polars LazyFrame over the data, for the data browser.
+    def scan(self, url: str) -> Any:
+        """A polars LazyFrame over the data at ``url``, for the data browser.
 
-        Only called when ``can_query()``. Should read lazily where the format
+        ``url`` is a location polars reads itself: a local path or a cloud URL
+        (e.g. "s3://bucket/key"), with credentials from the environment. Only
+        called when ``can_query()``. Should read lazily where the format
         allows, as the browser only fetches the rows it shows.
         """
         raise NotImplementedError(f"{self.name} cannot be queried")

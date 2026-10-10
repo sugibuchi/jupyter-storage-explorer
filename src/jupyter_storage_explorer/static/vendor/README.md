@@ -2,7 +2,7 @@
 
 Used to render Markdown previews in the browser. They are loaded on demand:
 the widget asks the kernel for a file's source (only the files listed in
-`browser.py`'s `_VENDOR_FILES`) and imports it as a module.
+`storage_explorer.py`'s `_VENDOR_FILES`) and imports it as a module.
 
 | File | Library | Version | License |
 |---|---|---|---|

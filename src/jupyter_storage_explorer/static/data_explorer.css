@@ -1,0 +1,9 @@
+/* DataExplorer: the data browser alone, under a title bar. The body's height
+   is set from the `height` trait (and by dragging the grip). */
+.jse-data-explorer .jse-data-explorer-body {
+  display: flex;
+  flex-direction: column;
+  flex: none;
+  min-height: 80px;
+  overflow: hidden;
+}
