@@ -22,12 +22,12 @@ pip install jupyter-storage-explorer
 
 Install the package for your storage too:
 
-| Storage                        | Package    | Address                 |
-|--------------------------------|------------|-------------------------|
-| Amazon S3                      | `s3fs`     | `s3://bucket/path`      |
-| Azure Data Lake / Blob Storage | `adlfs`    | `abfs://container/path` |
-| Google Cloud Storage           | `gcsfs`    | `gs://bucket/path`      |
-| Local disk, in-memory          | (included) | `/path`, `memory://`    |
+| Storage                        | Package    | Address                                              |
+|--------------------------------|------------|------------------------------------------------------|
+| Amazon S3                      | `s3fs`     | `s3://bucket/path`                                   |
+| Azure Data Lake / Blob Storage | `adlfs`    | `abfs://container@account.dfs.core.windows.net/path` |
+| Google Cloud Storage           | `gcsfs`    | `gs://bucket/path`                                   |
+| Local disk, in-memory          | (included) | `/path`, `memory://`                                 |
 
 Previewing and querying data files needs a data library, e.g. `pip install polars deltalake`. If one is missing, the
 preview tells you what to install.
@@ -44,12 +44,12 @@ The explorer appears as the cell's output. Other examples:
 
 ```python
 StorageExplorer()  # the current folder
-StorageExplorer("abfs://lake/raw", account_name="myaccount")  # Azure, with options
+StorageExplorer("abfs://lake@myaccount.dfs.core.windows.net/raw")  # Azure Data Lake
+StorageExplorer("s3://my-bucket/data", profile="analytics")  # Amazon S3, with options
 StorageExplorer("gs://my-bucket", token="google_default")  # Google Cloud
 ```
 
-Options after the address (like `account_name` above) are passed to the storage package, for example to choose an
-account or credentials.
+Options after the address (like `profile` above) are passed to the storage package, for example to choose credentials.
 
 To open one table directly, see [DataExplorer](#dataexplorer-one-table). The `notebooks` folder has a demo of each
 widget (`storage_explorer.ipynb`, `data_explorer.ipynb`) on sample data made by `make_samples.py`.
@@ -73,7 +73,7 @@ folder you were in.
 ```python
 StorageExplorer(
     filesystems={
-        "Data lake": "abfs://lake",
+        "Data lake": "abfs://lake@myaccount.dfs.core.windows.net",
         "Raw files (S3)": "s3://my-bucket/raw",
         "Local": "/home/me/data",
     },
@@ -173,12 +173,12 @@ looks the same in both.
 
 | Format                                                       | Preview                       | Query data | Load with               |
 |--------------------------------------------------------------|-------------------------------|------------|-------------------------|
-| Delta Lake tables                                            | First rows                    | ✓         | polars (with deltalake) |
-| Parquet files, and folders of them (e.g. Spark, Hive output) | First rows                    | ✓         | polars, pandas          |
-| CSV, TSV                                                     | First rows                    | ✓         | polars, pandas          |
-| JSON Lines                                                   | First records                 | ✓         | polars, pandas          |
+| Delta Lake tables                                            | First rows                    | ✓          | polars (with deltalake) |
+| Parquet files, and folders of them (e.g. Spark, Hive output) | First rows                    | ✓          | polars, pandas          |
+| CSV, TSV                                                     | First rows                    | ✓          | polars, pandas          |
+| JSON Lines                                                   | First records                 | ✓          | polars, pandas          |
 | JSON                                                         | Collapsible tree              |            | Python, polars, pandas  |
-| Excel (`.xlsx`)                                              | First rows of the first sheet | ✓         | polars, pandas          |
+| Excel (`.xlsx`)                                              | First rows of the first sheet | ✓          | polars, pandas          |
 | Markdown                                                     | Rendered                      |            | Python                  |
 | Text, code, configuration (YAML, SQL, Python, …)             | With syntax highlighting      |            | Python                  |
 | Images (PNG, JPEG, GIF, SVG, …)                              | Shown                         |            | Pillow                  |

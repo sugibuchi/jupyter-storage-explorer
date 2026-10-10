@@ -16,7 +16,10 @@ for example::
     def launch():
         return StorageExplorer(
             # "." is the folder the kernel started in
-            filesystems={"Here": ".", "Data lake": "abfs://lake"},
+            filesystems={
+                "Here": ".",
+                "Data lake": "abfs://lake@myaccount.dfs.core.windows.net",
+            },
             height="fill",  # as tall as the tab
         )
 

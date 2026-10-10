@@ -25,7 +25,7 @@ from jupyter_storage_explorer import StorageExplorer
 def launch():
     return StorageExplorer(
         # "." is the folder the tab opens on (see above)
-        filesystems={"Here": ".", "Data lake": "abfs://lake"},
+        filesystems={"Here": ".", "Data lake": "abfs://lake@myaccount.dfs.core.windows.net"},
         height="fill",  # as tall as the tab
     )
 ```
