@@ -38,6 +38,14 @@ coverage.xml
 .pytype/
 .ruff_cache/
 
+# --- JupyterLab extension (launcher/labextension/) ---
+node_modules/
+launcher/labextension/lib/
+launcher/labextension/.yarn/
+*.tsbuildinfo
+# Built into the launcher package by `jlpm build`
+launcher/src/jupyter_storage_explorer_launcher/labextension/
+
 # --- IPython / Jupyter ---
 .ipynb_checkpoints/
 */.ipynb_checkpoints/*

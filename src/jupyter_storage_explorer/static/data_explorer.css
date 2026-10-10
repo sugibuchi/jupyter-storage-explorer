@@ -7,3 +7,8 @@
   min-height: 80px;
   overflow: hidden;
 }
+
+/* Filling: the table area takes the height under the title bar. */
+.jse-data-explorer.jse-fill .jse-data-explorer-body {
+  flex: 1 1 0;
+}

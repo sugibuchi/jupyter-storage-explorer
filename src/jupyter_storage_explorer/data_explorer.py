@@ -57,7 +57,8 @@ class DataExplorer(anywidget.AnyWidget):
 
     Settings (filters, sort, hidden columns, widths) are remembered per
     dataset by ``query_settings``, shared with ``StorageExplorer`` (see
-    there). ``height`` is the height of the table area.
+    there). ``height`` is the height of the table area; ``"fill"`` makes the
+    widget as tall as its container (e.g. a tab, not a notebook cell).
     """
 
     _esm = _static.esm("data_explorer")

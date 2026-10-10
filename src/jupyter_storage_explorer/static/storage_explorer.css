@@ -54,6 +54,11 @@
   min-height: 80px;
 }
 
+/* Filling: the tree and list take what the preview panel leaves. */
+.jse-browser.jse-fill .jse-panes {
+  flex: 1 1 0;
+}
+
 .jse-tree {
   width: 260px;
   min-width: 120px;

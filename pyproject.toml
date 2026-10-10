@@ -22,16 +22,30 @@ raw-options = { 'version_scheme' = 'post-release' }
 [tool.hatch.build.targets.wheel]
 packages = ["src/jupyter_storage_explorer"]
 
+[tool.hatch.build.targets.sdist]
+exclude = ["launcher", ".github"]
+
 [dependency-groups]
 dev = [
     "deltalake>=1.6.6",
     "fastexcel>=0.21.0",
+    "jupyter-storage-explorer-launcher",
     "jupyterlab>=4.6.4",
+    "nodejs-wheel>=24.19.0",
     "openpyxl>=3.1.5",
     "pandas>=3.0.6",
     "polars>=2.0.0",
     "pyarrow>=26.0.0",
 ]
+
+# Two packages, released together: jupyter-storage-explorer (this folder: the
+# widgets) and jupyter-storage-explorer-launcher (launcher/: the JupyterLab
+# launcher item). Both are installed for development.
+[tool.uv.workspace]
+members = ["launcher"]
+
+[tool.uv.sources]
+jupyter-storage-explorer-launcher = { workspace = true }
 
 [tool.uv]
 # Rebuild the project when its git commit or tags change, as its version

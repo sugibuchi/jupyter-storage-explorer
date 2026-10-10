@@ -1,0 +1,47 @@
+[project]
+name = "jupyter-storage-explorer-launcher"
+dynamic = ["version"]
+description = "Adds Jupyter Storage Explorer to the JupyterLab launcher, opening it in a tab"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "jupyter-core>=5",
+    "jupyter-storage-explorer",
+]
+
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+# The same version as jupyter-storage-explorer: from the repository's git tags.
+[tool.hatch.version]
+source = "vcs"
+raw-options = { root = "..", version_scheme = "post-release" }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/jupyter_storage_explorer_launcher"]
+
+# The JupyterLab extension, installed where JupyterLab finds prebuilt
+# extensions. Packaging does not build it: build it first with
+# `uv run jlpm build:prod` in labextension/ (see DEVELOPMENT.md).
+[tool.hatch.build.targets.wheel.shared-data]
+"src/jupyter_storage_explorer_launcher/labextension" = "share/jupyter/labextensions/jupyter-storage-explorer-launcher"
+"install.json" = "share/jupyter/labextensions/jupyter-storage-explorer-launcher/install.json"
+
+[tool.hatch.build.targets.sdist]
+exclude = ["labextension/node_modules", "labextension/lib", "labextension/.yarn"]
+# The built extension (git-ignored) too, so building a wheel from the sdist
+# needs no Node.js.
+artifacts = ["src/jupyter_storage_explorer_launcher/labextension"]
+
+[tool.uv]
+# Rebuilding the extension (which changes its package.json) reinstalls the
+# package; the version comes from git, hence the git keys.
+cache-keys = [
+    { file = "pyproject.toml" },
+    { file = "src/jupyter_storage_explorer_launcher/labextension/package.json" },
+    { git = { commit = true, tags = true } },
+]
+
+[tool.uv.sources]
+jupyter-storage-explorer = { workspace = true }
