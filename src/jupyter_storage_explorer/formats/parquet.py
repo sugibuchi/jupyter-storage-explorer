@@ -121,8 +121,8 @@ def _is_dataset(entries: Iterable[Mapping[str, Any]], fs: Any) -> bool:
     return hive_file is None or _starts_like_parquet(fs, hive_file)
 
 
-def _data_files(target: Target, limit: int) -> list[str]:
-    """Paths of up to ``limit`` Parquet files directly in the directory, from its listing."""
+def _data_files(target: Target, limit: int | None = None) -> list[str]:
+    """Paths of (up to ``limit``) Parquet files directly in the directory, from its listing."""
     files = sorted(
         e["name"]
         for e in target.children or ()
@@ -136,11 +136,22 @@ class Parquet(DataFormat):
     extensions = (".parquet", ".parq")
     priority = 10  # above generic directories, below table formats such as Delta Lake
     preferred_requirements = ((Polars,), (Pandas, PyArrow))
+    query_requirements = (Polars,)
 
     def matches(self, target: Target) -> bool:
         if target.is_dir:
             return _is_dataset(target.children, target.fs)
         return super().matches(target)
+
+    def scan(self, target: Target, limits: PreviewLimits) -> Any:
+        pl = Polars().load()
+        if target.is_dir:
+            # All the directory's own data files (not only the preview's first few).
+            files = _data_files(target)
+            if not files:
+                raise ValueError("no Parquet files found")
+            return pl.scan_parquet([target.url_for(f) for f in files])
+        return pl.scan_parquet(target.url)
 
     def preview(self, target: Target, limits: PreviewLimits) -> list[Preview]:
         requirements = self.installed_requirements()

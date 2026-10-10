@@ -24,9 +24,13 @@ class DeltaLake(DataFormat):
     name = "Delta Lake table"
     priority = 20  # a Delta table is also a directory of Parquet files
     preferred_requirements = ((Polars, DeltaLakePackage),)
+    query_requirements = (Polars, DeltaLakePackage)
 
     def matches(self, target: Target) -> bool:
         return target.is_dir and "_delta_log" in target.child_names
+
+    def scan(self, target: Target, limits: PreviewLimits) -> Any:
+        return Polars().load().scan_delta(target.url)
 
     def preview(self, target: Target, limits: PreviewLimits) -> list[Preview]:
         if self.installed_requirements() is None:

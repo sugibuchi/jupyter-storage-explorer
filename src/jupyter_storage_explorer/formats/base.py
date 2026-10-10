@@ -350,6 +350,9 @@ class DataFormat(abc.ABC):
     # Sets of packages that can read this format, most preferred first,
     # e.g. ((Polars, DeltaLake), (Pandas,)). Each set yields one recipe.
     preferred_requirements: ClassVar[tuple[Requirements, ...]] = ()
+    # Packages needed to query the data interactively (the data browser,
+    # "Query data"), e.g. (Polars, DeltaLake). Empty: the format cannot be queried.
+    query_requirements: ClassVar[Requirements] = ()
 
     def matches(self, target: Target) -> bool:
         """Whether ``target`` is in this format. Must be cheap: called on every click."""
@@ -362,6 +365,20 @@ class DataFormat(abc.ABC):
         Implementations typically pick a library with ``installed_requirements``
         and return ``install_hint()`` when none is installed.
         """
+
+    def can_query(self) -> bool:
+        """Whether the data browser can query this format: its packages are installed."""
+        return bool(self.query_requirements) and all(
+            r().is_installed() for r in self.query_requirements
+        )
+
+    def scan(self, target: Target, limits: PreviewLimits) -> Any:
+        """A polars LazyFrame over the data, for the data browser.
+
+        Only called when ``can_query()``. Should read lazily where the format
+        allows, as the browser only fetches the rows it shows.
+        """
+        raise NotImplementedError(f"{self.name} cannot be queried")
 
     def installed_requirements(self) -> Requirements | None:
         """The first of ``preferred_requirements`` whose packages are all installed."""
