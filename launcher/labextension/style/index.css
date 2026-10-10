@@ -1,0 +1,63 @@
+/* The explorer tab is a code console showing only the output of its one
+   cell: the banner, the prompt for new code, the cell's input, the output
+   prompts and the bars for collapsing them are hidden. */
+.jse-launcher-panel .jp-CodeConsole-banner,
+.jse-launcher-panel .jp-CodeConsole-input,
+.jse-launcher-panel .jp-CodeConsole-promptCell,
+.jse-launcher-panel .jp-CodeConsole-content .jp-Cell-inputWrapper,
+.jse-launcher-panel .jp-OutputPrompt,
+.jse-launcher-panel .jp-OutputArea-prompt,
+.jse-launcher-panel .jp-OutputArea-promptOverlay,
+.jse-launcher-panel .jp-Collapser {
+  display: none;
+}
+
+/* The console splits its height between the cells and the (hidden) input;
+   the cells take it all. Lumino sets the split's sizes inline. */
+.jse-launcher-panel .jp-CodeConsole-split > .lm-SplitPanel-handle {
+  display: none;
+}
+
+.jse-launcher-panel .jp-CodeConsole-split > .jp-CodeConsole-content {
+  height: 100% !important;
+}
+
+/* The cell and its output stretch to the tab's height, so a widget with
+   height="fill" fills the tab. Other outputs (e.g. an error) are not affected. */
+.jse-launcher-panel .jp-CodeConsole-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.jse-launcher-panel .jp-CodeConsole-content > .jp-Console-cell,
+.jse-launcher-panel .jp-Cell-outputArea {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.jse-launcher-panel .jp-Cell-outputWrapper {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* Of the outputs, the widget's takes the height. */
+.jse-launcher-panel .jp-OutputArea-child:has(.jse-widget) {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* The output of launcher.py's style(): a <style> element, which applies even
+   when hidden. */
+.jse-launcher-panel .jp-OutputArea-child:has(.jp-RenderedHTMLCommon > style:only-child) {
+  display: none;
+}
+
+.jse-launcher-panel .jp-OutputArea-output {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+}

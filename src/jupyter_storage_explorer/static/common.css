@@ -28,6 +28,19 @@
   outline: none; /* focusable only to receive Escape */
 }
 
+/* height="fill": as tall as the container (which needs a height of its own,
+   e.g. the launcher's tab); each widget's CSS says which area takes the
+   space. Resizing the whole widget by dragging is then off. */
+.jse-widget.jse-fill {
+  flex: 1 1 auto;
+  height: 100%;
+  min-height: 0;
+}
+
+.jse-widget.jse-fill > .jse-grip {
+  display: none;
+}
+
 .jse-btn {
   min-width: 26px;
   padding: 2px 6px;

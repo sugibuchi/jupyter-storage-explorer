@@ -1267,8 +1267,12 @@ function render({ model, el }) {
     renderPath();
   }
 
+  // "fill": the widget fills its container (see "jse-fill" in the CSS);
+  // otherwise the CSS height of the tree and list.
   function applyHeight() {
-    el.style.setProperty("--jse-height", model.get("_height"));
+    const height = model.get("_height");
+    el.classList.toggle("jse-fill", height === "fill");
+    el.style.setProperty("--jse-height", height === "fill" ? "" : height);
     panesEl.style.height = ""; // a new `height` replaces any dragged size
   }
 

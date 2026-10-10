@@ -231,7 +231,9 @@ class StorageExplorer(anywidget.AnyWidget):
     It cannot be combined with ``path``, ``fs`` or storage options.
 
     ``height`` is the height of the tree and file list; the preview panel adds
-    to it. ``formats`` replaces the formats that can be previewed (default:
+    to it. ``height="fill"`` makes the explorer as tall as its container
+    instead, e.g. the tab opened from JupyterLab's launcher (not a notebook
+    cell, which has no height of its own). ``formats`` replaces the formats that can be previewed (default:
     ``DEFAULT_FORMATS``). ``max_upload_bytes`` limits the size of files
     uploaded from the user's computer (default 10 MB; None for no limit).
 

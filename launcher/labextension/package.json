@@ -1,0 +1,76 @@
+{
+  "name": "jupyter-storage-explorer-launcher",
+  "version": "0.1.0",
+  "description": "JupyterLab launcher item that opens Storage Explorer in a tab",
+  "private": true,
+  "keywords": [
+    "jupyter",
+    "jupyterlab",
+    "jupyterlab-extension"
+  ],
+  "files": [
+    "lib/**/*.{d.ts,js,js.map}",
+    "style/**/*.{css,js,svg}"
+  ],
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "style": "style/index.css",
+  "sideEffects": [
+    "style/*.css",
+    "style/index.js"
+  ],
+  "styleModule": "style/index.js",
+  "scripts": {
+    "build": "jlpm build:lib && jlpm build:labextension:dev",
+    "build:prod": "jlpm clean && jlpm build:lib:prod && jlpm build:labextension",
+    "build:lib": "tsc --sourceMap",
+    "build:lib:prod": "tsc",
+    "build:labextension": "jupyter labextension build .",
+    "build:labextension:dev": "jupyter labextension build --development True .",
+    "clean": "rimraf lib tsconfig.tsbuildinfo ../src/jupyter_storage_explorer_launcher/labextension"
+  },
+  "dependencies": {
+    "@jupyterlab/application": "^4.0.0",
+    "@jupyterlab/apputils": "^4.0.0",
+    "@jupyterlab/console": "^4.0.0",
+    "@jupyterlab/launcher": "^4.0.0",
+    "@jupyterlab/ui-components": "^4.0.0"
+  },
+  "devDependencies": {
+    "@jupyter/builder": "^1.2.3",
+    "@jupyterlab/core-meta": "^4.6.0",
+    "rimraf": "^5.0.0",
+    "typescript": "~5.5.4"
+  },
+  "jupyterlab": {
+    "extension": true,
+    "outputDir": "../src/jupyter_storage_explorer_launcher/labextension",
+    "sharedPackages": {
+      "@jupyterlab/application": {
+        "bundled": false,
+        "singleton": true,
+        "requiredVersion": "^4.0.0"
+      },
+      "@jupyterlab/apputils": {
+        "bundled": false,
+        "singleton": true,
+        "requiredVersion": "^4.0.0"
+      },
+      "@jupyterlab/console": {
+        "bundled": false,
+        "singleton": true,
+        "requiredVersion": "^4.0.0"
+      },
+      "@jupyterlab/launcher": {
+        "bundled": false,
+        "singleton": true,
+        "requiredVersion": "^4.0.0"
+      },
+      "@jupyterlab/ui-components": {
+        "bundled": false,
+        "singleton": true,
+        "requiredVersion": "^4.0.0"
+      }
+    }
+  }
+}

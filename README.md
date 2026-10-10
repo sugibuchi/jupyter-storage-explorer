@@ -12,6 +12,8 @@ Two widgets:
 - **`StorageExplorer`**: the file explorer, with previews and the data browser.
 - **`DataExplorer`**: the data browser alone, for one table.
 
+![StorageExplorer: a folder of the sample data lake, with a JSON Lines file open in the data browser](figs/storage-explorer.png)
+
 ## Installation
 
 ```bash
@@ -52,6 +54,17 @@ account or credentials.
 To open one table directly, see [DataExplorer](#dataexplorer-one-table). The `notebooks` folder has a demo of each
 widget (`storage_explorer.ipynb`, `data_explorer.ipynb`) on sample data made by `make_samples.py`.
 
+### From the JupyterLab launcher
+
+The separate package **`jupyter-storage-explorer-launcher`** adds **Storage Explorer** to JupyterLab's launcher and
+command palette, opening the explorer in its own tab on the launcher's folder (the one the file browser showed):
+
+```bash
+pip install jupyter-storage-explorer-launcher
+```
+
+What the tab shows can be configured with a `launcher.py` file; see the [launcher's README](launcher/README.md).
+
 ### Several storages in one explorer
 
 Give each storage a name; a drop-down on the left of the address bar switches between them, and each one remembers the
@@ -85,7 +98,7 @@ StorageExplorer(
 - Tables (Delta Lake, Parquet, CSV, JSON Lines, Excel) open in the data browser instead when polars is installed: the
   button reads *Query data (…)*. See [Query data](#query-data).
 - Drag the bar above the panel to share the space between the list and the preview; drag the bar at the bottom to make
-  the whole explorer taller or shorter.
+  the whole explorer taller or shorter (not with `height="fill"`, where it follows its container).
 
 **Right-click menu**
 
@@ -109,7 +122,8 @@ StorageExplorer(
 ## Query data
 
 With [polars](https://pola.rs) installed (plus `deltalake` for Delta Lake tables and `fastexcel` for Excel), tables open
-in a data browser rather than a fixed preview of the first rows. Only the rows on screen are read.
+in a data browser rather than a fixed preview of the first rows. Rows are read 1,000 at a time as you page, not the whole
+table (except Excel files, which are read whole).
 
 - **Page** through the rows with ◀ and ▶, 100 rows at a time.
 - **Sort**: click a column name; click again for descending, a third time to stop sorting.
@@ -148,6 +162,8 @@ DataExplorer("data/orders.tsv", format="CSV")  # choose the format by name
 DataExplorer("abfs://lake@myaccount.dfs.core.windows.net/raw/orders.parquet", height="600px")
 ```
 
+![DataExplorer showing a Delta Lake table in a notebook](figs/data-explorer.png)
+
 Options after the address are passed to the storage package, as for `StorageExplorer`; `query_settings=` works the same
 way. If polars (or a package the format needs, such as `deltalake`) is not installed, `DataExplorer` raises an error
 with the `%pip install` command instead of opening. Settings are shared with the explorer's Query data, so a table
@@ -181,61 +197,12 @@ explorer.selected_urls  # the URLs of the selected items
 
 ## Options
 
-| Option                              | Meaning                                                                              |
-|-------------------------------------|--------------------------------------------------------------------------------------|
-| `height="400px"`                    | Height of the tree and list; the preview panel adds its own space below.             |
-| `max_upload_bytes=10 * 1024 * 1024` | Largest file you can upload from your computer (default 10 MB; `None` for no limit). |
-| `filesystems={...}`                 | Several named storages, as shown above.                                              |
-| `query_settings=...`                | Where the data browser keeps its settings; see [Query data](#query-data).            |
-
-## Customizing icons
-
-Rows in the explorer carry attributes you can style with CSS:
-
-- **Folders** (tree and list): `data-depth`, their level below the top folder: `0` for the top folder itself, `1` for
-  the folders in it, and so on.
-- **Files** (list): `data-file-format`, the format name in lower case with `-` for spaces: `parquet`, `csv`, `json`,
-  `json-lines`, `excel-workbook`, `markdown`, `text`, `image`. Files of no known format, or without a URL, have none.
-
-Run CSS in a notebook cell, before or after the explorer. This example shows the top folder as a grey container,
-the folders in it in blue-grey and deeper folders in yellow, and gives data files their own icons:
-
-```python
-from IPython.display import HTML
-
-HTML("""<style>
-/* Folders: draw an SVG shape in a colour, both chosen per depth below */
-.jse-browser [data-depth] .jse-icon { font-size: 0; }
-.jse-browser [data-depth] .jse-icon::before {
-  content: ""; display: inline-block; width: 16px; height: 13px; vertical-align: -2px;
-  background: var(--folder-color);
-  -webkit-mask: var(--folder-shape) no-repeat center / contain;
-          mask: var(--folder-shape) no-repeat center / contain;
-}
-.jse-browser [data-depth] {
-  --folder-color: #eab308;
-  --folder-shape: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 13'%3E%3Cpath d='M0 1.5A1.5 1.5 0 0 1 1.5 0h4l1.5 2h7.5A1.5 1.5 0 0 1 16 3.5v8a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 0 11.5z'/%3E%3C/svg%3E");
-}
-.jse-browser [data-depth="1"] { --folder-color: #64748b; }
-.jse-browser [data-depth="0"] {
-  --folder-color: #6b7280;
-  --folder-shape: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 13'%3E%3Cpath fill-rule='evenodd' d='M1 0.5h14a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H1a1 1 0 0 1-1-1v-10a1 1 0 0 1 1-1zM3 3v7h1.3V3zM6 3v7h1.3V3zM9 3v7h1.3V3zM12 3v7h1.3V3z'/%3E%3C/svg%3E");
-}
-
-/* Files: a different emoji per format */
-.jse-browser [data-file-format] .jse-icon { font-size: 0; }
-.jse-browser [data-file-format] .jse-icon::before { font-size: 14px; content: "📄"; }
-.jse-browser [data-file-format="csv"] .jse-icon::before,
-.jse-browser [data-file-format="excel-workbook"] .jse-icon::before { content: "📊"; }
-.jse-browser [data-file-format="parquet"] .jse-icon::before { content: "🧱"; }
-.jse-browser [data-file-format="image"] .jse-icon::before { content: "🖼️"; }
-.jse-browser [data-file-format="markdown"] .jse-icon::before { content: "📝"; }
-</style>""")
-```
-
-`HTML(...)` must be the last line of the cell (or use `display(HTML(...))`). The style lasts until the page is reloaded.
-To apply it to every notebook, save the CSS (without `<style>`) to `~/.jupyter/custom/custom.css` and start JupyterLab
-with `jupyter lab --LabApp.custom_css=True`.
+| Option                              | Meaning                                                                                                                               |
+|-------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------|
+| `height="400px"`                    | Height of the tree and list; the preview panel adds its own space below. `"fill"`: as tall as the container, e.g. the launcher's tab. |
+| `max_upload_bytes=10 * 1024 * 1024` | Largest file you can upload from your computer (default 10 MB; `None` for no limit).                                                  |
+| `filesystems={...}`                 | Several named storages, as shown above.                                                                                               |
+| `query_settings=...`                | Where the data browser keeps its settings; see [Query data](#query-data).                                                             |
 
 ## Requirements
 
@@ -243,3 +210,8 @@ with `jupyter lab --LabApp.custom_css=True`.
 - JupyterLab 4. The widgets also show in other Jupyter frontends, but dragging files from JupyterLab's file browser
   works only in JupyterLab.
 - For Query data and `DataExplorer`: a recent polars (tested with polars 2.0).
+
+## Development
+
+Building from source, the JupyterLab extension, releasing, and customizing the explorer's icons with CSS:
+see [DEVELOPMENT.md](DEVELOPMENT.md).

@@ -38,9 +38,12 @@ function render({ model, el }) {
     body.replaceChildren(panel.el);
   }
 
-  // Height of the table area: the `height` trait until resized by dragging.
+  // Height of the table area: the `height` trait until resized by dragging;
+  // "fill": the widget fills its container (see "jse-fill" in the CSS).
   function applyHeight() {
-    body.style.height = model.get("height");
+    const height = model.get("height");
+    el.classList.toggle("jse-fill", height === "fill");
+    body.style.height = height === "fill" ? "" : height;
   }
 
   onDragY(grip, () => {
