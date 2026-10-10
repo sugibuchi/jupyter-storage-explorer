@@ -235,17 +235,29 @@ class Requirement:
         )
 
     @property
+    def setup_command(self) -> str | None:
+        """Lines that set the package up once in a notebook, after installing it
+        (e.g. creating a Spark session), or None.
+
+        Recipes put them with the install lines, run once before the load
+        code, and leave them out when ``get_module_name()`` finds the package
+        set up already.
+        """
+        return None
+
+    @property
     def setup_code(self) -> str:
-        """The install and import lines still needed in the notebook, possibly none.
+        """The install, setup and import lines still needed in the notebook, possibly none.
 
         The install line is left out if the package is installed, and the
-        import line if it is already imported (or never imported).
+        setup and import lines if it is already set up or imported (or never
+        imported).
         """
         lines = []
         if not self.is_installed():
             lines.append(self.install_command)
-        if self.import_command and self.get_module_name() is None:
-            lines.append(self.import_command)
+        if self.get_module_name() is None:
+            lines += [c for c in (self.setup_command, self.import_command) if c]
         return "\n".join(lines)
 
     def get_module_name(self, namespace: Mapping[str, Any] | None = None) -> str | None:
@@ -286,7 +298,8 @@ class Recipe:
     """One way to load the data in a notebook, e.g. with polars or with pandas."""
 
     library: str  # label shown to the user, e.g. "polars"
-    # %pip lines for the packages not installed yet; empty when all are installed.
+    # To run once first: %pip lines for the packages not installed yet, then
+    # their setup still needed (e.g. a Spark session); empty when neither is.
     install: str
     code: str  # import lines still needed, then the loading code
 
@@ -300,6 +313,26 @@ def format_args(*args: Any, **kwargs: Any) -> str:
     parts = [repr(a) for a in args]
     parts += [f"{k}={v!r}" for k, v in kwargs.items() if v is not None]
     return ", ".join(parts)
+
+
+# Spark (Hadoop) names for storage URLs: TLS "abfss" for Azure, as Spark
+# expects it (storage accounts usually require secure transfer); "s3a", the
+# S3 connector of open-source Hadoop (Databricks and EMR accept it too).
+_SPARK_SCHEMES = {"abfs": "abfss", "az": "abfss", "s3": "s3a"}
+
+
+def spark_url(url: str) -> str:
+    """``url`` as Spark reads it, e.g. "abfss://c@a.dfs.core.windows.net/x" for
+    "abfs://c@a.dfs.core.windows.net/x" or "s3a://bucket/x" for "s3://bucket/x".
+
+    Other URLs and local paths are unchanged.
+    """
+    scheme, sep, rest = url.partition("://")
+    return (
+        f"{_SPARK_SCHEMES[scheme]}://{rest}"
+        if sep and scheme in _SPARK_SCHEMES
+        else url
+    )
 
 
 # --- Formats ----------------------------------------------------------------
@@ -321,6 +354,9 @@ class DataFormat(abc.ABC):
     # Sets of packages that can read this format, most preferred first,
     # e.g. ((Polars, DeltaLake), (Pandas,)). Each set yields one recipe.
     preferred_requirements: ClassVar[tuple[Requirements, ...]] = ()
+    # Sets of packages that only appear in recipes (load code), after those of
+    # ``preferred_requirements``; previews never use them, e.g. ((PySpark,),).
+    code_only_requirements: ClassVar[tuple[Requirements, ...]] = ()
     # Packages needed to query the data interactively (the data browser,
     # "Query data"), e.g. (Polars, DeltaLake). Empty: the format cannot be queried.
     query_requirements: ClassVar[Requirements] = ()
@@ -380,7 +416,8 @@ class DataFormat(abc.ABC):
         requirements: Requirements,
         storage_options: Mapping[str, Any],
     ) -> str:
-        """Code that loads ``target`` with one set of ``preferred_requirements``.
+        """Code that loads ``target`` with one set of ``preferred_requirements``
+        or ``code_only_requirements``.
 
         Refer to packages by ``Requirement.code_name()``; their install and
         import lines are added by ``recipes``. ``storage_options`` are the
@@ -392,21 +429,25 @@ class DataFormat(abc.ABC):
     def recipes(
         self, target: Target, storage_options: Mapping[str, Any]
     ) -> list[Recipe]:
-        """Ways to load ``target`` in a notebook, one per set of ``preferred_requirements``."""
+        """Ways to load ``target`` in a notebook, one per set of
+        ``preferred_requirements`` and then of ``code_only_requirements``."""
         recipes = []
-        for requirements in self.preferred_requirements:
+        for requirements in (
+            *self.preferred_requirements,
+            *self.code_only_requirements,
+        ):
             instances = [r() for r in requirements]
             install = [r.install_command for r in instances if not r.is_installed()]
-            imports = [
-                r.import_command
-                for r in instances
-                if r.import_command and r.get_module_name() is None
-            ]
+            missing = [r for r in instances if r.get_module_name() is None]
+            setup = [r.setup_command for r in missing if r.setup_command]
+            imports = [r.import_command for r in missing if r.import_command]
             code = self.load_code(target, requirements, storage_options)
             recipes.append(
                 Recipe(
                     library=requirements[0].package,
-                    install="\n".join(install),
+                    install="\n\n".join(
+                        part for part in ("\n".join(install), *setup) if part
+                    ),
                     code="\n".join([*imports, "", code]).strip(),
                 )
             )

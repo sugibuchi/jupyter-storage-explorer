@@ -105,8 +105,9 @@ StorageExplorer(
 - **Preview** (or **Query data**) / **Preview as ▸**: show a file in another way, e.g. a JSON file as text.
 - **Open**: open a folder.
 - **Edit**: edit a text file, then **Save** or **Cancel**.
-- **Python code ▸ Load with polars / pandas / …**: the code to load the data into your notebook, with the install
-  command if a package is missing. Copy it into a cell.
+- **Python code ▸ Load with polars / pandas / pyspark / …**: the code to load the data into your notebook, with the
+  install command if a package is missing. Copy it into a cell. The PySpark code uses the notebook's `spark` session
+  (or creates one) and Spark's own storage settings.
 - **Download**: save the selected files to your computer.
 - **Copy URL**: copy the location of the selected items. Azure locations name the account, e.g.
   `abfs://container@myaccount.dfs.core.windows.net/raw/orders.csv`.
@@ -171,17 +172,17 @@ looks the same in both.
 
 ## Supported formats
 
-| Format                                                       | Preview                       | Query data | Load with               |
-|--------------------------------------------------------------|-------------------------------|------------|-------------------------|
-| Delta Lake tables                                            | First rows                    | ✓          | polars (with deltalake) |
-| Parquet files, and folders of them (e.g. Spark, Hive output) | First rows                    | ✓          | polars, pandas          |
-| CSV, TSV                                                     | First rows                    | ✓          | polars, pandas          |
-| JSON Lines                                                   | First records                 | ✓          | polars, pandas          |
-| JSON                                                         | Collapsible tree              |            | Python, polars, pandas  |
-| Excel (`.xlsx`)                                              | First rows of the first sheet | ✓          | polars, pandas          |
-| Markdown                                                     | Rendered                      |            | Python                  |
-| Text, code, configuration (YAML, SQL, Python, …)             | With syntax highlighting      |            | Python                  |
-| Images (PNG, JPEG, GIF, SVG, …)                              | Shown                         |            | Pillow                  |
+| Format                                                       | Preview                       | Query data | Load with                                           |
+|--------------------------------------------------------------|-------------------------------|------------|-----------------------------------------------------|
+| Delta Lake tables                                            | First rows                    | ✓          | polars (with deltalake), PySpark (with delta-spark) |
+| Parquet files, and folders of them (e.g. Spark, Hive output) | First rows                    | ✓          | polars, pandas, PySpark                             |
+| CSV, TSV                                                     | First rows                    | ✓          | polars, pandas, PySpark                             |
+| JSON Lines                                                   | First records                 | ✓          | polars, pandas, PySpark                             |
+| JSON                                                         | Collapsible tree              |            | Python, polars, pandas                              |
+| Excel (`.xlsx`)                                              | First rows of the first sheet | ✓          | polars, pandas                                      |
+| Markdown                                                     | Rendered                      |            | Python                                              |
+| Text, code, configuration (YAML, SQL, Python, …)             | With syntax highlighting      |            | Python                                              |
+| Images (PNG, JPEG, GIF, SVG, …)                              | Shown                         |            | Pillow                                              |
 
 ## Working with the explorer from Python
 

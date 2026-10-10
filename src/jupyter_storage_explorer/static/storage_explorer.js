@@ -167,11 +167,13 @@ function codeBlock(title, code, hint) {
   );
 }
 
-// Body of the "Python code" dialog for one recipe ({library, install, code}).
+// Body of the "Python code" dialog for one recipe ({library, install, code}):
+// `install` is what to run once first (installing packages, setting up e.g.
+// a Spark session), empty when nothing is needed.
 function recipeBlocks(recipe) {
   if (!recipe.install) return [codeBlock("Load", recipe.code)];
   return [
-    codeBlock("1. Install", recipe.install, "Some packages are not installed in this kernel. Run this in a cell first."),
+    codeBlock("1. Set up", recipe.install, "Not done in this kernel yet: run this once in a cell first."),
     codeBlock("2. Load", recipe.code),
   ];
 }

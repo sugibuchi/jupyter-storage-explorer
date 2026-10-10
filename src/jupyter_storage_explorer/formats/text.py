@@ -22,13 +22,19 @@ from jupyter_storage_explorer.formats.base import (
     TextPreview,
     TreePreview,
     format_args,
+    spark_url,
 )
 from jupyter_storage_explorer.formats.frames import (
     pandas_table,
     polars_table,
     rows_note,
 )
-from jupyter_storage_explorer.formats.requirements import Fsspec, Pandas, Polars
+from jupyter_storage_explorer.formats.requirements import (
+    Fsspec,
+    Pandas,
+    Polars,
+    PySpark,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -123,6 +129,7 @@ class Csv(DataFormat):
     name = "CSV"
     extensions = (".csv", ".tsv")
     preferred_requirements = ((Polars,), (Pandas,))
+    code_only_requirements = ((PySpark,),)
     query_requirements = (Polars,)
 
     def _separator(self, name: str, sample: str) -> str:
@@ -195,6 +202,12 @@ class Csv(DataFormat):
     ) -> str:
         sep = self._separator(target.name, target.head_text(4096)[0])
         sep = None if sep == "," else sep
+        if PySpark in requirements:
+            # Spark reads with its own storage configuration, not fsspec's options.
+            args = format_args(
+                spark_url(target.url), header=True, inferSchema=True, sep=sep
+            )
+            return f"df = {PySpark().code_name()}.read.csv({args})"
         options = dict(storage_options) or None
         if Polars in requirements:
             return f"df = {Polars().code_name()}.read_csv({format_args(target.url, separator=sep, storage_options=options)})"
@@ -238,6 +251,7 @@ class JsonLines(DataFormat):
     name = "JSON Lines"
     extensions = (".jsonl", ".ndjson")
     preferred_requirements = ((Polars,), (Pandas,))
+    code_only_requirements = ((PySpark,),)
     query_requirements = (Polars,)
 
     def scan(self, url: str) -> Any:
@@ -275,6 +289,10 @@ class JsonLines(DataFormat):
         requirements: Requirements,
         storage_options: Mapping[str, Any],
     ) -> str:
+        if PySpark in requirements:
+            # Spark reads JSON Lines (one record per line) by default, with its
+            # own storage configuration, not fsspec's options.
+            return f"df = {PySpark().code_name()}.read.json({format_args(spark_url(target.url))})"
         options = dict(storage_options) or None
         if Polars in requirements:
             return f"df = {Polars().code_name()}.read_ndjson({format_args(target.url, storage_options=options)})"

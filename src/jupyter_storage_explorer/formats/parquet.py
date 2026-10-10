@@ -13,13 +13,19 @@ from jupyter_storage_explorer.formats.base import (
     Requirements,
     Target,
     format_args,
+    spark_url,
 )
 from jupyter_storage_explorer.formats.frames import (
     pandas_table,
     polars_table,
     rows_note,
 )
-from jupyter_storage_explorer.formats.requirements import Pandas, Polars, PyArrow
+from jupyter_storage_explorer.formats.requirements import (
+    Pandas,
+    Polars,
+    PyArrow,
+    PySpark,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
@@ -136,6 +142,7 @@ class Parquet(DataFormat):
     extensions = (".parquet", ".parq")
     priority = 10  # above generic directories, below table formats such as Delta Lake
     preferred_requirements = ((Polars,), (Pandas, PyArrow))
+    code_only_requirements = ((PySpark,),)
     query_requirements = (Polars,)
 
     def matches(self, target: Target) -> bool:
@@ -199,6 +206,9 @@ class Parquet(DataFormat):
         requirements: Requirements,
         storage_options: Mapping[str, Any],
     ) -> str:
+        if PySpark in requirements:
+            # A file or a folder of them; Spark uses its own storage configuration.
+            return f"df = {PySpark().code_name()}.read.parquet({format_args(spark_url(target.url))})"
         options = dict(storage_options) or None
         if Polars not in requirements:
             return f"df = {Pandas().code_name()}.read_parquet({format_args(target.url, storage_options=options)})"
