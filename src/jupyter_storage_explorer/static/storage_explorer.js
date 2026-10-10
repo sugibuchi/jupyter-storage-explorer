@@ -1,5 +1,5 @@
 // Storage Explorer: directory tree (left) and file list (right), with a
-// preview panel below them.
+// preview panel below them. Joined after common.js and query.js (see _static.py).
 
 const join = (parent, name) => (!parent || parent.endsWith("/") ? parent + name : `${parent}/${name}`);
 // Some filesystems (e.g. DirFileSystem) use "" as their top-level path.
@@ -18,19 +18,7 @@ function formatSize(bytes) {
 
 const formatTime = (ts) => (ts == null ? "" : new Date(ts * 1000).toLocaleString());
 
-function h(tag, props = {}, ...children) {
-  const el = document.createElement(tag);
-  Object.assign(el, props);
-  el.append(...children);
-  return el;
-}
-
 // --- Preview sections (one renderer per Preview kind in formats/base.py) ---
-
-function cellText(value) {
-  if (value == null) return "";
-  return typeof value === "object" ? JSON.stringify(value) : String(value);
-}
 
 function renderTable(section) {
   const head = h("tr", {}, ...section.columns.map((c) => h("th", { textContent: c })));
@@ -254,15 +242,10 @@ function render({ model, el }) {
   );
 
   // Small confirmation dialog, e.g. "Upload sales.csv? [Cancel] [Upload]".
-  const confirmBody = h("div", { className: "jse-dialog-body" });
-  const confirmButtons = h("div", { className: "jse-editor-foot" });
-  const confirmEl = h(
-    "div",
-    { className: "jse-dialog", tabIndex: -1, hidden: true },
-    h("div", { className: "jse-modal jse-confirm" }, confirmBody, confirmButtons),
-  );
+  const { el: confirmEl, ask, answer } = createConfirm();
 
-  el.classList.add("jse-browser");
+  // "jse-browser" is for user styles too, e.g. icons by [data-depth] (README).
+  el.classList.add("jse-widget", "jse-browser");
   // Focusable, so Escape reaches the widget after a click anywhere in it.
   el.tabIndex = -1;
   // Keep JupyterLab's notebook shortcuts (e.g. "dd" deletes a cell) from
@@ -386,44 +369,6 @@ function render({ model, el }) {
     else if (msg.type === "reply") onReply(msg);
   }
 
-  // --- Confirmation dialog ---
-
-  let confirmResolve = null;
-
-  // Resolves with the clicked button's value, or null for Cancel/Esc/backdrop.
-  // buttons: [{label, value, primary}], shown left to right.
-  function ask(lines, buttons) {
-    confirmResolve?.(null);
-    return new Promise((resolve) => {
-      confirmResolve = resolve;
-      confirmBody.replaceChildren(...lines);
-      confirmButtons.replaceChildren(
-        h("span", { className: "jse-spacer" }),
-        ...buttons.map((b) => {
-          const btn = h("button", { className: "jse-btn" + (b.primary ? " jse-primary" : ""), textContent: b.label });
-          btn.addEventListener("click", () => answer(b.value));
-          return btn;
-        }),
-      );
-      confirmEl.hidden = false;
-      confirmEl.focus({ preventScroll: true });
-    });
-  }
-
-  function answer(value) {
-    confirmEl.hidden = true;
-    const resolve = confirmResolve;
-    confirmResolve = null;
-    resolve?.(value);
-  }
-
-  confirmEl.addEventListener("pointerdown", (ev) => ev.target === confirmEl && answer(null));
-  confirmEl.addEventListener("keydown", (ev) => {
-    if (ev.key !== "Escape") return;
-    ev.stopPropagation();
-    answer(null);
-  });
-
   // "a.csv", "a.csv and b.csv", or "3 files: a.csv, b.csv, c.csv" (long lists shortened).
   function describeFiles(names) {
     if (names.length === 1) return names[0];
@@ -455,7 +400,7 @@ function render({ model, el }) {
   function dropTarget(ev) {
     const node = ev.target instanceof Element ? ev.target.closest("[data-drop-dir]") : null;
     if (node && panesEl.contains(node)) return { el: node, dir: node.dataset.dropDir };
-    return { el: listEl, dir: model.get("current_dir") };
+    return { el: listEl, dir: model.get("_current_dir") };
   }
 
   function highlightDrop(target) {
@@ -574,16 +519,7 @@ function render({ model, el }) {
   const CHUNK_BYTES = 1024 * 1024;
 
   // Requests answered by a {"type": "reply", "rid"} message.
-  let nextRequestId = 1;
-  const waitingReplies = new Map();
-
-  function request(content, buffers) {
-    const rid = nextRequestId++;
-    return new Promise((resolve) => {
-      waitingReplies.set(rid, resolve);
-      model.send({ ...content, rid }, undefined, buffers);
-    });
-  }
+  const { request, onReply } = createRequester(model);
 
   // Lets Markdown previews load the vendored libraries through this widget's kernel.
   fetchVendor = async (name) => {
@@ -591,12 +527,6 @@ function render({ model, el }) {
     if (reply.error) throw new Error(reply.error);
     return reply.source;
   };
-
-  function onReply(msg) {
-    const resolve = waitingReplies.get(msg.rid);
-    waitingReplies.delete(msg.rid);
-    resolve?.(msg);
-  }
 
   // Files in a native drop; folders are listed separately, as they are not uploaded.
   function droppedFiles(dataTransfer) {
@@ -616,7 +546,7 @@ function render({ model, el }) {
   async function uploadLocalFiles({ files: dropped, folders }, dest) {
     const errors = folders.map((name) => `${name}: folders are not uploaded`);
     // Files over the widget's max_upload_bytes are refused before sending anything.
-    const limit = model.get("max_upload_bytes");
+    const limit = model.get("_max_upload_bytes");
     const files = [];
     for (const file of dropped) {
       if (limit != null && file.size > limit) errors.push(`${file.name}: too large to upload (over ${formatSize(limit)})`);
@@ -707,7 +637,7 @@ function render({ model, el }) {
   // Files a drag starting on `entry` moves: the selected files if it is
   // selected, else just it. Folders are not moved.
   function draggedFiles(entry) {
-    const selected = model.get("selected");
+    const selected = model.get("_selected");
     if (!selected.includes(entry.path)) return [entry.path];
     return model
       .get("entries")
@@ -839,12 +769,15 @@ function render({ model, el }) {
   function itemMenu(targets, withOpen = true) {
     const single = targets.length === 1 ? targets[0] : null;
     const count = targets.length > 1 ? `${targets.length} ` : "";
+    // Items without a URL (the kernel's _url gave None) are not treated as data:
+    // no preview, code or editing.
+    const data = single?.url ? single : null;
     // The reply arrives after the menu is built, so the refs below are set by then.
-    const info = single ? requestMenuInfo(single.path) : null;
+    const info = data ? requestMenuInfo(data.path) : null;
     const items = [
       {
         label: "Preview",
-        disabled: !single,
+        disabled: !data,
         // Relabelled "Query data" when the kernel says it opens in the data browser.
         ref: (row) => info && (info.previewRow = row),
         action: () => openPreview(single.path),
@@ -864,7 +797,7 @@ function render({ model, el }) {
     }
     items.push({
       label: "Python code",
-      disabled: !single,
+      disabled: !data,
       submenu: (sub) => {
         sub.replaceChildren(...menuRows([{ label: "Loading…", disabled: true }]));
         info.codeSub = sub;
@@ -878,10 +811,8 @@ function render({ model, el }) {
         action: () => download(targets.map((t) => t.path)),
       });
     }
-    items.push({
-      label: `Copy ${count}path${count ? "s" : ""}`,
-      action: () => copy(targets.map((t) => t.path), count ? `${count}paths` : "path"),
-    });
+    // Locations are copied only as URLs: fsspec's paths can differ from the
+    // storage's own notion of a path (e.g. abfs's "container/key").
     if (targets.every((t) => t.url)) {
       items.push({ label: `Copy ${count}URL${count ? "s" : ""}`, action: () => copy(targets.map((t) => t.url), count ? `${count}URLs` : "URL") });
     }
@@ -896,7 +827,7 @@ function render({ model, el }) {
 
   // Directories from the root down to and including `path`.
   function ancestors(path) {
-    const root = model.get("root");
+    const root = model.get("_root");
     if (!path.startsWith(root)) return [path];
     const out = [root];
     let cur = root;
@@ -908,12 +839,12 @@ function render({ model, el }) {
   }
 
   function navigate(path) {
-    model.set("current_dir", path);
+    model.set("_current_dir", path);
     model.save_changes();
   }
 
   function requestChildren(path) {
-    if (path in model.get("tree") || pending.has(path)) return;
+    if (path in model.get("_tree") || pending.has(path)) return;
     pending.add(path);
     model.send({ type: "expand", path });
   }
@@ -929,9 +860,9 @@ function render({ model, el }) {
   }
 
   function renderTree() {
-    const tree = model.get("tree");
-    const root = model.get("root");
-    const current = model.get("current_dir");
+    const tree = model.get("_tree");
+    const root = model.get("_root");
+    const current = model.get("_current_dir");
 
     for (const path of pending) if (path in tree) pending.delete(path);
 
@@ -973,7 +904,7 @@ function render({ model, el }) {
   }
 
   function renderPath() {
-    const chain = ancestors(model.get("current_dir"));
+    const chain = ancestors(model.get("_current_dir"));
     pathEl.replaceChildren();
     chain.forEach((path, i) => {
       if (i > 0) pathEl.append(h("span", { className: "jse-sep", textContent: "/" }));
@@ -996,19 +927,19 @@ function render({ model, el }) {
   }
 
   function select(path, additive) {
-    const current = model.get("selected");
+    const current = model.get("_selected");
     const next = !additive
       ? [path]
       : current.includes(path)
         ? current.filter((p) => p !== path)
         : [...current, path];
-    model.set("selected", next);
+    model.set("_selected", next);
     model.save_changes();
     // While the preview panel is open, it follows a single selected file.
     // Folders are not previewed on click (use Preview for e.g. a Delta table).
-    if (!previewEl.hidden && next.length === 1 && next[0] !== model.get("preview").path) {
-      const entry = model.get("entries").find((e) => e.path === next[0]);
-      if (entry && entry.type !== "directory") openPreview(next[0]);
+    if (!previewEl.hidden && next.length === 1 && next[0] !== model.get("_preview").path) {
+      const entry = model.get("_entries").find((e) => e.path === next[0]);
+      if (entry && entry.type !== "directory" && entry.url) openPreview(next[0]);
     }
   }
 
@@ -1026,8 +957,8 @@ function render({ model, el }) {
       }),
     );
 
-    const selected = new Set(model.get("selected"));
-    const entries = [...model.get("entries")].sort(compare);
+    const selected = new Set(model.get("_selected"));
+    const entries = [...model.get("_entries")].sort(compare);
     tbody.replaceChildren(
       ...entries.map((entry) => {
         const isDir = entry.type === "directory";
@@ -1047,7 +978,7 @@ function render({ model, el }) {
           tr.dataset.dropDir = entry.path; // files dropped here are uploaded or moved into this folder
           // Depth from the root, as in the tree: ancestors() lists the root down to
           // this folder, so a top-level folder gives 2 entries, i.e. depth 1.
-          if (entry.path.startsWith(model.get("root"))) tr.dataset.depth = ancestors(entry.path).length - 1;
+          if (entry.path.startsWith(model.get("_root"))) tr.dataset.depth = ancestors(entry.path).length - 1;
         } else {
           // e.g. "csv", "json-lines"; lets CSS style the icon per format.
           if (entry.format) tr.dataset.fileFormat = entry.format;
@@ -1060,10 +991,13 @@ function render({ model, el }) {
           });
         }
         tr.addEventListener("click", (ev) => select(entry.path, ev.ctrlKey || ev.metaKey));
-        tr.addEventListener("dblclick", () => (isDir ? navigate(entry.path) : openPreview(entry.path)));
+        tr.addEventListener("dblclick", () => {
+          if (isDir) navigate(entry.path);
+          else if (entry.url) openPreview(entry.path); // no URL: no preview
+        });
         tr.addEventListener("contextmenu", (ev) => {
           // Like file managers: right-clicking outside the selection selects that item.
-          let paths = model.get("selected");
+          let paths = model.get("_selected");
           if (!paths.includes(entry.path)) {
             select(entry.path, false);
             paths = [entry.path];
@@ -1082,19 +1016,19 @@ function render({ model, el }) {
   // clicked in the tree). null when that cannot be previewed, or while the
   // kernel has not yet said what the newly selected item is.
   function previewTarget() {
-    const selected = model.get("selected");
+    const selected = model.get("_selected");
     if (selected.length === 0) {
-      const format = model.get("current_format");
-      return format ? { path: model.get("current_dir"), format, query: model.get("current_query") } : null;
+      const format = model.get("_current_format");
+      return format ? { path: model.get("_current_dir"), format, query: model.get("_current_query") } : null;
     }
-    const known = model.get("selected_format");
+    const known = model.get("_selected_format");
     if (selected.length === 1 && known.path === selected[0] && known.format) return known;
     return null;
   }
 
   function updatePreviewBtn() {
     const target = previewTarget();
-    const selected = model.get("selected").length;
+    const selected = model.get("_selected").length;
     // Tabular data opens in the data browser when polars is installed.
     const action = target?.query ? "Query data" : "Preview";
     previewBtn.disabled = target == null;
@@ -1108,7 +1042,7 @@ function render({ model, el }) {
 
   function renderStatus() {
     if (flashTimer) return; // a message is showing; it calls back when done
-    const error = model.get("error");
+    const error = model.get("_error");
     statusEl.classList.toggle("jse-error", Boolean(error));
     // Errors always show. The item count is about the file list, so it is
     // hidden while the preview panel (just above the status bar) is open,
@@ -1118,8 +1052,8 @@ function render({ model, el }) {
       statusEl.textContent = error;
       return;
     }
-    const count = model.get("entries").length;
-    const sel = model.get("selected").length;
+    const count = model.get("_entries").length;
+    const sel = model.get("_selected").length;
     statusEl.textContent = `${count} item${count === 1 ? "" : "s"}` + (sel ? `, ${sel} selected` : "");
   }
 
@@ -1236,483 +1170,14 @@ function render({ model, el }) {
     ev.stopPropagation(); // keep the widget's own Escape handling out of it
   });
 
-  // --- Data browser ("Query data"): pages through a polars query in the kernel ---
-  // The kernel applies the settings (filters, sort, hidden columns) and
-  // returns QUERY_WINDOW rows at a time; pages of QUERY_PAGE rows are shown
-  // from that window. The kernel also remembers the settings per dataset.
+  // --- Data browser ("Query data"): the panel is in query.js ---
 
-  const QUERY_WINDOW = 1000;
-  const QUERY_PAGE = 100;
-  const OP_LABELS = {
-    not_null: "Not null",
-    null: "Null",
-    eq: "=",
-    contains: "Contains",
-    regex: "Regex",
-    not_empty: "Not empty",
-    empty: "Empty",
-    gt: ">",
-    lt: "<",
-    ge: ">=",
-    le: "<=",
-  };
-  const NO_VALUE_OPS = new Set(["not_null", "null", "not_empty", "empty"]);
-  const VALUE_HINTS = { numeric: "e.g. 10", temporal: "e.g. 2025-01-31", boolean: "true or false", text: "" };
-
-  let queryView = null; // the data browser shown in the preview panel
+  let queryPanel = null; // the data browser shown in the preview panel
 
   function renderQuery(preview) {
-    queryView = {
-      path: preview.path,
-      columns: preview.query.columns, // {name, dtype, kind, ops}
-      settings: preview.query.settings, // remembered by the kernel
-      start: 0, // first row of the fetched window
-      rows: [],
-      more: false,
-      page: 0, // page within the window
-      loading: false,
-      error: "",
-      el: h("div", { className: "jse-query" }),
-    };
-    fetchQuery(0, 0);
-    return queryView.el;
-  }
-
-  async function fetchQuery(start, page) {
-    const view = queryView;
-    view.loading = true;
-    drawQuery();
-    const reply = await request({ type: "query_rows", path: view.path, settings: view.settings, offset: start, window: QUERY_WINDOW });
-    if (queryView !== view) return; // another dataset was opened meanwhile
-    view.loading = false;
-    if (reply.settings) view.settings = reply.settings;
-    if (reply.error) {
-      Object.assign(view, { error: reply.error, rows: [], more: false, start: 0, page: 0 });
-    } else {
-      Object.assign(view, { error: "", start: reply.offset, rows: reply.rows, more: reply.more, page });
-    }
-    drawQuery();
-  }
-
-  function queryButton(label, onClick, title = "") {
-    const btn = h("button", { className: "jse-btn", textContent: label, title });
-    btn.addEventListener("click", onClick);
-    return btn;
-  }
-
-  function drawQuery() {
-    const view = queryView;
-    const s = view.settings;
-    const columns = view.columns.filter((c) => !s.hidden.includes(c.name));
-    const pageRows = view.rows.slice(view.page * QUERY_PAGE, (view.page + 1) * QUERY_PAGE);
-    const first = view.start + view.page * QUERY_PAGE;
-    const hasNext = (view.page + 1) * QUERY_PAGE < view.rows.length || view.more;
-    const resettable = Object.keys(s.filters).length > 0 || s.hidden.length > 0;
-
-    let status;
-    if (view.loading) status = "Loading…";
-    else if (!pageRows.length) status = "No rows";
-    else {
-      const total = view.more ? "" : ` of ${(view.start + view.rows.length).toLocaleString()}`;
-      status = `Rows ${(first + 1).toLocaleString()}–${(first + pageRows.length).toLocaleString()}${total}`;
-    }
-
-    const prev = queryButton("◀", prevQueryPage, "Previous page");
-    prev.disabled = view.loading || first === 0;
-    const next = queryButton("▶", nextQueryPage, "Next page");
-    next.disabled = view.loading || !hasNext;
-    const reset = queryButton("Reset", resetQuery, "Remove all filters and show all columns");
-    reset.disabled = !resettable;
-    const toolbar = h(
-      "div",
-      { className: "jse-query-bar" },
-      queryButton(s.hidden.length ? `Select columns (${s.hidden.length} hidden)` : "Select columns", openColumnsDialog),
-      h("div", { className: "jse-query-chips" }, ...Object.entries(s.filters).map(([name, f]) => filterChip(name, f))),
-      reset,
-      prev,
-      h("span", { className: "jse-query-status", textContent: status }),
-      next,
-    );
-
-    const head = h("tr", {}, ...columns.map((c) => queryHeaderCell(c)));
-    const body = pageRows.map((row) =>
-      h(
-        "tr",
-        {},
-        ...row.map((v) => {
-          const text = v == null ? "null" : cellText(v);
-          // The title shows values cut off in narrow columns.
-          return h("td", { textContent: text, title: text, className: v == null ? "jse-null" : "" });
-        }),
-      ),
-    );
-    const tableEl = h("table", { className: "jse-data" }, h("thead", {}, head), h("tbody", {}, ...body));
-    wireColumnResizers(tableEl, columns);
-    const parts = [toolbar];
-    if (view.error) parts.push(h("div", { className: "jse-preview-error", textContent: view.error }));
-    parts.push(h("div", { className: "jse-table-wrap" }, tableEl));
-    view.el.replaceChildren(...parts);
-  }
-
-  // Column header filter icons: SVG, drawn in the text colour (currentColor);
-  // CSS fills them in when the column has a filter. FILTER_ICON is the one used.
-  const FUNNEL_ICON =
-    '<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">' +
-    '<path d="M1.5 2.5h13l-5 6v5l-3-1.5v-3.5z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>';
-  const SEARCH_ICON =
-    '<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">' +
-    '<circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" stroke-width="1.5"/>' +
-    '<path d="M10 10l4.5 4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
-  const FILTER_ICON = FUNNEL_ICON;
-
-  // Name (click to sort) and filter button, and type underneath.
-  function queryHeaderCell(column) {
-    const s = queryView.settings;
-    const sorted = s.sort?.column === column.name;
-    const name = h("span", {
-      className: "jse-query-name",
-      textContent: column.name + (sorted ? (s.sort.descending ? " ▼" : " ▲") : ""),
-      title: "Sort by this column (click again to reverse, a third time to stop sorting)",
-    });
-    name.addEventListener("click", () => toggleQuerySort(column.name));
-    const active = s.filters[column.name];
-    const filterBtn = h("button", {
-      className: "jse-query-filter" + (active ? " jse-active" : ""),
-      innerHTML: FILTER_ICON,
-      title: active ? `Filter: ${describeFilter(column.name, active)}` : "Filter",
-    });
-    filterBtn.addEventListener("click", (ev) => {
-      ev.stopPropagation();
-      openFilterDialog(column);
-    });
-    return h(
-      "th",
-      {},
-      h("div", { className: "jse-query-head" }, name, filterBtn),
-      h("div", { className: "jse-query-dtype", textContent: column.dtype }),
-      // Drag to resize the column; double-click to go back to automatic widths.
-      h("span", { className: "jse-col-resizer", title: "Drag to resize; double-click for automatic widths" }),
-    );
-  }
-
-  // --- Column widths: automatic until a column is resized, then fixed ---
-  // Part of the dataset's settings ("widths": {column name: px}), so the
-  // kernel remembers them with the filters.
-  const MIN_COLUMN_WIDTH = 40;
-  const DEFAULT_COLUMN_WIDTH = 120;
-
-  // Remembers settings changed without fetching rows, e.g. column widths.
-  function saveQuerySettings() {
-    const view = queryView;
-    request({ type: "query_save", path: view.path, settings: view.settings });
-  }
-
-  // Fixes the table's layout to the given widths.
-  function applyColumnWidths(table, columns, widths) {
-    table.querySelector("colgroup")?.remove();
-    const cols = columns.map((c) => h("col", { style: `width: ${widths[c.name]}px` }));
-    table.prepend(h("colgroup", {}, ...cols));
-    table.classList.add("jse-fixed");
-    table.style.width = `${columns.reduce((sum, c) => sum + widths[c.name], 0)}px`;
-    return cols;
-  }
-
-  function wireColumnResizers(table, columns) {
-    const view = queryView;
-    const hasWidths = () => Object.keys(view.settings.widths ?? {}).length > 0;
-    if (hasWidths()) {
-      // Columns without a remembered width (e.g. shown again) get a default.
-      const widths = { ...view.settings.widths };
-      for (const c of columns) widths[c.name] ??= DEFAULT_COLUMN_WIDTH;
-      applyColumnWidths(table, columns, widths);
-    }
-    table.querySelectorAll(".jse-col-resizer").forEach((handle, i) => {
-      handle.addEventListener("click", (ev) => ev.stopPropagation());
-      handle.addEventListener("dblclick", (ev) => {
-        ev.stopPropagation();
-        view.settings.widths = {};
-        saveQuerySettings();
-        drawQuery();
-      });
-      handle.addEventListener("pointerdown", (ev) => {
-        ev.preventDefault();
-        ev.stopPropagation();
-        if (!hasWidths()) {
-          // First resize: fix every column at its current automatic width.
-          const cells = table.querySelectorAll("thead th");
-          view.settings.widths = Object.fromEntries(
-            columns.map((c, j) => [c.name, Math.round(cells[j].getBoundingClientRect().width)]),
-          );
-        }
-        const widths = view.settings.widths;
-        for (const c of columns) widths[c.name] ??= DEFAULT_COLUMN_WIDTH;
-        const cols = applyColumnWidths(table, columns, widths);
-        const name = columns[i].name;
-        const startX = ev.clientX;
-        const startWidth = widths[name];
-        handle.setPointerCapture(ev.pointerId);
-        const move = (e) => {
-          widths[name] = Math.max(MIN_COLUMN_WIDTH, Math.round(startWidth + e.clientX - startX));
-          cols[i].style.width = `${widths[name]}px`;
-          table.style.width = `${columns.reduce((sum, c) => sum + widths[c.name], 0)}px`;
-        };
-        const up = () => {
-          handle.removeEventListener("pointermove", move);
-          handle.removeEventListener("pointerup", up);
-          saveQuerySettings();
-        };
-        handle.addEventListener("pointermove", move);
-        handle.addEventListener("pointerup", up);
-      });
-    });
-  }
-
-  // Ascending, then descending, then not sorted.
-  function toggleQuerySort(name) {
-    const s = queryView.settings;
-    if (s.sort?.column !== name) s.sort = { column: name, descending: false };
-    else if (!s.sort.descending) s.sort = { column: name, descending: true };
-    else s.sort = null;
-    fetchQuery(0, 0);
-  }
-
-  function nextQueryPage() {
-    const view = queryView;
-    if ((view.page + 1) * QUERY_PAGE < view.rows.length) {
-      view.page += 1;
-      drawQuery();
-    } else if (view.more) {
-      fetchQuery(view.start + QUERY_WINDOW, 0);
-    }
-  }
-
-  function prevQueryPage() {
-    const view = queryView;
-    if (view.page > 0) {
-      view.page -= 1;
-      drawQuery();
-    } else if (view.start > 0) {
-      fetchQuery(Math.max(0, view.start - QUERY_WINDOW), QUERY_WINDOW / QUERY_PAGE - 1);
-    }
-  }
-
-  // Removes the filters and shows all columns; the sort order stays.
-  function resetQuery() {
-    queryView.settings = { ...queryView.settings, filters: {}, hidden: [] };
-    fetchQuery(0, 0);
-  }
-
-  // e.g. "quantity >= 8", "product contains tea (any case)", "comment: Not null".
-  function describeFilter(name, filter) {
-    if (NO_VALUE_OPS.has(filter.op)) return `${name}: ${OP_LABELS[filter.op]}`;
-    const label = filter.op === "contains" || filter.op === "regex" ? OP_LABELS[filter.op].toLowerCase() : OP_LABELS[filter.op];
-    return `${name} ${label} ${filter.value}` + (filter.case_sensitive === false ? " (any case)" : "");
-  }
-
-  // An applied filter in the toolbar: click to edit it, × to remove it.
-  function filterChip(name, filter) {
-    const text = describeFilter(name, filter);
-    const label = h("span", { className: "jse-chip-label", textContent: text, title: `Edit filter: ${text}` });
-    label.addEventListener("click", () => {
-      const column = queryView.columns.find((c) => c.name === name);
-      if (column) openFilterDialog(column);
-    });
-    const remove = h("button", { className: "jse-chip-remove", textContent: "×", title: "Remove this filter" });
-    remove.addEventListener("click", () => {
-      delete queryView.settings.filters[name];
-      fetchQuery(0, 0);
-    });
-    return h("span", { className: "jse-chip" }, label, remove);
-  }
-
-  // The filter types that take no value (Null, Not null, Empty, Not empty)
-  // are one type in the dialog, chosen between with radio buttons.
-  const NO_VALUE_TYPE = "null_or_empty";
-  const NO_VALUE_TYPE_LABEL = "Null / empty";
-
-  // Text filters with a "Case sensitive" option.
-  const CASE_OPS = new Set(["eq", "contains", "regex"]);
-  // Browser field for each kind of value ("input" from the kernel).
-  const INPUT_TYPES = {
-    text: { type: "text" },
-    number: { type: "number", step: "any" },
-    date: { type: "date" },
-    datetime: { type: "datetime-local", step: "1" },
-    time: { type: "time", step: "1" },
-  };
-
-  // Radio buttons, one per [value, label]; returns the group and a getter.
-  function radioGroup(choices, selected) {
-    const name = `jse-radio-${Math.random().toString(36).slice(2)}`;
-    const inputs = choices.map(([value]) => h("input", { type: "radio", name, value, checked: value === selected }));
-    if (!inputs.some((i) => i.checked)) inputs[0].checked = true;
-    const el = h(
-      "div",
-      { className: "jse-query-radios" },
-      ...choices.map(([, label], i) => h("label", {}, inputs[i], h("span", { textContent: label }))),
-    );
-    return { el, value: () => inputs.find((i) => i.checked).value };
-  }
-
-  // `draft`: a filter the user entered but that was rejected, shown again to fix.
-  async function openFilterDialog(column, draft = null) {
-    const view = queryView;
-    const current = view.settings.filters[column.name];
-    const initial = draft ?? current;
-    const currentValue = initial && !NO_VALUE_OPS.has(initial.op) ? initial.value : "";
-    const noValueOps = column.ops.filter((op) => NO_VALUE_OPS.has(op));
-    const valueOps = column.ops.filter((op) => !NO_VALUE_OPS.has(op));
-
-    const typeSelect = h(
-      "select",
-      { className: "jse-query-input" },
-      ...valueOps.map((op) => h("option", { value: op, textContent: OP_LABELS[op] })),
-      h("option", { value: NO_VALUE_TYPE, textContent: NO_VALUE_TYPE_LABEL }),
-    );
-    if (initial) typeSelect.value = NO_VALUE_OPS.has(initial.op) ? NO_VALUE_TYPE : initial.op;
-    else typeSelect.value = valueOps.includes("eq") ? "eq" : (valueOps[0] ?? NO_VALUE_TYPE);
-
-    // The possible contents of the Value row; the type decides which is shown.
-    const nullChoices = radioGroup(
-      noValueOps.map((op) => [op, OP_LABELS[op]]),
-      NO_VALUE_OPS.has(initial?.op) ? initial.op : "not_null",
-    );
-    const boolChoices = radioGroup(
-      [
-        ["true", "True"],
-        ["false", "False"],
-      ],
-      ["false", "0", "no"].includes(currentValue.toLowerCase()) ? "false" : "true",
-    );
-    const valueInput = h("input", {
-      className: "jse-query-input",
-      ...(INPUT_TYPES[column.input] ?? INPUT_TYPES.text),
-      // Date-time fields want "2025-01-31T12:00"; remembered values may have a space.
-      value: column.input === "datetime" ? currentValue.replace(" ", "T") : currentValue,
-      placeholder: VALUE_HINTS[column.kind] ?? "",
-    });
-    valueInput.addEventListener("keydown", (ev) => {
-      if (ev.key === "Enter") answer("apply");
-    });
-    const caseBox = h("input", { type: "checkbox", checked: initial?.case_sensitive !== false });
-    const caseLabel = h("label", { className: "jse-query-case" }, caseBox, h("span", { textContent: "Case sensitive" }));
-    const valueCell = h("div", { className: "jse-query-value" });
-
-    const isNoValue = () => typeSelect.value === NO_VALUE_TYPE;
-    const showValue = () => {
-      if (isNoValue()) valueCell.replaceChildren(nullChoices.el);
-      else if (column.input === "boolean") valueCell.replaceChildren(boolChoices.el);
-      else if (column.input === "text" && CASE_OPS.has(typeSelect.value)) valueCell.replaceChildren(valueInput, caseLabel);
-      else valueCell.replaceChildren(valueInput);
-    };
-    typeSelect.addEventListener("change", showValue);
-    showValue();
-
-    const buttons = [{ label: "Cancel", value: null }];
-    if (current) buttons.push({ label: "Clear filter", value: "clear" });
-    buttons.push({ label: "Apply", value: "apply", primary: true });
-    const asked = ask(
-      [
-        h("div", { className: "jse-section-title", textContent: `Filter: ${column.name}` }),
-        h("div", { className: "jse-note", textContent: column.dtype }),
-        h(
-          "div",
-          { className: "jse-query-form" },
-          h("div", { className: "jse-query-row" }, h("span", { textContent: "Type" }), typeSelect),
-          h("div", { className: "jse-query-row" }, h("span", { textContent: "Value" }), valueCell),
-        ),
-      ],
-      buttons,
-    );
-    (valueInput.isConnected ? valueInput : typeSelect).focus({ preventScroll: true });
-    const choice = await asked;
-    if (queryView !== view || !choice) return;
-
-    if (choice === "clear") {
-      delete view.settings.filters[column.name];
-      fetchQuery(0, 0);
-      return;
-    }
-    let filter;
-    if (isNoValue()) {
-      filter = { op: nullChoices.value(), value: "" };
-    } else if (column.input === "boolean") {
-      filter = { op: typeSelect.value, value: boolChoices.value() };
-    } else {
-      filter = { op: typeSelect.value, value: valueInput.value };
-      if (column.input === "text" && CASE_OPS.has(filter.op)) filter.case_sensitive = caseBox.checked;
-    }
-
-    // Check before applying: a value is given, and it fits the column (e.g. a
-    // regular expression polars can compile). If not, say why and reopen the
-    // dialog with what was entered.
-    let problem = null;
-    if (!NO_VALUE_OPS.has(filter.op) && filter.value.trim() === "") {
-      problem = "Enter a value.";
-    } else if (!NO_VALUE_OPS.has(filter.op)) {
-      const reply = await request({ type: "query_check", path: view.path, column: column.name, filter });
-      if (queryView !== view) return;
-      problem = reply.error ?? null;
-    }
-    if (problem) {
-      await showFilterError(column, filter, problem);
-      if (queryView === view) openFilterDialog(column, filter);
-      return;
-    }
-    view.settings.filters[column.name] = filter;
-    fetchQuery(0, 0);
-  }
-
-  function showFilterError(column, filter, message) {
-    const title = filter.op === "regex" ? "Invalid regular expression" : "Invalid filter value";
-    return ask(
-      [
-        h("div", { className: "jse-section-title jse-error-text", textContent: title }),
-        h("div", { className: "jse-note", textContent: `Filter on ${column.name}` }),
-        // Monospace keeps polars' marker (^) under the right character.
-        h("pre", { className: "jse-text jse-filter-error", textContent: message }),
-      ],
-      [{ label: "OK", value: true, primary: true }],
-    );
-  }
-
-  async function openColumnsDialog() {
-    const view = queryView;
-    const boxes = view.columns.map((column) => ({
-      column,
-      box: h("input", { type: "checkbox", checked: !view.settings.hidden.includes(column.name) }),
-    }));
-    const setAll = (checked) => boxes.forEach(({ box }) => (box.checked = checked));
-    const choice = await ask(
-      [
-        h("div", { className: "jse-section-title", textContent: "Select columns" }),
-        h(
-          "div",
-          { className: "jse-query-colbar" },
-          queryButton("Show all", () => setAll(true)),
-          queryButton("Hide all", () => setAll(false)),
-        ),
-        h(
-          "div",
-          { className: "jse-query-cols" },
-          ...boxes.map(({ column, box }) =>
-            h("label", {}, box, h("span", { textContent: column.name }), h("span", { className: "jse-note", textContent: column.dtype })),
-          ),
-        ),
-      ],
-      [
-        { label: "Cancel", value: null },
-        { label: "Apply", value: true, primary: true },
-      ],
-    );
-    if (queryView !== view || !choice) return;
-    const hidden = boxes.filter(({ box }) => !box.checked).map(({ column }) => column.name);
-    if (hidden.length === view.columns.length) {
-      flash("Keep at least one column visible");
-      return;
-    }
-    view.settings.hidden = hidden;
-    fetchQuery(0, 0);
+    queryPanel?.dispose();
+    queryPanel = createQueryPanel({ request, ask, answer, flash }, preview.path, preview.query);
+    return queryPanel.el;
   }
 
   // --- Preview panel: shows the kernel's `preview` trait ---
@@ -1724,12 +1189,16 @@ function render({ model, el }) {
 
   function closePreview() {
     // The kernel owns the preview; clearing it closes the panel.
-    model.set("preview", {});
+    model.set("_preview", {});
     model.save_changes();
   }
 
   function renderPreview() {
-    const preview = model.get("preview");
+    const preview = model.get("_preview");
+    if (!preview.query) {
+      queryPanel?.dispose();
+      queryPanel = null;
+    }
     if (!preview.path) {
       previewEl.hidden = true;
       renderStatus(); // the item count shows again
@@ -1771,24 +1240,6 @@ function render({ model, el }) {
 
   const MIN_AREA_HEIGHT = 80;
 
-  // Calls begin() on pointerdown; it returns a function given the vertical
-  // distance dragged so far.
-  function onDragY(handle, begin) {
-    handle.addEventListener("pointerdown", (ev) => {
-      ev.preventDefault();
-      handle.setPointerCapture(ev.pointerId);
-      const startY = ev.clientY;
-      const move = begin();
-      const onMove = (e) => move(e.clientY - startY);
-      const onUp = () => {
-        handle.removeEventListener("pointermove", onMove);
-        handle.removeEventListener("pointerup", onUp);
-      };
-      handle.addEventListener("pointermove", onMove);
-      handle.addEventListener("pointerup", onUp);
-    });
-  }
-
   // The splitter moves the boundary: the list gains what the panel loses.
   onDragY(splitter, () => {
     const panes = panesEl.offsetHeight;
@@ -1809,33 +1260,33 @@ function render({ model, el }) {
 
   function onDirChange() {
     // Only folders under the root belong to this filesystem's tree.
-    if (model.get("current_dir").startsWith(model.get("root"))) {
-      for (const path of ancestors(model.get("current_dir"))) expanded.add(path);
+    if (model.get("_current_dir").startsWith(model.get("_root"))) {
+      for (const path of ancestors(model.get("_current_dir"))) expanded.add(path);
     }
     renderTree();
     renderPath();
   }
 
   function applyHeight() {
-    el.style.setProperty("--jse-height", model.get("height"));
+    el.style.setProperty("--jse-height", model.get("_height"));
     panesEl.style.height = ""; // a new `height` replaces any dragged size
   }
 
   // --- Filesystem chooser ---
 
   function renderFsSelect() {
-    const names = model.get("filesystems");
+    const names = model.get("_filesystem_names");
     fsSelect.replaceChildren(...names.map((name) => h("option", { value: name, textContent: name })));
-    fsSelect.value = model.get("filesystem");
+    fsSelect.value = model.get("_filesystem");
     fsSelect.hidden = names.length < 2;
   }
 
   // The filesystem whose folders `expanded` holds. Tracked here because
   // anywidget's model has no previous(): its API is get/set/save_changes/on/off/send.
-  let shownFs = model.get("filesystem");
+  let shownFs = model.get("_filesystem");
 
   function onFilesystemChange() {
-    const name = model.get("filesystem");
+    const name = model.get("_filesystem");
     if (name === shownFs) return;
     // Keep the tree's expanded folders of the filesystem left, and restore
     // those of the one switched to. The kernel restores its current folder.
@@ -1847,12 +1298,12 @@ function render({ model, el }) {
   }
 
   fsSelect.addEventListener("change", () => {
-    model.set("filesystem", fsSelect.value);
+    model.set("_filesystem", fsSelect.value);
     model.save_changes();
   });
 
   upBtn.addEventListener("click", () => {
-    const chain = ancestors(model.get("current_dir"));
+    const chain = ancestors(model.get("_current_dir"));
     if (chain.length > 1) navigate(chain[chain.length - 2]);
   });
   refreshBtn.addEventListener("click", () => model.send({ type: "refresh" }));
@@ -1873,20 +1324,20 @@ function render({ model, el }) {
   });
 
   const handlers = {
-    "change:tree": renderTree,
-    "change:current_dir": onDirChange,
+    "change:_tree": renderTree,
+    "change:_current_dir": onDirChange,
     // The address bar starts at the root, which differs per filesystem.
-    "change:root": onDirChange,
-    "change:filesystem": onFilesystemChange,
-    "change:filesystems": renderFsSelect,
-    "change:entries": renderList,
-    "change:selected": renderList,
-    "change:error": renderStatus,
-    "change:height": applyHeight,
-    "change:preview": renderPreview,
-    "change:current_format": updatePreviewBtn,
-    "change:selected_format": updatePreviewBtn,
-    "change:current_query": updatePreviewBtn,
+    "change:_root": onDirChange,
+    "change:_filesystem": onFilesystemChange,
+    "change:_filesystem_names": renderFsSelect,
+    "change:_entries": renderList,
+    "change:_selected": renderList,
+    "change:_error": renderStatus,
+    "change:_height": applyHeight,
+    "change:_preview": renderPreview,
+    "change:_current_format": updatePreviewBtn,
+    "change:_selected_format": updatePreviewBtn,
+    "change:_current_query": updatePreviewBtn,
     "msg:custom": onCustomMsg,
   };
   for (const [event, handler] of Object.entries(handlers)) model.on(event, handler);
@@ -1901,6 +1352,7 @@ function render({ model, el }) {
     for (const [event, handler] of Object.entries(handlers)) model.off(event, handler);
     hideMenu();
     clearTimeout(flashTimer);
+    queryPanel?.dispose();
   };
 }
 

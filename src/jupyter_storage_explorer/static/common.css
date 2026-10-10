@@ -1,0 +1,234 @@
+/* Shared by the widgets: colours, buttons, dialogs, tables, text. Joined
+   before query.css and each widget's own stylesheet (see _static.py). */
+/* The widget's own element. StorageExplorer's also has the class
+   "jse-browser", and DataExplorer's "jse-data-explorer". */
+.jse-widget {
+  --jse-bg: var(--jp-layout-color1, #fff);
+  --jse-bg-alt: var(--jp-layout-color2, #f3f3f3);
+  --jse-fg: var(--jp-ui-font-color1, #222);
+  --jse-fg-muted: var(--jp-ui-font-color2, #666);
+  --jse-border: var(--jp-border-color2, #ddd);
+  --jse-hover: var(--jp-layout-color3, #e6e6e6);
+  --jse-accent: var(--jp-brand-color1, #1976d2);
+  --jse-accent-bg: var(--jp-brand-color3, #bbdefb);
+  --jse-error: var(--jp-error-color1, #d32f2f);
+
+  position: relative; /* dialogs cover the widget */
+  display: flex;
+  flex-direction: column;
+  /* No fixed height: the widget is as tall as its areas, each resizable by
+     dragging. */
+  border: 1px solid var(--jse-border);
+  border-radius: 4px;
+  background: var(--jse-bg);
+  color: var(--jse-fg);
+  font-family: var(--jp-ui-font-family, system-ui, sans-serif);
+  font-size: var(--jp-ui-font-size1, 13px);
+  overflow: hidden;
+  outline: none; /* focusable only to receive Escape */
+}
+
+.jse-btn {
+  min-width: 26px;
+  padding: 2px 6px;
+  border: 1px solid var(--jse-border);
+  border-radius: 3px;
+  background: var(--jse-bg);
+  color: var(--jse-fg);
+  cursor: pointer;
+}
+
+.jse-btn:hover:not(:disabled) {
+  background: var(--jse-hover);
+}
+
+.jse-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.jse-grip {
+  flex: none;
+  height: 6px;
+  cursor: ns-resize;
+  background: var(--jse-bg-alt);
+}
+
+/* Backdrop dimming the widget; the modal window is centred on it. */
+.jse-dialog {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.35);
+  outline: none;
+}
+
+.jse-dialog[hidden] {
+  display: none;
+}
+
+.jse-modal {
+  display: flex;
+  flex-direction: column;
+  width: min(640px, calc(100% - 32px));
+  max-height: calc(100% - 32px);
+  border: 1px solid var(--jse-border);
+  border-radius: 6px;
+  background: var(--jse-bg);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+}
+
+.jse-editor-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-top: 1px solid var(--jse-border);
+  background: var(--jse-bg-alt);
+}
+
+.jse-btn.jse-primary:not(:disabled) {
+  border-color: var(--jse-accent);
+  background: var(--jse-accent);
+  color: #fff;
+}
+
+/* Sized by its content (scrolling past max-height), unlike in the preview panel. */
+.jse-modal .jse-dialog-body {
+  flex: 1 1 auto;
+}
+
+.jse-dialog-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px 4px 10px;
+  border-bottom: 1px solid var(--jse-border);
+  background: var(--jse-bg-alt);
+}
+
+.jse-spacer {
+  flex: 1;
+}
+
+.jse-dialog-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px 10px;
+}
+
+.jse-preview-name {
+  min-width: 0;
+  font-weight: 600;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.jse-badge {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: var(--jse-accent-bg);
+  font-size: 0.9em;
+}
+
+.jse-confirm {
+  width: min(460px, calc(100% - 32px));
+}
+
+.jse-preview-error {
+  color: var(--jse-error);
+  white-space: pre-wrap;
+}
+
+.jse-section-title.jse-error-text {
+  color: var(--jse-error);
+}
+
+.jse-section-title {
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.jse-note {
+  color: var(--jse-fg-muted);
+  font-size: 0.9em;
+  margin-top: 2px;
+}
+
+.jse-table-wrap {
+  max-height: 360px;
+  overflow: auto;
+  border: 1px solid var(--jse-border);
+}
+
+.jse-data {
+  border-collapse: collapse;
+  font-family: var(--jp-code-font-family, monospace);
+  font-size: 0.9em;
+}
+
+.jse-data th,
+.jse-data td {
+  padding: 2px 8px;
+  border-bottom: 1px solid var(--jse-border);
+  text-align: left;
+  white-space: nowrap;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.jse-data thead th {
+  position: sticky;
+  top: 0;
+  background: var(--jse-bg-alt);
+}
+
+.jse-data .jse-dtypes th {
+  top: 1.6em;
+  font-weight: normal;
+  color: var(--jse-fg-muted);
+}
+
+.jse-null {
+  color: var(--jse-fg-muted);
+  font-style: italic;
+}
+
+.jse-text,
+.jse-code {
+  margin: 0;
+  padding: 6px 8px;
+  max-height: 260px;
+  overflow: auto;
+  background: var(--jse-bg-alt);
+  border: 1px solid var(--jse-border);
+  font-family: var(--jp-code-font-family, monospace);
+  font-size: 0.9em;
+  white-space: pre;
+}
+
+.jse-status {
+  padding: 3px 8px;
+  border-top: 1px solid var(--jse-border);
+  background: var(--jse-bg-alt);
+  color: var(--jse-fg-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.jse-status.jse-error {
+  color: var(--jse-error);
+}
+
+.jse-grip:hover {
+  background: var(--jse-accent-bg);
+}

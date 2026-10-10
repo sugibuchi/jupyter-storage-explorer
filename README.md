@@ -4,8 +4,13 @@ A file explorer for cloud storage and data lakes, right inside your Jupyter note
 Explorer.
 
 Browse Amazon S3, Azure Data Lake / Blob Storage, Google Cloud Storage, local disks and more; preview Parquet files,
-Delta Lake tables, CSV, Excel, JSON and other formats; sort and filter tables; get ready-to-run code that loads the data into your notebook; and
-upload, download, move and edit files without leaving JupyterLab.
+Delta Lake tables, CSV, Excel, JSON and other formats; page through, sort and filter tables; get ready-to-run code that
+loads the data into your notebook; and upload, download, move and edit files without leaving JupyterLab.
+
+Two widgets:
+
+- **`StorageExplorer`**: the file explorer, with previews and the data browser.
+- **`DataExplorer`**: the data browser alone, for one table.
 
 ## Installation
 
@@ -22,8 +27,8 @@ Install the package for your storage too:
 | Google Cloud Storage           | `gcsfs`    | `gs://bucket/path`      |
 | Local disk, in-memory          | (included) | `/path`, `memory://`    |
 
-Previewing data files needs a data library, e.g. `pip install polars deltalake`. If one is missing, the preview tells
-you what to install.
+Previewing and querying data files needs a data library, e.g. `pip install polars deltalake`. If one is missing, the
+preview tells you what to install.
 
 ## Quick start
 
@@ -43,6 +48,9 @@ StorageExplorer("gs://my-bucket", token="google_default")  # Google Cloud
 
 Options after the address (like `account_name` above) are passed to the storage package, for example to choose an
 account or credentials.
+
+To open one table directly, see [DataExplorer](#dataexplorer-one-table). The `notebooks` folder has a demo of each
+widget (`storage_explorer.ipynb`, `data_explorer.ipynb`) on sample data made by `make_samples.py`.
 
 ### Several storages in one explorer
 
@@ -74,20 +82,21 @@ StorageExplorer(
 - **Preview** in the toolbar previews the selected item, or, with nothing selected, the folder you are in — for example
   a Delta Lake table you opened from the tree. The button shows the format it will use, like *Preview (Delta Lake
   table)*.
-- Drag the bar above the panel to share the space between the list and the preview; drag the bar at the bottom to make
-  the whole explorer taller or shorter.
 - Tables (Delta Lake, Parquet, CSV, JSON Lines, Excel) open in the data browser instead when polars is installed: the
   button reads *Query data (…)*. See [Query data](#query-data).
+- Drag the bar above the panel to share the space between the list and the preview; drag the bar at the bottom to make
+  the whole explorer taller or shorter.
 
 **Right-click menu**
 
-- **Preview** / **Preview as ▸**: show a file in another way, e.g. a JSON file as text.
+- **Preview** (or **Query data**) / **Preview as ▸**: show a file in another way, e.g. a JSON file as text.
 - **Open**: open a folder.
 - **Edit**: edit a text file, then **Save** or **Cancel**.
 - **Python code ▸ Load with polars / pandas / …**: the code to load the data into your notebook, with the install
   command if a package is missing. Copy it into a cell.
 - **Download**: save the selected files to your computer.
-- **Copy path** / **Copy URL**: copy the location of the selected items.
+- **Copy URL**: copy the location of the selected items. Azure locations name the account, e.g.
+  `abfs://container@myaccount.dfs.core.windows.net/raw/orders.csv`.
 
 **Drag and drop**
 
@@ -112,25 +121,47 @@ in a data browser rather than a fixed preview of the first rows. Only the rows o
 - **Resize** a column by dragging the right edge of its header; double-click the edge to go back to automatic widths.
 - **Reset** removes all filters and shows all columns again (sorting and widths are kept).
 
-Filters, sorting, hidden columns and widths are remembered per table, so reopening it shows it as you left it. By default
-they are remembered until the kernel restarts; to keep them for good, store them in a file:
+polars reads the data itself from its location (the URL shown by **Copy URL**), with the credentials it finds in the
+environment, not with the options given to the explorer. Tables on storage polars cannot read, such as `memory://`,
+show an error instead of the data.
+
+Filters, sorting, hidden columns and widths are remembered per table, so reopening it shows it as you left it. By
+default they are remembered until the kernel restarts; to keep them for good, store them in a file:
 
 ```python
 from jupyter_storage_explorer.query import QuerySettingsStore
 
-StorageExplorer("s3://my-bucket/data", query_settings=QuerySettingsStore("query-settings.json"))
+settings = QuerySettingsStore("query-settings.json")
+StorageExplorer("s3://my-bucket/data", query_settings=settings)
 ```
+
+### DataExplorer: one table
+
+`DataExplorer` opens the same data browser for a single table, without the file explorer around it:
+
+```python
+from jupyter_storage_explorer import DataExplorer
+
+DataExplorer("s3://my-bucket/lake/sales")  # a Delta Lake table, Parquet, CSV, JSON Lines or Excel
+DataExplorer("data/orders.tsv", format="CSV")  # choose the format by name
+DataExplorer("abfs://lake@myaccount.dfs.core.windows.net/raw/orders.parquet", height="600px")
+```
+
+Options after the address are passed to the storage package, as for `StorageExplorer`; `query_settings=` works the same
+way. If polars (or a package the format needs, such as `deltalake`) is not installed, `DataExplorer` raises an error
+with the `%pip install` command instead of opening. Settings are shared with the explorer's Query data, so a table
+looks the same in both.
 
 ## Supported formats
 
 | Format                                                       | Preview                       | Query data | Load with               |
 |--------------------------------------------------------------|-------------------------------|------------|-------------------------|
-| Delta Lake tables                                            | First rows                    | ✓          | polars (with deltalake) |
-| Parquet files, and folders of them (e.g. Spark, Hive output) | First rows                    | ✓          | polars, pandas          |
-| CSV, TSV                                                     | First rows                    | ✓          | polars, pandas          |
-| JSON Lines                                                   | First records                 | ✓          | polars, pandas          |
+| Delta Lake tables                                            | First rows                    | ✓         | polars (with deltalake) |
+| Parquet files, and folders of them (e.g. Spark, Hive output) | First rows                    | ✓         | polars, pandas          |
+| CSV, TSV                                                     | First rows                    | ✓         | polars, pandas          |
+| JSON Lines                                                   | First records                 | ✓         | polars, pandas          |
 | JSON                                                         | Collapsible tree              |            | Python, polars, pandas  |
-| Excel (`.xlsx`)                                              | First rows of the first sheet | ✓          | polars, pandas          |
+| Excel (`.xlsx`)                                              | First rows of the first sheet | ✓         | polars, pandas          |
 | Markdown                                                     | Rendered                      |            | Python                  |
 | Text, code, configuration (YAML, SQL, Python, …)             | With syntax highlighting      |            | Python                  |
 | Images (PNG, JPEG, GIF, SVG, …)                              | Shown                         |            | Pillow                  |
@@ -143,9 +174,8 @@ explorer
 ```
 
 ```python
-explorer.selected_urls  # locations of the selected items, e.g. to pass to pandas
-explorer.current_dir  # the folder shown
-explorer.filesystem = "Local"  # switch storage (with several filesystems)
+explorer.folder_url  # the URL of the folder shown, e.g. to pass to polars or pandas
+explorer.selected_urls  # the URLs of the selected items
 ```
 
 ## Options
@@ -164,7 +194,7 @@ Rows in the explorer carry attributes you can style with CSS:
 - **Folders** (tree and list): `data-depth`, their level below the top folder: `0` for the top folder itself, `1` for
   the folders in it, and so on.
 - **Files** (list): `data-file-format`, the format name in lower case with `-` for spaces: `parquet`, `csv`, `json`,
-  `json-lines`, `excel-workbook`, `markdown`, `text`, `image`. Files of no known format have none.
+  `json-lines`, `excel-workbook`, `markdown`, `text`, `image`. Files of no known format, or without a URL, have none.
 
 Run CSS in a notebook cell, before or after the explorer. This example shows the top folder as a grey container,
 the folders in it in blue-grey and deeper folders in yellow, and gives data files their own icons:
@@ -209,5 +239,6 @@ with `jupyter lab --LabApp.custom_css=True`.
 ## Requirements
 
 - Python 3.11 or later
-- JupyterLab 4. The explorer is a notebook widget, so it also shows in other Jupyter frontends, but dragging files from
-  JupyterLab's file browser works only in JupyterLab.
+- JupyterLab 4. The widgets also show in other Jupyter frontends, but dragging files from JupyterLab's file browser
+  works only in JupyterLab.
+- For Query data and `DataExplorer`: a recent polars (tested with polars 2.0).

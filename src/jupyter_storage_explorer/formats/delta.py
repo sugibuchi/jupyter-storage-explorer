@@ -29,8 +29,10 @@ class DeltaLake(DataFormat):
     def matches(self, target: Target) -> bool:
         return target.is_dir and "_delta_log" in target.child_names
 
-    def scan(self, target: Target, limits: PreviewLimits) -> Any:
-        return Polars().load().scan_delta(target.url)
+    def scan(self, url: str) -> Any:
+        # polars reads the table with deltalake (delta-rs), which reads cloud
+        # storage itself with credentials from the environment.
+        return Polars().load().scan_delta(url)
 
     def preview(self, target: Target, limits: PreviewLimits) -> list[Preview]:
         if self.installed_requirements() is None:
@@ -40,10 +42,7 @@ class DeltaLake(DataFormat):
     def preview_with_polars(
         self, target: Target, limits: PreviewLimits
     ) -> list[Preview]:
-        pl = Polars().load()
-        # polars reads the table with deltalake (delta-rs), which reads cloud
-        # storage itself with credentials from the environment.
-        df = pl.scan_delta(target.url).head(limits.max_rows).collect()
+        df = self.scan(target.url).head(limits.max_rows).collect()
         return [
             polars_table(df, note=rows_note(df.height, df.height == limits.max_rows))
         ]

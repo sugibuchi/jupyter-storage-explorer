@@ -62,3 +62,6 @@ out/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Others
+notebooks/query-settings.json

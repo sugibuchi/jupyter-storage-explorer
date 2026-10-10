@@ -1,4 +1,4 @@
-"""File browser widget: directory tree, file list, and a preview of the selected item."""
+"""Storage explorer widget: directory tree, file list, and a preview of the selected item."""
 
 from __future__ import annotations
 
@@ -8,7 +8,6 @@ import dataclasses
 import datetime as dt
 import hashlib
 import os
-import pathlib
 import re
 import tempfile
 from collections.abc import Mapping, Sequence
@@ -18,7 +17,8 @@ import anywidget
 import traitlets
 from fsspec.core import url_to_fs
 
-from jupyter_storage_explorer import query
+from jupyter_storage_explorer import _static
+from jupyter_storage_explorer._urls import default_url
 from jupyter_storage_explorer.formats import (
     DEFAULT_FORMATS,
     DataFormat,
@@ -28,13 +28,11 @@ from jupyter_storage_explorer.formats import (
     Recipe,
     Target,
     Text,
-    UrlFor,
-    default_url_for,
     matching_formats,
 )
 from jupyter_storage_explorer.formats import detect as detect_format
 from jupyter_storage_explorer.formats.base import jsonable
-from jupyter_storage_explorer.query import QuerySettingsStore
+from jupyter_storage_explorer.query import DataQuery, QuerySettingsStore
 from jupyter_storage_explorer.query import default_store as default_query_settings
 
 if TYPE_CHECKING:
@@ -42,7 +40,6 @@ if TYPE_CHECKING:
 
     from fsspec import AbstractFileSystem
 
-_STATIC = pathlib.Path(__file__).parent / "static"
 # JavaScript libraries the frontend may ask for (see static/vendor/README.md);
 # only these names are served.
 _VENDOR_FILES = frozenset({"marked.esm.js", "purify.es.mjs"})
@@ -216,17 +213,17 @@ class StorageExplorer(anywidget.AnyWidget):
     within the widget onto a folder are moved there (see ``_mv``).
 
     Examples:
-        FileBrowser()                          # current local directory
-        FileBrowser("s3://my-bucket/data", anon=True)
-        FileBrowser("memory://")
-        FileBrowser("data", fs=my_filesystem)  # an existing fsspec filesystem
-        FileBrowser(filesystems={"Lake": s3, "Local": "file:///home/me/data"})
+        StorageExplorer()                          # current local directory
+        StorageExplorer("s3://my-bucket/data", anon=True)
+        StorageExplorer("memory://")
+        StorageExplorer("data", fs=my_filesystem)  # an existing fsspec filesystem
+        StorageExplorer(filesystems={"Lake": s3, "Local": "file:///home/me/data"})
 
     Extra keyword arguments are passed to fsspec as storage options.
     When ``fs`` is given, ``path`` is a path within that filesystem instead.
 
     ``filesystems`` maps names to several filesystems, chosen with a
-    drop-down in the widget (or by setting ``filesystem`` to a name); each
+    drop-down in the widget; each
     remembers its current folder while another is shown. Values are fsspec
     filesystems (starting at their top level; wrap one in fsspec's
     ``DirFileSystem`` to start in a subfolder) or URLs (starting at that path).
@@ -237,13 +234,10 @@ class StorageExplorer(anywidget.AnyWidget):
     ``DEFAULT_FORMATS``). ``max_upload_bytes`` limits the size of files
     uploaded from the user's computer (default 10 MB; None for no limit).
 
-    ``url_for(fs, path)`` turns a path on the filesystem shown into the
-    location used by "Copy URL", ``selected_urls``, "Python code" snippets
-    and previews that read by location (e.g. with polars). The default,
-    ``default_url_for``, gives a plain path for local files and
-    ``protocol://path`` otherwise. Replace it to e.g. resolve a
-    ``DirFileSystem`` to its underlying location; with several
-    ``filesystems``, tell them apart by ``fs``.
+    The public interface is ``folder_url``, the URL of the folder shown, and
+    ``selected_urls``, those of the selected items. To change how paths
+    become locations ("Copy URL", these properties, "Python code" snippets,
+    data read by polars), override ``_url`` in a subclass.
 
     With polars installed, tabular data (Parquet, Delta Lake, CSV, ...) opens
     in a data browser ("Query data") with paging, sorting, filters and column
@@ -252,43 +246,43 @@ class StorageExplorer(anywidget.AnyWidget):
     kernel, in memory; give one with a path to keep them across restarts).
     """
 
-    _esm = _STATIC / "browser.js"
-    _css = _STATIC / "browser.css"
+    _esm = _static.esm("storage_explorer")
+    _css = _static.css("storage_explorer")
 
-    root = traitlets.Unicode().tag(sync=True)
+    _root = traitlets.Unicode().tag(sync=True)
     # Directory path -> list of {"name", "path"} of its subdirectories.
     # A directory that has not been listed yet has no key.
-    tree = traitlets.Dict().tag(sync=True)
-    current_dir = traitlets.Unicode().tag(sync=True)
-    entries = traitlets.List().tag(sync=True)
-    selected = traitlets.List(traitlets.Unicode()).tag(sync=True)
-    error = traitlets.Unicode().tag(sync=True)
+    _tree = traitlets.Dict().tag(sync=True)
+    _current_dir = traitlets.Unicode().tag(sync=True)
+    _entries = traitlets.List().tag(sync=True)
+    _selected = traitlets.List(traitlets.Unicode()).tag(sync=True)
+    _error = traitlets.Unicode().tag(sync=True)
     # Height of the tree and file list (CSS). The preview panel adds its own
     # height below them, and both can be resized by dragging in the widget.
-    height = traitlets.Unicode("400px").tag(sync=True)
+    _height = traitlets.Unicode("400px").tag(sync=True)
     # Preview shown in the panel: {"path", "name", "format", "sections",
     # "error", "loading"}; empty when the panel is closed.
-    preview = traitlets.Dict().tag(sync=True)
+    _preview = traitlets.Dict().tag(sync=True)
     # Format of the current directory itself (e.g. "Delta Lake table"), or ""
     # if it cannot be previewed; enables the Preview button when nothing is selected.
-    current_format = traitlets.Unicode().tag(sync=True)
+    _current_format = traitlets.Unicode().tag(sync=True)
     # Whether the current directory can be queried in the data browser
     # ("Query data" instead of "Preview").
-    current_query = traitlets.Bool().tag(sync=True)
+    _current_query = traitlets.Bool().tag(sync=True)
     # Format of the single selected item, for the Preview button's label:
     # {"path", "format", "query"} ("format" is "" if it cannot be previewed;
     # "query": whether it opens in the data browser); empty unless exactly one
     # item is selected. The path lets the frontend ignore an answer for a
     # previous selection.
-    selected_format = traitlets.Dict().tag(sync=True)
+    _selected_format = traitlets.Dict().tag(sync=True)
     # Largest file that can be uploaded from the user's computer (bytes), or
     # None for no limit. Files dragged from JupyterLab's file browser are
     # copied by the kernel directly and are not limited.
-    max_upload_bytes = traitlets.Int(10 * 1024 * 1024, allow_none=True).tag(sync=True)
-    # Names of the filesystems to choose from, and the one shown. Setting
-    # `filesystem` switches to it (the widget's drop-down does the same).
-    filesystems = traitlets.List(traitlets.Unicode()).tag(sync=True)
-    filesystem = traitlets.Unicode().tag(sync=True)
+    _max_upload_bytes = traitlets.Int(10 * 1024 * 1024, allow_none=True).tag(sync=True)
+    # Names of the filesystems to choose from, and the one shown. The
+    # widget's drop-down sets `_filesystem` to switch.
+    _filesystem_names = traitlets.List(traitlets.Unicode()).tag(sync=True)
+    _filesystem = traitlets.Unicode().tag(sync=True)
 
     def __init__(
         self,
@@ -300,16 +294,14 @@ class StorageExplorer(anywidget.AnyWidget):
         formats: Sequence[DataFormat] | None = None,
         preview_limits: PreviewLimits | None = None,
         max_upload_bytes: int | None = 10 * 1024 * 1024,
-        url_for: UrlFor | None = None,
         query_settings: QuerySettingsStore | None = None,
         **storage_options: Any,
     ) -> None:
-        self._url_for: UrlFor = url_for or default_url_for
-        self.query_settings = query_settings or default_query_settings
-        # Data browser: path -> (LazyFrame, schema) of the data being queried.
-        self._queries: dict[str, tuple[Any, Any]] = {}
-        self.formats = list(DEFAULT_FORMATS if formats is None else formats)
-        self.preview_limits = preview_limits or PreviewLimits()
+        self._query_settings = query_settings or default_query_settings
+        # Data browser: path -> the data being queried.
+        self._queries: dict[str, DataQuery] = {}
+        self._formats = list(DEFAULT_FORMATS if formats is None else formats)
+        self._preview_limits = preview_limits or PreviewLimits()
         # Uploads from the user's computer in progress: id -> {"file", "target", ...}.
         self._incoming: dict[str, dict[str, Any]] = {}
         # Name -> (filesystem, top-level path), and the folder each was left in.
@@ -330,16 +322,16 @@ class StorageExplorer(anywidget.AnyWidget):
             self._filesystems = {"default": _open(path, fs, storage_options)}
         self._remembered: dict[str, str] = {}
         name = next(iter(self._filesystems))
-        self.fs: AbstractFileSystem = self._filesystems[name][0]
+        self._fs: AbstractFileSystem = self._filesystems[name][0]
         super().__init__(
-            height=height,
-            max_upload_bytes=max_upload_bytes,
-            filesystems=list(self._filesystems),
+            _height=height,
+            _max_upload_bytes=max_upload_bytes,
+            _filesystem_names=list(self._filesystems),
         )
         self.on_msg(self._on_custom_msg)
-        self.filesystem = name  # shows its top level (see _on_filesystem)
+        self._filesystem = name  # shows its top level (see _on_filesystem)
 
-    @traitlets.validate("filesystem")
+    @traitlets.validate("_filesystem")
     def _validate_filesystem(self, proposal: dict[str, Any]) -> str:
         if proposal["value"] not in self._filesystems:
             raise traitlets.TraitError(
@@ -347,70 +339,84 @@ class StorageExplorer(anywidget.AnyWidget):
             )
         return proposal["value"]
 
-    @traitlets.observe("filesystem")
+    @traitlets.observe("_filesystem")
     def _on_filesystem(self, change: dict[str, Any]) -> None:
         """Switch filesystems, remembering the folder left and returning to the one remembered."""
         if change["old"] in self._filesystems:
-            self._remembered[change["old"]] = self.current_dir
-        self.fs, root = self._filesystems[change["new"]]
+            self._remembered[change["old"]] = self._current_dir
+        self._fs, root = self._filesystems[change["new"]]
         path = self._remembered.get(change["new"], root)
-        if path != root and not _is_dir(self.fs, path):
+        if path != root and not _is_dir(self._fs, path):
             path = root  # the remembered folder is gone
         # One update for the frontend: separate ones would let it combine the
         # new root with the old folder (or the reverse) and ask the new
         # filesystem to list the old filesystem's paths.
         self._queries.clear()
         with self.hold_sync():
-            self.preview = {}
-            self.tree = {}
-            self.root = root
-            if self.current_dir == path:
+            self._preview = {}
+            self._tree = {}
+            self._root = root
+            if self._current_dir == path:
                 # Same path string as before (e.g. "/" on both), so no change event lists it.
                 self._list(path)
             else:
-                self.current_dir = path
+                self._current_dir = path
+
+    @property
+    def folder_url(self) -> str | None:
+        """Location of the folder shown in the list (see ``_url``), usable with
+        ``fsspec.open``, pandas, etc.; None if it has no URL."""
+        return self._url(self._current_dir)
 
     @property
     def selected_urls(self) -> list[str]:
-        """Locations of the selected items (see ``url_for``), usable with ``fsspec.open``, pandas, etc."""
-        return [self._url(p) for p in self.selected]
+        """Locations of the selected items (see ``_url``), in the order selected.
 
-    def refresh(self) -> None:
+        Items without a URL are left out, so the list is empty when nothing
+        with a URL is selected.
+        """
+        return [url for p in self._selected if (url := self._url(p)) is not None]
+
+    def _refresh(self) -> None:
         """Drop cached listings and reload the current directory."""
-        self.fs.invalidate_cache()
-        self.tree = {}
-        self._list(self.current_dir)
+        self._fs.invalidate_cache()
+        self._tree = {}
+        self._list(self._current_dir)
 
-    @traitlets.observe("current_dir")
+    @traitlets.observe("_current_dir")
     def _on_current_dir(self, change: dict[str, Any]) -> None:
         self._list(change["new"])
 
-    @traitlets.observe("selected")
+    @traitlets.observe("_selected")
     def _on_selected(self, change: dict[str, Any]) -> None:
         if len(change["new"]) != 1:
-            self.selected_format = {}
+            self._selected_format = {}
             return
         path = change["new"][0]
         try:
             _, formats = self._detect(path)
         except Exception:
             formats = []  # detection is best-effort; a failure just means no preview
-        self.selected_format = {
+        self._selected_format = {
             "path": path,
             "format": formats[0].name if formats else "",
             "query": bool(formats) and formats[0].can_query(),
         }
 
-    def _detect(self, path: str) -> tuple[Target, list[DataFormat]]:
-        """The target at ``path`` and the formats matching it, best first."""
-        info = self.fs.info(path)
-        children = self._ls(path) if info.get("type") == "directory" else None
-        target = Target(
-            fs=self.fs, path=path, url=self._url(path), info=info, children=children
-        )
-        return target, matching_formats(target, self.formats)
+    def _detect(self, path: str) -> tuple[Target | None, list[DataFormat]]:
+        """The target at ``path`` and the formats matching it, best first.
 
-    def open_preview(self, path: str, format: str | None = None) -> None:
+        (None, []) if ``path`` has no URL: it is then not treated as data.
+        """
+        url = self._url(path)
+        if url is None:
+            return None, []
+        info = self._fs.info(path)
+        children = self._ls(path) if info.get("type") == "directory" else None
+        target = Target(fs=self._fs, path=path, url=url, info=info, children=children)
+        return target, matching_formats(target, self._formats)
+
+    def _open_preview(self, path: str, format: str | None = None) -> None:
         """Preview the file or directory at ``path`` in the preview panel.
 
         ``format`` names one of the formats matching it (e.g. "Text" for a JSON
@@ -424,9 +430,11 @@ class StorageExplorer(anywidget.AnyWidget):
             "error": "",
         }
         # Shown while the (possibly remote) reads below run.
-        self.preview = {**base, "loading": True}
+        self._preview = {**base, "loading": True}
         try:
             target, formats = self._detect(path)
+            if target is None:
+                raise ValueError(f"{path} has no URL, so it cannot be previewed")
             if format is not None:
                 formats = [f for f in formats if f.name == format]
                 if not formats:
@@ -438,15 +446,15 @@ class StorageExplorer(anywidget.AnyWidget):
                     base["query"] = self._open_query(path, fmt, target)
                 else:
                     base["sections"] = [
-                        _section(s) for s in fmt.preview(target, self.preview_limits)
+                        _section(s) for s in fmt.preview(target, self._preview_limits)
                     ]
         except Exception as exc:
             base["error"] = f"{type(exc).__name__}: {exc}"
-        self.preview = base
+        self._preview = base
 
-    def close_preview(self) -> None:
+    def _close_preview(self) -> None:
         self._queries.clear()
-        self.preview = {}
+        self._preview = {}
 
     # --- Data browser ("Query data") ---
 
@@ -455,83 +463,28 @@ class StorageExplorer(anywidget.AnyWidget):
 
         The frontend then asks for rows with "query_rows".
         """
-        lf = fmt.scan(target, self.preview_limits)
-        schema = lf.collect_schema()
-        self._queries[path] = (lf, schema)
-        remembered = self.query_settings.get(self._url(path))
-        return {
-            "columns": query.columns_info(schema),
-            "settings": query.normalize_settings(remembered, schema),
-        }
+        # Settings are remembered by URL, so they follow the data across explorers.
+        data = DataQuery(fmt.scan(target.url), target.url, self._query_settings)
+        self._queries[path] = data
+        return data.opening()
 
-    def _query_save(self, content: dict[str, Any]) -> dict[str, Any]:
-        """Remember settings changed without fetching rows (e.g. column widths)."""
-        path = content["path"]
-        if path in self._queries:
-            _, schema = self._queries[path]
-            settings = query.normalize_settings(content.get("settings"), schema)
-            self.query_settings.set(self._url(path), settings)
-        return {}
-
-    def _query_check(self, content: dict[str, Any]) -> dict[str, Any]:
-        """Check one filter before the frontend applies it: {} if it can run,
-        else {"error": message} (e.g. an invalid regular expression)."""
-        path, column = content["path"], content["column"]
-        if path not in self._queries:
+    def _query_request(self, content: dict[str, Any]) -> dict[str, Any]:
+        """Answer the data browser's "query_rows", "query_check" or "query_save"."""
+        data = self._queries.get(content["path"])
+        if data is None:
             return {"error": "the data is no longer open; preview it again"}
-        _, schema = self._queries[path]
-        settings = query.normalize_settings(
-            {"filters": {column: content["filter"]}}, schema
-        )
-        if column not in settings["filters"]:
-            return {"error": f"this filter is not available for {column!r}"}
-        try:
-            query.check_filter(column, schema[column], settings["filters"][column])
-        except ValueError as exc:
-            return {"error": str(exc)}
-        return {}
+        return data.handle(content) or {}
 
-    def _query_rows(self, content: dict[str, Any]) -> dict[str, Any]:
-        """Rows ``offset`` to ``offset + window`` of the data, with the frontend's
-        settings applied; also remembers those settings for the dataset."""
-        path = content["path"]
-        if path not in self._queries:
-            return {"error": "the data is no longer open; preview it again"}
-        lf, schema = self._queries[path]
-        settings = query.normalize_settings(content.get("settings"), schema)
-        self.query_settings.set(self._url(path), settings)
-        offset = max(0, int(content.get("offset", 0)))
-        window = max(1, int(content.get("window", 1000)))
-        try:
-            # One extra row tells whether there are more.
-            df = (
-                query.build_query(lf, schema, settings)
-                .slice(offset, window + 1)
-                .collect()
-            )
-        except Exception as exc:
-            return {"error": f"{type(exc).__name__}: {exc}", "settings": settings}
-        more = df.height > window
-        df = df.head(window)
-        return {
-            "offset": offset,
-            "columns": df.columns,
-            "dtypes": [str(t) for t in df.dtypes],
-            "rows": [[jsonable(v) for v in row] for row in df.rows()],
-            "more": more,
-            "settings": settings,
-        }
-
-    def recipes(self, path: str) -> list[Recipe]:
+    def _recipes(self, path: str) -> list[Recipe]:
         """Ways to load ``path`` in the notebook, from its best-matching format.
 
-        Empty if its format is unknown. Storage options that look like
-        credentials are left out of the code.
+        Empty if its format is unknown or it has no URL. Storage options that
+        look like credentials are left out of the code.
         """
         target, formats = self._detect(path)
-        if not formats:
+        if target is None or not formats:
             return []
-        return formats[0].recipes(target, _snippet_options(self.fs.storage_options))
+        return formats[0].recipes(target, _snippet_options(self._fs.storage_options))
 
     def _send_menu_info(self, path: str) -> None:
         """Answer the right-click menu's request: matching formats ("Preview as"),
@@ -540,14 +493,16 @@ class StorageExplorer(anywidget.AnyWidget):
         try:
             target, formats = self._detect(path)
             reply["formats"] = [f.name for f in formats]
-            options = _snippet_options(self.fs.storage_options)
+            options = _snippet_options(self._fs.storage_options)
             reply["recipes"] = (
                 [dataclasses.asdict(r) for r in formats[0].recipes(target, options)]
                 if formats
                 else []
             )
-            reply["editable"] = not target.is_dir and any(
-                isinstance(f, Text) for f in formats
+            reply["editable"] = (
+                target is not None
+                and not target.is_dir
+                and any(isinstance(f, Text) for f in formats)
             )
             reply["query"] = bool(formats) and formats[0].can_query()
         except Exception as exc:
@@ -556,9 +511,9 @@ class StorageExplorer(anywidget.AnyWidget):
 
     # --- Text editor ---
 
-    def read_text(self, path: str) -> tuple[str, str]:
-        """The text of a UTF-8 file, and a version string to pass to ``write_text``."""
-        data = self.fs.cat_file(path)
+    def _read_text(self, path: str) -> tuple[str, str]:
+        """The text of a UTF-8 file, and a version string to pass to ``_write_text``."""
+        data = self._fs.cat_file(path)
         if len(data) > _MAX_EDIT_BYTES:
             raise ValueError(
                 f"too large to edit (over {_MAX_EDIT_BYTES // (1024 * 1024)} MB)"
@@ -569,14 +524,14 @@ class StorageExplorer(anywidget.AnyWidget):
             raise ValueError("not UTF-8 text") from None
         return text, _version(data)
 
-    def write_text(self, path: str, text: str, version: str | None = None) -> str:
+    def _write_text(self, path: str, text: str, version: str | None = None) -> str:
         """Save ``text`` to the file at ``path``; returns its new version.
 
-        With ``version`` (from ``read_text``), refuses to save if the file has
+        With ``version`` (from ``_read_text``), refuses to save if the file has
         changed since, rather than overwriting that change. Files with Windows
         line endings keep them, although browsers edit text with "\\n" only.
         """
-        current = self.fs.cat_file(path) if self.fs.exists(path) else b""
+        current = self._fs.cat_file(path) if self._fs.exists(path) else b""
         if version is not None and _version(current) != version:
             raise RuntimeError(
                 "the file has changed since it was opened; close the editor and open it again"
@@ -584,23 +539,23 @@ class StorageExplorer(anywidget.AnyWidget):
         if b"\r\n" in current:
             text = text.replace("\r\n", "\n").replace("\n", "\r\n")
         data = text.encode("utf-8")
-        self.fs.pipe_file(path, data)
-        self.fs.invalidate_cache(path)
+        self._fs.pipe_file(path, data)
+        self._fs.invalidate_cache(path)
         self._update_entry(path)
-        if self.preview.get("path") == path:
-            self.open_preview(path, self.preview.get("format"))
+        if self._preview.get("path") == path:
+            self._open_preview(path, self._preview.get("format"))
         return _version(data)
 
     def _update_entry(self, path: str) -> None:
         """Refresh the size and modification time shown for ``path`` in the list."""
-        if any(e["path"] == path for e in self.entries):
-            new = {**_entry(self.fs.info(path)), "url": self._url(path)}
-            self.entries = [new if e["path"] == path else e for e in self.entries]
+        if any(e["path"] == path for e in self._entries):
+            new = {**_entry(self._fs.info(path)), "url": self._url(path)}
+            self._entries = [new if e["path"] == path else e for e in self._entries]
 
     def _edit_open(self, path: str) -> None:
         reply: dict[str, Any] = {"type": "edit_open", "path": path}
         try:
-            reply["text"], reply["version"] = self.read_text(path)
+            reply["text"], reply["version"] = self._read_text(path)
         except Exception as exc:
             reply["error"] = f"Cannot open {_basename(path)}: {exc}"
         self.send(reply)
@@ -608,7 +563,7 @@ class StorageExplorer(anywidget.AnyWidget):
     def _edit_save(self, path: str, text: str, version: str | None) -> None:
         reply: dict[str, Any] = {"type": "edit_save", "path": path}
         try:
-            reply["version"] = self.write_text(path, text, version)
+            reply["version"] = self._write_text(path, text, version)
         except Exception as exc:
             reply["error"] = f"Cannot save: {exc}"
         self.send(reply)
@@ -624,7 +579,7 @@ class StorageExplorer(anywidget.AnyWidget):
                 "name": _basename(path),
             }
             try:
-                info = self.fs.info(path)
+                info = self._fs.info(path)
                 if info.get("type") == "directory":
                     raise ValueError("folders cannot be downloaded")
                 size = info.get("size")
@@ -632,7 +587,7 @@ class StorageExplorer(anywidget.AnyWidget):
                     raise ValueError(
                         f"too large to download (over {_MAX_DOWNLOAD_BYTES // (1024 * 1024)} MB)"
                     )
-                data = self.fs.cat_file(path)
+                data = self._fs.cat_file(path)
             except Exception as exc:
                 reply["error"] = f"{_basename(path)}: {exc}"
                 self.send(reply)
@@ -641,7 +596,7 @@ class StorageExplorer(anywidget.AnyWidget):
 
     # --- Upload: copy files dragged in from JupyterLab's file browser ---
 
-    def upload(
+    def _upload_files(
         self, sources: Sequence[str], dest: str, if_exists: str = "ask"
     ) -> dict[str, list[str]]:
         """Copy local files (paths on the kernel's machine) into directory ``dest``.
@@ -662,7 +617,7 @@ class StorageExplorer(anywidget.AnyWidget):
                 errors.append(f"{name}: not found from the kernel")
             else:
                 files.append((source, _join(dest, name)))
-        existing = {target for _, target in files if self.fs.exists(target)}
+        existing = {target for _, target in files if self._fs.exists(target)}
         if if_exists == "ask" and existing:
             return {"conflicts": sorted(_basename(t) for t in existing)}
         copied, skipped = [], []
@@ -671,7 +626,7 @@ class StorageExplorer(anywidget.AnyWidget):
                 skipped.append(_basename(target))
                 continue
             try:
-                self.fs.put_file(source, target)  # streams, so any size works
+                self._fs.put_file(source, target)  # streams, so any size works
                 copied.append(_basename(target))
             except Exception as exc:
                 errors.append(f"{_basename(target)}: {exc}")
@@ -681,10 +636,10 @@ class StorageExplorer(anywidget.AnyWidget):
 
     def _refresh_dir(self, path: str) -> None:
         """Show changes made to directory ``path`` in the list and tree."""
-        self.fs.invalidate_cache(path)
-        if path == self.current_dir:
+        self._fs.invalidate_cache(path)
+        if path == self._current_dir:
             self._list(path)
-        elif path in self.tree:
+        elif path in self._tree:
             self._load_children(path)
 
     def _upload(self, root: str, paths: list[str], dest: str, if_exists: str) -> None:
@@ -693,7 +648,7 @@ class StorageExplorer(anywidget.AnyWidget):
         sources = [os.path.join(base, *p.split("/")) for p in paths]
         reply: dict[str, Any] = {"type": "upload", "dest": dest}
         try:
-            reply.update(self.upload(sources, dest, if_exists))
+            reply.update(self._upload_files(sources, dest, if_exists))
         except Exception as exc:
             reply["errors"] = [f"{type(exc).__name__}: {exc}"]
         self.send(reply)
@@ -707,9 +662,9 @@ class StorageExplorer(anywidget.AnyWidget):
         Override in a subclass to change how files are moved, e.g. to log
         moves, or to copy and delete on storage that cannot rename.
         """
-        self.fs.mv(source, target)
+        self._fs.mv(source, target)
 
-    def move(
+    def _move(
         self, paths: Sequence[str], dest: str, if_exists: str = "ask"
     ) -> dict[str, list[str]]:
         """Move files into directory ``dest`` on the filesystem shown, each with ``_mv``.
@@ -721,14 +676,14 @@ class StorageExplorer(anywidget.AnyWidget):
         (file names). Folders are not moved.
         """
         moves, errors = self._plan_moves(paths, dest)
-        existing = {target for _, target in moves if self.fs.exists(target)}
+        existing = {target for _, target in moves if self._fs.exists(target)}
         if if_exists == "ask" and existing:
             return {"conflicts": sorted(_basename(t) for t in existing)}
         moved, skipped = self._move_files(moves, existing, if_exists, errors)
         if moved:
-            if self.preview.get("path") in moved:
-                self.close_preview()
-            for folder in {dest, *(_parent(p, self.fs) for p in moved)}:
+            if self._preview.get("path") in moved:
+                self._close_preview()
+            for folder in {dest, *(_parent(p, self._fs) for p in moved)}:
                 self._refresh_dir(folder)
         return {
             "moved": [_basename(p) for p in moved],
@@ -746,7 +701,7 @@ class StorageExplorer(anywidget.AnyWidget):
             target = _join(dest, name)
             if _norm(path) == _norm(target):
                 continue  # already in that folder
-            if _is_dir(self.fs, path):
+            if _is_dir(self._fs, path):
                 errors.append(f"{name}: folders are not moved")
             else:
                 moves.append((path, target))
@@ -769,7 +724,7 @@ class StorageExplorer(anywidget.AnyWidget):
             try:
                 if target in existing:
                     # Renaming onto an existing file fails on some systems.
-                    self.fs.rm(target)
+                    self._fs.rm(target)
                 self._mv(source, target)
                 moved.append(source)
             except Exception as exc:
@@ -782,7 +737,7 @@ class StorageExplorer(anywidget.AnyWidget):
         """Which of ``names`` already exist in ``dest``."""
         return {
             "conflicts": [
-                n for n in names if self.fs.exists(_join(dest, _safe_name(n)))
+                n for n in names if self._fs.exists(_join(dest, _safe_name(n)))
             ]
         }
 
@@ -803,13 +758,13 @@ class StorageExplorer(anywidget.AnyWidget):
                 # Opened per piece below, so none stays open between messages.
                 os.close(handle)
                 # The filesystem is kept, as the user may switch to another meanwhile.
-                state = {"path": temp_path, "target": target, "size": 0, "fs": self.fs}
+                state = {"path": temp_path, "target": target, "size": 0, "fs": self._fs}
                 self._incoming[upload_id] = state
             if buffers:
                 piece = bytes(buffers[0])
                 state["size"] += len(piece)
                 # The frontend checks too; this guards against a file larger than it said.
-                limit = self.max_upload_bytes
+                limit = self._max_upload_bytes
                 if limit is not None and state["size"] > limit:
                     raise ValueError(
                         f"too large to upload (over {_format_size(limit)})"
@@ -851,8 +806,8 @@ class StorageExplorer(anywidget.AnyWidget):
         for (those with a "rid") are answered with ``_reply``."""
         return {
             "expand": lambda c, _: self._load_children(c["path"]),
-            "refresh": lambda c, _: self.refresh(),
-            "preview": lambda c, _: self.open_preview(c["path"], c.get("format")),
+            "refresh": lambda c, _: self._refresh(),
+            "preview": lambda c, _: self._open_preview(c["path"], c.get("format")),
             "menu_info": lambda c, _: self._send_menu_info(c["path"]),
             "edit_open": lambda c, _: self._edit_open(c["path"]),
             "edit_save": lambda c, _: self._edit_save(
@@ -869,9 +824,9 @@ class StorageExplorer(anywidget.AnyWidget):
             "upload_done": lambda c, _: self._reply(c, self._upload_done(c["dest"])),
             "vendor": lambda c, _: self._reply(c, self._vendor_source(c["name"])),
             "move": lambda c, _: self._reply(c, self._move_request(c)),
-            "query_rows": lambda c, _: self._reply(c, self._query_rows(c)),
-            "query_check": lambda c, _: self._reply(c, self._query_check(c)),
-            "query_save": lambda c, _: self._reply(c, self._query_save(c)),
+            "query_rows": lambda c, _: self._reply(c, self._query_request(c)),
+            "query_check": lambda c, _: self._reply(c, self._query_request(c)),
+            "query_save": lambda c, _: self._reply(c, self._query_request(c)),
         }
 
     def _upload_done(self, dest: str) -> dict[str, Any]:
@@ -882,11 +837,13 @@ class StorageExplorer(anywidget.AnyWidget):
         """Source of a bundled library, e.g. marked for Markdown previews."""
         if name not in _VENDOR_FILES:
             return {"error": f"unknown library {name!r}"}
-        return {"source": (_STATIC / "vendor" / name).read_text(encoding="utf-8")}
+        return {
+            "source": (_static.STATIC / "vendor" / name).read_text(encoding="utf-8")
+        }
 
     def _move_request(self, content: dict[str, Any]) -> dict[str, Any]:
         try:
-            return self.move(
+            return self._move(
                 content["paths"], content["dest"], content.get("if_exists", "ask")
             )
         except Exception as exc:
@@ -894,16 +851,16 @@ class StorageExplorer(anywidget.AnyWidget):
 
     def _ancestors(self, path: str) -> list[str]:
         """Directories from the root down to (but excluding) ``path``."""
-        if not path.startswith(self.root):
+        if not path.startswith(self._root):
             return []
-        out, cur = [], self.root
-        for segment in filter(None, path[len(self.root) :].split("/")):
+        out, cur = [], self._root
+        for segment in filter(None, path[len(self._root) :].split("/")):
             out.append(cur)
             cur = _join(cur, segment)
         return out
 
     def _ls(self, path: str) -> list[dict[str, Any]]:
-        infos = self.fs.ls(path, detail=True)
+        infos = self._fs.ls(path, detail=True)
         # Some backends include the directory itself in its own listing.
         return [i for i in infos if _norm(i["name"]) != _norm(path)]
 
@@ -911,17 +868,26 @@ class StorageExplorer(anywidget.AnyWidget):
         try:
             infos = self._ls(path)
         except Exception as exc:
-            self.error = f"Cannot list {path}: {exc}"
+            self._error = f"Cannot list {path}: {exc}"
             infos = []
         self._set_children(path, infos)
 
-    def _url(self, path: str) -> str:
-        """Location of ``path`` on the filesystem shown, from ``url_for``.
+    def _url(self, path: str) -> str | None:
+        """Location of ``path`` on the filesystem shown (``self._fs``).
 
-        The one place paths become locations: "Copy URL", ``selected_urls``,
+        The one place paths become locations: "Copy URL", ``folder_url``,
         "Python code" snippets and previews that read by location all use it.
+        Gives a plain path for local files, which every library reads; for
+        Azure (adlfs), ``abfs://container@account.dfs.core.windows.net/key``,
+        which names the account; and ``protocol://path`` otherwise. Override
+        to e.g. resolve a ``DirFileSystem`` to its underlying location; with
+        several ``filesystems``, tell them apart by ``self._filesystem``.
+
+        An override may return None for items without a URL. They can still be
+        browsed, uploaded to, downloaded and moved, but have no "Copy URL",
+        preview, "Query data", "Python code" or "Edit".
         """
-        return self._url_for(self.fs, path)
+        return default_url(self._fs, path)
 
     def _set_children(self, path: str, infos: list[dict[str, Any]]) -> None:
         dirs = sorted(
@@ -936,25 +902,25 @@ class StorageExplorer(anywidget.AnyWidget):
             ),
             key=lambda d: d["name"].lower(),
         )
-        self.tree = {**self.tree, path: dirs}
+        self._tree = {**self._tree, path: dirs}
 
     def _list(self, path: str) -> None:
         # Make sure the tree can be expanded down to the current directory.
         for ancestor in self._ancestors(path):
-            if ancestor not in self.tree:
+            if ancestor not in self._tree:
                 self._load_children(ancestor)
         try:
             infos = self._ls(path)
         except Exception as exc:
-            self.error = f"Cannot list {path}: {exc}"
-            self.entries = []
-            self.selected = []
-            self.current_format = ""
-            self.current_query = False
+            self._error = f"Cannot list {path}: {exc}"
+            self._entries = []
+            self._selected = []
+            self._current_format = ""
+            self._current_query = False
             return
-        self.error = ""
+        self._error = ""
         self._set_children(path, infos)
-        self.entries = [
+        self._entries = [
             {
                 **(e := _entry(i)),
                 "url": self._url(e["path"]),
@@ -962,23 +928,24 @@ class StorageExplorer(anywidget.AnyWidget):
             }
             for i in infos
         ]
-        self.selected = []
+        self._selected = []
         fmt = self._directory_format(path, infos)
-        self.current_format = fmt.name if fmt is not None else ""
-        self.current_query = fmt is not None and fmt.can_query()
+        self._current_format = fmt.name if fmt is not None else ""
+        self._current_query = fmt is not None and fmt.can_query()
 
     def _file_format(self, info: dict[str, Any]) -> str:
         """The format of a listed file as a CSS-friendly name, e.g. "json-lines".
 
         Shown as the row's ``data-file-format``. Empty for folders (detecting
-        them would mean listing each one) and unrecognised files.
+        them would mean listing each one), files without a URL and
+        unrecognised files.
         """
-        if info.get("type") == "directory":
-            return ""
         path = _norm(info["name"])
-        target = Target(fs=self.fs, path=path, url=self._url(path), info=info)
+        if info.get("type") == "directory" or (url := self._url(path)) is None:
+            return ""
+        target = Target(fs=self._fs, path=path, url=url, info=info)
         try:
-            fmt = detect_format(target, self.formats)
+            fmt = detect_format(target, self._formats)
         except Exception:
             return ""  # detection is best-effort
         return fmt.name.lower().replace(" ", "-") if fmt is not None else ""
@@ -987,16 +954,19 @@ class StorageExplorer(anywidget.AnyWidget):
         self, path: str, infos: list[dict[str, Any]]
     ) -> DataFormat | None:
         """The format of directory ``path`` given its listing, if any."""
+        url = self._url(path)
+        if url is None:
+            return None
         # The listing is all directory formats need, so skip fetching the
         # directory's own info.
         target = Target(
-            fs=self.fs,
+            fs=self._fs,
             path=path,
-            url=self._url(path),
+            url=url,
             info={"name": path, "type": "directory"},
             children=infos,
         )
         try:
-            return detect_format(target, self.formats)
+            return detect_format(target, self._formats)
         except Exception:
             return None  # detection is best-effort; a failure just means no preview

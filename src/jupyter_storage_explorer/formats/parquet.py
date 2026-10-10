@@ -143,15 +143,14 @@ class Parquet(DataFormat):
             return _is_dataset(target.children, target.fs)
         return super().matches(target)
 
-    def scan(self, target: Target, limits: PreviewLimits) -> Any:
-        pl = Polars().load()
-        if target.is_dir:
-            # All the directory's own data files (not only the preview's first few).
-            files = _data_files(target)
-            if not files:
-                raise ValueError("no Parquet files found")
-            return pl.scan_parquet([target.url_for(f) for f in files])
-        return pl.scan_parquet(target.url)
+    def scan(self, url: str) -> Any:
+        """A LazyFrame over a Parquet file, or over a directory's data files.
+
+        For a directory, polars lists the files itself. Names starting with
+        "." or "_" are skipped, as Spark writes "_SUCCESS" and ".crc"
+        checksums next to the data.
+        """
+        return Polars().load().scan_parquet(url, hidden_file_prefix=[".", "_"])
 
     def preview(self, target: Target, limits: PreviewLimits) -> list[Preview]:
         requirements = self.installed_requirements()
@@ -165,16 +164,7 @@ class Parquet(DataFormat):
         self, target: Target, limits: PreviewLimits
     ) -> list[Preview]:
         pl = Polars().load()
-        # polars reads cloud storage itself (credentials from the environment),
-        # fetching only the rows needed.
-        if target.is_dir:
-            # Only the first few data files: enough for a preview.
-            files = _data_files(target, _PREVIEW_FILES)
-            if not files:
-                raise ValueError("no Parquet files found")
-            lf = pl.scan_parquet([target.url_for(f) for f in files])
-        else:
-            lf = pl.scan_parquet(target.url)
+        lf = self.scan(target.url)
         df = lf.head(limits.max_rows).collect()
         if target.is_dir:
             note = rows_note(df.height, df.height == limits.max_rows)

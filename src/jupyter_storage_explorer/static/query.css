@@ -1,0 +1,221 @@
+/* Data browser ("Query data"): toolbar, then the table filling the panel. */
+.jse-query {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  gap: 4px;
+}
+
+.jse-query-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+
+/* Applied filters: one line, scrolling sideways when there are many. */
+.jse-query-chips {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  gap: 4px;
+  overflow-x: auto;
+}
+
+.jse-chip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  max-width: 24em;
+  border: 1px solid var(--jse-accent);
+  border-radius: 10px;
+  background: var(--jse-accent-bg);
+  white-space: nowrap;
+}
+
+.jse-chip-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 1px 4px 1px 8px;
+  cursor: pointer;
+}
+
+.jse-chip-remove {
+  padding: 0 6px 0 2px;
+  border: none;
+  background: none;
+  color: var(--jse-fg-muted);
+  cursor: pointer;
+  font: inherit;
+}
+
+.jse-chip-remove:hover {
+  color: var(--jse-error);
+}
+
+.jse-query-status {
+  min-width: 9em;
+  text-align: center;
+  color: var(--jse-fg-muted);
+}
+
+.jse-query .jse-table-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+}
+
+/* Column resizing: a handle on each header's right edge. Once a column is
+   resized, the table uses fixed widths (set on <col> elements). */
+.jse-col-resizer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.jse-col-resizer:hover {
+  background: var(--jse-accent-bg);
+}
+
+.jse-data.jse-fixed {
+  table-layout: fixed;
+}
+
+.jse-data.jse-fixed th,
+.jse-data.jse-fixed td {
+  max-width: none;
+}
+
+.jse-query-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.jse-query-name {
+  cursor: pointer;
+}
+
+.jse-query-name:hover {
+  text-decoration: underline;
+}
+
+.jse-query-filter {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 2px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: none;
+  color: var(--jse-fg-muted);
+  cursor: pointer;
+}
+
+.jse-query-filter:hover {
+  border-color: var(--jse-border);
+  color: var(--jse-fg);
+}
+
+/* An outline when there is no filter; filled in the accent colour when there is. */
+.jse-query-filter svg :is(path, circle) {
+  fill: none;
+}
+
+.jse-query-filter.jse-active {
+  color: var(--jse-accent);
+}
+
+.jse-query-filter.jse-active svg :is(path, circle) {
+  fill: currentColor;
+}
+
+.jse-query-dtype {
+  font-weight: normal;
+  color: var(--jse-fg-muted);
+}
+
+.jse-query-form {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* "Type" and "Value" rows: label column, then the field(s). */
+.jse-query-row {
+  display: grid;
+  grid-template-columns: 4em 1fr;
+  align-items: center;
+}
+
+/* The Value row's contents change with the type: a field (plus "Case
+   sensitive" for text), or radio buttons. */
+.jse-query-value {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  min-height: 1.8em;
+  justify-content: center;
+}
+
+.jse-filter-error {
+  margin-top: 8px;
+  white-space: pre-wrap;
+}
+
+.jse-query-case {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.jse-query-radios {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+}
+
+.jse-query-radios[hidden] {
+  display: none;
+}
+
+.jse-query-radios label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.jse-query-input {
+  padding: 3px 6px;
+  border: 1px solid var(--jse-border);
+  border-radius: 3px;
+  background: var(--jse-bg);
+  color: var(--jse-fg);
+  font: inherit;
+}
+
+.jse-query-input:disabled {
+  opacity: 0.5;
+}
+
+.jse-query-colbar {
+  display: flex;
+  gap: 6px;
+  margin: 6px 0;
+}
+
+.jse-query-cols {
+  display: grid;
+  gap: 2px;
+}
+
+.jse-query-cols label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}

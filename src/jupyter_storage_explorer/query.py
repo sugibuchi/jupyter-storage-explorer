@@ -22,6 +22,7 @@ import json
 import pathlib
 from typing import Any
 
+from jupyter_storage_explorer.formats.base import jsonable
 from jupyter_storage_explorer.formats.requirements import Polars
 
 # Filter types ("op") by kind of column. Ops in _NO_VALUE take no value.
@@ -294,3 +295,82 @@ class QuerySettingsStore:
 # Shared by all explorers in the kernel, so reopening data in a new explorer
 # restores its settings too.
 default_store = QuerySettingsStore()
+
+
+class DataQuery:
+    """One dataset open in the data browser, answering its frontend's requests.
+
+    ``lf`` is the data as a polars LazyFrame; its settings are remembered in
+    ``store`` under ``key`` (the data's URL). The frontend's requests are
+    "query_rows", "query_check" and "query_save" (see static/query.js).
+    """
+
+    def __init__(self, lf: Any, key: str, store: QuerySettingsStore) -> None:
+        self.lf = lf
+        self.schema = lf.collect_schema()
+        self.key = key
+        self.store = store
+
+    def opening(self) -> dict[str, Any]:
+        """What the frontend needs to show the data: its columns and remembered settings."""
+        return {
+            "columns": columns_info(self.schema),
+            "settings": normalize_settings(self.store.get(self.key), self.schema),
+        }
+
+    def rows(self, content: dict[str, Any]) -> dict[str, Any]:
+        """Rows ``offset`` to ``offset + window`` of the data, with the frontend's
+        settings applied; also remembers those settings."""
+        settings = normalize_settings(content.get("settings"), self.schema)
+        self.store.set(self.key, settings)
+        offset = max(0, int(content.get("offset", 0)))
+        window = max(1, int(content.get("window", 1000)))
+        try:
+            # One extra row tells whether there are more.
+            df = (
+                build_query(self.lf, self.schema, settings)
+                .slice(offset, window + 1)
+                .collect()
+            )
+        except Exception as exc:
+            return {"error": f"{type(exc).__name__}: {exc}", "settings": settings}
+        more = df.height > window
+        df = df.head(window)
+        return {
+            "offset": offset,
+            "columns": df.columns,
+            "dtypes": [str(t) for t in df.dtypes],
+            "rows": [[jsonable(v) for v in row] for row in df.rows()],
+            "more": more,
+            "settings": settings,
+        }
+
+    def check(self, content: dict[str, Any]) -> dict[str, Any]:
+        """Check one filter before the frontend applies it: {} if it can run,
+        else {"error": message} (e.g. an invalid regular expression)."""
+        column = content["column"]
+        settings = normalize_settings(
+            {"filters": {column: content["filter"]}}, self.schema
+        )
+        if column not in settings["filters"]:
+            return {"error": f"this filter is not available for {column!r}"}
+        try:
+            check_filter(column, self.schema[column], settings["filters"][column])
+        except ValueError as exc:
+            return {"error": str(exc)}
+        return {}
+
+    def save(self, content: dict[str, Any]) -> dict[str, Any]:
+        """Remember settings changed without fetching rows (e.g. column widths)."""
+        settings = normalize_settings(content.get("settings"), self.schema)
+        self.store.set(self.key, settings)
+        return {}
+
+    def handle(self, content: dict[str, Any]) -> dict[str, Any] | None:
+        """The reply to a request by its "type", or None if it is not a query request."""
+        handler = {
+            "query_rows": self.rows,
+            "query_check": self.check,
+            "query_save": self.save,
+        }.get(content.get("type"))
+        return handler(content) if handler is not None else None
