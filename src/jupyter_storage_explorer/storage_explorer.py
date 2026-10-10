@@ -6,6 +6,7 @@ import base64
 import contextlib
 import dataclasses
 import datetime as dt
+import functools
 import hashlib
 import os
 import re
@@ -464,7 +465,9 @@ class StorageExplorer(anywidget.AnyWidget):
         The frontend then asks for rows with "query_rows".
         """
         # Settings are remembered by URL, so they follow the data across explorers.
-        data = DataQuery(fmt.scan(target.url), target.url, self._query_settings)
+        data = DataQuery(
+            functools.partial(fmt.scan, target.url), target.url, self._query_settings
+        )
         self._queries[path] = data
         return data.opening()
 
@@ -827,6 +830,7 @@ class StorageExplorer(anywidget.AnyWidget):
             "query_rows": lambda c, _: self._reply(c, self._query_request(c)),
             "query_check": lambda c, _: self._reply(c, self._query_request(c)),
             "query_save": lambda c, _: self._reply(c, self._query_request(c)),
+            "query_reload": lambda c, _: self._reply(c, self._query_request(c)),
         }
 
     def _upload_done(self, dest: str) -> dict[str, Any]:

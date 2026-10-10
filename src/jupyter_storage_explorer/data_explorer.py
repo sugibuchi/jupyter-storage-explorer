@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 from typing import TYPE_CHECKING, Any
 
 import anywidget
@@ -85,7 +86,7 @@ class DataExplorer(anywidget.AnyWidget):
         self.fs, path = url_to_fs(url, **storage_options)
         fmt, target = self._open(path, format, formats)
         self._data = DataQuery(
-            fmt.scan(target.url),
+            functools.partial(fmt.scan, target.url),
             target.url,
             query_settings or default_query_settings,
         )

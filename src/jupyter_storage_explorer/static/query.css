@@ -168,6 +168,18 @@
   white-space: pre-wrap;
 }
 
+/* Range: "From [min] to [max]" on one line, the fields sharing the width. */
+.jse-query-range {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+}
+
+.jse-query-range .jse-query-input {
+  min-width: 0;
+}
+
 .jse-query-case {
   display: flex;
   align-items: center;

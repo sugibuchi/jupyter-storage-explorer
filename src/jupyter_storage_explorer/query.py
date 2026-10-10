@@ -5,8 +5,9 @@ per dataset by a ``QuerySettingsStore``::
 
     {
         "filters": {
-            "price": {"op": "gt", "value": "10"},
+            "price": {"op": "range", "min": "10", "max": ""},  # price >= 10
             "name": {"op": "contains", "value": "tea", "case_sensitive": False},
+            "comment": {"op": "not_null"},
         },
         "sort": {"column": "date", "descending": True},  # or None
         "hidden": ["comment"],
@@ -20,22 +21,27 @@ import copy
 import datetime as dt
 import json
 import pathlib
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from jupyter_storage_explorer.formats.base import jsonable
 from jupyter_storage_explorer.formats.requirements import Polars
 
-# Filter types ("op") by kind of column. Ops in _NO_VALUE take no value.
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+# Filter types ("op") by kind of column. Ops in _NO_VALUE take no value;
+# "range" takes "min" and "max" (inclusive; either may be empty); the others
+# take a "value".
 _OPS_BY_KIND = {
-    "text": ["not_null", "null", "eq", "contains", "regex", "not_empty", "empty"],
-    "numeric": ["not_null", "null", "eq", "gt", "lt", "ge", "le"],
-    "temporal": ["not_null", "null", "eq", "gt", "lt", "ge", "le"],
+    "text": ["not_null", "null", "not_empty", "empty", "contains", "regex", "range"],
+    "numeric": ["not_null", "null", "range"],
+    "temporal": ["not_null", "null", "range"],
     "boolean": ["not_null", "null", "eq"],
     "other": ["not_null", "null"],
 }
 _NO_VALUE = {"not_null", "null", "not_empty", "empty"}
 # Text filters that can ignore case ("case_sensitive": False in the filter).
-_CASE_OPS = {"eq", "contains", "regex"}
+_CASE_OPS = {"contains", "regex", "range"}
 
 DEFAULT_SETTINGS: dict[str, Any] = {
     "filters": {},
@@ -107,17 +113,10 @@ def normalize_settings(settings: Any, schema: Any) -> dict[str, Any]:
     filters = {}
     for column, f in (settings.get("filters") or {}).items():
         if column in schema and isinstance(f, dict):
-            op = f.get("op")
             kind = column_kind(schema[column])
-            if op in _OPS_BY_KIND[kind]:
-                filters[column] = {
-                    "op": op,
-                    "value": "" if op in _NO_VALUE else str(f.get("value", "")),
-                }
-                if kind == "text" and op in _CASE_OPS:
-                    filters[column]["case_sensitive"] = bool(
-                        f.get("case_sensitive", True)
-                    )
+            normalized = _normalize_filter(f, kind)
+            if normalized is not None:
+                filters[column] = normalized
     sort = settings.get("sort")
     if not (isinstance(sort, dict) and sort.get("column") in schema):
         sort = None
@@ -132,7 +131,26 @@ def normalize_settings(settings: Any, schema: Any) -> dict[str, Any]:
     return {"filters": filters, "sort": sort, "hidden": hidden, "widths": widths}
 
 
-def _parse_value(op: str, value: str, dtype: Any, kind: str) -> Any:
+def _normalize_filter(f: dict[str, Any], kind: str) -> dict[str, Any] | None:
+    """A filter in its canonical form, or None if it does not apply to the column."""
+    op = f.get("op")
+    if op not in _OPS_BY_KIND[kind]:
+        return None  # e.g. a filter type of an earlier version
+    if op in _NO_VALUE:
+        return {"op": op}
+    if op == "range":
+        bounds = {b: str(f.get(b) or "") for b in ("min", "max")}
+        if not any(v.strip() for v in bounds.values()):
+            return None  # no bound: nothing to filter
+        normalized: dict[str, Any] = {"op": op, **bounds}
+    else:
+        normalized = {"op": op, "value": str(f.get("value", ""))}
+    if kind == "text" and op in _CASE_OPS:
+        normalized["case_sensitive"] = bool(f.get("case_sensitive", True))
+    return normalized
+
+
+def _parse_value(value: str, dtype: Any, kind: str) -> Any:
     """The filter value as a polars literal of the column's type."""
     pl = _polars()
     text = value.strip()
@@ -176,16 +194,19 @@ def _temporal_literal(text: str, dtype: Any) -> Any:
     return literal
 
 
-def filter_expression(
-    column: str, dtype: Any, op: str, value: str, case_sensitive: bool = True
-) -> Any:
-    """The polars expression keeping rows that match one column's filter.
+def filter_expression(column: str, dtype: Any, f: dict[str, Any]) -> Any:
+    """The polars expression keeping rows that match one column's filter ``f``
+    (as normalized by ``normalize_settings``).
 
-    ``case_sensitive`` applies to text "eq", "contains" and "regex".
+    "range" keeps values between "min" and "max", both included; an empty
+    bound is open. ``f["case_sensitive"]`` (default True) applies to text
+    "contains", "regex" and "range".
     """
     pl = _polars()
     col = pl.col(column)
     kind = column_kind(dtype)
+    op = f["op"]
+    case_sensitive = f.get("case_sensitive", True)
     if kind == "text" and dtype != pl.String:
         col = col.cast(pl.String)  # categorical/enum values compared as text
     if op == "null":
@@ -198,20 +219,41 @@ def filter_expression(
         return col.is_not_null() & (col != "")
     if op == "regex":
         # (?i) makes the whole pattern ignore case.
+        value = f["value"]
         return col.str.contains(value if case_sensitive else f"(?i){value}")
-    if kind == "text" and not case_sensitive:
-        col, value = col.str.to_lowercase(), value.lower()
+    ignore_case = kind == "text" and not case_sensitive
+    if ignore_case:
+        col = col.str.to_lowercase()
     if op == "contains":
+        value = f["value"].lower() if ignore_case else f["value"]
         return col.str.contains(value, literal=True)
-    literal = _parse_value(op, value, dtype, kind)
-    comparisons = {
-        "eq": col == literal,
-        "gt": col > literal,
-        "lt": col < literal,
-        "ge": col >= literal,
-        "le": col <= literal,
-    }
-    return comparisons[op]
+    if op == "range":
+        return _range_expression(col, dtype, kind, f, ignore_case)
+    return col == _parse_value(f["value"], dtype, kind)  # "eq" (booleans)
+
+
+def _range_expression(
+    col: Any, dtype: Any, kind: str, f: dict[str, Any], ignore_case: bool
+) -> Any:
+    """``col`` between ``f["min"]`` and ``f["max"]``, both included; an empty bound is open.
+
+    With ``ignore_case``, ``col`` is already lower case, and the bounds are made so.
+    """
+    conditions = []
+    for bound, name in (("min", "minimum"), ("max", "maximum")):
+        text = f[bound]
+        if kind != "text":
+            text = text.strip()  # "10 " is 10; text keeps its spaces
+        if not text:
+            continue
+        try:
+            literal = _parse_value(text.lower() if ignore_case else text, dtype, kind)
+        except (ValueError, TypeError) as exc:
+            raise ValueError(f"{name}: {exc}") from exc
+        conditions.append(col >= literal if bound == "min" else col <= literal)
+    if not conditions:
+        raise ValueError("enter a minimum, a maximum or both")
+    return conditions[0] if len(conditions) == 1 else conditions[0] & conditions[1]
 
 
 def check_filter(column: str, dtype: Any, f: dict[str, Any]) -> None:
@@ -223,7 +265,7 @@ def check_filter(column: str, dtype: Any, f: dict[str, Any]) -> None:
     pl = _polars()
     case_sensitive = f.get("case_sensitive", True)
     try:
-        filter_expression(column, dtype, f["op"], f["value"], case_sensitive)
+        filter_expression(column, dtype, f)
     except (ValueError, TypeError) as exc:
         raise ValueError(str(exc)) from exc
     if f["op"] == "regex":
@@ -244,15 +286,7 @@ def build_query(lf: Any, schema: Any, settings: dict[str, Any]) -> Any:
     """
     for column, f in settings["filters"].items():
         try:
-            lf = lf.filter(
-                filter_expression(
-                    column,
-                    schema[column],
-                    f["op"],
-                    f["value"],
-                    f.get("case_sensitive", True),
-                )
-            )
+            lf = lf.filter(filter_expression(column, schema[column], f))
         except (ValueError, TypeError) as exc:
             raise ValueError(f"filter on {column!r}: {exc}") from exc
     if settings["sort"]:
@@ -300,16 +334,34 @@ default_store = QuerySettingsStore()
 class DataQuery:
     """One dataset open in the data browser, answering its frontend's requests.
 
-    ``lf`` is the data as a polars LazyFrame; its settings are remembered in
-    ``store`` under ``key`` (the data's URL). The frontend's requests are
-    "query_rows", "query_check" and "query_save" (see static/query.js).
+    ``scan()`` returns the data as a polars LazyFrame; it is called again to
+    reload the data. Settings are remembered in ``store`` under ``key`` (the
+    data's URL). The frontend's requests are "query_rows", "query_check",
+    "query_save" and "query_reload" (see static/query.js).
     """
 
-    def __init__(self, lf: Any, key: str, store: QuerySettingsStore) -> None:
-        self.lf = lf
-        self.schema = lf.collect_schema()
+    def __init__(
+        self, scan: Callable[[], Any], key: str, store: QuerySettingsStore
+    ) -> None:
+        self.scan = scan
+        self.lf = scan()
+        self.schema = self.lf.collect_schema()
         self.key = key
         self.store = store
+
+    def reload(self, content: dict[str, Any]) -> dict[str, Any]:
+        """Scan the data again, e.g. after it changed on storage: its columns, and
+        the frontend's settings fitted to them (columns may have changed)."""
+        try:
+            lf = self.scan()
+            schema = lf.collect_schema()
+        except Exception as exc:
+            return {"error": f"{type(exc).__name__}: {exc}"}
+        self.lf, self.schema = lf, schema
+        return {
+            "columns": columns_info(schema),
+            "settings": normalize_settings(content.get("settings"), schema),
+        }
 
     def opening(self) -> dict[str, Any]:
         """What the frontend needs to show the data: its columns and remembered settings."""
@@ -353,6 +405,8 @@ class DataQuery:
             {"filters": {column: content["filter"]}}, self.schema
         )
         if column not in settings["filters"]:
+            if (content["filter"] or {}).get("op") == "range":
+                return {"error": "enter a minimum, a maximum or both"}
             return {"error": f"this filter is not available for {column!r}"}
         try:
             check_filter(column, self.schema[column], settings["filters"][column])
@@ -372,5 +426,6 @@ class DataQuery:
             "query_rows": self.rows,
             "query_check": self.check,
             "query_save": self.save,
+            "query_reload": self.reload,
         }.get(content.get("type"))
         return handler(content) if handler is not None else None

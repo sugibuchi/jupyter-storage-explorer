@@ -113,13 +113,14 @@ in a data browser rather than a fixed preview of the first rows. Only the rows o
 
 - **Page** through the rows with ◀ and ▶, 100 rows at a time.
 - **Sort**: click a column name; click again for descending, a third time to stop sorting.
-- **Filter**: click the funnel next to a column name. The choices depend on the column's type: *Null / empty*, equals,
-  contains, regular expression (text, optionally ignoring case), greater / less than (numbers, dates and times). Dates
-  are entered as `2025-01-31` or `2025-01-31 12:00`.
+- **Filter**: click the funnel next to a column name. Every column has *Null / empty*; numbers, dates and times have
+  *Range* (from and to, both included; leave one empty for no limit); text has *Contains*, *Regex* and *Range*, each
+  optionally ignoring case; true/false columns have *=*.
 - Active filters are listed next to **Select columns**; click one to change it, or × to remove it.
 - **Select columns** hides and shows columns.
 - **Resize** a column by dragging the right edge of its header; double-click the edge to go back to automatic widths.
 - **Reset** removes all filters and shows all columns again (sorting and widths are kept).
+- **⟳** reads the data again, e.g. after it changed on the storage; filters, sorting and the page are kept.
 
 polars reads the data itself from its location (the URL shown by **Copy URL**), with the credentials it finds in the
 environment, not with the options given to the explorer. Tables on storage polars cannot read, such as `memory://`,

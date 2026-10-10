@@ -5,21 +5,21 @@
 
 const QUERY_WINDOW = 1000;
 const QUERY_PAGE = 100;
+// Filter types ("op"); the kernel says which apply to each column. "range"
+// has "min" and "max" (both included, either may be empty); "eq" is for
+// booleans; the others with a value have "value".
 const OP_LABELS = {
   not_null: "Not null",
   null: "Null",
-  eq: "=",
-  contains: "Contains",
-  regex: "Regex",
   not_empty: "Not empty",
   empty: "Empty",
-  gt: ">",
-  lt: "<",
-  ge: ">=",
-  le: "<=",
+  contains: "Contains",
+  regex: "Regex",
+  range: "Range",
+  eq: "=",
 };
 const NO_VALUE_OPS = new Set(["not_null", "null", "not_empty", "empty"]);
-const VALUE_HINTS = { numeric: "e.g. 10", temporal: "e.g. 2025-01-31", boolean: "true or false", text: "" };
+const VALUE_HINTS = { numeric: "e.g. 10", temporal: "e.g. 2025-01-31", text: "" };
 
 // Column header filter icons: SVG, drawn in the text colour (currentColor);
 // CSS fills them in when the column has a filter. FILTER_ICON is the one used.
@@ -44,7 +44,7 @@ const NO_VALUE_TYPE = "null_or_empty";
 const NO_VALUE_TYPE_LABEL = "Null / empty";
 
 // Text filters with a "Case sensitive" option.
-const CASE_OPS = new Set(["eq", "contains", "regex"]);
+const CASE_OPS = new Set(["contains", "regex", "range"]);
 // Browser field for each kind of value ("input" from the kernel).
 const INPUT_TYPES = {
   text: { type: "text" },
@@ -60,11 +60,19 @@ function queryButton(label, onClick, title = "") {
   return btn;
 }
 
-// e.g. "quantity >= 8", "product contains tea (any case)", "comment: Not null".
+// e.g. "quantity >= 8", "price between 1 and 5", "product contains tea (any
+// case)", "comment: Not null".
 function describeFilter(name, filter) {
   if (NO_VALUE_OPS.has(filter.op)) return `${name}: ${OP_LABELS[filter.op]}`;
-  const label = filter.op === "contains" || filter.op === "regex" ? OP_LABELS[filter.op].toLowerCase() : OP_LABELS[filter.op];
-  return `${name} ${label} ${filter.value}` + (filter.case_sensitive === false ? " (any case)" : "");
+  const anyCase = filter.case_sensitive === false ? " (any case)" : "";
+  if (filter.op === "range") {
+    const min = (filter.min ?? "").trim() ? filter.min : null;
+    const max = (filter.max ?? "").trim() ? filter.max : null;
+    if (min != null && max != null) return `${name} between ${min} and ${max}${anyCase}`;
+    return (min != null ? `${name} >= ${min}` : `${name} <= ${max}`) + anyCase;
+  }
+  const label = filter.op === "eq" ? "=" : OP_LABELS[filter.op].toLowerCase();
+  return `${name} ${label} ${filter.value}${anyCase}`;
 }
 
 // Radio buttons, one per [value, label]; returns the group and a getter.
@@ -147,9 +155,12 @@ function createQueryPanel(host, path, data) {
     next.disabled = view.loading || !hasNext;
     const reset = queryButton("Reset", resetQuery, "Remove all filters and show all columns");
     reset.disabled = !resettable;
+    const reloadBtn = queryButton("⟳", reload, "Reload the data, e.g. after it changed");
+    reloadBtn.disabled = view.loading;
     const toolbar = h(
       "div",
       { className: "jse-query-bar" },
+      reloadBtn,
       queryButton(s.hidden.length ? `Select columns (${s.hidden.length} hidden)` : "Select columns", openColumnsDialog),
       h("div", { className: "jse-query-chips" }, ...Object.entries(s.filters).map(([name, f]) => filterChip(name, f))),
       reset,
@@ -287,6 +298,22 @@ function createQueryPanel(host, path, data) {
     }
   }
 
+  // Reads the data again (it may have changed, columns included), keeping the
+  // settings and the position.
+  async function reload() {
+    view.loading = true;
+    draw();
+    const reply = await host.request({ type: "query_reload", path, settings: view.settings });
+    if (view.disposed) return;
+    if (reply.error) {
+      Object.assign(view, { loading: false, error: reply.error });
+      draw();
+      return;
+    }
+    Object.assign(view, { columns: reply.columns, settings: reply.settings });
+    fetchRows(view.start, view.page);
+  }
+
   // Removes the filters and shows all columns; the sort order stays.
   function resetQuery() {
     view.settings = { ...view.settings, filters: {}, hidden: [] };
@@ -313,18 +340,19 @@ function createQueryPanel(host, path, data) {
   async function openFilterDialog(column, draft = null) {
     const current = view.settings.filters[column.name];
     const initial = draft ?? current;
-    const currentValue = initial && !NO_VALUE_OPS.has(initial.op) ? initial.value : "";
+    const currentValue = initial?.value ?? "";
     const noValueOps = column.ops.filter((op) => NO_VALUE_OPS.has(op));
     const valueOps = column.ops.filter((op) => !NO_VALUE_OPS.has(op));
 
     const typeSelect = h(
       "select",
       { className: "jse-query-input" },
-      ...valueOps.map((op) => h("option", { value: op, textContent: OP_LABELS[op] })),
       h("option", { value: NO_VALUE_TYPE, textContent: NO_VALUE_TYPE_LABEL }),
+      ...valueOps.map((op) => h("option", { value: op, textContent: OP_LABELS[op] })),
     );
+    // A new filter starts with the first type that takes a value, e.g. Contains or Range.
     if (initial) typeSelect.value = NO_VALUE_OPS.has(initial.op) ? NO_VALUE_TYPE : initial.op;
-    else typeSelect.value = valueOps.includes("eq") ? "eq" : (valueOps[0] ?? NO_VALUE_TYPE);
+    else typeSelect.value = valueOps[0] ?? NO_VALUE_TYPE;
 
     // The possible contents of the Value row; the type decides which is shown.
     const nullChoices = radioGroup(
@@ -338,26 +366,47 @@ function createQueryPanel(host, path, data) {
       ],
       ["false", "0", "no"].includes(currentValue.toLowerCase()) ? "false" : "true",
     );
-    const valueInput = h("input", {
-      className: "jse-query-input",
-      ...(INPUT_TYPES[column.input] ?? INPUT_TYPES.text),
-      // Date-time fields want "2025-01-31T12:00"; remembered values may have a space.
-      value: column.input === "datetime" ? currentValue.replace(" ", "T") : currentValue,
-      placeholder: VALUE_HINTS[column.kind] ?? "",
-    });
-    valueInput.addEventListener("keydown", (ev) => {
-      if (ev.key === "Enter") host.answer("apply");
-    });
+    // A field for the column's kind of value; Enter applies the filter.
+    const field = (value, placeholder) => {
+      const input = h("input", {
+        className: "jse-query-input",
+        ...(INPUT_TYPES[column.input] ?? INPUT_TYPES.text),
+        // Date-time fields want "2025-01-31T12:00"; remembered values may have a space.
+        value: column.input === "datetime" ? value.replace(" ", "T") : value,
+        placeholder,
+      });
+      input.addEventListener("keydown", (ev) => {
+        if (ev.key === "Enter") host.answer("apply");
+      });
+      return input;
+    };
+    const valueInput = field(currentValue, VALUE_HINTS[column.kind] ?? "");
+    // Range: from and to, both included; either may be left empty.
+    const minInput = field(initial?.min ?? "", "No minimum");
+    const maxInput = field(initial?.max ?? "", "No maximum");
+    const rangeFields = h(
+      "div",
+      { className: "jse-query-range" },
+      h("span", { textContent: "From" }),
+      minInput,
+      h("span", { textContent: "to" }),
+      maxInput,
+    );
+    const rangeNote = h("div", { className: "jse-note", textContent: "Both ends are included; leave one empty for no limit." });
     const caseBox = h("input", { type: "checkbox", checked: initial?.case_sensitive !== false });
     const caseLabel = h("label", { className: "jse-query-case" }, caseBox, h("span", { textContent: "Case sensitive" }));
     const valueCell = h("div", { className: "jse-query-value" });
 
     const isNoValue = () => typeSelect.value === NO_VALUE_TYPE;
+    const isRange = () => typeSelect.value === "range";
     const showValue = () => {
-      if (isNoValue()) valueCell.replaceChildren(nullChoices.el);
-      else if (column.input === "boolean") valueCell.replaceChildren(boolChoices.el);
-      else if (column.input === "text" && CASE_OPS.has(typeSelect.value)) valueCell.replaceChildren(valueInput, caseLabel);
-      else valueCell.replaceChildren(valueInput);
+      let parts;
+      if (isNoValue()) parts = [nullChoices.el];
+      else if (column.input === "boolean") parts = [boolChoices.el];
+      else if (isRange()) parts = [rangeFields, rangeNote];
+      else parts = [valueInput];
+      if (!isNoValue() && column.input === "text" && CASE_OPS.has(typeSelect.value)) parts.push(caseLabel);
+      valueCell.replaceChildren(...parts);
     };
     typeSelect.addEventListener("change", showValue);
     showValue();
@@ -378,7 +427,7 @@ function createQueryPanel(host, path, data) {
       ],
       buttons,
     );
-    (valueInput.isConnected ? valueInput : typeSelect).focus({ preventScroll: true });
+    [valueInput, minInput, typeSelect].find((el) => el.isConnected)?.focus({ preventScroll: true });
     const choice = await asked;
     if (view.disposed || !choice) return;
 
@@ -389,19 +438,23 @@ function createQueryPanel(host, path, data) {
     }
     let filter;
     if (isNoValue()) {
-      filter = { op: nullChoices.value(), value: "" };
+      filter = { op: nullChoices.value() };
     } else if (column.input === "boolean") {
       filter = { op: typeSelect.value, value: boolChoices.value() };
+    } else if (isRange()) {
+      filter = { op: "range", min: minInput.value, max: maxInput.value };
     } else {
       filter = { op: typeSelect.value, value: valueInput.value };
-      if (column.input === "text" && CASE_OPS.has(filter.op)) filter.case_sensitive = caseBox.checked;
     }
+    if (column.input === "text" && CASE_OPS.has(filter.op)) filter.case_sensitive = caseBox.checked;
 
     // Check before applying: a value is given, and it fits the column (e.g. a
     // regular expression polars can compile). If not, say why and reopen the
     // dialog with what was entered.
     let problem = null;
-    if (!NO_VALUE_OPS.has(filter.op) && filter.value.trim() === "") {
+    if (filter.op === "range" && !filter.min.trim() && !filter.max.trim()) {
+      problem = "Enter a minimum, a maximum or both.";
+    } else if ("value" in filter && filter.value.trim() === "") {
       problem = "Enter a value.";
     } else if (!NO_VALUE_OPS.has(filter.op)) {
       const reply = await host.request({ type: "query_check", path, column: column.name, filter });
