@@ -12,7 +12,7 @@ Two widgets:
 - **`StorageExplorer`**: the file explorer, with previews and the data browser.
 - **`DataExplorer`**: the data browser alone, for one table.
 
-![StorageExplorer: a folder of the sample data lake, with a JSON Lines file open in the data browser](figs/storage-explorer.png)
+![StorageExplorer with a JSON Lines file open in the data browser](figs/storage-explorer.png)
 
 ## Installation
 
@@ -82,74 +82,26 @@ StorageExplorer(
 
 ## Using the explorer
 
-**Browse**
-
-- Click a folder in the tree on the left to list it; double-click a folder in the list to open it.
-- Click a folder name in the address bar at the top to go back to it; ↑ goes to the parent folder and ⟳ refreshes.
-- Click to select, Ctrl+click (⌘+click on a Mac) to select several items; click a column header to sort.
-
-**Preview**
-
-- Double-click a file to preview it in a panel below the list. While the panel is open, clicking another file previews
-  that one. Esc or ✕ closes it.
-- **Preview** in the toolbar previews the selected item, or, with nothing selected, the folder you are in — for example
-  a Delta Lake table you opened from the tree. The button shows the format it will use, like *Preview (Delta Lake
-  table)*.
-- Tables (Delta Lake, Parquet, CSV, JSON Lines, Excel) open in the data browser instead when polars is installed: the
-  button reads *Query data (…)*. See [Query data](#query-data).
-- Drag the bar above the panel to share the space between the list and the preview; drag the bar at the bottom to make
-  the whole explorer taller or shorter (not with `height="fill"`, where it follows its container).
-
-**Right-click menu**
-
-- **Preview** (or **Query data**) / **Preview as ▸**: show a file in another way, e.g. a JSON file as text.
-- **Open**: open a folder.
-- **Edit**: edit a text file, then **Save** or **Cancel**.
-- **Python code ▸ Load with polars / pandas / pyspark / …**: the code to load the data into your notebook, with the
-  install command if a package is missing. Copy it into a cell. The PySpark code uses the notebook's `spark` session
-  (or creates one) and Spark's own storage settings.
-- **Download**: save the selected files to your computer.
-- **Copy URL**: copy the location of the selected items. Azure locations name the account, e.g.
-  `abfs://container@myaccount.dfs.core.windows.net/raw/orders.csv`.
-
-**Drag and drop**
-
-- **Upload**: drop files from JupyterLab's file browser or from your computer onto the list (into the folder shown) or
-  onto a folder.
-- **Move**: drag files in the list onto a folder in the list or the tree.
-- You are asked to confirm, and asked what to do if files with the same names already exist (**Overwrite**, **Skip
-  existing** or **Cancel**).
+- **Browse**: click folders in the tree, double-click them in the list, or click the address bar; ↑ goes up, ⟳
+  refreshes. Ctrl+click (⌘+click) selects several items.
+- **Preview**: double-click a file, or use **Preview** (with nothing selected, it previews the current folder, e.g. a
+  Delta Lake table). Tables open in the data browser instead (see [Query data](#query-data)). Esc closes the panel.
+- **Right-click**: Preview as, Open, Edit (text files), Python code to load the data (polars, pandas, PySpark, …),
+  Download, Copy URL.
+- **Drag and drop**: drop files from JupyterLab's file browser or your computer to upload them; drag files onto a folder
+  to move them. Both ask for confirmation.
 
 ## Query data
 
-With [polars](https://pola.rs) installed (plus `deltalake` for Delta Lake tables and `fastexcel` for Excel), tables open
-in a data browser rather than a fixed preview of the first rows. Rows are read 1,000 at a time as you page, not the whole
-table (except Excel files, which are read whole).
+With [polars](https://pola.rs) installed (plus `deltalake` for Delta Lake, `fastexcel` for Excel), tables open in a data
+browser that reads 1,000 rows at a time:
 
-- **Page** through the rows with ◀ and ▶, 100 rows at a time.
-- **Sort**: click a column name; click again for descending, a third time to stop sorting.
-- **Filter**: click the funnel next to a column name. Every column has *Null / empty*; numbers, dates and times have
-  *Range* (from and to, both included; leave one empty for no limit); text has *Contains*, *Regex* and *Range*, each
-  optionally ignoring case; true/false columns have *=*.
-- Active filters are listed next to **Select columns**; click one to change it, or × to remove it.
-- **Select columns** hides and shows columns.
-- **Resize** a column by dragging the right edge of its header; double-click the edge to go back to automatic widths.
-- **Reset** removes all filters and shows all columns again (sorting and widths are kept).
-- **⟳** reads the data again, e.g. after it changed on the storage; filters, sorting and the page are kept.
+- ◀ ▶ to page, click a column name to sort, its funnel to filter (*Null / empty*, *Range*, *Contains*, *Regex*).
+- **Select columns** to hide columns, drag a header's edge to resize, **Reset** to clear filters, **⟳** to reload.
 
-polars reads the data itself from its location (the URL shown by **Copy URL**), with the credentials it finds in the
-environment, not with the options given to the explorer. Tables on storage polars cannot read, such as `memory://`,
-show an error instead of the data.
-
-Filters, sorting, hidden columns and widths are remembered per table, so reopening it shows it as you left it. By
-default they are remembered until the kernel restarts; to keep them for good, store them in a file:
-
-```python
-from jupyter_storage_explorer.query import QuerySettingsStore
-
-settings = QuerySettingsStore("query-settings.json")
-StorageExplorer("s3://my-bucket/data", query_settings=settings)
-```
+Filters, sorting, hidden columns and widths are remembered per table until the kernel restarts, or in a file with
+`query_settings=QuerySettingsStore("query-settings.json")` (from `jupyter_storage_explorer.query`). polars reads the
+data with the credentials in the environment, not the explorer's options.
 
 ### DataExplorer: one table
 
@@ -165,10 +117,8 @@ DataExplorer("abfs://lake@myaccount.dfs.core.windows.net/raw/orders.parquet", he
 
 ![DataExplorer showing a Delta Lake table in a notebook](figs/data-explorer.png)
 
-Options after the address are passed to the storage package, as for `StorageExplorer`; `query_settings=` works the same
-way. If polars (or a package the format needs, such as `deltalake`) is not installed, `DataExplorer` raises an error
-with the `%pip install` command instead of opening. Settings are shared with the explorer's Query data, so a table
-looks the same in both.
+It takes the same storage options and `query_settings=` as `StorageExplorer`, and shares its remembered settings. If
+polars (or e.g. `deltalake`) is missing, it raises an error with the `%pip install` command.
 
 ## Supported formats
 
