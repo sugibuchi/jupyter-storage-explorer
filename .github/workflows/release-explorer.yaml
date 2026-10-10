@@ -1,0 +1,87 @@
+# Release, part 1: on a version tag (e.g. `git push origin v0.0.6`), build
+# jupyter-storage-explorer, create the GitHub release with it, and publish it
+# to PyPI. When this succeeds, release-launcher.yaml releases the launcher.
+#
+# PyPI publishing uses trusted publishing (no token): the PyPI project
+# jupyter-storage-explorer needs a trusted publisher for this repository,
+# workflow `release-explorer.yaml` and environment `pypi` (see DEVELOPMENT.md).
+name: Release explorer
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # the version comes from the git tags (hatch-vcs)
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Build the package
+        run: uv build --package jupyter-storage-explorer --out-dir dist
+
+      - name: Check the package
+        run: |
+          uv run --no-project python - <<'EOF'
+          import glob, os, sys
+
+          version = os.environ["GITHUB_REF_NAME"].removeprefix("v")
+          files = sorted(os.path.basename(f) for f in glob.glob("dist/*"))
+          print("\n".join(files))
+          expected = [
+              f"jupyter_storage_explorer-{version}-py3-none-any.whl",
+              f"jupyter_storage_explorer-{version}.tar.gz",
+          ]
+          if files != expected:
+              sys.exit(f"expected {expected} for tag {version}")
+          EOF
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  github-release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      # The launcher's files are added by release-launcher.yaml.
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create "$GITHUB_REF_NAME" dist/*
+          --repo "$GITHUB_REPOSITORY" --verify-tag
+          --title "$GITHUB_REF_NAME" --generate-notes
+
+  pypi:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/jupyter-storage-explorer/
+    permissions:
+      id-token: write  # trusted publishing
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

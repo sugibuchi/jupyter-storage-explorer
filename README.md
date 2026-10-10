@@ -63,6 +63,8 @@ command palette, opening the explorer in its own tab on the launcher's folder (t
 pip install jupyter-storage-explorer-launcher
 ```
 
+![The Storage Explorer item in JupyterLab's launcher](launcher/figs/launcher.png)
+
 What the tab shows can be configured with a `launcher.py` file; see the [launcher's README](launcher/README.md).
 
 ### Several storages in one explorer
