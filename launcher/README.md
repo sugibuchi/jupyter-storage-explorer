@@ -3,6 +3,8 @@
 Adds **Storage Explorer** to JupyterLab's launcher (section *Other*) and command palette. It opens
 [Jupyter Storage Explorer](../README.md) in its own tab, with a kernel of its own that stops when the tab is closed.
 
+![The Storage Explorer item in JupyterLab's launcher](figs/launcher.png)
+
 The tab opens on the launcher's folder: the one JupyterLab's file browser showed when the launcher was opened (like the
 launcher's Notebook and Console items; open a new launcher after changing folder). From the command palette, it opens
 on the folder the file browser shows. When the page is reloaded, JupyterLab restores the tab and the explorer is shown

@@ -1,0 +1,115 @@
+# Release, part 2: once release-explorer.yaml has succeeded for a version tag
+# (so jupyter-storage-explorer, which the launcher depends on, is on PyPI),
+# build jupyter-storage-explorer-launcher for the same tag, add it to the
+# GitHub release, and publish it to PyPI. It can also be run by hand for a tag
+# (Actions ▸ Release launcher ▸ Run workflow), e.g. to retry.
+#
+# PyPI publishing uses trusted publishing (no token): the PyPI project
+# jupyter-storage-explorer-launcher needs a trusted publisher for this
+# repository, workflow `release-launcher.yaml` and environment `pypi` (see
+# DEVELOPMENT.md).
+name: Release launcher
+
+on:
+  workflow_run:
+    workflows: ["Release explorer"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Version tag to release, e.g. v0.0.6"
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  # The tag the explorer was released for (a tag push's "branch"), or the one given.
+  TAG: ${{ inputs.tag || github.event.workflow_run.head_branch }}
+
+jobs:
+  build:
+    # Only after a successful explorer release.
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ env.TAG }}
+          fetch-depth: 0  # the version comes from the git tags (hatch-vcs)
+
+      - name: Check the tag
+        run: |
+          case "$TAG" in v*) ;; *) echo "not a version tag: $TAG"; exit 1 ;; esac
+          test "$(git describe --tags --exact-match)" = "$TAG"
+
+      - uses: astral-sh/setup-uv@v6
+
+      # Node.js comes with nodejs-wheel, as in development (see DEVELOPMENT.md).
+      - name: Build the JupyterLab extension
+        working-directory: launcher/labextension
+        run: |
+          uv run --no-project --with "jupyterlab>=4.6.4,<5" --with nodejs-wheel jlpm install
+          uv run --no-project --with "jupyterlab>=4.6.4,<5" --with nodejs-wheel jlpm build:prod
+
+      - name: Build the package
+        run: uv build --package jupyter-storage-explorer-launcher --out-dir dist
+
+      - name: Check the package
+        run: |
+          uv run --no-project python - <<'EOF'
+          import glob, os, sys, zipfile
+
+          version = os.environ["TAG"].removeprefix("v")
+          files = sorted(os.path.basename(f) for f in glob.glob("dist/*"))
+          print("\n".join(files))
+          expected = [
+              f"jupyter_storage_explorer_launcher-{version}-py3-none-any.whl",
+              f"jupyter_storage_explorer_launcher-{version}.tar.gz",
+          ]
+          if files != expected:
+              sys.exit(f"expected {expected} for tag {version}")
+          wheel = zipfile.ZipFile(f"dist/{expected[0]}").namelist()
+          if not any("labextensions/jupyter-storage-explorer-launcher/static/" in n for n in wheel):
+              sys.exit("the wheel has no JupyterLab extension")
+          EOF
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  github-release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      # The release was created by release-explorer.yaml.
+      - name: Add the files to the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --clobber
+
+  pypi:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/jupyter-storage-explorer-launcher/
+    permissions:
+      id-token: write  # trusted publishing
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

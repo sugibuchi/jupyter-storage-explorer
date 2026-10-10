@@ -62,34 +62,54 @@ not `node_modules/`, `lib/` or `.yarn/`.
 
 ## Releasing
 
+Releases are made by GitHub Actions: push a version tag from `main`,
+
+```bash
+git tag -a vX.Y.Z -m "Release X.Y.Z"
+git push origin vX.Y.Z
+```
+
+1. **Release explorer** (`.github/workflows/release-explorer.yaml`), run by the tag, builds `jupyter-storage-explorer`,
+   checks it (version X.Y.Z), creates the GitHub release with it and notes generated from the merged pull requests
+   (edit them on GitHub afterwards if needed), and publishes it to PyPI.
+2. **Release launcher** (`.github/workflows/release-launcher.yaml`), run when the first has succeeded (so the package
+   the launcher depends on is on PyPI), builds the JupyterLab extension and `jupyter-storage-explorer-launcher` for the
+   same tag, checks them (version X.Y.Z, the wheel has the extension), adds them to the GitHub release and publishes
+   them to PyPI. To retry it, run it by hand for the tag: *Actions ▸ Release launcher ▸ Run workflow*.
+
+### One-time setup for PyPI
+
+The workflows publish with PyPI's [trusted publishing](https://docs.pypi.org/trusted-publishers/), without a token:
+
+1. On PyPI, add a trusted publisher for each project (for a project not on PyPI yet, as a *pending publisher* under
+   *Your account ▸ Publishing*), with the owner and repository of this GitHub repository and environment `pypi`:
+
+   | PyPI project                        | Workflow                  |
+   |-------------------------------------|---------------------------|
+   | `jupyter-storage-explorer`          | `release-explorer.yaml`   |
+   | `jupyter-storage-explorer-launcher` | `release-launcher.yaml`   |
+
+2. On GitHub, create the environment `pypi` (*Settings ▸ Environments*); optionally require a reviewer there, so that
+   publishing waits for approval.
+
+### By hand
+
+To build the packages locally, e.g. to publish them to another repository such as an internal Nexus:
+
 ```bash
 cd launcher/labextension
 uv run jlpm install        # only if package.json or yarn.lock changed
 uv run jlpm build:prod
 cd ../..
-git tag -a vX.Y.Z -m "Release X.Y.Z"
 uv build --all-packages    # sdists and wheels of both packages, in dist/
-```
-
-Before publishing, check that the launcher's wheel has the extension:
-
-```bash
-uv run python -c "import zipfile, glob; n = zipfile.ZipFile(sorted(glob.glob('dist/*launcher*.whl'))[-1]).namelist(); print(sum('labextensions/' in x for x in n), 'extension files')"
-```
-
-It should print a few files, not 0: if the extension was not built, `uv build` still succeeds, but the wheel has no
-launcher item. `uv build` also packages whatever was built last, so run `build:prod` just before it. Installing the
-packages needs no Node.js.
-
-To publish both packages to a Python repository, e.g. an internal Nexus (`<url>` being its upload URL, such as
-`https://nexus.example.com/repository/pypi-internal/`):
-
-```bash
 uv publish --publish-url <url> dist/*
 ```
 
-`uv publish` asks for the credentials, or takes them from `--username` / `--password` or `UV_PUBLISH_USERNAME` /
-`UV_PUBLISH_PASSWORD`. Publish `jupyter-storage-explorer` before (or with) the launcher, which depends on it.
+`<url>` is the repository's upload URL (e.g. `https://nexus.example.com/repository/pypi-internal/`); `uv publish` asks
+for the credentials, or takes them from `UV_PUBLISH_USERNAME` / `UV_PUBLISH_PASSWORD`. Build from a clean checkout of
+the tag: uncommitted changes give a version like `X.Y.Z.post0+g<commit>.d<date>`. If the extension was not built,
+`uv build` still succeeds, but the launcher's wheel has no launcher item; `uv build` also packages whatever was built
+last, so run `build:prod` just before it.
 
 ## Customizing icons
 
