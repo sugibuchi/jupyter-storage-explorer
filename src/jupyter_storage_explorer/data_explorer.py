@@ -12,9 +12,9 @@ from fsspec.core import url_to_fs
 from jupyter_storage_explorer import _static
 from jupyter_storage_explorer._urls import default_url
 from jupyter_storage_explorer.formats import (
-    DEFAULT_FORMATS,
     DataFormat,
     Target,
+    explorer_formats,
     matching_formats,
 )
 from jupyter_storage_explorer.formats.requirements import Polars
@@ -22,7 +22,7 @@ from jupyter_storage_explorer.query import DataQuery, QuerySettingsStore
 from jupyter_storage_explorer.query import default_store as default_query_settings
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Mapping, Sequence
 
     from jupyter_storage_explorer.formats.base import Requirement
 
@@ -48,9 +48,10 @@ class DataExplorer(anywidget.AnyWidget):
     Parquet files, a CSV, JSON Lines or Excel file, e.g.
     ``"s3://bucket/sales"`` or ``"data/orders.csv"``. Extra keyword arguments
     are passed to fsspec as storage options. ``format`` chooses one of the
-    formats that match by name (e.g. "Parquet"); by default the best match is
+    formats that match by name (e.g. "parquet"); by default the best match is
     used. ``formats`` replaces the formats to choose from (default:
-    ``DEFAULT_FORMATS``).
+    ``default_formats()``); or ``format_options`` gives keyword arguments to
+    create the default formats with, as in ``StorageExplorer``.
 
     Needs polars (plus deltalake for Delta Lake tables, fastexcel for Excel);
     if a package is missing, an ImportError says how to install it.
@@ -64,7 +65,7 @@ class DataExplorer(anywidget.AnyWidget):
     _esm = _static.esm("data_explorer")
     _css = _static.css("data_explorer")
 
-    # Shown above the table: the URL as given, and the format's name.
+    # Shown above the table: the URL as given, and the format's label.
     title = traitlets.Unicode().tag(sync=True)
     format = traitlets.Unicode().tag(sync=True)
     # The data's columns and remembered settings: {"columns", "settings"}.
@@ -77,6 +78,7 @@ class DataExplorer(anywidget.AnyWidget):
         *,
         format: str | None = None,
         formats: Sequence[DataFormat] | None = None,
+        format_options: Mapping[str, Any] | None = None,
         height: str = "400px",
         query_settings: QuerySettingsStore | None = None,
         **storage_options: Any,
@@ -85,14 +87,16 @@ class DataExplorer(anywidget.AnyWidget):
         if not Polars().is_installed():
             raise _missing_packages_error("DataExplorer", [Polars()])
         self.fs, path = url_to_fs(url, **storage_options)
-        fmt, target = self._open(path, format, formats)
+        fmt, target = self._open(
+            path, format, explorer_formats(formats, format_options)
+        )
         self._data = DataQuery(
-            functools.partial(fmt.scan, target.url),
+            functools.partial(fmt.scan, target.url, target.is_dir),
             target.url,
             query_settings or default_query_settings,
         )
         super().__init__(
-            title=url, format=fmt.name, query=self._data.opening(), height=height
+            title=url, format=fmt.label, query=self._data.opening(), height=height
         )
         self.on_msg(self._on_custom_msg)
 
@@ -100,7 +104,7 @@ class DataExplorer(anywidget.AnyWidget):
         self,
         path: str,
         format: str | None,
-        formats: Sequence[DataFormat] | None,
+        formats: Sequence[DataFormat],
     ) -> tuple[DataFormat, Target]:
         """The format to query ``path`` with, and the target to scan."""
         info = self.fs.info(path)
@@ -115,20 +119,18 @@ class DataExplorer(anywidget.AnyWidget):
         target = Target(
             fs=self.fs, path=path, url=self._url(path), info=info, children=children
         )
-        matching = matching_formats(
-            target, DEFAULT_FORMATS if formats is None else formats
-        )
+        matching = matching_formats(target, formats)
         if format is not None:
             matching = [f for f in matching if f.name == format]
         queryable = [f for f in matching if f.query_requirements]
         if not queryable:
-            found = f" (it looks like {matching[0].name})" if matching else ""
+            found = f" (it looks like {matching[0].label})" if matching else ""
             wanted = f"as {format}" if format is not None else "as a table"
             raise ValueError(f"{target.url} cannot be queried {wanted}{found}")
         fmt = queryable[0]
         missing = [r() for r in fmt.query_requirements if not r().is_installed()]
         if missing:
-            raise _missing_packages_error(f"Querying {fmt.name}", missing)
+            raise _missing_packages_error(f"Querying {fmt.label}", missing)
         return fmt, target
 
     def _url(self, path: str) -> str:

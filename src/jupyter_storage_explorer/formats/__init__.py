@@ -23,21 +23,17 @@ from jupyter_storage_explorer.formats.excel import Excel
 from jupyter_storage_explorer.formats.images import Image
 from jupyter_storage_explorer.formats.parquet import Parquet
 from jupyter_storage_explorer.formats.text import Csv, Json, JsonLines, Markdown, Text
-
-DEFAULT_FORMATS: list[DataFormat] = [
-    DeltaLake(),
-    Parquet(),
-    Csv(),
-    Excel(),
-    Json(),
-    JsonLines(),
-    Markdown(),
-    Text(),
-    Image(),
-]
+from jupyter_storage_explorer.formats.utils import (
+    DEFAULT_FORMATS,
+    FORMAT_OPTIONS,
+    check_format_options,
+    default_formats,
+    explorer_formats,
+)
 
 __all__ = [
     "DEFAULT_FORMATS",
+    "FORMAT_OPTIONS",
     "Csv",
     "DataFormat",
     "DeltaLake",
@@ -60,7 +56,10 @@ __all__ = [
     "Text",
     "TextPreview",
     "TreePreview",
+    "check_format_options",
+    "default_formats",
     "detect",
+    "explorer_formats",
     "format_args",
     "matching_formats",
 ]

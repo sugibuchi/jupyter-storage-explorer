@@ -27,7 +27,10 @@ from jupyter_storage_explorer import StorageExplorer
 def launch():
     return StorageExplorer(
         # "." is the folder the tab opens on (see above)
-        filesystems={"Here": ".", "Data lake": "abfs://lake@myaccount.dfs.core.windows.net"},
+        filesystems={
+            "Here": ".",
+            "Data lake": "abfs://lake@myaccount.dfs.core.windows.net",
+        },
         height="fill",  # as tall as the tab
     )
 ```
@@ -42,8 +45,11 @@ open:
 
 ```python
 def style():
-    # Top-level folders in blue instead of yellow
-    return '.jse-browser [data-depth="1"] .jse-icon { filter: hue-rotate(180deg); }'
+    # The folders in the top folder as 🗃️ instead of 📁: hide the icon, show another
+    return """
+    .jse-browser [data-depth="1"] .jse-icon { font-size: 0; }
+    .jse-browser [data-depth="1"] .jse-icon::before { font-size: 14px; content: "🗃️"; }
+    """
 ```
 
 Requires JupyterLab 4.

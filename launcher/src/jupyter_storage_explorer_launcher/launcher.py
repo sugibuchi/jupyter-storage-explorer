@@ -31,7 +31,11 @@ The file may also have a ``style()`` function returning CSS (without
 while the tab is open::
 
     def style():
-        return '.jse-browser [data-depth="1"] .jse-icon { filter: hue-rotate(180deg); }'
+        # The folders in the top folder as 🗃️ instead of 📁
+        return '''
+        .jse-browser [data-depth="1"] .jse-icon { font-size: 0; }
+        .jse-browser [data-depth="1"] .jse-icon::before { font-size: 14px; content: "🗃️"; }
+        '''
 """
 
 from __future__ import annotations

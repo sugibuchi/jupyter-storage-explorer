@@ -36,6 +36,7 @@ dev = [
     "pandas>=3.0.6",
     "polars>=2.0.0",
     "pyarrow>=26.0.0",
+    "pytest>=9.1.1",
 ]
 
 # Two packages, released together: jupyter-storage-explorer (this folder: the
@@ -51,6 +52,9 @@ jupyter-storage-explorer-launcher = { workspace = true }
 # Rebuild the project when its git commit or tags change, as its version
 # comes from git (hatch-vcs), not only when pyproject.toml changes.
 cache-keys = [{ file = "pyproject.toml" }, { git = { commit = true, tags = true } }]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 [tool.ruff]
 exclude = [

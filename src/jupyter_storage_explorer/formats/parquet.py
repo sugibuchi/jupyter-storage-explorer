@@ -13,6 +13,7 @@ from jupyter_storage_explorer.formats.base import (
     Requirements,
     Target,
     format_args,
+    snippet_options,
     spark_url,
 )
 from jupyter_storage_explorer.formats.frames import (
@@ -137,27 +138,66 @@ def _data_files(target: Target, limit: int | None = None) -> list[str]:
     return files[:limit]
 
 
+def _polars_url(url: str, is_dir: bool) -> str:
+    """The URL polars reads: a file's as it is, a directory's "*.parquet" files.
+
+    A glob of the directory's own files, rather than the directory itself,
+    which polars would search recursively.
+    """
+    return f"{url.rstrip('/')}/*.parquet" if is_dir else url
+
+
 class Parquet(DataFormat):
-    name = "Parquet"
+    name = "parquet"
+    label = "Parquet"
     extensions = (".parquet", ".parq")
     priority = 10  # above generic directories, below table formats such as Delta Lake
     preferred_requirements = ((Polars,), (Pandas, PyArrow))
     code_only_requirements = ((PySpark,),)
     query_requirements = (Polars,)
 
+    def __init__(
+        self,
+        *,
+        polars_storage_options: Mapping[str, Any] | None = None,
+        polars_credential_provider: Any = "auto",
+        pandas_storage_options: Mapping[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> None:
+        """``polars_storage_options`` and ``polars_credential_provider``: for
+        polars' ``scan_parquet``, in the preview, the data browser and the
+        polars code snippet. ``pandas_storage_options``: for pandas'
+        ``read_parquet`` in the pandas snippet.
+
+        In snippets, storage options that look like credentials are left out,
+        as is the credential provider. Other options (``kwargs``) are ignored.
+        """
+        self.polars_storage_options = polars_storage_options
+        self.polars_credential_provider = polars_credential_provider
+        self.pandas_storage_options = pandas_storage_options
+
     def matches(self, target: Target) -> bool:
         if target.is_dir:
             return _is_dataset(target.children, target.fs)
         return super().matches(target)
 
-    def scan(self, url: str) -> Any:
+    def scan(self, url: str, is_dir: bool) -> Any:
         """A LazyFrame over a Parquet file, or over a directory's data files.
 
-        For a directory, polars lists the files itself. Names starting with
-        "." or "_" are skipped, as Spark writes "_SUCCESS" and ".crc"
-        checksums next to the data.
+        For a directory, the "*.parquet" files directly in it (see
+        ``_polars_url``). Names starting with "." or "_" are skipped, as Spark
+        writes "_SUCCESS" and ".crc" checksums next to the data.
         """
-        return Polars().load().scan_parquet(url, hidden_file_prefix=[".", "_"])
+        return (
+            Polars()
+            .load()
+            .scan_parquet(
+                _polars_url(url, is_dir),
+                hidden_file_prefix=[".", "_"],
+                storage_options=self.polars_storage_options,
+                credential_provider=self.polars_credential_provider,
+            )
+        )
 
     def preview(self, target: Target, limits: PreviewLimits) -> list[Preview]:
         requirements = self.installed_requirements()
@@ -171,7 +211,7 @@ class Parquet(DataFormat):
         self, target: Target, limits: PreviewLimits
     ) -> list[Preview]:
         pl = Polars().load()
-        lf = self.scan(target.url)
+        lf = self.scan(target.url, target.is_dir)
         df = lf.head(limits.max_rows).collect()
         if target.is_dir:
             note = rows_note(df.height, df.height == limits.max_rows)
@@ -200,23 +240,14 @@ class Parquet(DataFormat):
             note = rows_note(len(df), len(df) < total, total=total)
         return [pandas_table(df, note=note)]
 
-    def load_code(
-        self,
-        target: Target,
-        requirements: Requirements,
-        storage_options: Mapping[str, Any],
-    ) -> str:
+    def load_code(self, target: Target, requirements: Requirements) -> str:
         if PySpark in requirements:
             # A file or a folder of them; Spark uses its own storage configuration.
             return f"df = {PySpark().code_name()}.read.parquet({format_args(spark_url(target.url))})"
-        options = dict(storage_options) or None
         if Polars not in requirements:
+            options = snippet_options(self.pandas_storage_options) or None
             return f"df = {Pandas().code_name()}.read_parquet({format_args(target.url, storage_options=options)})"
-        pl = Polars().code_name()
-        if target.is_dir:
-            # Lazy, so only the needed rows and columns are read.
-            return (
-                f"lf = {pl}.scan_parquet({format_args(target.url, storage_options=options)})\n"
-                "df = lf.head(1000).collect()"
-            )
-        return f"df = {pl}.read_parquet({format_args(target.url, storage_options=options)})"
+        # A LazyFrame, so only the needed rows and columns are read.
+        url = _polars_url(target.url, target.is_dir)
+        options = snippet_options(self.polars_storage_options) or None
+        return f"df = {Polars().code_name()}.scan_parquet({format_args(url, storage_options=options)})"
