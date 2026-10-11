@@ -314,6 +314,65 @@ class TestUpload:
         ]
 
 
+class TestDownloadToServer:
+    """Files dropped on JupyterLab's file browser, copied to the server's folders."""
+
+    def download(self, explorer, root, dest, paths, if_exists="ask"):
+        """The kernel's reply, without "type" and "rid"."""
+        reply = explorer.request(
+            {
+                "type": "download_to_server",
+                "rid": 1,
+                "paths": paths,
+                "root": str(root),
+                "dest": dest,
+                "if_exists": if_exists,
+            }
+        )
+        return {k: v for k, v in reply.items() if k not in ("type", "rid")}
+
+    def test_into_a_folder_relative_to_the_server_root(self, mem_explorer, tmp_path):
+        (tmp_path / "notebooks" / "sub").mkdir(parents=True)
+        reply = self.download(
+            mem_explorer, tmp_path, "notebooks/sub", ["/data/a.csv", "/data/table"]
+        )
+        assert reply == {
+            "copied": ["a.csv"],
+            "skipped": [],
+            "errors": ["table: folders are not downloaded"],
+        }
+        assert (tmp_path / "notebooks" / "sub" / "a.csv").read_bytes() == b"x,y\n1,2\n"
+        # No temporary file left next to it.
+        assert sorted(p.name for p in (tmp_path / "notebooks" / "sub").iterdir()) == [
+            "a.csv"
+        ]
+
+    def test_server_root_itself(self, mem_explorer, tmp_path):
+        self.download(mem_explorer, tmp_path, "", ["/other/b.txt"])
+        assert (tmp_path / "b.txt").read_bytes() == b"b"
+
+    @pytest.mark.parametrize(
+        ("if_exists", "content"), [("skip", b"mine"), ("overwrite", b"b")]
+    )
+    def test_conflicts(self, mem_explorer, tmp_path, if_exists, content):
+        (tmp_path / "b.txt").write_bytes(b"mine")
+        reply = self.download(mem_explorer, tmp_path, "", ["/other/b.txt"])
+        assert reply == {"conflicts": ["b.txt"]}
+        assert (tmp_path / "b.txt").read_bytes() == b"mine"
+        self.download(mem_explorer, tmp_path, "", ["/other/b.txt"], if_exists)
+        assert (tmp_path / "b.txt").read_bytes() == content
+
+    def test_folder_not_reachable_from_the_kernel(self, mem_explorer, tmp_path):
+        reply = self.download(mem_explorer, tmp_path, "missing", ["/other/b.txt"])
+        assert "folder not found from the kernel" in reply["errors"][0]
+
+    def test_failed_copy_leaves_nothing(self, mem_explorer, tmp_path):
+        reply = self.download(mem_explorer, tmp_path, "", ["/other/missing.txt"])
+        assert reply["copied"] == []
+        assert reply["errors"][0].startswith("missing.txt:")
+        assert list(tmp_path.iterdir()) == []
+
+
 def test_vendor(mem_explorer):
     assert (
         "marked"

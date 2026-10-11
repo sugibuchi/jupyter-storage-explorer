@@ -95,7 +95,8 @@ StorageExplorer(
 - **Right-click**: Preview as, Open, Edit (text files), Python code to load the data (polars, pandas, PySpark, …),
   Download, Copy URL.
 - **Drag and drop**: drop files from JupyterLab's file browser or your computer to upload them; drag files onto a folder
-  to move them. Both ask for confirmation.
+  to move them; drag files onto JupyterLab's file browser to download them to the Jupyter server (needs
+  [the launcher](launcher/README.md) installed). All ask for confirmation.
 
 ## Query data
 

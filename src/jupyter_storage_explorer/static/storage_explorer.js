@@ -647,7 +647,7 @@ function render({ model, el }) {
     const selected = model.get("_selected");
     if (!selected.includes(entry.path)) return [entry.path];
     return model
-      .get("entries")
+      .get("_entries")
       .filter((e) => selected.includes(e.path) && e.type !== "directory")
       .map((e) => e.path);
   }
@@ -680,6 +680,33 @@ function render({ model, el }) {
     if (node) confirmMove(JSON.parse(ev.dataTransfer.getData(MOVE_MIME)), node.dataset.dropDir);
   });
   panesEl.addEventListener("dragend", () => highlightDrop(null));
+
+  // --- Download: drag files onto JupyterLab's file browser ---
+  // The launcher's JupyterLab extension (jupyter-storage-explorer-launcher)
+  // handles drops of this type on the file browser: it asks the user, then
+  // downloads with the drag's `download` from the page-wide registry, as drag
+  // data can only be text. Without the extension, such drops do nothing.
+  const DOWNLOAD_MIME = "application/x-jupyter-storage-explorer-download";
+  const DRAG_REGISTRY = Symbol.for("jupyter-storage-explorer.drag");
+
+  // Adds the download to a drag of `paths` starting in the list.
+  function startDownloadDrag(ev, paths) {
+    const names = paths.map((p) => p.slice(p.lastIndexOf("/") + 1));
+    ev.dataTransfer.setData(DOWNLOAD_MIME, JSON.stringify(names));
+    const drag = {
+      names,
+      // `dest`: a folder relative to the Jupyter server's, as JupyterLab names
+      // it. Resolves with the kernel's reply: {conflicts} if files exist there
+      // and `ifExists` is "ask", else {copied, skipped, errors} (file names).
+      async download(dest, ifExists = "ask") {
+        const root = serverRoot();
+        if (root == null) return { errors: ["JupyterLab did not say where its files are"] };
+        return request({ type: "download_to_server", paths, root, dest, if_exists: ifExists });
+      },
+    };
+    // Replaced by the next drag; the extension only reads it on a drop of this type.
+    globalThis[DRAG_REGISTRY] = drag;
+  }
 
   async function confirmMove(paths, dest) {
     const parentOf = (p) => p.slice(0, p.lastIndexOf("/"));
@@ -998,12 +1025,14 @@ function render({ model, el }) {
         } else {
           // e.g. "csv", "json-lines"; lets CSS style the icon per format.
           if (entry.format) tr.dataset.fileFormat = entry.format;
-          // Files can be dragged onto a folder to move them there.
+          // Files can be dragged onto a folder to move them there, or onto
+          // JupyterLab's file browser to download them to the Jupyter server.
           tr.draggable = true;
           tr.addEventListener("dragstart", (ev) => {
             const paths = draggedFiles(entry);
             ev.dataTransfer.setData(MOVE_MIME, JSON.stringify(paths));
-            ev.dataTransfer.effectAllowed = "move";
+            startDownloadDrag(ev, paths);
+            ev.dataTransfer.effectAllowed = "copyMove";
           });
         }
         tr.addEventListener("click", (ev) => select(entry.path, ev.ctrlKey || ev.metaKey));
