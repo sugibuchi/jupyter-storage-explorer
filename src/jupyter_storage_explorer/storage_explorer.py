@@ -122,6 +122,12 @@ def _join(parent: str, name: str) -> str:
     return parent + name if not parent or parent.endswith("/") else f"{parent}/{name}"
 
 
+def _inside(path: str, folder: str) -> bool:
+    """Whether ``path`` is ``folder`` or something in it."""
+    path, folder = _norm(path), _norm(folder)
+    return path == folder or path.startswith(folder.rstrip("/") + "/")
+
+
 def _to_timestamp(value: Any) -> float | None:
     if isinstance(value, (int, float)):
         return float(value)
@@ -171,7 +177,9 @@ class StorageExplorer(anywidget.AnyWidget):
     ``_paste``), and "Delete" deletes files (see ``_rm``). Files
     dragged from JupyterLab's file browser or from the user's computer onto
     the list or tree are uploaded after a confirmation, and files dragged
-    within the widget onto a folder are moved there (see ``_mv``).
+    within the widget onto a folder are moved there (see ``_mv``). Folders
+    are moved, copied, pasted and deleted only in "Unsafe mode", turned on
+    in the status bar and off again by any operation.
 
     Examples:
         StorageExplorer()                          # current local directory
@@ -260,6 +268,11 @@ class StorageExplorer(anywidget.AnyWidget):
     # widget's drop-down sets `_filesystem` to switch.
     _filesystem_names = traitlets.List(traitlets.Unicode()).tag(sync=True)
     _filesystem = traitlets.Unicode().tag(sync=True)
+    # The "Unsafe mode" switch in the status bar: while on, risky operations
+    # are offered (today: moving, copying, pasting and deleting folders). The
+    # frontend turns it off when any operation starts, and sends with each
+    # request whether it was on ("unsafe").
+    _unsafe_mode = traitlets.Bool(False).tag(sync=True)
     # Identifies this explorer to "Paste": files copied in it, from the
     # filesystem shown, are copied within that filesystem.
     _explorer_id = traitlets.Unicode().tag(sync=True)
@@ -522,6 +535,23 @@ class StorageExplorer(anywidget.AnyWidget):
             self._list(path)
         elif path in self._tree:
             self._load_children(path)
+
+    def _forget(self, path: str, moved_to: str | None = None) -> None:
+        """Let the widget follow folder or file ``path``, moved to ``moved_to`` or deleted.
+
+        Closes a preview of it or of something in it, drops its folders from the
+        tree, and if the list shows it (or a folder in it), shows the same
+        folder where it was moved to, or the deleted folder's parent.
+        """
+        if _inside(self._preview.get("path") or "", path):
+            self._close_preview()
+        self._tree = {k: v for k, v in self._tree.items() if not _inside(k, path)}
+        if _inside(self._current_dir, path):
+            self._current_dir = (
+                _parent(path, self._fs)
+                if moved_to is None
+                else moved_to + _norm(self._current_dir)[len(_norm(path)) :]
+            )
 
     def _update_entry(self, path: str) -> None:
         """Refresh the size and modification time shown for ``path`` in the list."""
@@ -899,18 +929,25 @@ class StorageExplorer(anywidget.AnyWidget):
         self._refresh_dir(dest)
         return {}
 
-    # --- Move: files dragged onto a folder in the list or tree ---
+    # --- Move: files (and, in unsafe mode, folders) dragged onto a folder in the list or tree ---
 
     def _move_request(self, content: dict[str, Any]) -> dict[str, Any]:
         try:
             return self._move(
-                content["paths"], content["dest"], content.get("if_exists", "ask")
+                content["paths"],
+                content["dest"],
+                content.get("if_exists", "ask"),
+                folders=bool(content.get("unsafe")),
             )
         except Exception as exc:
             return {"errors": [f"{type(exc).__name__}: {exc}"]}
 
     def _move(
-        self, paths: Sequence[str], dest: str, if_exists: str = "ask"
+        self,
+        paths: Sequence[str],
+        dest: str,
+        if_exists: str = "ask",
+        folders: bool = False,
     ) -> dict[str, list[str]]:
         """Move files into directory ``dest`` on the filesystem shown, each with ``_mv``.
 
@@ -918,51 +955,63 @@ class StorageExplorer(anywidget.AnyWidget):
         moves nothing and returns {"conflicts": [names]} if there are any;
         "overwrite" replaces them; "skip" leaves them (and the file to move).
         Otherwise returns {"moved": [...], "skipped": [...], "errors": [...]}
-        (file names). Folders are not moved.
+        (names). Folders are moved only with ``folders`` (the widget's unsafe
+        mode was on), and never onto anything that exists.
         """
-        moves, errors = self._plan_moves(paths, dest)
-        existing = {target for _, target in moves if self._exists(target)}
+        moves, errors = self._plan_moves(paths, dest, folders)
+        existing = {target for _, target, _ in moves if self._exists(target)}
         if if_exists == "ask" and existing:
             return {"conflicts": sorted(_basename(t) for t in existing)}
         moved, skipped = self._move_files(moves, existing, if_exists, errors)
+        for source, target in moved:
+            self._forget(source, moved_to=target)
         if moved:
-            if self._preview.get("path") in moved:
-                self._close_preview()
-            for folder in {dest, *(_parent(p, self._fs) for p in moved)}:
+            for folder in {dest, *(_parent(s, self._fs) for s, _ in moved)}:
                 self._refresh_dir(folder)
         return {
-            "moved": [_basename(p) for p in moved],
+            "moved": [_basename(s) for s, _ in moved],
             "skipped": skipped,
             "errors": errors,
         }
 
     def _plan_moves(
-        self, paths: Sequence[str], dest: str
-    ) -> tuple[list[tuple[str, str]], list[str]]:
-        """(source, target) pairs for the files to move, and errors for the rest."""
+        self, paths: Sequence[str], dest: str, folders: bool = False
+    ) -> tuple[list[tuple[str, str, bool]], list[str]]:
+        """(source, target, is folder) for the items to move, and errors for the rest."""
         moves, errors = [], []
         for path in paths:
             name = _basename(path)
             target = _join(dest, name)
             if _norm(path) == _norm(target):
                 continue  # already in that folder
-            if self._isdir(path):
-                errors.append(f"{name}: folders are not moved")
+            if not self._isdir(path):
+                moves.append((path, target, False))
+            elif not folders:
+                errors.append(
+                    f"{name}: folders are not moved (turn on unsafe mode first)"
+                )
+            elif _norm(path) == _norm(self._root):
+                errors.append(f"{name}: the top folder is not moved")
+            elif _inside(dest, path):
+                errors.append(f"{name}: a folder cannot be moved into itself")
+            elif self._exists(target):
+                # Folders are never merged into, or replace, what is there.
+                errors.append(f"{name}: already exists in that folder")
             else:
-                moves.append((path, target))
+                moves.append((path, target, True))
         return moves, errors
 
     def _move_files(
         self,
-        moves: list[tuple[str, str]],
+        moves: list[tuple[str, str, bool]],
         existing: set[str],
         if_exists: str,
         errors: list[str],
-    ) -> tuple[list[str], list[str]]:
-        """Move each (source, target) pair; returns the sources moved and the names
-        skipped, and adds failures to ``errors``."""
+    ) -> tuple[list[tuple[str, str]], list[str]]:
+        """Move each (source, target, is folder); returns the (source, target)
+        pairs moved and the names skipped, and adds failures to ``errors``."""
         moved, skipped = [], []
-        for source, target in moves:
+        for source, target, is_folder in moves:
             if target in existing and if_exists == "skip":
                 skipped.append(_basename(target))
                 continue
@@ -970,43 +1019,54 @@ class StorageExplorer(anywidget.AnyWidget):
                 if target in existing:
                     # Renaming onto an existing file fails on some systems.
                     self._rm(target)
-                self._mv(source, target)
-                moved.append(source)
+                self._mv(source, target, recursive=is_folder)
+                moved.append((source, target))
             except Exception as exc:
                 errors.append(f"{_basename(source)}: {exc}")
         return moved, skipped
 
-    # --- Delete: files chosen with "Delete" in the right-click menu ---
+    # --- Delete: files (and, in unsafe mode, folders) chosen with "Delete" in the right-click menu ---
 
     def _delete_request(self, content: dict[str, Any]) -> dict[str, Any]:
         try:
-            return self._delete(content["paths"])
+            return self._delete(content["paths"], folders=bool(content.get("unsafe")))
         except Exception as exc:
             return {"errors": [f"{type(exc).__name__}: {exc}"]}
 
-    def _delete(self, paths: Sequence[str]) -> dict[str, list[str]]:
-        """Delete files of the filesystem shown, each with ``_rm``; folders are not deleted.
+    def _delete(
+        self, paths: Sequence[str], folders: bool = False
+    ) -> dict[str, list[str]]:
+        """Delete files of the filesystem shown, each with ``_rm``.
 
-        Returns {"deleted": [...], "errors": [...]} (file names).
+        Folders, with everything in them, only with ``folders`` (the widget's
+        unsafe mode was on); never the top folder. Returns
+        {"deleted": [...], "errors": [...]} (names).
         """
         deleted, errors = [], []
         for path in paths:
-            if self._isdir(path):
-                errors.append(f"{_basename(path)}: folders are not deleted")
+            name = _basename(path)
+            is_folder = self._isdir(path)
+            if is_folder and not folders:
+                errors.append(
+                    f"{name}: folders are not deleted (turn on unsafe mode first)"
+                )
+                continue
+            if is_folder and _norm(path) == _norm(self._root):
+                errors.append(f"{name}: the top folder is not deleted")
                 continue
             try:
-                self._rm(path)
+                self._rm(path, recursive=is_folder)
                 deleted.append(path)
             except Exception as exc:
-                errors.append(f"{_basename(path)}: {exc}")
-        if deleted:
-            if self._preview.get("path") in deleted:
-                self._close_preview()
-            for folder in {_parent(p, self._fs) for p in deleted}:
-                self._refresh_dir(folder)
+                errors.append(f"{name}: {exc}")
+        for path in deleted:
+            self._forget(path)
+        for folder in {_parent(p, self._fs) for p in deleted}:
+            self._refresh_dir(folder)
         return {"deleted": [_basename(p) for p in deleted], "errors": errors}
 
-    # --- Paste: files copied with "Copy" (in any explorer), into a folder ---
+    # --- Paste: files (and, in unsafe mode, folders) copied with "Copy" (in any
+    # explorer), into a folder ---
 
     def _paste_request(self, content: dict[str, Any]) -> dict[str, Any]:
         """Answer "paste": files copied in the explorer ``content["explorer"]``,
@@ -1021,6 +1081,7 @@ class StorageExplorer(anywidget.AnyWidget):
                 content["dest"],
                 content.get("if_exists", "ask"),
                 same_filesystem=same,
+                folders=bool(content.get("unsafe")),
             )
         except Exception as exc:
             return {"errors": [f"{type(exc).__name__}: {exc}"]}
@@ -1031,6 +1092,7 @@ class StorageExplorer(anywidget.AnyWidget):
         dest: str,
         if_exists: str = "ask",
         same_filesystem: bool = False,
+        folders: bool = False,
     ) -> dict[str, list[str]]:
         """Copy files into folder ``dest`` of the filesystem shown.
 
@@ -1038,40 +1100,73 @@ class StorageExplorer(anywidget.AnyWidget):
         (copied in this explorer, from the filesystem shown) they are copied
         within it, with ``_cp`` and the explorer's own credentials; otherwise
         read from their URLs (see ``_copy_from_url``). ``if_exists`` as for
-        ``_move``; a file is not pasted into the folder it is in. Returns
-        {"pasted": [...], "skipped": [...], "errors": [...]} (file names).
+        ``_move``; nothing is pasted into the folder it is in. Folders, file by
+        file, only with ``folders`` (the widget's unsafe mode was
+        on), never into themselves nor onto anything that exists. Returns
+        {"pasted": [...], "skipped": [...], "errors": [...]} (names).
         """
-        plans, errors = [], []
-        for file in files:
-            path, url = file.get("path"), file.get("url")
-            name = _safe_name(_basename(path if same_filesystem else url))
-            target = _join(dest, name)
-            if same_filesystem and self._isdir(path):
-                errors.append(f"{name}: folders are not pasted")
-            elif same_filesystem and _norm(path) == _norm(target):
-                errors.append(f"{name}: already in that folder")
-            else:
-                plans.append((path if same_filesystem else url, target))
-        existing = {target for _, target in plans if self._exists(target)}
+        plans, errors = self._plan_paste(files, dest, same_filesystem, folders)
+        existing = {target for _, target, _ in plans if self._exists(target)}
         if if_exists == "ask" and existing:
             return {"conflicts": sorted(_basename(t) for t in existing)}
         pasted, skipped = [], []
-        for source, target in plans:
+        for source, target, is_folder in plans:
             name = _basename(target)
             if target in existing and if_exists == "skip":
                 skipped.append(name)
                 continue
             try:
-                if same_filesystem:
-                    self._cp(source, target)
-                else:
+                if not same_filesystem:
                     self._copy_from_url(source, target)
+                elif is_folder:
+                    self._copy_folder(source, target)
+                else:
+                    self._cp(source, target)
                 pasted.append(name)
             except Exception as exc:
                 errors.append(f"{name}: {exc}")
         if pasted:
             self._refresh_dir(dest)
         return {"pasted": pasted, "skipped": skipped, "errors": errors}
+
+    def _plan_paste(
+        self,
+        files: Sequence[dict[str, Any]],
+        dest: str,
+        same_filesystem: bool,
+        folders: bool,
+    ) -> tuple[list[tuple[str, str, bool]], list[str]]:
+        """(source path or URL, target, is folder) for the items to paste, and
+        errors for the rest (see ``_paste``)."""
+        plans, errors = [], []
+        for file in files:
+            path, url = file.get("path"), file.get("url")
+            name = _basename(path if same_filesystem else url)
+            try:
+                name = _safe_name(name)
+                target = _join(dest, name)
+                if same_filesystem:
+                    is_folder = self._isdir(path)
+                else:
+                    source_fs, source_path = url_to_fs(url)
+                    is_folder = self._isdir(source_path, fs=source_fs)
+            except Exception as exc:
+                errors.append(f"{name}: {exc}")
+                continue
+            if same_filesystem and _norm(path) == _norm(target):
+                errors.append(f"{name}: already in that folder")
+            elif is_folder and not folders:
+                errors.append(
+                    f"{name}: folders are not pasted (turn on unsafe mode first)"
+                )
+            elif is_folder and same_filesystem and _inside(dest, path):
+                errors.append(f"{name}: a folder cannot be pasted into itself")
+            elif is_folder and self._exists(target):
+                # Folders are never merged into, or replace, what is there.
+                errors.append(f"{name}: already exists in that folder")
+            else:
+                plans.append((path if same_filesystem else url, target, is_folder))
+        return plans, errors
 
     # --- Download to the Jupyter server: "Download to JupyterLab", and files
     # dropped on JupyterLab's file browser ---
@@ -1199,45 +1294,83 @@ class StorageExplorer(anywidget.AnyWidget):
         """Forget cached listings (of ``path``, else all), so changes made elsewhere show."""
         self._fs.invalidate_cache(path)
 
-    def _mv(self, source: str, target: str) -> None:
-        """Move one file to path ``target``, which does not exist (an existing
-        file is removed first when overwriting).
+    def _makedirs(self, path: str) -> None:
+        """Create folder ``path`` and its parents if missing (local disks need
+        them before writing a file; object stores have no folders to create)."""
+        self._fs.makedirs(path, exist_ok=True)
+
+    def _mv(self, source: str, target: str, recursive: bool = False) -> None:
+        """Move one file, or with ``recursive`` a folder with everything in it,
+        to path ``target``, which does not exist (an existing file is removed
+        first when overwriting).
 
         Override in a subclass to change how files are moved, e.g. to log
         moves, or to copy and delete on storage that cannot rename.
         """
-        self._fs.mv(source, target)
+        if recursive:
+            self._fs.mv(source, target, recursive=True)
+        else:
+            self._fs.mv(source, target)
 
     def _cp(self, source: str, target: str) -> None:
-        """Copy one file within the filesystem shown to path ``target``.
+        """Copy one file within the filesystem shown to path ``target``; folders
+        are copied with it file by file (see ``_copy_folder``).
 
         Override in a subclass to change how files are copied, as ``_mv``.
         """
         self._fs.cp_file(source, target)
 
-    def _rm(self, path: str) -> None:
-        """Delete one file: for "Delete", and a file a move or paste replaces.
+    def _rm(self, path: str, recursive: bool = False) -> None:
+        """Delete one file, or with ``recursive`` a folder with everything in it:
+        for "Delete", and a file a move or paste replaces.
 
         Override in a subclass to change how files are deleted, e.g. to log
         deletions, or to move files to a trash folder instead.
         """
-        self._fs.rm_file(path)
+        if recursive:
+            self._fs.rm(path, recursive=True)
+        else:
+            self._fs.rm_file(path)
 
-    def _copy_from_url(self, url: str, target: str) -> None:
-        """Copy the file at ``url`` (any storage fsspec reads, with the
-        environment's credentials) to path ``target`` of the filesystem shown.
+    def _copy_folder(
+        self, source: str, target: str, source_fs: AbstractFileSystem | None = None
+    ) -> None:
+        """Copy folder ``source`` with everything in it to path ``target``, file
+        by file: within the filesystem shown with ``_cp``, or from ``source_fs``
+        (another storage) through local temporary files (see ``_copy_from``).
+        Empty subfolders are not copied (object stores have none)."""
+        self._makedirs(target)
+        made = {target}
+        for path in (source_fs or self._fs).find(source):
+            relative = _norm(path)[len(_norm(source)) :].lstrip("/")
+            dest = _join(target, relative)
+            parent = _parent(dest, self._fs)
+            if parent not in made:
+                self._makedirs(parent)
+                made.add(parent)
+            if source_fs is None:
+                self._cp(path, dest)
+            else:
+                self._copy_from(source_fs, path, dest)
 
-        Through a local temporary file, so a failed copy never leaves a partial
-        file in the storage.
-        """
-        source_fs, source_path = url_to_fs(url)
-        if self._isdir(source_path, fs=source_fs):
-            raise IsADirectoryError("folders are not pasted")
+    def _copy_from(self, source_fs: AbstractFileSystem, path: str, target: str) -> None:
+        """Copy file ``path`` of another filesystem to path ``target`` of the one
+        shown, through a local temporary file, so a failed copy never leaves a
+        partial file in the storage."""
         handle, temp_path = tempfile.mkstemp(prefix="jse-paste-")
         os.close(handle)
         try:
-            source_fs.get_file(source_path, temp_path)
+            source_fs.get_file(path, temp_path)
             self._put_file(temp_path, target)
         finally:
             with contextlib.suppress(FileNotFoundError):
                 os.unlink(temp_path)
+
+    def _copy_from_url(self, url: str, target: str) -> None:
+        """Copy the file or folder at ``url`` (any storage fsspec reads, with the
+        environment's credentials) to path ``target`` of the filesystem shown."""
+        source_fs, source_path = url_to_fs(url)
+        if self._isdir(source_path, fs=source_fs):
+            self._copy_folder(source_path, target, source_fs=source_fs)
+        else:
+            self._copy_from(source_fs, source_path, target)

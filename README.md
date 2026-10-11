@@ -88,17 +88,23 @@ StorageExplorer(
 
 ## Using the explorer
 
-- **Browse**: click folders in the tree, double-click them in the list, or click the address bar; ↑ goes up, ⟳
-  refreshes. Ctrl+click (⌘+click) selects several items.
-- **Preview**: double-click a file, or use **Preview** (with nothing selected, it previews the current folder, e.g. a
-  Delta Lake table). Tables open in the data browser instead (see [Query data](#query-data)). Esc closes the panel.
-- **Right-click**: Preview as, Open, Edit (text files), Python code to load the data (polars, pandas, PySpark, …),
-  Download to local (saves the files on your computer), Download to JupyterLab (into a folder of the Jupyter server;
-  see [Options](#storageexplorer-options)), Copy and Paste (files; into a folder, or the one shown when right-clicking
-  empty space; also between explorers, and the files' URLs go to the clipboard), Delete (files), Copy URL (folders).
+- **Browse**: click folders in the tree or list; ↑ goes up, ⟳ refreshes. Ctrl+click (⌘+click) selects several items.
+- **Preview**: double-click a file, or **Preview** (with nothing selected: the current folder, e.g. a Delta Lake table).
+  Tables open in the [data browser](#query-data).
+- **Right-click**: Preview as, Edit, Python code to load the data, Copy, Paste, Delete, Download to local or to
+  JupyterLab (see [Options](#storageexplorer-options)), Copy URL.
 - **Drag and drop**: drop files from JupyterLab's file browser or your computer to upload them; drag files onto a folder
-  to move them; drag files onto JupyterLab's file browser to download them to the Jupyter server (needs
-  [the launcher](launcher/README.md) installed). All ask for confirmation.
+  to move them, or onto JupyterLab's file browser to download them (needs [the launcher](launcher/README.md)).
+
+### Unsafe operations
+
+Folder operations need **Unsafe mode**, turned on with the slider in the status bar:
+
+| Operation              | How                                                 |
+|------------------------|-----------------------------------------------------|
+| Move folders           | Drag a folder onto another folder.                  |
+| Copy and paste folders | Right-click → **Copy**, then **Paste** on a folder. |
+| Delete folders         | Right-click → **Delete** (with everything in it).   |
 
 ## Query data
 
