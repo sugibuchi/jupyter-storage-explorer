@@ -93,7 +93,8 @@ StorageExplorer(
 - **Preview**: double-click a file, or use **Preview** (with nothing selected, it previews the current folder, e.g. a
   Delta Lake table). Tables open in the data browser instead (see [Query data](#query-data)). Esc closes the panel.
 - **Right-click**: Preview as, Open, Edit (text files), Python code to load the data (polars, pandas, PySpark, …),
-  Download, Copy URL.
+  Download to local (saves the files on your computer), Download to JupyterLab (into a folder of the Jupyter server;
+  see [Options](#storageexplorer-options)), Copy URL.
 - **Drag and drop**: drop files from JupyterLab's file browser or your computer to upload them; drag files onto a folder
   to move them; drag files onto JupyterLab's file browser to download them to the Jupyter server (needs
   [the launcher](launcher/README.md) installed). All ask for confirmation.
@@ -109,28 +110,6 @@ browser that reads 1,000 rows at a time:
 Filters, sorting, hidden columns and widths are remembered per table until the kernel restarts, or in a file with
 `query_settings=QuerySettingsStore("query-settings.json")` (from `jupyter_storage_explorer.query`). polars reads the
 data with the credentials in the environment, not the explorer's options.
-
-### DataExplorer: one table
-
-`DataExplorer` opens the same data browser for a single table, without the file explorer around it:
-
-```python
-from jupyter_storage_explorer import DataExplorer
-
-DataExplorer(
-    "s3://my-bucket/lake/sales"
-)  # a Delta Lake table, Parquet, CSV, JSON Lines or Excel
-DataExplorer("data/orders.tsv", format="csv")  # choose the format by name
-DataExplorer(
-    "abfs://lake@myaccount.dfs.core.windows.net/raw/orders.parquet", height="600px"
-)
-```
-
-![DataExplorer showing a Delta Lake table in a notebook](figs/data-explorer.png)
-
-It takes the same storage options, `format_options=` (see [Format options](#format-options)) and `query_settings=` as
-`StorageExplorer`, and shares its remembered settings. If
-polars (or e.g. `deltalake`) is missing, it raises an error with the `%pip install` command.
 
 ## Supported formats
 
@@ -190,15 +169,48 @@ explorer.folder_url  # the URL of the folder shown, e.g. to pass to polars or pa
 explorer.selected_urls  # the URLs of the selected items
 ```
 
-## Options
+## StorageExplorer options
 
 | Option                              | Meaning                                                                                                                               |
 |-------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------|
 | `height="400px"`                    | Height of the tree and list; the preview panel adds its own space below. `"fill"`: as tall as the container, e.g. the launcher's tab. |
 | `max_upload_bytes=10 * 1024 * 1024` | Largest file you can upload from your computer (default 10 MB; `None` for no limit).                                                  |
+| `allow_download_to_local=True`      | "Download to local" in the right-click menu (`False`: left out, and refused by the kernel).                                           |
+| `download_to_jupyterlab_path="."`   | Folder "Download to JupyterLab" copies into, e.g. `"~/Downloads"`; default: where it runs. `None`: left out.                          |
 | `filesystems={...}`                 | Several named storages, as shown above.                                                                                               |
 | `query_settings=...`                | Where the data browser keeps its settings; see [Query data](#query-data).                                                             |
-| `format_options={...}`              | Options for the formats (see [Format options](#format-options)). Also for `DataExplorer`.                                             |
+| `format_options={...}`              | Options for the formats (see [Format options](#format-options)).                                                                      |
+
+## DataExplorer: one table
+
+`DataExplorer` opens the same data browser for a single table, without the file explorer around it:
+
+```python
+from jupyter_storage_explorer import DataExplorer
+
+DataExplorer(
+    "s3://my-bucket/lake/sales"
+)  # a Delta Lake table, Parquet, CSV, JSON Lines or Excel
+DataExplorer("data/orders.tsv", format="csv")  # choose the format by name
+DataExplorer(
+    "abfs://lake@myaccount.dfs.core.windows.net/raw/orders.parquet", height="600px"
+)
+```
+
+![DataExplorer showing a Delta Lake table in a notebook](figs/data-explorer.png)
+
+It remembers its settings like `StorageExplorer`'s data browser, and shares them with it. If polars (or e.g.
+`deltalake`) is missing, it raises an error with the `%pip install` command.
+
+### DataExplorer options
+
+| Option                                      | Meaning                                                                                                          |
+|---------------------------------------------|------------------------------------------------------------------------------------------------------------------|
+| `format="csv"`                              | The format to read the table as, by name (see [Supported formats](#supported-formats)); default: the best match. |
+| `height="400px"`                            | Height of the table area. `"fill"`: as tall as the container, e.g. a tab (not a notebook cell).                  |
+| `query_settings=...`                        | Where it keeps its settings, shared with `StorageExplorer`; see [Query data](#query-data).                       |
+| `format_options={...}`                      | Options for the formats; see [Format options](#format-options).                                                  |
+| Storage options, e.g. `profile="analytics"` | Passed to the storage package, as for `StorageExplorer`.                                                         |
 
 ## Requirements
 

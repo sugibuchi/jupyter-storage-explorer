@@ -170,8 +170,9 @@ class StorageExplorer(anywidget.AnyWidget):
     Double-clicking a file (or the Preview button, or Preview in the
     right-click menu) opens a preview panel below the list. "Python code" in
     the right-click menu shows how to load it in the notebook, "Edit"
-    opens text files in an editor that saves back to the storage, and
-    "Download" saves the selected files (not folders) in the browser. Files
+    opens text files in an editor that saves back to the storage, "Download
+    to local" saves the selected files (not folders) in the browser, and
+    "Download to JupyterLab" copies them into a folder of the Jupyter server. Files
     dragged from JupyterLab's file browser or from the user's computer onto
     the list or tree are uploaded after a confirmation, and files dragged
     within the widget onto a folder are moved there (see ``_mv``).
@@ -204,6 +205,13 @@ class StorageExplorer(anywidget.AnyWidget):
     it cannot be combined with ``formats``. ``max_upload_bytes`` limits the
     size of files uploaded from the user's computer (default 10 MB; None for
     no limit).
+
+    ``allow_download_to_local=False`` leaves "Download to local" out of the menu
+    (and the kernel refuses it). ``download_to_jupyterlab_path`` is the folder
+    "Download to JupyterLab" copies into, on the kernel's machine: by default
+    ".", the folder the explorer is launched in; e.g. "~/Downloads". Relative
+    paths and "~" are resolved when the explorer is created. None leaves the
+    item out.
 
     The public interface is ``folder_url``, the URL of the folder shown, and
     ``selected_urls``, those of the selected items. To change how paths
@@ -256,6 +264,11 @@ class StorageExplorer(anywidget.AnyWidget):
     # widget's drop-down sets `_filesystem` to switch.
     _filesystem_names = traitlets.List(traitlets.Unicode()).tag(sync=True)
     _filesystem = traitlets.Unicode().tag(sync=True)
+    # Whether "Download to local" (files saved by the browser) is offered.
+    _allow_download_to_local = traitlets.Bool(True).tag(sync=True)
+    # Absolute folder on the kernel's machine "Download to JupyterLab" copies
+    # into, or "" when it is not offered.
+    _download_to_jupyterlab_path = traitlets.Unicode().tag(sync=True)
 
     def __init__(
         self,
@@ -268,6 +281,8 @@ class StorageExplorer(anywidget.AnyWidget):
         format_options: Mapping[str, Any] | None = None,
         preview_limits: PreviewLimits | None = None,
         max_upload_bytes: int | None = 10 * 1024 * 1024,
+        allow_download_to_local: bool = True,
+        download_to_jupyterlab_path: str | None = ".",
         query_settings: QuerySettingsStore | None = None,
         **storage_options: Any,
     ) -> None:
@@ -302,6 +317,12 @@ class StorageExplorer(anywidget.AnyWidget):
             _format_labels={f.name: f.label for f in self._formats},
             _max_upload_bytes=max_upload_bytes,
             _filesystem_names=list(self._filesystems),
+            _allow_download_to_local=allow_download_to_local,
+            # Resolved now: "." is the folder the explorer is launched in,
+            # even if the kernel's working directory changes later.
+            _download_to_jupyterlab_path=""
+            if download_to_jupyterlab_path is None
+            else os.path.abspath(os.path.expanduser(download_to_jupyterlab_path)),
         )
         self.on_msg(self._on_custom_msg)
         self._filesystem = name  # shows its top level (see _on_filesystem)
@@ -545,7 +566,7 @@ class StorageExplorer(anywidget.AnyWidget):
             reply["error"] = f"Cannot save: {exc}"
         self.send(reply)
 
-    # --- Download ---
+    # --- Download to local: the browser saves the files on the user's computer ---
 
     def _download(self, paths: list[str]) -> None:
         """Send each file to the browser, which saves it; one message per file."""
@@ -556,6 +577,8 @@ class StorageExplorer(anywidget.AnyWidget):
                 "name": _basename(path),
             }
             try:
+                if not self._allow_download_to_local:
+                    raise PermissionError("downloading to local is not allowed")
                 info = self._fs.info(path)
                 if info.get("type") == "directory":
                     raise ValueError("folders cannot be downloaded")
@@ -708,17 +731,19 @@ class StorageExplorer(anywidget.AnyWidget):
                 errors.append(f"{_basename(source)}: {exc}")
         return moved, skipped
 
-    # --- Download to the Jupyter server: files dropped on JupyterLab's file browser ---
+    # --- Download to the Jupyter server: "Download to JupyterLab", and files
+    # dropped on JupyterLab's file browser ---
 
-    def _download_to_server(
+    def _copy_to_folder(
         self, paths: Sequence[str], dest: str, if_exists: str = "ask"
     ) -> dict[str, list[str]]:
         """Copy files of the filesystem shown into ``dest``, a folder on the kernel's machine.
 
-        For files dragged onto JupyterLab's file browser, whose drops the
-        launcher's JupyterLab extension handles; ``dest`` is the browser's
-        folder, which the kernel reaches when it runs where the Jupyter server
-        does. ``if_exists`` as for ``_move``. Folders are not downloaded.
+        ``dest`` is ``download_to_jupyterlab_path`` ("Download to JupyterLab"), or
+        the folder of JupyterLab's file browser files were dropped on (the
+        launcher's JupyterLab extension handles such drops), which the kernel
+        reaches when it runs where the Jupyter server does. ``if_exists`` as
+        for ``_move``. Folders are not copied.
         """
         if not os.path.isdir(dest):
             # e.g. the kernel runs elsewhere than the Jupyter server (a remote kernel).
@@ -761,8 +786,23 @@ class StorageExplorer(anywidget.AnyWidget):
             *filter(None, content["dest"].split("/")),
         )
         try:
-            return self._download_to_server(
+            return self._copy_to_folder(
                 content["paths"], dest, content.get("if_exists", "ask")
+            )
+        except Exception as exc:
+            return {"errors": [f"{type(exc).__name__}: {exc}"]}
+
+    def _download_to_jupyterlab_request(
+        self, content: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Answer "download_to_jupyterlab": copy into ``download_to_jupyterlab_path``."""
+        if not self._download_to_jupyterlab_path:
+            return {"errors": ["downloading to JupyterLab is not allowed"]}
+        try:
+            return self._copy_to_folder(
+                content["paths"],
+                self._download_to_jupyterlab_path,
+                content.get("if_exists", "ask"),
             )
         except Exception as exc:
             return {"errors": [f"{type(exc).__name__}: {exc}"]}
@@ -862,6 +902,9 @@ class StorageExplorer(anywidget.AnyWidget):
             "move": lambda c, _: self._reply(c, self._move_request(c)),
             "download_to_server": lambda c, _: self._reply(
                 c, self._download_to_server_request(c)
+            ),
+            "download_to_jupyterlab": lambda c, _: self._reply(
+                c, self._download_to_jupyterlab_request(c)
             ),
             "query_rows": lambda c, _: self._reply(c, self._query_request(c)),
             "query_check": lambda c, _: self._reply(c, self._query_request(c)),
