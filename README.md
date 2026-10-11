@@ -1,5 +1,8 @@
 # Jupyter Storage Explorer
 
+[![PyPI - Version](https://img.shields.io/pypi/v/jupyter-storage-explorer?color=blue)](https://pypi.org/project/jupyter-storage-explorer/)
+[![codecov](https://codecov.io/github/sugibuchi/jupyter-storage-explorer/graph/badge.svg)](https://codecov.io/github/sugibuchi/jupyter-storage-explorer)
+
 A file explorer for cloud storage and data lakes, right inside your Jupyter notebook, in the spirit of Azure Storage
 Explorer.
 

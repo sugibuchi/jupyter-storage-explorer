@@ -1,5 +1,7 @@
 # Jupyter Storage Explorer launcher
 
+[![PyPI - Version](https://img.shields.io/pypi/v/jupyter-storage-explorer-launcher?color=blue)](https://pypi.org/project/jupyter-storage-explorer-launcher/)
+
 Adds **Storage Explorer** to JupyterLab's launcher (section *Other*) and command palette. It opens
 [Jupyter Storage Explorer](../README.md) in its own tab, with a kernel of its own that stops when the tab is closed.
 

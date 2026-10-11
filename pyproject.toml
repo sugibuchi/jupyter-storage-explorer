@@ -37,6 +37,7 @@ dev = [
     "polars>=2.0.0",
     "pyarrow>=26.0.0",
     "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
 ]
 
 # Two packages, released together: jupyter-storage-explorer (this folder: the
@@ -55,6 +56,10 @@ cache-keys = [{ file = "pyproject.toml" }, { git = { commit = true, tags = true 
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+# Coverage of the widgets' package (the launcher has no tests), for Codecov.
+[tool.coverage.run]
+source = ["src/jupyter_storage_explorer"]
 
 [tool.ruff]
 exclude = [
