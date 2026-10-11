@@ -3,6 +3,39 @@ name = "jupyter-storage-explorer"
 dynamic = ["version"]
 description = "A storage explorer for Jupyter: browse cloud storage and data lakes, preview Parquet, Delta Lake and more"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Tsuyoshi SUGIBUCHI" }]
+keywords = [
+    "jupyter",
+    "jupyterlab",
+    "anywidget",
+    "fsspec",
+    "s3",
+    "azure",
+    "gcs",
+    "data lake",
+    "delta lake",
+    "parquet",
+    "file browser",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Framework :: Jupyter",
+    "Framework :: Jupyter :: JupyterLab",
+    "Framework :: Jupyter :: JupyterLab :: 4",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering",
+    "Topic :: System :: Filesystems",
+]
 requires-python = ">=3.11"
 dependencies = [
     "anywidget>=0.9",
@@ -10,6 +43,12 @@ dependencies = [
     "pygments>=2.12",
     "traitlets>=5.4",
 ]
+
+[project.urls]
+Homepage = "https://github.com/sugibuchi/jupyter-storage-explorer"
+Source = "https://github.com/sugibuchi/jupyter-storage-explorer"
+Issues = "https://github.com/sugibuchi/jupyter-storage-explorer/issues"
+Changelog = "https://github.com/sugibuchi/jupyter-storage-explorer/releases"
 
 [build-system]
 requires = ["hatchling", "hatch-vcs"]

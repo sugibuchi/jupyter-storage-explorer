@@ -3,11 +3,51 @@ name = "jupyter-storage-explorer-launcher"
 dynamic = ["version"]
 description = "Adds Jupyter Storage Explorer to the JupyterLab launcher, opening it in a tab"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Tsuyoshi SUGIBUCHI" }]
+keywords = [
+    "jupyter",
+    "jupyterlab",
+    "jupyterlab-extension",
+    "launcher",
+    "fsspec",
+    "s3",
+    "azure",
+    "gcs",
+    "data lake",
+    "file browser",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Framework :: Jupyter",
+    "Framework :: Jupyter :: JupyterLab",
+    "Framework :: Jupyter :: JupyterLab :: 4",
+    "Framework :: Jupyter :: JupyterLab :: Extensions",
+    "Framework :: Jupyter :: JupyterLab :: Extensions :: Prebuilt",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering",
+    "Topic :: System :: Filesystems",
+]
 requires-python = ">=3.11"
 dependencies = [
     "jupyter-core>=5",
     "jupyter-storage-explorer",
 ]
+
+[project.urls]
+Homepage = "https://github.com/sugibuchi/jupyter-storage-explorer/tree/main/launcher"
+Source = "https://github.com/sugibuchi/jupyter-storage-explorer"
+Issues = "https://github.com/sugibuchi/jupyter-storage-explorer/issues"
+Changelog = "https://github.com/sugibuchi/jupyter-storage-explorer/releases"
 
 [build-system]
 requires = ["hatchling", "hatch-vcs"]
