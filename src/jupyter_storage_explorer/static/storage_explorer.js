@@ -182,6 +182,11 @@ function render({ model, el }) {
   // Expanded tree folders, kept per filesystem so switching back restores them.
   const expandedByFs = new Map();
   let expanded = new Set();
+  // Set when switching to a filesystem not shown before: its root is expanded
+  // on the next render, like the first one's. Not left to onDirChange, as
+  // filesystems can share their root path (e.g. "" for DirFileSystems), and
+  // then neither _root nor _current_dir changes.
+  let expandRoot = false;
   const pending = new Set(); // directories requested from the kernel but not yet in the tree
   const sort = { key: "name", asc: true };
 
@@ -872,6 +877,10 @@ function render({ model, el }) {
     const current = model.get("_current_dir");
 
     for (const path of pending) if (path in tree) pending.delete(path);
+    if (expandRoot) {
+      expanded.add(root);
+      expandRoot = false;
+    }
 
     function node(dir, depth) {
       const children = tree[dir.path];
@@ -1303,6 +1312,7 @@ function render({ model, el }) {
     // those of the one switched to. The kernel restores its current folder.
     expandedByFs.set(shownFs, expanded);
     expanded = expandedByFs.get(name) ?? new Set();
+    expandRoot = !expandedByFs.has(name);
     shownFs = name;
     pending.clear();
     fsSelect.value = name;
