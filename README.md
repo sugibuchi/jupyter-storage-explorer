@@ -91,8 +91,8 @@ StorageExplorer(
 - **Browse**: click folders in the tree or list; ↑ goes up, ⟳ refreshes. Ctrl+click (⌘+click) selects several items.
 - **Preview**: double-click a file, or **Preview** (with nothing selected: the current folder, e.g. a Delta Lake table).
   Tables open in the [data browser](#query-data).
-- **Right-click**: Preview as, Edit, Python code to load the data, Copy, Paste, Delete, Download to local or to
-  JupyterLab (see [Options](#storageexplorer-options)), Copy URL.
+- **Right-click**: Preview as, Edit, Python code to load the data, Copy, Paste, Delete, Create a folder, Download to
+  local or to JupyterLab (see [Options](#storageexplorer-options)), Copy URL.
 - **Drag and drop**: drop files from JupyterLab's file browser or your computer to upload them; drag files onto a folder
   to move them, or onto JupyterLab's file browser to download them (needs [the launcher](launcher/README.md)).
 

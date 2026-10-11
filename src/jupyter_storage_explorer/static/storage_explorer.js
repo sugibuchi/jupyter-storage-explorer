@@ -925,11 +925,72 @@ function render({ model, el }) {
     flash(parts.join("; ") || "Nothing pasted");
   }
 
-  // Right-clicking empty space in the list: paste into the folder shown.
+  // --- Create a folder: "Create a folder" in the right-click menu ---
+
+  // Why `name` cannot name a new folder, or null: the kernel's checks
+  // (_folder_name_error in storage_explorer.py), answered before sending anything.
+  function folderNameError(name) {
+    if (!name.trim()) return "Enter a name";
+    if (name !== name.trim()) return "No spaces at the start or the end";
+    if (name === "." || name === "..") return `"${name}" is not a folder name`;
+    if (/[\\/]/.test(name)) return "A name, without / or \\";
+    if (/[\x00-\x1f\x7f]/.test(name)) return "No control characters";
+    if (name.length > 255) return "At most 255 characters";
+    return null;
+  }
+
+  // Asks for the new folder's name (a name, not a path) and creates it in
+  // folder `dest`. A name that cannot be used is explained in the dialog,
+  // which stays open until a folder is created or it is cancelled.
+  async function createFolder(dest) {
+    takeUnsafe(); // an operation, though not a risky one
+    const input = h("input", { type: "text", className: "jse-name-input", placeholder: "Folder name", spellcheck: false });
+    const problem = h("div", { className: "jse-note jse-error-text" });
+    input.addEventListener("keydown", (ev) => {
+      if (ev.key !== "Enter") return;
+      ev.preventDefault();
+      answer(true);
+    });
+    for (;;) {
+      const asked = ask(
+        [h("div", { textContent: "Create a folder" }), h("div", { className: "jse-note", textContent: `In ${dest}` }), input, problem],
+        [
+          { label: "Cancel", value: null },
+          { label: "Create", value: true, primary: true },
+        ],
+      );
+      input.focus();
+      input.select();
+      if (!(await asked)) return;
+      const name = input.value;
+      const error = folderNameError(name);
+      if (error) {
+        problem.textContent = error;
+        continue;
+      }
+      const reply = await request({ type: "create_folder", dest, name });
+      if (reply.error) {
+        problem.textContent = reply.error; // e.g. "x already exists" (the name as it is)
+        continue;
+      }
+      flash(
+        reply.hidden
+          ? `Created ${name}: it shows once a file is put in it (this storage has no empty folders)`
+          : `Created ${name}`,
+      );
+      return;
+    }
+  }
+
+  // Right-clicking empty space in the list: paste into, or create a folder in, the folder shown.
   listEl.addEventListener("contextmenu", (ev) => {
     if (ev.target instanceof Element && ev.target.closest("tbody tr")) return; // a row's own menu
-    // Folders on the clipboard while locked: a greyed-out "Paste", not an empty menu.
-    showMenu(ev, [pasteItem(model.get("_current_dir")) ?? { label: "Paste", disabled: true }]);
+    const dest = model.get("_current_dir");
+    showMenu(ev, [
+      // Folders on the clipboard while locked: a greyed-out "Paste".
+      pasteItem(dest) ?? { label: "Paste", disabled: true },
+      { label: "Create a folder", action: () => createFolder(dest) },
+    ]);
   });
 
   // --- Download to local: the kernel sends each file's bytes; the browser saves them ---
@@ -1095,6 +1156,7 @@ function render({ model, el }) {
     if (single?.type === "directory") {
       const paste = pasteItem(single.path);
       if (paste) items.push(paste);
+      items.push({ label: "Create a folder", action: () => createFolder(single.path) });
     }
     if (allowed) {
       items.push("-", { label: count ? `Delete ${count}${what}` : "Delete", action: () => confirmDelete(targets) });

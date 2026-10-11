@@ -122,6 +122,24 @@ def _join(parent: str, name: str) -> str:
     return parent + name if not parent or parent.endswith("/") else f"{parent}/{name}"
 
 
+def _folder_name_error(name: str) -> str | None:
+    """Why ``name`` cannot name a new folder, or None if it can. The same checks
+    as the frontend's (see folderNameError in storage_explorer.js)."""
+    if not name.strip():
+        return "enter a name"
+    if name != name.strip():
+        return "no spaces at the start or the end"
+    if name in (".", ".."):
+        return f"{name!r} is not a folder name"
+    if "/" in name or "\\" in name:
+        return "a name, without / or \\"
+    if any(ord(c) < 32 or ord(c) == 127 for c in name):
+        return "no control characters"
+    if len(name) > 255:
+        return "at most 255 characters"
+    return None
+
+
 def _inside(path: str, folder: str) -> bool:
     """Whether ``path`` is ``folder`` or something in it."""
     path, folder = _norm(path), _norm(folder)
@@ -433,6 +451,9 @@ class StorageExplorer(anywidget.AnyWidget):
             ),
             "delete": lambda c, _: self._reply(c, self._delete_request(c)),
             "paste": lambda c, _: self._reply(c, self._paste_request(c)),
+            "create_folder": lambda c, _: self._reply(
+                c, self._create_folder_request(c)
+            ),
             "download_to_jupyterlab": lambda c, _: self._reply(
                 c, self._download_to_jupyterlab_request(c)
             ),
@@ -1168,6 +1189,30 @@ class StorageExplorer(anywidget.AnyWidget):
                 plans.append((path if same_filesystem else url, target, is_folder))
         return plans, errors
 
+    # --- Create a folder: "Create a folder" in the right-click menu ---
+
+    def _create_folder_request(self, content: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return self._create_folder(content["dest"], content["name"])
+        except Exception as exc:
+            return {"error": f"{type(exc).__name__}: {exc}"}
+
+    def _create_folder(self, dest: str, name: str) -> dict[str, Any]:
+        """Create folder ``name`` (a name, not a path) in folder ``dest``, with ``_mkdir``.
+
+        Returns {"created": name}, with "hidden": True when the new folder does
+        not show, as on object stores (S3, Google Cloud Storage), which have no
+        empty folders; or {"error": reason}.
+        """
+        if (error := _folder_name_error(name)) is not None:
+            return {"error": error}
+        path = _join(dest, name)
+        if self._exists(path):
+            return {"error": f"{name} already exists"}  # the dialog shows where
+        self._mkdir(path)
+        self._refresh_dir(dest)
+        return {"created": name, "hidden": not self._isdir(path)}
+
     # --- Download to the Jupyter server: "Download to JupyterLab", and files
     # dropped on JupyterLab's file browser ---
 
@@ -1298,6 +1343,15 @@ class StorageExplorer(anywidget.AnyWidget):
         """Create folder ``path`` and its parents if missing (local disks need
         them before writing a file; object stores have no folders to create)."""
         self._fs.makedirs(path, exist_ok=True)
+
+    def _mkdir(self, path: str) -> None:
+        """Create the new folder ``path`` ("Create a folder"); its parent exists.
+
+        Override in a subclass to change how folders are created, e.g. to put a
+        placeholder file in it on an object store, where empty folders do not
+        exist.
+        """
+        self._fs.makedirs(path, exist_ok=False)
 
     def _mv(self, source: str, target: str, recursive: bool = False) -> None:
         """Move one file, or with ``recursive`` a folder with everything in it,

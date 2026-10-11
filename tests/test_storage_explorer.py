@@ -539,6 +539,60 @@ class TestFolderOperations:
         assert explorer._fs.exists("/data/sub/x.txt")
 
 
+class TestCreateFolder:
+    def create(self, explorer, dest, name):
+        return without_ids(
+            explorer.request(
+                {"type": "create_folder", "rid": 1, "dest": dest, "name": name}
+            )
+        )
+
+    def test_in_memory(self, mem_explorer):
+        mem_explorer._current_dir = "/data"
+        assert self.create(mem_explorer, "/data", "new") == {
+            "created": "new",
+            "hidden": False,
+        }
+        assert mem_explorer._fs.isdir("/data/new")
+        assert "new" in [e["name"] for e in mem_explorer._entries]
+        assert "new" in [d["name"] for d in mem_explorer._tree["/data"]]
+
+    def test_on_a_local_disk(self, tmp_path):
+        explorer = make(str(tmp_path))
+        reply = self.create(explorer, explorer._root, "new folder")
+        assert reply == {"created": "new folder", "hidden": False}
+        assert (tmp_path / "new folder").is_dir()
+
+    @pytest.mark.parametrize(
+        ("name", "error"),
+        [
+            ("", "enter a name"),
+            ("   ", "enter a name"),
+            (" x", "no spaces at the start or the end"),
+            ("..", "'..' is not a folder name"),
+            ("a/b", "a name, without / or \\"),
+            ("a\\b", "a name, without / or \\"),
+            ("a\tb", "no control characters"),
+            ("x" * 256, "at most 255 characters"),
+        ],
+    )
+    def test_invalid_names(self, mem_explorer, name, error):
+        assert self.create(mem_explorer, "/data", name) == {"error": error}
+
+    def test_existing(self, mem_explorer):
+        for name in ("a.csv", "table"):  # a file, a folder
+            reply = self.create(mem_explorer, "/data", name)
+            assert reply == {"error": f"{name} already exists"}
+
+    def test_storage_without_empty_folders(self, mem_explorer, monkeypatch):
+        # Like S3 or Google Cloud Storage: creating a folder leaves nothing to see.
+        monkeypatch.setattr(mem_explorer._fs, "makedirs", lambda path, exist_ok: None)
+        assert self.create(mem_explorer, "/data", "new") == {
+            "created": "new",
+            "hidden": True,
+        }
+
+
 class TestMove:
     def move(self, explorer, paths, dest, if_exists="ask"):
         return explorer.request(
