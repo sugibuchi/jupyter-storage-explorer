@@ -56,8 +56,9 @@ widget (`storage_explorer.ipynb`, `data_explorer.ipynb`) on sample data made by 
 
 ### From the JupyterLab launcher
 
-The separate package **`jupyter-storage-explorer-launcher`** adds **Storage Explorer** to JupyterLab's launcher and
-command palette, opening the explorer in its own tab on the launcher's folder (the one the file browser showed):
+The separate package **[`jupyter-storage-explorer-launcher`](launcher/README.md)** adds **Storage Explorer** to
+JupyterLab's launcher and command palette, opening the explorer in its own tab on the launcher's folder (the one the
+file browser showed):
 
 ```bash
 pip install jupyter-storage-explorer-launcher
@@ -112,29 +113,66 @@ data with the credentials in the environment, not the explorer's options.
 ```python
 from jupyter_storage_explorer import DataExplorer
 
-DataExplorer("s3://my-bucket/lake/sales")  # a Delta Lake table, Parquet, CSV, JSON Lines or Excel
-DataExplorer("data/orders.tsv", format="CSV")  # choose the format by name
-DataExplorer("abfs://lake@myaccount.dfs.core.windows.net/raw/orders.parquet", height="600px")
+DataExplorer(
+    "s3://my-bucket/lake/sales"
+)  # a Delta Lake table, Parquet, CSV, JSON Lines or Excel
+DataExplorer("data/orders.tsv", format="csv")  # choose the format by name
+DataExplorer(
+    "abfs://lake@myaccount.dfs.core.windows.net/raw/orders.parquet", height="600px"
+)
 ```
 
 ![DataExplorer showing a Delta Lake table in a notebook](figs/data-explorer.png)
 
-It takes the same storage options and `query_settings=` as `StorageExplorer`, and shares its remembered settings. If
+It takes the same storage options, `format_options=` (see [Format options](#format-options)) and `query_settings=` as
+`StorageExplorer`, and shares its remembered settings. If
 polars (or e.g. `deltalake`) is missing, it raises an error with the `%pip install` command.
 
 ## Supported formats
 
-| Format                                                       | Preview                       | Query data | Load with                                           |
-|--------------------------------------------------------------|-------------------------------|------------|-----------------------------------------------------|
-| Delta Lake tables                                            | First rows                    | ✓          | polars (with deltalake), PySpark (with delta-spark) |
-| Parquet files, and folders of them (e.g. Spark, Hive output) | First rows                    | ✓          | polars, pandas, PySpark                             |
-| CSV, TSV                                                     | First rows                    | ✓          | polars, pandas, PySpark                             |
-| JSON Lines                                                   | First records                 | ✓          | polars, pandas, PySpark                             |
-| JSON                                                         | Collapsible tree              |            | Python, polars, pandas                              |
-| Excel (`.xlsx`)                                              | First rows of the first sheet | ✓          | polars, pandas                                      |
-| Markdown                                                     | Rendered                      |            | Python                                              |
-| Text, code, configuration (YAML, SQL, Python, …)             | With syntax highlighting      |            | Python                                              |
-| Images (PNG, JPEG, GIF, SVG, …)                              | Shown                         |            | Pillow                                              |
+| Format                                                       | Name         | Preview                       | Query data | Load with                                           |
+|--------------------------------------------------------------|--------------|-------------------------------|------------|-----------------------------------------------------|
+| Delta Lake tables                                            | `delta`      | First rows                    | ✓         | polars (with deltalake), PySpark (with delta-spark) |
+| Parquet files, and folders of them (e.g. Spark, Hive output) | `parquet`    | First rows                    | ✓         | polars, pandas, PySpark                             |
+| CSV, TSV                                                     | `csv`        | First rows                    | ✓         | polars, pandas, PySpark                             |
+| JSON Lines                                                   | `json-lines` | First records                 | ✓         | polars, pandas, PySpark                             |
+| JSON                                                         | `json`       | Collapsible tree              |            | Python, polars, pandas                              |
+| Excel (`.xlsx`)                                              | `excel`      | First rows of the first sheet | ✓         | polars, pandas                                      |
+| Markdown                                                     | `markdown`   | Rendered                      |            | Python                                              |
+| Text, code, configuration (YAML, SQL, Python, …)             | `text`       | With syntax highlighting      |            | Python                                              |
+| Images (PNG, JPEG, GIF, SVG, …)                              | `image`      | Shown                         |            | Pillow                                              |
+
+The name identifies the format in `DataExplorer(..., format=...)` and in CSS (see
+[Customizing icons](DEVELOPMENT.md#customizing-icons)).
+
+### Format options
+
+`format_options` is one dictionary for all formats; each format uses the options it takes. Options are named after the
+library they are for, and the ones for a single format also after the format:
+
+```python
+StorageExplorer(
+    "s3://my-bucket/lake",
+    format_options={
+        "polars_storage_options": {"aws_region": "eu-west-1"},
+        "pandas_storage_options": {"anon": False},
+        "polars_delta_use_pyarrow": True,
+    },
+)
+```
+
+| Option                         | Formats                                         | Meaning                                                                                                               |
+|--------------------------------|-------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------|
+| `polars_storage_options`       | `delta`, `parquet`, `csv`, `json-lines`         | polars' `storage_options` (object_store's names, not fsspec's), in the preview, the data browser and the polars code. |
+| `polars_credential_provider`   | `delta`, `parquet`, `csv`, `json-lines`         | polars' `credential_provider`, in the preview and the data browser (not in the code).                                 |
+| `pandas_storage_options`       | `parquet`, `csv`, `json-lines`, `json`, `excel` | pandas' `storage_options` (fsspec's), in the pandas code.                                                             |
+| `fsspec_storage_options`       | `json`, `excel`, `markdown`, `text`, `image`    | `fsspec.open`'s keyword arguments, in the code that reads with fsspec.                                                |
+| `polars_delta_table_options`   | `delta`                                         | `scan_delta`'s `delta_table_options`.                                                                                 |
+| `polars_delta_use_pyarrow`     | `delta`                                         | `scan_delta`'s `use_pyarrow`.                                                                                         |
+| `polars_delta_pyarrow_options` | `delta`                                         | `scan_delta`'s `pyarrow_options`.                                                                                     |
+
+Storage options that look like credentials are left out of the code. Without storage options, the code relies on the
+environment's configuration and credentials.
 
 ## Working with the explorer from Python
 
@@ -156,6 +194,7 @@ explorer.selected_urls  # the URLs of the selected items
 | `max_upload_bytes=10 * 1024 * 1024` | Largest file you can upload from your computer (default 10 MB; `None` for no limit).                                                  |
 | `filesystems={...}`                 | Several named storages, as shown above.                                                                                               |
 | `query_settings=...`                | Where the data browser keeps its settings; see [Query data](#query-data).                                                             |
+| `format_options={...}`              | Options for the formats (see [Format options](#format-options)). Also for `DataExplorer`.                                             |
 
 ## Requirements
 

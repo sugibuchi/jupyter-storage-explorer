@@ -9,9 +9,7 @@ import datetime as dt
 import functools
 import hashlib
 import os
-import re
 import tempfile
-from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
 import anywidget
@@ -21,7 +19,6 @@ from fsspec.core import url_to_fs
 from jupyter_storage_explorer import _static
 from jupyter_storage_explorer._urls import default_url
 from jupyter_storage_explorer.formats import (
-    DEFAULT_FORMATS,
     DataFormat,
     MediaPreview,
     Preview,
@@ -29,6 +26,7 @@ from jupyter_storage_explorer.formats import (
     Recipe,
     Target,
     Text,
+    explorer_formats,
     matching_formats,
 )
 from jupyter_storage_explorer.formats import detect as detect_format
@@ -37,7 +35,7 @@ from jupyter_storage_explorer.query import DataQuery, QuerySettingsStore
 from jupyter_storage_explorer.query import default_store as default_query_settings
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Mapping, Sequence
 
     from fsspec import AbstractFileSystem
 
@@ -54,12 +52,6 @@ _MTIME_KEYS = (
     "updated",
     "modified",
     "created",
-)
-
-# Storage options whose names look like credentials are left out of generated
-# snippets, since snippets get copied, shared and saved in notebooks.
-_SECRET_OPTION = re.compile(
-    r"key|secret|token|password|passwd|credential|sas|connection_string", re.IGNORECASE
 )
 
 # Largest file the text editor opens; the whole file is sent to the browser.
@@ -164,35 +156,6 @@ def _entry(info: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _is_plain(value: Any) -> bool:
-    """Whether ``repr(value)`` is valid Python, so it can appear in generated code."""
-    if value is None or isinstance(value, (bool, int, float, str)):
-        return True
-    if isinstance(value, (list, tuple)):
-        return all(_is_plain(v) for v in value)
-    if isinstance(value, Mapping):
-        return all(isinstance(k, str) and _is_plain(v) for k, v in value.items())
-    return False
-
-
-def _snippet_options(options: Mapping[str, Any]) -> dict[str, Any]:
-    """Storage options fit to put in generated code.
-
-    Leaves out options that look like credentials, and ones whose values are
-    objects rather than plain data (e.g. the filesystem a DirFileSystem wraps).
-    """
-    out: dict[str, Any] = {}
-    for key, value in options.items():
-        if _SECRET_OPTION.search(key):
-            continue
-        if isinstance(value, Mapping):
-            # Filtered key by key, keeping e.g. client_kwargs' endpoint_url.
-            out[key] = _snippet_options(value)
-        elif _is_plain(value):
-            out[key] = value
-    return out
-
-
 def _section(preview: Preview) -> dict[str, Any]:
     """A preview section as JSON for the frontend; media bytes are base64-encoded."""
     data = {f.name: getattr(preview, f.name) for f in dataclasses.fields(preview)}
@@ -233,9 +196,14 @@ class StorageExplorer(anywidget.AnyWidget):
     ``height`` is the height of the tree and file list; the preview panel adds
     to it. ``height="fill"`` makes the explorer as tall as its container
     instead, e.g. the tab opened from JupyterLab's launcher (not a notebook
-    cell, which has no height of its own). ``formats`` replaces the formats that can be previewed (default:
-    ``DEFAULT_FORMATS``). ``max_upload_bytes`` limits the size of files
-    uploaded from the user's computer (default 10 MB; None for no limit).
+    cell, which has no height of its own). ``formats`` replaces the formats
+    that can be previewed (default: ``default_formats()``). Or
+    ``format_options`` gives keyword arguments to create every default
+    format with, each using those it takes, e.g.
+    ``{"polars_storage_options": {...}, "polars_delta_use_pyarrow": True}``;
+    it cannot be combined with ``formats``. ``max_upload_bytes`` limits the
+    size of files uploaded from the user's computer (default 10 MB; None for
+    no limit).
 
     The public interface is ``folder_url``, the URL of the folder shown, and
     ``selected_urls``, those of the selected items. To change how paths
@@ -266,7 +234,9 @@ class StorageExplorer(anywidget.AnyWidget):
     # Preview shown in the panel: {"path", "name", "format", "sections",
     # "error", "loading"}; empty when the panel is closed.
     _preview = traitlets.Dict().tag(sync=True)
-    # Format of the current directory itself (e.g. "Delta Lake table"), or ""
+    # Format name -> label shown to the user, e.g. {"delta": "Delta Lake table"}.
+    _format_labels = traitlets.Dict().tag(sync=True)
+    # Format name of the current directory itself (e.g. "delta"), or ""
     # if it cannot be previewed; enables the Preview button when nothing is selected.
     _current_format = traitlets.Unicode().tag(sync=True)
     # Whether the current directory can be queried in the data browser
@@ -295,6 +265,7 @@ class StorageExplorer(anywidget.AnyWidget):
         filesystems: Mapping[str, AbstractFileSystem | str] | None = None,
         height: str = "400px",
         formats: Sequence[DataFormat] | None = None,
+        format_options: Mapping[str, Any] | None = None,
         preview_limits: PreviewLimits | None = None,
         max_upload_bytes: int | None = 10 * 1024 * 1024,
         query_settings: QuerySettingsStore | None = None,
@@ -303,7 +274,7 @@ class StorageExplorer(anywidget.AnyWidget):
         self._query_settings = query_settings or default_query_settings
         # Data browser: path -> the data being queried.
         self._queries: dict[str, DataQuery] = {}
-        self._formats = list(DEFAULT_FORMATS if formats is None else formats)
+        self._formats = explorer_formats(formats, format_options)
         self._preview_limits = preview_limits or PreviewLimits()
         # Uploads from the user's computer in progress: id -> {"file", "target", ...}.
         self._incoming: dict[str, dict[str, Any]] = {}
@@ -328,6 +299,7 @@ class StorageExplorer(anywidget.AnyWidget):
         self._fs: AbstractFileSystem = self._filesystems[name][0]
         super().__init__(
             _height=height,
+            _format_labels={f.name: f.label for f in self._formats},
             _max_upload_bytes=max_upload_bytes,
             _filesystem_names=list(self._filesystems),
         )
@@ -422,7 +394,7 @@ class StorageExplorer(anywidget.AnyWidget):
     def _open_preview(self, path: str, format: str | None = None) -> None:
         """Preview the file or directory at ``path`` in the preview panel.
 
-        ``format`` names one of the formats matching it (e.g. "Text" for a JSON
+        ``format`` names one of the formats matching it (e.g. "text" for a JSON
         file); by default the best match is used.
         """
         base = {
@@ -468,7 +440,9 @@ class StorageExplorer(anywidget.AnyWidget):
         """
         # Settings are remembered by URL, so they follow the data across explorers.
         data = DataQuery(
-            functools.partial(fmt.scan, target.url), target.url, self._query_settings
+            functools.partial(fmt.scan, target.url, target.is_dir),
+            target.url,
+            self._query_settings,
         )
         self._queries[path] = data
         return data.opening()
@@ -483,13 +457,12 @@ class StorageExplorer(anywidget.AnyWidget):
     def _recipes(self, path: str) -> list[Recipe]:
         """Ways to load ``path`` in the notebook, from its best-matching format.
 
-        Empty if its format is unknown or it has no URL. Storage options that
-        look like credentials are left out of the code.
+        Empty if its format is unknown or it has no URL.
         """
         target, formats = self._detect(path)
         if target is None or not formats:
             return []
-        return formats[0].recipes(target, _snippet_options(self._fs.storage_options))
+        return formats[0].recipes(target)
 
     def _send_menu_info(self, path: str) -> None:
         """Answer the right-click menu's request: matching formats ("Preview as"),
@@ -498,9 +471,8 @@ class StorageExplorer(anywidget.AnyWidget):
         try:
             target, formats = self._detect(path)
             reply["formats"] = [f.name for f in formats]
-            options = _snippet_options(self._fs.storage_options)
             reply["recipes"] = (
-                [dataclasses.asdict(r) for r in formats[0].recipes(target, options)]
+                [dataclasses.asdict(r) for r in formats[0].recipes(target)]
                 if formats
                 else []
             )
@@ -940,7 +912,7 @@ class StorageExplorer(anywidget.AnyWidget):
         self._current_query = fmt is not None and fmt.can_query()
 
     def _file_format(self, info: dict[str, Any]) -> str:
-        """The format of a listed file as a CSS-friendly name, e.g. "json-lines".
+        """The format name of a listed file, e.g. "json-lines".
 
         Shown as the row's ``data-file-format``. Empty for folders (detecting
         them would mean listing each one), files without a URL and
@@ -954,7 +926,7 @@ class StorageExplorer(anywidget.AnyWidget):
             fmt = detect_format(target, self._formats)
         except Exception:
             return ""  # detection is best-effort
-        return fmt.name.lower().replace(" ", "-") if fmt is not None else ""
+        return fmt.name if fmt is not None else ""
 
     def _directory_format(
         self, path: str, infos: list[dict[str, Any]]

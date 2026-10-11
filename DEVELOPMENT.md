@@ -70,8 +70,8 @@ git push origin vX.Y.Z
 ```
 
 1. **Release explorer** (`.github/workflows/release-explorer.yaml`), run by the tag, builds `jupyter-storage-explorer`,
-   checks it (version X.Y.Z), creates the GitHub release with it and notes generated from the merged pull requests
-   (edit them on GitHub afterwards if needed), and publishes it to PyPI.
+   checks it (version X.Y.Z), creates the GitHub release with it and notes generated from the merged pull requests (edit
+   them on GitHub afterwards if needed), and publishes it to PyPI.
 2. **Release launcher** (`.github/workflows/release-launcher.yaml`), run when the first has succeeded (so the package
    the launcher depends on is on PyPI), builds the JupyterLab extension and `jupyter-storage-explorer-launcher` for the
    same tag, checks them (version X.Y.Z, the wheel has the extension), adds them to the GitHub release and publishes
@@ -117,39 +117,28 @@ Rows in the explorer carry attributes you can style with CSS:
 
 - **Folders** (tree and list): `data-depth`, their level below the top folder: `0` for the top folder itself, `1` for
   the folders in it, and so on.
-- **Files** (list): `data-file-format`, the format name in lower case with `-` for spaces: `parquet`, `csv`, `json`,
-  `json-lines`, `excel-workbook`, `markdown`, `text`, `image`. Files of no known format, or without a URL, have none.
+- **Files** (list): `data-file-format`, the format name: `parquet`, `csv`, `json`, `json-lines`, `excel`, `markdown`,
+  `text`, `image`. Files of no known format, or without a URL, have none.
 
-Run CSS in a notebook cell, before or after the explorer. This example shows the top folder as a grey container,
-the folders in it in blue-grey and deeper folders in yellow, and gives data files their own icons:
+The icons are emoji (📁 for folders, 📄 for files). To change one, hide it (`font-size: 0`) and show another in its
+`::before`. Run the CSS in a notebook cell, before or after the explorer. This example shows the top folder as 🗄️, the
+folders in it as 🗃️ (deeper ones keep 📁), and gives data files their own icons:
 
 ```python
 from IPython.display import HTML
 
 HTML("""<style>
-/* Folders: draw an SVG shape in a colour, both chosen per depth below */
-.jse-browser [data-depth] .jse-icon { font-size: 0; }
-.jse-browser [data-depth] .jse-icon::before {
-  content: ""; display: inline-block; width: 16px; height: 13px; vertical-align: -2px;
-  background: var(--folder-color);
-  -webkit-mask: var(--folder-shape) no-repeat center / contain;
-          mask: var(--folder-shape) no-repeat center / contain;
-}
-.jse-browser [data-depth] {
-  --folder-color: #eab308;
-  --folder-shape: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 13'%3E%3Cpath d='M0 1.5A1.5 1.5 0 0 1 1.5 0h4l1.5 2h7.5A1.5 1.5 0 0 1 16 3.5v8a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 0 11.5z'/%3E%3C/svg%3E");
-}
-.jse-browser [data-depth="1"] { --folder-color: #64748b; }
-.jse-browser [data-depth="0"] {
-  --folder-color: #6b7280;
-  --folder-shape: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 13'%3E%3Cpath fill-rule='evenodd' d='M1 0.5h14a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H1a1 1 0 0 1-1-1v-10a1 1 0 0 1 1-1zM3 3v7h1.3V3zM6 3v7h1.3V3zM9 3v7h1.3V3zM12 3v7h1.3V3z'/%3E%3C/svg%3E");
-}
+/* Folders: an emoji per depth */
+.jse-browser :is([data-depth="0"], [data-depth="1"]) .jse-icon { font-size: 0; }
+.jse-browser :is([data-depth="0"], [data-depth="1"]) .jse-icon::before { font-size: 14px; }
+.jse-browser [data-depth="0"] .jse-icon::before { content: "🗄️"; }
+.jse-browser [data-depth="1"] .jse-icon::before { content: "🗃️"; }
 
-/* Files: a different emoji per format */
+/* Files: an emoji per format */
 .jse-browser [data-file-format] .jse-icon { font-size: 0; }
 .jse-browser [data-file-format] .jse-icon::before { font-size: 14px; content: "📄"; }
 .jse-browser [data-file-format="csv"] .jse-icon::before,
-.jse-browser [data-file-format="excel-workbook"] .jse-icon::before { content: "📊"; }
+.jse-browser [data-file-format="excel"] .jse-icon::before { content: "📊"; }
 .jse-browser [data-file-format="parquet"] .jse-icon::before { content: "🧱"; }
 .jse-browser [data-file-format="image"] .jse-icon::before { content: "🖼️"; }
 .jse-browser [data-file-format="markdown"] .jse-icon::before { content: "📝"; }

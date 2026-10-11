@@ -246,7 +246,7 @@ function render({ model, el }) {
   // Small confirmation dialog, e.g. "Upload sales.csv? [Cancel] [Upload]".
   const { el: confirmEl, ask, answer } = createConfirm();
 
-  // "jse-browser" is for user styles too, e.g. icons by [data-depth] (README).
+  // "jse-browser" is for user styles too, e.g. icons by [data-depth] (DEVELOPMENT.md).
   el.classList.add("jse-widget", "jse-browser");
   // Focusable, so Escape reaches the widget after a click anywhere in it.
   el.tabIndex = -1;
@@ -741,13 +741,18 @@ function render({ model, el }) {
     Object.assign(downloads, { done: 0, errors: [] });
   }
 
+  // The kernel identifies formats by name (e.g. "delta"); users see their label.
+  function formatLabel(name) {
+    return model.get("_format_labels")[name] ?? name;
+  }
+
   function onMenuInfo(msg) {
     if (menuInfo?.path !== msg.path) return;
     const { path, previewRow, previewAsRow, previewAsSub, editRow, codeSub } = menuInfo;
     if (!msg.error && msg.query && previewRow) previewRow.firstChild.textContent = "Query data";
     // "Preview as" only appears when the item matches more than one format.
     if (!msg.error && msg.formats.length > 1) {
-      const items = msg.formats.map((format) => ({ label: `Preview as ${format}`, action: () => openPreview(path, format) }));
+      const items = msg.formats.map((format) => ({ label: `Preview as ${formatLabel(format)}`, action: () => openPreview(path, format) }));
       previewAsSub.replaceChildren(...menuRows(items));
       previewAsRow.hidden = false;
     }
@@ -1034,9 +1039,9 @@ function render({ model, el }) {
     // Tabular data opens in the data browser when polars is installed.
     const action = target?.query ? "Query data" : "Preview";
     previewBtn.disabled = target == null;
-    previewBtn.textContent = target ? `${action} (${target.format})` : "Preview";
+    previewBtn.textContent = target ? `${action} (${formatLabel(target.format)})` : "Preview";
     previewBtn.title = target
-      ? `${action}: ${selected === 0 ? "this folder" : "the selected item"} as ${target.format}`
+      ? `${action}: ${selected === 0 ? "this folder" : "the selected item"} as ${formatLabel(target.format)}`
       : selected > 1
         ? "Select one item to preview"
         : "Nothing to preview here";
@@ -1209,7 +1214,7 @@ function render({ model, el }) {
     const opening = previewEl.hidden || previewHead.dataset.path !== preview.path;
     previewHead.dataset.path = preview.path;
     previewHead.replaceChildren(h("span", { className: "jse-preview-name", textContent: preview.path, title: preview.path }));
-    if (preview.format) previewHead.append(h("span", { className: "jse-badge", textContent: preview.format }));
+    if (preview.format) previewHead.append(h("span", { className: "jse-badge", textContent: formatLabel(preview.format) }));
     previewHead.append(h("span", { className: "jse-spacer" }), previewCloseBtn);
 
     let body;

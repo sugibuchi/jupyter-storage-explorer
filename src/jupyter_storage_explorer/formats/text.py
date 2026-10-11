@@ -22,6 +22,7 @@ from jupyter_storage_explorer.formats.base import (
     TextPreview,
     TreePreview,
     format_args,
+    snippet_options,
     spark_url,
 )
 from jupyter_storage_explorer.formats.frames import (
@@ -72,7 +73,8 @@ def _text_preview(text: str, language: str | None, note: str = "") -> TextPrevie
 
 
 class Text(DataFormat):
-    name = "Text"
+    name = "text"
+    label = "Text"
     # Extension -> syntax highlighting hint. Includes text-based data formats
     # (JSON, CSV, SVG, ...), so those can also be previewed as plain text.
     languages = {  # noqa: RUF012
@@ -88,6 +90,17 @@ class Text(DataFormat):
     priority = -10  # the fallback: any more specific format is the default
     preferred_requirements = ((Fsspec,),)
 
+    def __init__(
+        self,
+        *,
+        fsspec_storage_options: Mapping[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> None:
+        """``fsspec_storage_options``: ``fsspec.open``'s keyword arguments in
+        the code snippet; ones that look like credentials are left out. Other
+        options (``kwargs``) are ignored."""
+        self.fsspec_storage_options = fsspec_storage_options
+
     def preview(self, target: Target, limits: PreviewLimits) -> list[Preview]:
         text, truncated = target.head_text(limits.max_bytes)
         language = self.languages.get("." + target.name.lower().rsplit(".", 1)[-1])
@@ -97,12 +110,8 @@ class Text(DataFormat):
             )
         ]
 
-    def load_code(
-        self,
-        target: Target,
-        requirements: Requirements,
-        storage_options: Mapping[str, Any],
-    ) -> str:
+    def load_code(self, target: Target, requirements: Requirements) -> str:
+        storage_options = snippet_options(self.fsspec_storage_options)
         return (
             f"with {Fsspec().code_name()}.open({format_args(target.url, 'rt', **storage_options)}) as f:\n"
             "    text = f.read()"
@@ -112,7 +121,8 @@ class Text(DataFormat):
 class Markdown(Text):
     """Markdown, rendered in the browser. A Text subclass: same load code, and still editable."""
 
-    name = "Markdown"
+    name = "markdown"
+    label = "Markdown"
     extensions = (".md", ".markdown")
     priority = 0  # preferred over Text, which stays available through "Preview as"
 
@@ -126,11 +136,32 @@ class Markdown(Text):
 
 
 class Csv(DataFormat):
-    name = "CSV"
+    name = "csv"
+    label = "CSV"
     extensions = (".csv", ".tsv")
     preferred_requirements = ((Polars,), (Pandas,))
     code_only_requirements = ((PySpark,),)
     query_requirements = (Polars,)
+
+    def __init__(
+        self,
+        *,
+        polars_storage_options: Mapping[str, Any] | None = None,
+        polars_credential_provider: Any = "auto",
+        pandas_storage_options: Mapping[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> None:
+        """``polars_storage_options`` and ``polars_credential_provider``: for
+        polars' ``scan_csv``, in the data browser and the polars code snippet
+        (as ``read_csv``'s). ``pandas_storage_options``: for pandas'
+        ``read_csv`` in the pandas snippet.
+
+        In snippets, storage options that look like credentials are left out,
+        as is the credential provider. Other options (``kwargs``) are ignored.
+        """
+        self.polars_storage_options = polars_storage_options
+        self.polars_credential_provider = polars_credential_provider
+        self.pandas_storage_options = pandas_storage_options
 
     def _separator(self, name: str, sample: str) -> str:
         """The separator of a file named (or located at) ``name``, from a sample of it."""
@@ -141,16 +172,21 @@ class Csv(DataFormat):
         except csv.Error:
             return ","
 
-    def scan(self, url: str) -> Any:
+    def scan(self, url: str, is_dir: bool) -> Any:
         pl = Polars().load()
+        storage = {
+            "storage_options": self.polars_storage_options,
+            "credential_provider": self.polars_credential_provider,
+        }
         # The first lines, read by polars too, so any URL it reads works.
-        sample = "\n".join(pl.scan_lines(url).head(20).collect()["line"])
+        sample = "\n".join(pl.scan_lines(url, **storage).head(20).collect()["line"])
         # try_parse_dates: date columns get date filters (<, >, ...) instead of text ones.
         return pl.scan_csv(
             url,
             separator=self._separator(url, sample),
             truncate_ragged_lines=True,
             try_parse_dates=True,
+            **storage,
         )
 
     def preview(self, target: Target, limits: PreviewLimits) -> list[Preview]:
@@ -194,30 +230,45 @@ class Csv(DataFormat):
             )
         ]
 
-    def load_code(
-        self,
-        target: Target,
-        requirements: Requirements,
-        storage_options: Mapping[str, Any],
-    ) -> str:
+    def load_code(self, target: Target, requirements: Requirements) -> str:
         sep = self._separator(target.name, target.head_text(4096)[0])
         sep = None if sep == "," else sep
         if PySpark in requirements:
-            # Spark reads with its own storage configuration, not fsspec's options.
+            # Spark reads with its own storage configuration.
             args = format_args(
                 spark_url(target.url), header=True, inferSchema=True, sep=sep
             )
             return f"df = {PySpark().code_name()}.read.csv({args})"
-        options = dict(storage_options) or None
         if Polars in requirements:
+            options = snippet_options(self.polars_storage_options) or None
             return f"df = {Polars().code_name()}.read_csv({format_args(target.url, separator=sep, storage_options=options)})"
+        options = snippet_options(self.pandas_storage_options) or None
         return f"df = {Pandas().code_name()}.read_csv({format_args(target.url, sep=sep, storage_options=options)})"
 
 
 class Json(DataFormat):
-    name = "JSON"
+    name = "json"
+    label = "JSON"
     extensions = (".json",)
     preferred_requirements = ((Fsspec,), (Polars,), (Pandas,))
+
+    def __init__(
+        self,
+        *,
+        fsspec_storage_options: Mapping[str, Any] | None = None,
+        pandas_storage_options: Mapping[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> None:
+        """``fsspec_storage_options``: ``fsspec.open``'s keyword arguments in
+        the fsspec snippet. ``pandas_storage_options``: for pandas'
+        ``read_json`` in the pandas snippet. (polars' ``read_json`` takes no
+        storage options.)
+
+        Storage options that look like credentials are left out. Other
+        options (``kwargs``) are ignored.
+        """
+        self.fsspec_storage_options = fsspec_storage_options
+        self.pandas_storage_options = pandas_storage_options
 
     def preview(self, target: Target, limits: PreviewLimits) -> list[Preview]:
         text, truncated = target.head_text(limits.max_bytes)
@@ -229,17 +280,13 @@ class Json(DataFormat):
         except json.JSONDecodeError as exc:
             return [_text_preview(text, "json", f"Invalid JSON: {exc}")]
 
-    def load_code(
-        self,
-        target: Target,
-        requirements: Requirements,
-        storage_options: Mapping[str, Any],
-    ) -> str:
-        options = dict(storage_options) or None
+    def load_code(self, target: Target, requirements: Requirements) -> str:
         if Polars in requirements:
-            return f"df = {Polars().code_name()}.read_json({format_args(target.url, storage_options=options)})"
+            return f"df = {Polars().code_name()}.read_json({format_args(target.url)})"
         if Pandas in requirements:
+            options = snippet_options(self.pandas_storage_options) or None
             return f"df = {Pandas().code_name()}.read_json({format_args(target.url, storage_options=options)})"
+        storage_options = snippet_options(self.fsspec_storage_options)
         return (
             "import json\n\n"
             f"with {Fsspec().code_name()}.open({format_args(target.url, 'rt', **storage_options)}) as f:\n"
@@ -248,14 +295,43 @@ class Json(DataFormat):
 
 
 class JsonLines(DataFormat):
-    name = "JSON Lines"
+    name = "json-lines"
+    label = "JSON Lines"
     extensions = (".jsonl", ".ndjson")
     preferred_requirements = ((Polars,), (Pandas,))
     code_only_requirements = ((PySpark,),)
     query_requirements = (Polars,)
 
-    def scan(self, url: str) -> Any:
-        return Polars().load().scan_ndjson(url)
+    def __init__(
+        self,
+        *,
+        polars_storage_options: Mapping[str, Any] | None = None,
+        polars_credential_provider: Any = "auto",
+        pandas_storage_options: Mapping[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> None:
+        """``polars_storage_options`` and ``polars_credential_provider``: for
+        polars' ``scan_ndjson``, in the data browser and the polars code
+        snippet. ``pandas_storage_options``: for pandas' ``read_json`` in the
+        pandas snippet.
+
+        In snippets, storage options that look like credentials are left out,
+        as is the credential provider. Other options (``kwargs``) are ignored.
+        """
+        self.polars_storage_options = polars_storage_options
+        self.polars_credential_provider = polars_credential_provider
+        self.pandas_storage_options = pandas_storage_options
+
+    def scan(self, url: str, is_dir: bool) -> Any:
+        return (
+            Polars()
+            .load()
+            .scan_ndjson(
+                url,
+                storage_options=self.polars_storage_options,
+                credential_provider=self.polars_credential_provider,
+            )
+        )
 
     def preview(self, target: Target, limits: PreviewLimits) -> list[Preview]:
         requirements = self.installed_requirements()
@@ -283,17 +359,13 @@ class JsonLines(DataFormat):
         more = truncated or len(df) == limits.max_rows
         return [pandas_table(df, note=rows_note(len(df), more, "records"))]
 
-    def load_code(
-        self,
-        target: Target,
-        requirements: Requirements,
-        storage_options: Mapping[str, Any],
-    ) -> str:
+    def load_code(self, target: Target, requirements: Requirements) -> str:
         if PySpark in requirements:
             # Spark reads JSON Lines (one record per line) by default, with its
-            # own storage configuration, not fsspec's options.
+            # own storage configuration.
             return f"df = {PySpark().code_name()}.read.json({format_args(spark_url(target.url))})"
-        options = dict(storage_options) or None
         if Polars in requirements:
-            return f"df = {Polars().code_name()}.read_ndjson({format_args(target.url, storage_options=options)})"
+            options = snippet_options(self.polars_storage_options) or None
+            return f"df = {Polars().code_name()}.scan_ndjson({format_args(target.url, storage_options=options)})"
+        options = snippet_options(self.pandas_storage_options) or None
         return f"df = {Pandas().code_name()}.read_json({format_args(target.url, lines=True, storage_options=options)})"

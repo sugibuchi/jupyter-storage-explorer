@@ -12,6 +12,7 @@ from jupyter_storage_explorer.formats.base import (
     Requirements,
     Target,
     format_args,
+    snippet_options,
 )
 from jupyter_storage_explorer.formats.frames import (
     pandas_table,
@@ -36,13 +37,32 @@ def _with_sheets(note: str, sheets: list[str]) -> str:
 
 
 class Excel(DataFormat):
-    name = "Excel workbook"
+    name = "excel"
+    label = "Excel workbook"
     extensions = (".xlsx", ".xlsm")
     # polars reads Excel from bytes, fetched with fsspec so any storage works.
     preferred_requirements = ((Polars, Fastexcel, Fsspec), (Pandas, Openpyxl))
     query_requirements = (Polars, Fastexcel)
 
-    def scan(self, url: str) -> Any:
+    def __init__(
+        self,
+        *,
+        fsspec_storage_options: Mapping[str, Any] | None = None,
+        pandas_storage_options: Mapping[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> None:
+        """``fsspec_storage_options``: ``fsspec.open``'s keyword arguments in
+        the polars snippet, which reads the bytes with it.
+        ``pandas_storage_options``: for pandas' ``read_excel`` in the pandas
+        snippet.
+
+        Storage options that look like credentials are left out. Other
+        options (``kwargs``) are ignored.
+        """
+        self.fsspec_storage_options = fsspec_storage_options
+        self.pandas_storage_options = pandas_storage_options
+
+    def scan(self, url: str, is_dir: bool) -> Any:
         # Excel cannot be read lazily: the first sheet is read whole and
         # queried in memory.
         return Polars().load().read_excel(url).lazy()
@@ -91,16 +111,12 @@ class Excel(DataFormat):
             )
         ]
 
-    def load_code(
-        self,
-        target: Target,
-        requirements: Requirements,
-        storage_options: Mapping[str, Any],
-    ) -> str:
+    def load_code(self, target: Target, requirements: Requirements) -> str:
         if Polars in requirements:
+            storage_options = snippet_options(self.fsspec_storage_options)
             return (
                 f"with {Fsspec().code_name()}.open({format_args(target.url, 'rb', **storage_options)}) as f:\n"
                 f"    df = {Polars().code_name()}.read_excel(f.read())"
             )
-        options = dict(storage_options) or None
+        options = snippet_options(self.pandas_storage_options) or None
         return f"df = {Pandas().code_name()}.read_excel({format_args(target.url, storage_options=options)})"

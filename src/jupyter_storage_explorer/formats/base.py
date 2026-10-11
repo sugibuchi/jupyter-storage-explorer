@@ -8,7 +8,9 @@ import decimal
 import importlib
 import importlib.util
 import math
+import re
 import types
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar, TypeAlias
 
@@ -16,7 +18,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, TypeAlias
 from IPython import get_ipython
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Mapping, Sequence
+    from collections.abc import Iterable, Sequence
 
     from fsspec import AbstractFileSystem
 
@@ -304,6 +306,42 @@ class Recipe:
     code: str  # import lines still needed, then the loading code
 
 
+# Storage options whose names look like credentials are left out of generated
+# snippets, since snippets get copied, shared and saved in notebooks.
+_SECRET_OPTION = re.compile(
+    r"key|secret|token|password|passwd|credential|sas|connection_string", re.IGNORECASE
+)
+
+
+def _is_plain(value: Any) -> bool:
+    """Whether ``repr(value)`` is valid Python, so it can appear in generated code."""
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return True
+    if isinstance(value, (list, tuple)):
+        return all(_is_plain(v) for v in value)
+    if isinstance(value, Mapping):
+        return all(isinstance(k, str) and _is_plain(v) for k, v in value.items())
+    return False
+
+
+def snippet_options(options: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Storage options fit to put in generated code; empty for None.
+
+    Leaves out options that look like credentials, and ones whose values are
+    objects rather than plain data (e.g. the filesystem a DirFileSystem wraps).
+    """
+    out: dict[str, Any] = {}
+    for key, value in (options or {}).items():
+        if _SECRET_OPTION.search(key):
+            continue
+        if isinstance(value, Mapping):
+            # Filtered key by key, keeping e.g. client_kwargs' endpoint_url.
+            out[key] = snippet_options(value)
+        elif _is_plain(value):
+            out[key] = value
+    return out
+
+
 def format_args(*args: Any, **kwargs: Any) -> str:
     """Python source for call arguments; keyword arguments that are None are left out.
 
@@ -344,9 +382,19 @@ class DataFormat(abc.ABC):
     File formats usually only set ``extensions``. Directory formats (Delta
     Lake tables, Spark output, Hive-partitioned datasets, ...) override
     ``matches`` and inspect ``target.children``.
+
+    A format with options takes them in ``__init__`` as keyword-only
+    arguments, and ignores others in ``**kwargs``: explorers create every
+    default format with all of ``format_options`` (see ``default_formats``).
+    Options are named after the library they are for, and those for one
+    format only also after the format, e.g. ``polars_storage_options`` and
+    ``polars_delta_use_pyarrow``.
     """
 
-    name: ClassVar[str]  # shown to the user, e.g. "Delta Lake table"
+    # Identifier, lower case with "-" between words, e.g. "delta": used to
+    # choose a format, and in CSS ([data-file-format]).
+    name: ClassVar[str]
+    label: ClassVar[str]  # shown to the user, e.g. "Delta Lake table"
     # When several formats match (a Delta table is also a directory of Parquet
     # files), the one with the highest priority wins.
     priority: ClassVar[int] = 0
@@ -379,15 +427,16 @@ class DataFormat(abc.ABC):
             r().is_installed() for r in self.query_requirements
         )
 
-    def scan(self, url: str) -> Any:
+    def scan(self, url: str, is_dir: bool) -> Any:
         """A polars LazyFrame over the data at ``url``, for the data browser.
 
         ``url`` is a location polars reads itself: a local path or a cloud URL
-        (e.g. "s3://bucket/key"), with credentials from the environment. Only
+        (e.g. "s3://bucket/key"), with credentials from the environment.
+        ``is_dir`` tells whether it is a directory (e.g. a table) or a file. Only
         called when ``can_query()``. Should read lazily where the format
         allows, as the browser only fetches the rows it shows.
         """
-        raise NotImplementedError(f"{self.name} cannot be queried")
+        raise NotImplementedError(f"{self.label} cannot be queried")
 
     def installed_requirements(self) -> Requirements | None:
         """The first of ``preferred_requirements`` whose packages are all installed."""
@@ -407,28 +456,19 @@ class DataFormat(abc.ABC):
                     "command": "\n".join(r.install_command for r in missing),
                 }
             )
-        return [InstallPreview(format=self.name, options=options)]
+        return [InstallPreview(format=self.label, options=options)]
 
     @abc.abstractmethod
-    def load_code(
-        self,
-        target: Target,
-        requirements: Requirements,
-        storage_options: Mapping[str, Any],
-    ) -> str:
+    def load_code(self, target: Target, requirements: Requirements) -> str:
         """Code that loads ``target`` with one set of ``preferred_requirements``
         or ``code_only_requirements``.
 
         Refer to packages by ``Requirement.code_name()``; their install and
-        import lines are added by ``recipes``. ``storage_options`` are the
-        browser's fsspec options with secrets already removed. Libraries that
-        do not use fsspec (e.g. delta-rs via polars) may need them translated
-        to their own option names. Build calls with ``format_args``.
+        import lines are added by ``recipes``. Pass a format's storage
+        options through ``snippet_options``. Build calls with ``format_args``.
         """
 
-    def recipes(
-        self, target: Target, storage_options: Mapping[str, Any]
-    ) -> list[Recipe]:
+    def recipes(self, target: Target) -> list[Recipe]:
         """Ways to load ``target`` in a notebook, one per set of
         ``preferred_requirements`` and then of ``code_only_requirements``."""
         recipes = []
@@ -441,7 +481,7 @@ class DataFormat(abc.ABC):
             missing = [r for r in instances if r.get_module_name() is None]
             setup = [r.setup_command for r in missing if r.setup_command]
             imports = [r.import_command for r in missing if r.import_command]
-            code = self.load_code(target, requirements, storage_options)
+            code = self.load_code(target, requirements)
             recipes.append(
                 Recipe(
                     library=requirements[0].package,
