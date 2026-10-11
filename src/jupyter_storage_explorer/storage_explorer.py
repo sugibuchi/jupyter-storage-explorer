@@ -88,13 +88,6 @@ def _parent(path: str, fs: AbstractFileSystem) -> str:
     return parent or fs.root_marker or "/"
 
 
-def _is_dir(fs: AbstractFileSystem, path: str) -> bool:
-    try:
-        return fs.isdir(path)
-    except Exception:
-        return False
-
-
 def _format_size(size: int) -> str:
     """E.g. "10 MB" or "1.5 GB", as shown to users."""
     for unit in ("B", "KB", "MB", "GB"):
@@ -1168,9 +1161,15 @@ class StorageExplorer(anywidget.AnyWidget):
     def _exists(self, path: str) -> bool:
         return self._fs.exists(path)
 
-    def _isdir(self, path: str) -> bool:
-        """Whether ``path`` is a directory; False if that cannot be told."""
-        return _is_dir(self._fs, path)
+    def _isdir(self, path: str, fs: AbstractFileSystem | None = None) -> bool:
+        """Whether ``path`` is a directory; False if that cannot be told.
+
+        ``fs``: another filesystem than the one shown, e.g. a pasted file's.
+        """
+        try:
+            return (fs or self._fs).isdir(path)
+        except Exception:
+            return False
 
     def _read_bytes(self, path: str) -> bytes:
         return self._fs.cat_file(path)
@@ -1229,7 +1228,7 @@ class StorageExplorer(anywidget.AnyWidget):
         file in the storage.
         """
         source_fs, source_path = url_to_fs(url)
-        if _is_dir(source_fs, source_path):
+        if self._isdir(source_path, fs=source_fs):
             raise IsADirectoryError("folders are not pasted")
         handle, temp_path = tempfile.mkstemp(prefix="jse-paste-")
         os.close(handle)
