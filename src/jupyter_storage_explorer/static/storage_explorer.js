@@ -741,14 +741,14 @@ function render({ model, el }) {
     flash(parts.join("; ") || "Nothing moved");
   }
 
-  // --- Download: the kernel sends each file's bytes; the browser saves them ---
+  // --- Download to local: the kernel sends each file's bytes; the browser saves them ---
 
   // Files requested but not received yet, and the errors so far.
   const downloads = { pending: 0, done: 0, errors: [] };
 
   function download(paths) {
     downloads.pending += paths.length;
-    flash(`Downloading ${paths.length === 1 ? "1 file" : `${paths.length} files`}…`);
+    flash(`Downloading ${paths.length === 1 ? "1 file" : `${paths.length} files`} to local…`);
     model.send({ type: "download", paths });
   }
 
@@ -768,9 +768,41 @@ function render({ model, el }) {
     }
     if (downloads.pending > 0) return;
     const { done, errors } = downloads;
-    const summary = done ? `Downloaded ${done === 1 ? "1 file" : `${done} files`}` : "";
+    const summary = done ? `Downloaded ${done === 1 ? "1 file" : `${done} files`} to local` : "";
     flash([summary, ...errors.map((e) => `Failed: ${e}`)].filter(Boolean).join("; "));
     Object.assign(downloads, { done: 0, errors: [] });
+  }
+
+  // --- Download to JupyterLab: the kernel copies the files into its folder
+  // download_to_jupyterlab_path (on the Jupyter server's machine) ---
+
+  async function downloadToJupyterLab(paths) {
+    const dest = model.get("_download_to_jupyterlab_path");
+    const names = paths.map((p) => p.slice(p.lastIndexOf("/") + 1));
+    const confirmed = await ask(
+      [h("div", { textContent: `Download ${describeFiles(names)} to JupyterLab?` }), h("div", { className: "jse-note", textContent: `To ${dest}` })],
+      [
+        { label: "Cancel", value: null },
+        { label: "Download", value: true, primary: true },
+      ],
+    );
+    if (!confirmed) return;
+    flash("Downloading to JupyterLab…");
+    let reply = await request({ type: "download_to_jupyterlab", paths, if_exists: "ask" });
+    if (reply.conflicts) {
+      const choice = await askConflicts(reply.conflicts, dest);
+      if (!choice) {
+        flash("Download cancelled");
+        return;
+      }
+      reply = await request({ type: "download_to_jupyterlab", paths, if_exists: choice });
+    }
+    const { copied = [], skipped = [], errors = [] } = reply;
+    const parts = [];
+    if (copied.length) parts.push(`Downloaded ${describeFiles(copied)} to ${dest}`);
+    if (skipped.length) parts.push(`skipped ${skipped.length} existing`);
+    parts.push(...errors.map((e) => `Failed: ${e}`));
+    flash(parts.join("; ") || "Nothing downloaded");
   }
 
   // The kernel identifies formats by name (e.g. "delta"); users see their label.
@@ -843,12 +875,16 @@ function render({ model, el }) {
       },
     });
     items.push("-");
-    // Files only: downloading folders is intentionally not supported.
+    // Files only: downloading folders is intentionally not supported. Each
+    // download is offered unless the explorer's arguments turned it off.
     if (targets.every((t) => t.type !== "directory")) {
-      items.push({
-        label: count ? `Download ${count}files` : "Download",
-        action: () => download(targets.map((t) => t.path)),
-      });
+      const paths = targets.map((t) => t.path);
+      if (model.get("_allow_download_to_local")) {
+        items.push({ label: count ? `Download ${count}files to local` : "Download to local", action: () => download(paths) });
+      }
+      if (model.get("_download_to_jupyterlab_path")) {
+        items.push({ label: count ? `Download ${count}files to JupyterLab` : "Download to JupyterLab", action: () => downloadToJupyterLab(paths) });
+      }
     }
     // Locations are copied only as URLs: fsspec's paths can differ from the
     // storage's own notion of a path (e.g. abfs's "container/key").

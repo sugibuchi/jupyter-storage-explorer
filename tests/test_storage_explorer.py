@@ -211,6 +211,75 @@ def test_download(mem_explorer):
     assert "folders cannot be downloaded" in folder_reply["error"]
 
 
+def test_download_to_local_not_allowed(memfs):
+    memfs.pipe_file("/a.csv", b"a")
+    explorer = make("/", fs=memfs, allow_download_to_local=False)
+    assert explorer._allow_download_to_local is False
+    explorer.message({"type": "download", "paths": ["/a.csv"]})
+    reply, buffers = explorer.sent[-1]
+    assert "not allowed" in reply["error"]
+    assert buffers is None
+
+
+class TestDownloadToJupyterLab:
+    def copy(self, explorer, paths, if_exists="ask"):
+        """The kernel's reply, without "type" and "rid"."""
+        reply = explorer.request(
+            {
+                "type": "download_to_jupyterlab",
+                "rid": 1,
+                "paths": paths,
+                "if_exists": if_exists,
+            }
+        )
+        return {k: v for k, v in reply.items() if k not in ("type", "rid")}
+
+    def test_default_is_the_folder_launched_in(self, memfs, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        memfs.pipe_file("/a.csv", b"a")
+        explorer = make("/", fs=memfs)
+        assert explorer._download_to_jupyterlab_path == str(tmp_path)
+        # Still there after the working directory changes.
+        monkeypatch.chdir(tmp_path.parent)
+        assert self.copy(explorer, ["/a.csv"]) == {
+            "copied": ["a.csv"],
+            "skipped": [],
+            "errors": [],
+        }
+        assert (tmp_path / "a.csv").read_bytes() == b"a"
+
+    def test_home_folder(self, memfs, tmp_path, monkeypatch):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.setenv("USERPROFILE", str(tmp_path))  # Windows
+        (tmp_path / "Downloads").mkdir()
+        explorer = make("/", fs=memfs, download_to_jupyterlab_path="~/Downloads")
+        assert explorer._download_to_jupyterlab_path == str(tmp_path / "Downloads")
+
+    @pytest.mark.parametrize(
+        ("if_exists", "content"), [("skip", b"mine"), ("overwrite", b"a")]
+    )
+    def test_conflicts(self, memfs, tmp_path, if_exists, content):
+        memfs.pipe_file("/a.csv", b"a")
+        (tmp_path / "a.csv").write_bytes(b"mine")
+        explorer = make("/", fs=memfs, download_to_jupyterlab_path=str(tmp_path))
+        assert self.copy(explorer, ["/a.csv"]) == {"conflicts": ["a.csv"]}
+        self.copy(explorer, ["/a.csv"], if_exists)
+        assert (tmp_path / "a.csv").read_bytes() == content
+
+    def test_missing_folder(self, memfs, tmp_path):
+        memfs.pipe_file("/a.csv", b"a")
+        explorer = make(
+            "/", fs=memfs, download_to_jupyterlab_path=str(tmp_path / "missing")
+        )
+        assert "folder not found" in self.copy(explorer, ["/a.csv"])["errors"][0]
+
+    def test_not_offered(self, memfs, tmp_path):
+        memfs.pipe_file("/a.csv", b"a")
+        explorer = make("/", fs=memfs, download_to_jupyterlab_path=None)
+        assert explorer._download_to_jupyterlab_path == ""
+        assert "not allowed" in self.copy(explorer, ["/a.csv"])["errors"][0]
+
+
 class TestMove:
     def move(self, explorer, paths, dest, if_exists="ask"):
         return explorer.request(
