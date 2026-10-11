@@ -10,6 +10,7 @@ import functools
 import hashlib
 import os
 import tempfile
+import uuid
 from typing import TYPE_CHECKING, Any
 
 import anywidget
@@ -172,7 +173,9 @@ class StorageExplorer(anywidget.AnyWidget):
     the right-click menu shows how to load it in the notebook, "Edit"
     opens text files in an editor that saves back to the storage, "Download
     to local" saves the selected files (not folders) in the browser, and
-    "Download to JupyterLab" copies them into a folder of the Jupyter server. Files
+    "Download to JupyterLab" copies them into a folder of the Jupyter server.
+    "Copy" and "Paste" copy files into a folder, also between explorers (see
+    ``_paste``), and "Delete" deletes files (see ``_rm``). Files
     dragged from JupyterLab's file browser or from the user's computer onto
     the list or tree are uploaded after a confirmation, and files dragged
     within the widget onto a folder are moved there (see ``_mv``).
@@ -264,6 +267,9 @@ class StorageExplorer(anywidget.AnyWidget):
     # widget's drop-down sets `_filesystem` to switch.
     _filesystem_names = traitlets.List(traitlets.Unicode()).tag(sync=True)
     _filesystem = traitlets.Unicode().tag(sync=True)
+    # Identifies this explorer to "Paste": files copied in it, from the
+    # filesystem shown, are copied within that filesystem.
+    _explorer_id = traitlets.Unicode().tag(sync=True)
     # Whether "Download to local" (files saved by the browser) is offered.
     _allow_download_to_local = traitlets.Bool(True).tag(sync=True)
     # Absolute folder on the kernel's machine "Download to JupyterLab" copies
@@ -317,6 +323,7 @@ class StorageExplorer(anywidget.AnyWidget):
             _format_labels={f.name: f.label for f in self._formats},
             _max_upload_bytes=max_upload_bytes,
             _filesystem_names=list(self._filesystems),
+            _explorer_id=uuid.uuid4().hex,
             _allow_download_to_local=allow_download_to_local,
             # Resolved now: "." is the folder the explorer is launched in,
             # even if the kernel's working directory changes later.
@@ -731,6 +738,137 @@ class StorageExplorer(anywidget.AnyWidget):
                 errors.append(f"{_basename(source)}: {exc}")
         return moved, skipped
 
+    # --- Delete: files chosen with "Delete" in the right-click menu ---
+
+    def _rm(self, path: str) -> None:
+        """Delete one file.
+
+        Override in a subclass to change how files are deleted, e.g. to log
+        deletions, or to move files to a trash folder instead.
+        """
+        self._fs.rm_file(path)
+
+    def _delete(self, paths: Sequence[str]) -> dict[str, list[str]]:
+        """Delete files of the filesystem shown, each with ``_rm``; folders are not deleted.
+
+        Returns {"deleted": [...], "errors": [...]} (file names).
+        """
+        deleted, errors = [], []
+        for path in paths:
+            if _is_dir(self._fs, path):
+                errors.append(f"{_basename(path)}: folders are not deleted")
+                continue
+            try:
+                self._rm(path)
+                deleted.append(path)
+            except Exception as exc:
+                errors.append(f"{_basename(path)}: {exc}")
+        if deleted:
+            if self._preview.get("path") in deleted:
+                self._close_preview()
+            for folder in {_parent(p, self._fs) for p in deleted}:
+                self._refresh_dir(folder)
+        return {"deleted": [_basename(p) for p in deleted], "errors": errors}
+
+    def _delete_request(self, content: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return self._delete(content["paths"])
+        except Exception as exc:
+            return {"errors": [f"{type(exc).__name__}: {exc}"]}
+
+    # --- Paste: files copied with "Copy" (in any explorer), into a folder ---
+
+    def _cp(self, source: str, target: str) -> None:
+        """Copy one file within the filesystem shown to path ``target``.
+
+        Override in a subclass to change how files are copied, as ``_mv``.
+        """
+        self._fs.cp_file(source, target)
+
+    def _copy_from_url(self, url: str, target: str) -> None:
+        """Copy the file at ``url`` (any storage fsspec reads, with the
+        environment's credentials) to path ``target`` of the filesystem shown.
+
+        Through a local temporary file, so a failed copy never leaves a partial
+        file in the storage.
+        """
+        source_fs, source_path = url_to_fs(url)
+        if _is_dir(source_fs, source_path):
+            raise IsADirectoryError("folders are not pasted")
+        handle, temp_path = tempfile.mkstemp(prefix="jse-paste-")
+        os.close(handle)
+        try:
+            source_fs.get_file(source_path, temp_path)
+            self._fs.put_file(temp_path, target)
+        finally:
+            with contextlib.suppress(FileNotFoundError):
+                os.unlink(temp_path)
+
+    def _paste(
+        self,
+        files: Sequence[dict[str, Any]],
+        dest: str,
+        if_exists: str = "ask",
+        same_filesystem: bool = False,
+    ) -> dict[str, list[str]]:
+        """Copy files into folder ``dest`` of the filesystem shown.
+
+        ``files`` are {"path", "url"} as copied. With ``same_filesystem``
+        (copied in this explorer, from the filesystem shown) they are copied
+        within it, with ``_cp`` and the explorer's own credentials; otherwise
+        read from their URLs (see ``_copy_from_url``). ``if_exists`` as for
+        ``_move``; a file is not pasted into the folder it is in. Returns
+        {"pasted": [...], "skipped": [...], "errors": [...]} (file names).
+        """
+        plans, errors = [], []
+        for file in files:
+            path, url = file.get("path"), file.get("url")
+            name = _safe_name(_basename(path if same_filesystem else url))
+            target = _join(dest, name)
+            if same_filesystem and _is_dir(self._fs, path):
+                errors.append(f"{name}: folders are not pasted")
+            elif same_filesystem and _norm(path) == _norm(target):
+                errors.append(f"{name}: already in that folder")
+            else:
+                plans.append((path if same_filesystem else url, target))
+        existing = {target for _, target in plans if self._fs.exists(target)}
+        if if_exists == "ask" and existing:
+            return {"conflicts": sorted(_basename(t) for t in existing)}
+        pasted, skipped = [], []
+        for source, target in plans:
+            name = _basename(target)
+            if target in existing and if_exists == "skip":
+                skipped.append(name)
+                continue
+            try:
+                if same_filesystem:
+                    self._cp(source, target)
+                else:
+                    self._copy_from_url(source, target)
+                pasted.append(name)
+            except Exception as exc:
+                errors.append(f"{name}: {exc}")
+        if pasted:
+            self._refresh_dir(dest)
+        return {"pasted": pasted, "skipped": skipped, "errors": errors}
+
+    def _paste_request(self, content: dict[str, Any]) -> dict[str, Any]:
+        """Answer "paste": files copied in the explorer ``content["explorer"]``,
+        from its filesystem ``content["filesystem"]``."""
+        same = (
+            content.get("explorer") == self._explorer_id
+            and content.get("filesystem") == self._filesystem
+        )
+        try:
+            return self._paste(
+                content["files"],
+                content["dest"],
+                content.get("if_exists", "ask"),
+                same_filesystem=same,
+            )
+        except Exception as exc:
+            return {"errors": [f"{type(exc).__name__}: {exc}"]}
+
     # --- Download to the Jupyter server: "Download to JupyterLab", and files
     # dropped on JupyterLab's file browser ---
 
@@ -903,6 +1041,8 @@ class StorageExplorer(anywidget.AnyWidget):
             "download_to_server": lambda c, _: self._reply(
                 c, self._download_to_server_request(c)
             ),
+            "delete": lambda c, _: self._reply(c, self._delete_request(c)),
+            "paste": lambda c, _: self._reply(c, self._paste_request(c)),
             "download_to_jupyterlab": lambda c, _: self._reply(
                 c, self._download_to_jupyterlab_request(c)
             ),

@@ -280,6 +280,116 @@ class TestDownloadToJupyterLab:
         assert "not allowed" in self.copy(explorer, ["/a.csv"])["errors"][0]
 
 
+def without_ids(reply):
+    return {k: v for k, v in reply.items() if k not in ("type", "rid")}
+
+
+class TestDelete:
+    def delete(self, explorer, paths):
+        return without_ids(
+            explorer.request({"type": "delete", "rid": 1, "paths": paths})
+        )
+
+    def test_files(self, mem_explorer):
+        mem_explorer._current_dir = "/data"
+        reply = self.delete(mem_explorer, ["/data/a.csv", "/data/notes.md"])
+        assert reply == {"deleted": ["a.csv", "notes.md"], "errors": []}
+        assert not mem_explorer._fs.exists("/data/a.csv")
+        # The list shows the folder without them.
+        assert [e["name"] for e in mem_explorer._entries] == ["table"]
+
+    def test_folders_are_not_deleted(self, mem_explorer):
+        reply = self.delete(mem_explorer, ["/data/table"])
+        assert reply == {"deleted": [], "errors": ["table: folders are not deleted"]}
+        assert mem_explorer._fs.exists("/data/table/_delta_log/0.json")
+
+    def test_closes_the_preview_of_a_deleted_file(self, mem_explorer):
+        mem_explorer._open_preview("/data/notes.md")
+        assert mem_explorer._preview["path"] == "/data/notes.md"
+        self.delete(mem_explorer, ["/data/notes.md"])
+        assert mem_explorer._preview == {}
+
+    def test_missing_file(self, mem_explorer):
+        reply = self.delete(mem_explorer, ["/data/gone.csv"])
+        assert reply["deleted"] == []
+        assert reply["errors"][0].startswith("gone.csv:")
+
+
+class TestPaste:
+    def paste(self, explorer, files, dest, *, source=None, if_exists="ask"):
+        """Paste ``files`` (paths of ``source``, by default ``explorer``) into ``dest``."""
+        source = source or explorer
+        return without_ids(
+            explorer.request(
+                {
+                    "type": "paste",
+                    "rid": 1,
+                    "explorer": source._explorer_id,
+                    "filesystem": source._filesystem,
+                    "files": [{"path": p, "url": source._url(p)} for p in files],
+                    "dest": dest,
+                    "if_exists": if_exists,
+                }
+            )
+        )
+
+    def test_within_the_filesystem(self, mem_explorer):
+        mem_explorer._current_dir = "/other"
+        reply = self.paste(mem_explorer, ["/data/a.csv", "/data/table"], "/other")
+        assert reply == {
+            "pasted": ["a.csv"],
+            "skipped": [],
+            "errors": ["table: folders are not pasted"],
+        }
+        assert mem_explorer._fs.cat_file("/other/a.csv") == b"x,y\n1,2\n"
+        assert mem_explorer._fs.exists("/data/a.csv")  # copied, not moved
+        assert "a.csv" in [e["name"] for e in mem_explorer._entries]
+
+    @pytest.mark.parametrize(
+        ("if_exists", "content"), [("skip", b"b"), ("overwrite", b"new")]
+    )
+    def test_conflicts(self, mem_explorer, if_exists, content):
+        mem_explorer._fs.pipe_file("/data/b.txt", b"new")
+        assert self.paste(mem_explorer, ["/data/b.txt"], "/other") == {
+            "conflicts": ["b.txt"]
+        }
+        self.paste(mem_explorer, ["/data/b.txt"], "/other", if_exists=if_exists)
+        assert mem_explorer._fs.cat_file("/other/b.txt") == content
+
+    def test_not_into_its_own_folder(self, mem_explorer):
+        reply = self.paste(mem_explorer, ["/other/b.txt"], "/other")
+        assert reply["errors"] == ["b.txt: already in that folder"]
+
+    def test_from_another_explorer_by_url(self, mem_explorer, tmp_path):
+        local = make(str(tmp_path))
+        reply = self.paste(local, ["/data/a.csv"], local._root, source=mem_explorer)
+        assert reply["pasted"] == ["a.csv"]
+        assert (tmp_path / "a.csv").read_bytes() == b"x,y\n1,2\n"
+        assert "a.csv" in [e["name"] for e in local._entries]
+
+    def test_folder_by_url_is_not_pasted(self, mem_explorer, tmp_path):
+        local = make(str(tmp_path))
+        reply = self.paste(local, ["/data/table"], local._root, source=mem_explorer)
+        assert reply["errors"] == ["table: folders are not pasted"]
+        assert list(tmp_path.iterdir()) == []
+
+    def test_unreadable_url(self, tmp_path):
+        local = make(str(tmp_path))
+        reply = local.request(
+            {
+                "type": "paste",
+                "rid": 1,
+                "explorer": "elsewhere",
+                "filesystem": "default",
+                "files": [{"path": "/x.csv", "url": "memory:///missing/x.csv"}],
+                "dest": local._root,
+            }
+        )
+        assert reply["pasted"] == []
+        assert reply["errors"][0].startswith("x.csv:")
+        assert list(tmp_path.iterdir()) == []
+
+
 class TestMove:
     def move(self, explorer, paths, dest, if_exists="ask"):
         return explorer.request(
