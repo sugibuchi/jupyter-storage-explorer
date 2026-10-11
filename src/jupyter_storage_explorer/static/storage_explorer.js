@@ -338,21 +338,30 @@ function render({ model, el }) {
     });
   }
 
+  // Where the open menu was opened (client coordinates).
+  let menuAt = { x: 0, y: 0 };
+
   function showMenu(ev, items) {
     ev.preventDefault();
     ev.stopPropagation(); // keep JupyterLab's own context menu from opening
     menuEl.replaceChildren(...menuRows(items));
     menuEl.hidden = false;
-    // Place at the pointer, kept inside the widget.
+    menuAt = { x: ev.clientX, y: ev.clientY };
+    placeMenu();
+    document.addEventListener("pointerdown", onOutsidePointer, true);
+    document.addEventListener("keydown", onMenuKey, true);
+  }
+
+  // Places the menu at the pointer, kept inside the widget (which clips what
+  // is outside it). Called again when rows appear later ("Preview as", "Edit").
+  function placeMenu() {
     const box = el.getBoundingClientRect();
-    const x = Math.min(ev.clientX - box.left, box.width - menuEl.offsetWidth - 4);
-    const y = Math.min(ev.clientY - box.top, box.height - menuEl.offsetHeight - 4);
+    const x = Math.min(menuAt.x - box.left, box.width - menuEl.offsetWidth - 4);
+    const y = Math.min(menuAt.y - box.top, box.height - menuEl.offsetHeight - 4);
     menuEl.style.left = `${Math.max(0, x)}px`;
     menuEl.style.top = `${Math.max(0, y)}px`;
     // Open submenus to the left when there is no room on the right.
     menuEl.classList.toggle("jse-flip", Math.max(0, x) + 2 * menuEl.offsetWidth > box.width);
-    document.addEventListener("pointerdown", onOutsidePointer, true);
-    document.addEventListener("keydown", onMenuKey, true);
   }
 
   // --- Menu items filled in by the kernel: "Preview as", "Edit" and "Python code" ---
@@ -741,6 +750,91 @@ function render({ model, el }) {
     flash(parts.join("; ") || "Nothing moved");
   }
 
+  // --- Delete: files chosen with "Delete" in the right-click menu ---
+
+  async function confirmDelete(paths) {
+    const names = paths.map((p) => p.slice(p.lastIndexOf("/") + 1));
+    const ok = await ask(
+      [h("div", { textContent: `Delete ${describeFiles(names)}?` }), h("div", { className: "jse-note", textContent: "This cannot be undone." })],
+      [
+        { label: "Cancel", value: null },
+        { label: "Delete", value: true, primary: true },
+      ],
+    );
+    if (!ok) return;
+    const { deleted = [], errors = [] } = await request({ type: "delete", paths });
+    const parts = [];
+    if (deleted.length) parts.push(`Deleted ${deleted.length === 1 ? deleted[0] : `${deleted.length} files`}`);
+    parts.push(...errors.map((e) => `Failed: ${e}`));
+    flash(parts.join("; ") || "Nothing deleted");
+  }
+
+  // --- Copy and paste: "Copy" puts files on a clipboard shared by the
+  // explorers on the page (and their URLs on the system clipboard); "Paste"
+  // copies them into a folder ---
+
+  const CLIPBOARD = Symbol.for("jupyter-storage-explorer.clipboard");
+
+  // files: [{path, url}] of the filesystem shown.
+  async function copyFiles(files) {
+    globalThis[CLIPBOARD] = {
+      // Pasted in this explorer, on this filesystem, they are copied within it.
+      explorer: model.get("_explorer_id"),
+      filesystem: model.get("_filesystem"),
+      files: files.map(({ path, url }) => ({ path, url, name: url.slice(url.replace(/\/$/, "").lastIndexOf("/") + 1) })),
+    };
+    const what = files.length === 1 ? globalThis[CLIPBOARD].files[0].name : `${files.length} files`;
+    try {
+      await navigator.clipboard.writeText(files.map((f) => f.url).join("\n"));
+      flash(`Copied ${what}`);
+    } catch {
+      // Paste still works; only the URLs are not on the system clipboard.
+      flash(`Copied ${what} (the browser denied clipboard access for the URLs)`);
+    }
+  }
+
+  // The "Paste" item for folder `dest`; greyed out when nothing was copied.
+  function pasteItem(dest) {
+    const clip = globalThis[CLIPBOARD];
+    if (!clip?.files.length) return { label: "Paste", disabled: true };
+    const label = clip.files.length === 1 ? `Paste ${clip.files[0].name}` : `Paste ${clip.files.length} files`;
+    return { label, action: () => confirmPaste(clip, dest) };
+  }
+
+  async function confirmPaste(clip, dest) {
+    const ok = await ask(
+      [h("div", { textContent: `Paste ${describeFiles(clip.files.map((f) => f.name))}?` }), h("div", { className: "jse-note", textContent: `Into ${dest}` })],
+      [
+        { label: "Cancel", value: null },
+        { label: "Paste", value: true, primary: true },
+      ],
+    );
+    if (!ok) return;
+    const content = { type: "paste", explorer: clip.explorer, filesystem: clip.filesystem, files: clip.files, dest };
+    flash("Pasting…");
+    let reply = await request({ ...content, if_exists: "ask" });
+    if (reply.conflicts) {
+      const choice = await askConflicts(reply.conflicts, dest);
+      if (!choice) {
+        flash("Paste cancelled");
+        return;
+      }
+      reply = await request({ ...content, if_exists: choice });
+    }
+    const { pasted = [], skipped = [], errors = [] } = reply;
+    const parts = [];
+    if (pasted.length) parts.push(`Pasted ${pasted.length === 1 ? pasted[0] : `${pasted.length} files`}`);
+    if (skipped.length) parts.push(`skipped ${skipped.length} existing`);
+    parts.push(...errors.map((e) => `Failed: ${e}`));
+    flash(parts.join("; ") || "Nothing pasted");
+  }
+
+  // Right-clicking empty space in the list: paste into the folder shown.
+  listEl.addEventListener("contextmenu", (ev) => {
+    if (ev.target instanceof Element && ev.target.closest("tbody tr")) return; // a row's own menu
+    showMenu(ev, [pasteItem(model.get("_current_dir"))]);
+  });
+
   // --- Download to local: the kernel sends each file's bytes; the browser saves them ---
 
   // Files requested but not received yet, and the errors so far.
@@ -833,6 +927,7 @@ function render({ model, el }) {
       }));
     }
     codeSub.replaceChildren(...menuRows(items));
+    if (!menuEl.hidden) placeMenu(); // rows shown above may have pushed it out of the widget
   }
 
   // Menu items for one or more items ({path, url, type}). The tree passes
@@ -887,9 +982,16 @@ function render({ model, el }) {
       }
     }
     // Locations are copied only as URLs: fsspec's paths can differ from the
-    // storage's own notion of a path (e.g. abfs's "container/key").
+    // storage's own notion of a path (e.g. abfs's "container/key"). Files are
+    // copied for "Paste" too (their URLs also go to the clipboard), folders as URLs only.
+    const files = targets.every((t) => t.type !== "directory");
     if (targets.every((t) => t.url)) {
-      items.push({ label: `Copy ${count}URL${count ? "s" : ""}`, action: () => copy(targets.map((t) => t.url), count ? `${count}URLs` : "URL") });
+      if (files) items.push({ label: count ? `Copy ${count}files` : "Copy", action: () => copyFiles(targets) });
+      else items.push({ label: `Copy ${count}URL${count ? "s" : ""}`, action: () => copy(targets.map((t) => t.url), count ? `${count}URLs` : "URL") });
+    }
+    if (single?.type === "directory") items.push(pasteItem(single.path));
+    if (files) {
+      items.push("-", { label: count ? `Delete ${count}files` : "Delete", action: () => confirmDelete(targets.map((t) => t.path)) });
     }
     return items;
   }
