@@ -99,6 +99,21 @@ class TestFilesystems:
         explorer._filesystem = "mem"
         assert explorer._current_dir == "/m"
 
+    def test_remembered_folder_that_cannot_be_checked(
+        self, memfs, tmp_path, monkeypatch
+    ):
+        memfs.pipe_file("/m/x.txt", b"")
+        explorer = make(filesystems={"mem": memfs, "local": str(tmp_path)})
+        explorer._current_dir = "/m"
+        explorer._filesystem = "local"
+
+        def broken(path):
+            raise RuntimeError("storage unreachable")
+
+        monkeypatch.setattr(memfs, "isdir", broken)
+        explorer._filesystem = "mem"  # no error: back at the top instead
+        assert explorer._current_dir == explorer._root == "/"
+
     def test_unknown_filesystem(self, memfs):
         explorer = make(filesystems={"mem": memfs})
         with pytest.raises(Exception, match="unknown filesystem"):
@@ -308,6 +323,16 @@ class TestDelete:
         assert mem_explorer._preview["path"] == "/data/notes.md"
         self.delete(mem_explorer, ["/data/notes.md"])
         assert mem_explorer._preview == {}
+
+    def test_storage_error_is_reported(self, mem_explorer, monkeypatch):
+        def broken(path):
+            raise RuntimeError("storage unreachable")
+
+        monkeypatch.setattr(mem_explorer._fs, "isdir", broken)
+        reply = self.delete(mem_explorer, ["/data/a.csv"])
+        assert reply == {"errors": ["RuntimeError: storage unreachable"]}
+        monkeypatch.undo()
+        assert mem_explorer._fs.exists("/data/a.csv")
 
     def test_missing_file(self, mem_explorer):
         reply = self.delete(mem_explorer, ["/data/gone.csv"])

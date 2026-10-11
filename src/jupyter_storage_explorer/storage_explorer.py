@@ -342,8 +342,13 @@ class StorageExplorer(anywidget.AnyWidget):
             self._remembered[change["old"]] = self._current_dir
         self._fs, root = self._filesystems[change["new"]]
         path = self._remembered.get(change["new"], root)
-        if path != root and not self._isdir(path):
-            path = root  # the remembered folder is gone
+        if path != root:
+            try:
+                gone = not self._isdir(path)
+            except Exception:
+                gone = True  # cannot tell: start at the top rather than fail the switch
+            if gone:
+                path = root  # the remembered folder is gone
         # One update for the frontend: separate ones would let it combine the
         # new root with the old folder (or the reverse) and ask the new
         # filesystem to list the old filesystem's paths.
@@ -1162,14 +1167,12 @@ class StorageExplorer(anywidget.AnyWidget):
         return self._fs.exists(path)
 
     def _isdir(self, path: str, fs: AbstractFileSystem | None = None) -> bool:
-        """Whether ``path`` is a directory; False if that cannot be told.
+        """Whether ``path`` is a directory; False if it does not exist (fsspec
+        returns False on OSError, e.g. not found or access denied).
 
         ``fs``: another filesystem than the one shown, e.g. a pasted file's.
         """
-        try:
-            return (fs or self._fs).isdir(path)
-        except Exception:
-            return False
+        return (fs or self._fs).isdir(path)
 
     def _read_bytes(self, path: str) -> bytes:
         return self._fs.cat_file(path)
