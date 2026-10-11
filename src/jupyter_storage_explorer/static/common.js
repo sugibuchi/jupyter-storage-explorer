@@ -80,13 +80,15 @@ function createConfirm() {
   return { el, ask, answer };
 }
 
-// A one-line filter: a text field and a ".*" toggle for regular expressions.
-// Matching is always case-insensitive. onChange() is called as it changes.
-// test(text) tells whether a name matches: everything matches while the field
-// is empty, or while its regular expression is invalid (marked in red).
-// active() tells whether it filters. Esc in the field clears it.
+// A one-line filter: a text field with a clear button (✕, while it has
+// text), and a ".*" toggle for regular expressions. Matching is always
+// case-insensitive. onChange() is called as it changes. test(text) tells
+// whether a name matches: everything matches while the field is empty, or
+// while its regular expression is invalid (marked in red). active() tells
+// whether it filters; clear() empties it. Esc in the field clears it too.
 function createFilter({ placeholder = "Filter", onChange = () => {} } = {}) {
   const input = h("input", { type: "text", className: "jse-filter-input", placeholder, spellcheck: false });
+  const clearBtn = h("button", { type: "button", className: "jse-filter-clear", textContent: "✕", title: "Clear", hidden: true });
   const regexBtn = h("button", {
     type: "button",
     className: "jse-btn jse-filter-regex",
@@ -94,13 +96,14 @@ function createFilter({ placeholder = "Filter", onChange = () => {} } = {}) {
     title: "Regular expression (case-insensitive)",
   });
   regexBtn.setAttribute("aria-pressed", "false");
-  const el = h("div", { className: "jse-filter" }, input, regexBtn);
+  const el = h("div", { className: "jse-filter" }, h("span", { className: "jse-filter-field" }, input, clearBtn), regexBtn);
   let regex = false;
   let test = () => true;
   let active = false;
 
   function update() {
     const text = input.value;
+    clearBtn.hidden = !text;
     input.classList.remove("jse-invalid");
     input.title = "";
     test = () => true;
@@ -122,12 +125,22 @@ function createFilter({ placeholder = "Filter", onChange = () => {} } = {}) {
     onChange();
   }
 
+  // Empties the field; onChange() only if it had text.
+  function clear() {
+    if (!input.value) return;
+    input.value = "";
+    update();
+  }
+
   input.addEventListener("input", update);
   input.addEventListener("keydown", (ev) => {
     if (ev.key !== "Escape" || !input.value) return;
     ev.stopPropagation(); // clears the field, rather than closing a dialog or panel
-    input.value = "";
-    update();
+    clear();
+  });
+  clearBtn.addEventListener("click", () => {
+    clear();
+    input.focus({ preventScroll: true });
   });
   regexBtn.addEventListener("click", () => {
     regex = !regex;
@@ -139,6 +152,7 @@ function createFilter({ placeholder = "Filter", onChange = () => {} } = {}) {
     el,
     test: (name) => test(name),
     active: () => active,
+    clear,
     focus: () => input.focus({ preventScroll: true }),
   };
 }

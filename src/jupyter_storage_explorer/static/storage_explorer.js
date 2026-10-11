@@ -292,6 +292,22 @@ function render({ model, el }) {
   // Small confirmation dialog, e.g. "Upload sales.csv? [Cancel] [Upload]".
   const { el: confirmEl, ask, answer } = createConfirm();
 
+  // Shown over the widget while a file operation waits for the kernel (see
+  // busy()): it blocks clicks and keys from the start, and shows itself after
+  // a moment (CSS), so quick operations do not flicker.
+  const busyText = h("div", { className: "jse-busy-text" });
+  const busyEl = h(
+    "div",
+    { className: "jse-dialog jse-busy", tabIndex: -1, hidden: true },
+    h("div", { className: "jse-modal jse-busy-box" }, h("span", { className: "jse-spinner", ariaHidden: "true" }), busyText),
+  );
+  busyEl.setAttribute("role", "alertdialog");
+  busyEl.setAttribute("aria-busy", "true");
+  busyEl.addEventListener("keydown", (ev) => {
+    ev.preventDefault(); // nothing else runs meanwhile, Esc included
+    ev.stopPropagation();
+  });
+
   // "jse-browser" is for user styles too, e.g. icons by [data-depth] (DEVELOPMENT.md).
   el.classList.add("jse-widget", "jse-browser");
   // Focusable, so Escape reaches the widget after a click anywhere in it.
@@ -309,7 +325,37 @@ function render({ model, el }) {
     editorEl,
     confirmEl,
     menuEl,
+    busyEl,
   );
+
+  // --- Busy: file operations block the widget while the kernel works ---
+
+  let busyCount = 0;
+
+  function busyStart(text) {
+    busyCount += 1;
+    busyText.textContent = text;
+    // Restart the delay of its appearance (see .jse-busy in the CSS).
+    busyEl.hidden = true;
+    void busyEl.offsetWidth;
+    busyEl.hidden = false;
+    busyEl.focus({ preventScroll: true });
+  }
+
+  function busyEnd() {
+    busyCount = Math.max(0, busyCount - 1);
+    if (!busyCount) busyEl.hidden = true;
+  }
+
+  // Runs `work` (async) with the widget blocked, showing `text`; returns its result.
+  async function busy(text, work) {
+    busyStart(text);
+    try {
+      return await work();
+    } finally {
+      busyEnd();
+    }
+  }
 
   // --- "Unsafe mode": while on, risky operations are offered (today:
   // moving, copying, pasting and deleting folders). Any operation turns it
@@ -581,12 +627,14 @@ function render({ model, el }) {
     const names = paths.map((p) => p.slice(p.lastIndexOf("/") + 1));
     if (!(await askUpload(names, dest))) return;
     uploadRequest = { root, paths, dest };
-    flash("Uploading…");
+    // Blocked until the kernel's "upload" message answers (onUpload).
+    busyStart(`Uploading ${describeFiles(names)}…`);
     model.send({ type: "upload", ...uploadRequest, if_exists: "ask" });
   }
 
   async function onUpload(msg) {
     if (uploadRequest?.dest !== msg.dest) return;
+    busyEnd();
     if (msg.conflicts) {
       const choice = await askConflicts(msg.conflicts, msg.dest);
       if (!choice) {
@@ -594,6 +642,7 @@ function render({ model, el }) {
         flash("Upload cancelled");
         return;
       }
+      busyStart("Uploading…");
       model.send({ type: "upload", ...uploadRequest, if_exists: choice });
       return;
     }
@@ -655,7 +704,8 @@ function render({ model, el }) {
     const copied = [];
     const skipped = [];
     try {
-      const { conflicts = [] } = await request({ type: "upload_check", dest, names: files.map((f) => f.name) });
+      const names = files.map((f) => f.name);
+      const { conflicts = [] } = await busy("Checking…", () => request({ type: "upload_check", dest, names }));
       let toSend = files;
       if (conflicts.length) {
         const choice = await askConflicts(conflicts, dest);
@@ -668,23 +718,26 @@ function render({ model, el }) {
           skipped.push(...conflicts);
         }
       }
-      for (const [i, file] of toSend.entries()) {
-        const id = `${Date.now()}-${i}`;
-        let offset = 0;
-        do {
-          const piece = await file.slice(offset, offset + CHUNK_BYTES).arrayBuffer();
-          offset += piece.byteLength;
-          const last = offset >= file.size;
-          const reply = await request({ type: "upload_chunk", id, dest, name: file.name, last }, [piece]);
-          if (reply.error) {
-            errors.push(reply.error);
-            break;
-          }
-          if (last) copied.push(file.name);
-          else flash(`Uploading ${file.name}: ${Math.floor((100 * offset) / file.size)}%`);
-        } while (offset < file.size);
-      }
-      if (copied.length) await request({ type: "upload_done", dest });
+      // Blocked while the pieces are sent; the busy dialog shows the progress.
+      await busy("Uploading…", async () => {
+        for (const [i, file] of toSend.entries()) {
+          const id = `${Date.now()}-${i}`;
+          let offset = 0;
+          do {
+            busyText.textContent = `Uploading ${file.name}: ${file.size ? Math.floor((100 * offset) / file.size) : 0}%`;
+            const piece = await file.slice(offset, offset + CHUNK_BYTES).arrayBuffer();
+            offset += piece.byteLength;
+            const last = offset >= file.size;
+            const reply = await request({ type: "upload_chunk", id, dest, name: file.name, last }, [piece]);
+            if (reply.error) {
+              errors.push(reply.error);
+              break;
+            }
+            if (last) copied.push(file.name);
+          } while (offset < file.size);
+        }
+        if (copied.length) await request({ type: "upload_done", dest });
+      });
     } finally {
       localUploadBusy = false;
     }
@@ -802,7 +855,9 @@ function render({ model, el }) {
       async download(dest, ifExists = "ask") {
         const root = serverRoot();
         if (root == null) return { errors: ["JupyterLab did not say where its files are"] };
-        return request({ type: "download_to_server", paths, root, dest, if_exists: ifExists });
+        return busy(`Downloading ${describeFiles(names)} to JupyterLab…`, () =>
+          request({ type: "download_to_server", paths, root, dest, if_exists: ifExists }),
+        );
       },
     };
     // Replaced by the next drag; the extension only reads it on a drop of this type.
@@ -827,14 +882,15 @@ function render({ model, el }) {
     );
     if (!ok) return;
     const content = { type: "move", paths: toMove, dest, unsafe: folders };
-    let reply = await request({ ...content, if_exists: "ask" });
+    const text = `Moving ${describeFiles(names)}…`;
+    let reply = await busy(text, () => request({ ...content, if_exists: "ask" }));
     if (reply.conflicts) {
       const choice = await askConflicts(reply.conflicts, dest);
       if (!choice) {
         flash("Move cancelled");
         return;
       }
-      reply = await request({ ...content, if_exists: choice });
+      reply = await busy(text, () => request({ ...content, if_exists: choice }));
     }
     const { moved = [], skipped = [], errors = [] } = reply;
     const parts = [];
@@ -866,7 +922,9 @@ function render({ model, el }) {
       ],
     );
     if (!ok) return;
-    const { deleted = [], errors = [] } = await request({ type: "delete", paths, unsafe: folders });
+    const { deleted = [], errors = [] } = await busy(`Deleting ${describeFiles(names)}…`, () =>
+      request({ type: "delete", paths, unsafe: folders }),
+    );
     const parts = [];
     if (deleted.length) parts.push(`Deleted ${deleted.length === 1 ? deleted[0] : `${deleted.length} items`}`);
     parts.push(...errors.map((e) => `Failed: ${e}`));
@@ -929,15 +987,15 @@ function render({ model, el }) {
     );
     if (!ok) return;
     const content = { type: "paste", explorer: clip.explorer, filesystem: clip.filesystem, files: clip.files, dest, unsafe: folders };
-    flash("Pasting…");
-    let reply = await request({ ...content, if_exists: "ask" });
+    const text = `Pasting ${describeFiles(clip.files.map((f) => f.name))}…`;
+    let reply = await busy(text, () => request({ ...content, if_exists: "ask" }));
     if (reply.conflicts) {
       const choice = await askConflicts(reply.conflicts, dest);
       if (!choice) {
         flash("Paste cancelled");
         return;
       }
-      reply = await request({ ...content, if_exists: choice });
+      reply = await busy(text, () => request({ ...content, if_exists: choice }));
     }
     const { pasted = [], skipped = [], errors = [] } = reply;
     const parts = [];
@@ -990,7 +1048,7 @@ function render({ model, el }) {
         problem.textContent = error;
         continue;
       }
-      const reply = await request({ type: "create_folder", dest, name });
+      const reply = await busy(`Creating ${name}…`, () => request({ type: "create_folder", dest, name }));
       if (reply.error) {
         problem.textContent = reply.error; // e.g. "x already exists" (the name as it is)
         continue;
@@ -1023,12 +1081,14 @@ function render({ model, el }) {
   function download(paths) {
     takeUnsafe(); // an operation, though not on folders
     downloads.pending += paths.length;
-    flash(`Downloading ${paths.length === 1 ? "1 file" : `${paths.length} files`} to local…`);
+    // Blocked until the last file arrives (onDownload); the kernel sends one message per file.
+    busyStart(`Downloading ${paths.length === 1 ? "1 file" : `${paths.length} files`} to local…`);
     model.send({ type: "download", paths });
   }
 
   function onDownload(msg, buffers) {
     downloads.pending -= 1;
+    if (downloads.pending <= 0) busyEnd();
     if (msg.error) {
       downloads.errors.push(msg.error);
     } else {
@@ -1063,15 +1123,15 @@ function render({ model, el }) {
       ],
     );
     if (!confirmed) return;
-    flash("Downloading to JupyterLab…");
-    let reply = await request({ type: "download_to_jupyterlab", paths, if_exists: "ask" });
+    const text = `Downloading ${describeFiles(names)} to JupyterLab…`;
+    let reply = await busy(text, () => request({ type: "download_to_jupyterlab", paths, if_exists: "ask" }));
     if (reply.conflicts) {
       const choice = await askConflicts(reply.conflicts, dest);
       if (!choice) {
         flash("Download cancelled");
         return;
       }
-      reply = await request({ type: "download_to_jupyterlab", paths, if_exists: choice });
+      reply = await busy(text, () => request({ type: "download_to_jupyterlab", paths, if_exists: choice }));
     }
     const { copied = [], skipped = [], errors = [] } = reply;
     const parts = [];
@@ -1290,7 +1350,11 @@ function render({ model, el }) {
       row.dataset.dropDir = dir.path; // files dropped here are uploaded into this folder
       // For styling by depth, e.g. [data-depth="1"]: 0 is the root, 1 a top-level folder.
       row.dataset.depth = depth;
-      row.addEventListener("click", () => navigate(dir.path));
+      // Clicking a folder ends the search for it: the whole tree shows again.
+      row.addEventListener("click", () => {
+        treeFilter.clear();
+        navigate(dir.path);
+      });
       row.addEventListener("contextmenu", (ev) => showMenu(ev, itemMenu([{ ...dir, type: "directory" }], false)));
 
       const wrap = h("div", {}, row);
@@ -1696,6 +1760,9 @@ function render({ model, el }) {
     return (dy) => (area.style.height = `${Math.max(MIN_AREA_HEIGHT, start + dy)}px`);
   });
 
+  // The folder the list was last shown for, to tell when another is shown.
+  let listShowsDir = null;
+
   function onDirChange() {
     // Only folders under the root belong to this filesystem's tree.
     if (model.get("_current_dir").startsWith(model.get("_root"))) {
@@ -1703,7 +1770,13 @@ function render({ model, el }) {
     }
     renderTree();
     renderPath();
-    // Another folder starts at its first page (its entries may have been drawn already).
+    // Another folder is shown unfiltered (clearing the filter renders the
+    // list), from its first page (its entries may have been drawn already).
+    const dir = model.get("_current_dir");
+    if (dir !== listShowsDir) {
+      listShowsDir = dir;
+      listFilter.clear();
+    }
     if (listPage) {
       listPage = 0;
       renderList();

@@ -139,10 +139,48 @@
   margin: 6px 0;
 }
 
+/* The text field and its clear button (✕), drawn inside the field's right end. */
+.jse-filter-field {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+}
+
+/* A filled circle with a white ✕, as in browsers' search fields. */
+.jse-filter-clear {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--jse-fg-muted);
+  color: var(--jse-bg);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.jse-filter-clear:hover {
+  background: var(--jse-fg);
+}
+
+.jse-filter-clear[hidden] {
+  display: none;
+}
+
 .jse-filter-input {
   flex: 1;
   min-width: 0;
-  padding: 1px 6px;
+  padding: 1px 24px 1px 6px; /* room for the clear button */
   border: 1px solid var(--jse-border);
   border-radius: 3px;
   background: var(--jse-bg);

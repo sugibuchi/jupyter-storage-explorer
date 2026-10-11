@@ -629,3 +629,56 @@
 .jse-note.jse-error-text:empty {
   display: none;
 }
+/* The busy dialog (busy() in storage_explorer.js): from the start it blocks
+   the widget, invisibly; after a moment it shows (dimmed backdrop, message). */
+.jse-busy {
+  z-index: 20; /* above the other dialogs */
+  background: transparent;
+  cursor: progress;
+  animation: jse-busy-backdrop 0.15s ease-out 0.3s forwards;
+}
+
+.jse-busy .jse-busy-box {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  width: auto;
+  max-width: calc(100% - 32px);
+  padding: 12px 16px;
+  opacity: 0;
+  animation: jse-busy-show 0.15s ease-out 0.3s forwards;
+}
+
+.jse-busy-text {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.jse-spinner {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--jse-border);
+  border-top-color: var(--jse-accent);
+  border-radius: 50%;
+  animation: jse-spin 0.8s linear infinite;
+}
+
+@keyframes jse-busy-backdrop {
+  to {
+    background: rgba(0, 0, 0, 0.35);
+  }
+}
+
+@keyframes jse-busy-show {
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes jse-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
