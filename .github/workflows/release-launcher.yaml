@@ -33,7 +33,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: refs/tags/${{ env.TAG }}
           fetch-depth: 0  # the version comes from the git tags (hatch-vcs)
@@ -43,7 +43,7 @@ jobs:
           case "$TAG" in v*) ;; *) echo "not a version tag: $TAG"; exit 1 ;; esac
           test "$(git describe --tags --exact-match)" = "$TAG"
 
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v10
 
       # Node.js comes with nodejs-wheel, as in development (see DEVELOPMENT.md).
       - name: Build the JupyterLab extension
@@ -74,7 +74,7 @@ jobs:
               sys.exit("the wheel has no JupyterLab extension")
           EOF
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dist
           path: dist/
@@ -86,7 +86,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: dist
           path: dist/
@@ -106,7 +106,7 @@ jobs:
     permissions:
       id-token: write  # trusted publishing
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: dist
           path: dist/
