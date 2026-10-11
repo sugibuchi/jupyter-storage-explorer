@@ -561,3 +561,23 @@
 .jse-unsafe.jse-on .jse-switch::after {
   transform: translateX(12px);
 }
+/* The name field of "Create a folder". */
+.jse-name-input {
+  box-sizing: border-box;
+  width: 100%;
+  margin-top: 8px;
+  padding: 4px 6px;
+  border: 1px solid var(--jse-border);
+  border-radius: 3px;
+  background: var(--jse-bg);
+  color: var(--jse-fg);
+  font: inherit;
+}
+
+.jse-note.jse-error-text {
+  color: var(--jse-error);
+}
+
+.jse-note.jse-error-text:empty {
+  display: none;
+}
