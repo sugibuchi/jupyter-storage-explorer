@@ -89,6 +89,9 @@ StorageExplorer(
 ## Using the explorer
 
 - **Browse**: click folders in the tree or list; ↑ goes up, ⟳ refreshes. Ctrl+click (⌘+click) selects several items.
+  The list shows 100 items per page (◀ ▶ above it).
+- **Filter**: type in the fields above the tree and the list (and in **Select columns** of the data browser) to show
+  only names containing the text, or matching a regular expression with **.\***. Case is ignored; Esc clears.
 - **Preview**: double-click a file, or **Preview** (with nothing selected: the current folder, e.g. a Delta Lake table).
   Tables open in the [data browser](#query-data).
 - **Right-click**: Preview as, Edit, Python code to load the data, Copy, Paste, Delete, Create a folder, Download to

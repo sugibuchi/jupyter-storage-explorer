@@ -484,28 +484,35 @@ function createQueryPanel(host, path, data) {
   }
 
   async function openColumnsDialog() {
-    const boxes = view.columns.map((column) => ({
-      column,
-      box: h("input", { type: "checkbox", checked: !view.settings.hidden.includes(column.name) }),
-    }));
-    const setAll = (checked) => boxes.forEach(({ box }) => (box.checked = checked));
-    const choice = await host.ask(
+    const boxes = view.columns.map((column) => {
+      const box = h("input", { type: "checkbox", checked: !view.settings.hidden.includes(column.name) });
+      const label = h("label", {}, box, h("span", { textContent: column.name }), h("span", { className: "jse-note", textContent: column.dtype }));
+      return { column, box, label };
+    });
+    const none = h("div", { className: "jse-note", textContent: "No columns match the filter", hidden: true });
+    // Filters the list by column name; "Show all" and "Hide all" act on the columns listed.
+    const filter = createFilter({
+      placeholder: "Filter columns",
+      onChange() {
+        for (const { column, label } of boxes) label.hidden = !filter.test(column.name);
+        none.hidden = boxes.some(({ label }) => !label.hidden);
+      },
+    });
+    const setAll = (checked) => boxes.forEach(({ box, label }) => !label.hidden && (box.checked = checked));
+    const asked = host.ask(
       [
         h("div", { className: "jse-section-title", textContent: "Select columns" }),
+        filter.el,
         h("div", { className: "jse-query-colbar" }, queryButton("Show all", () => setAll(true)), queryButton("Hide all", () => setAll(false))),
-        h(
-          "div",
-          { className: "jse-query-cols" },
-          ...boxes.map(({ column, box }) =>
-            h("label", {}, box, h("span", { textContent: column.name }), h("span", { className: "jse-note", textContent: column.dtype })),
-          ),
-        ),
+        h("div", { className: "jse-query-cols" }, ...boxes.map(({ label }) => label), none),
       ],
       [
         { label: "Cancel", value: null },
         { label: "Apply", value: true, primary: true },
       ],
     );
+    filter.focus();
+    const choice = await asked;
     if (view.disposed || !choice) return;
     const hidden = boxes.filter(({ box }) => !box.checked).map(({ column }) => column.name);
     if (hidden.length === view.columns.length) {
