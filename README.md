@@ -15,7 +15,7 @@ Two widgets:
 - **`StorageExplorer`**: the file explorer, with previews and the data browser.
 - **`DataExplorer`**: the data browser alone, for one table.
 
-![StorageExplorer with a JSON Lines file open in the data browser](figs/storage-explorer.png)
+![StorageExplorer with a JSON Lines file open in the data browser](https://raw.githubusercontent.com/sugibuchi/jupyter-storage-explorer/main/figs/storage-explorer.png)
 
 ## Installation
 
@@ -59,7 +59,7 @@ widget (`storage_explorer.ipynb`, `data_explorer.ipynb`) on sample data made by 
 
 ### From the JupyterLab launcher
 
-The separate package **[`jupyter-storage-explorer-launcher`](launcher/README.md)** adds **Storage Explorer** to
+The separate package **[`jupyter-storage-explorer-launcher`](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/launcher/README.md)** adds **Storage Explorer** to
 JupyterLab's launcher and command palette, opening the explorer in its own tab on the launcher's folder (the one the
 file browser showed):
 
@@ -67,9 +67,9 @@ file browser showed):
 pip install jupyter-storage-explorer-launcher
 ```
 
-![The Storage Explorer item in JupyterLab's launcher](launcher/figs/launcher.png)
+![The Storage Explorer item in JupyterLab's launcher](https://raw.githubusercontent.com/sugibuchi/jupyter-storage-explorer/main/launcher/figs/launcher.png)
 
-What the tab shows can be configured with a `launcher.py` file; see the [launcher's README](launcher/README.md).
+What the tab shows can be configured with a `launcher.py` file; see the [launcher's README](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/launcher/README.md).
 
 ### Several storages in one explorer
 
@@ -97,7 +97,7 @@ StorageExplorer(
 - **Right-click**: Preview as, Edit, Python code to load the data, Copy, Paste, Delete, Create a folder, Download to
   local or to JupyterLab (see [Options](#storageexplorer-options)), Copy URL.
 - **Drag and drop**: drop files from JupyterLab's file browser or your computer to upload them; drag files onto a folder
-  to move them, or onto JupyterLab's file browser to download them (needs [the launcher](launcher/README.md)).
+  to move them, or onto JupyterLab's file browser to download them (needs [the launcher](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/launcher/README.md)).
 
 ### Unsafe operations
 
@@ -136,7 +136,7 @@ data with the credentials in the environment, not the explorer's options.
 | Images (PNG, JPEG, GIF, SVG, …)                              | `image`      | Shown                         |            | Pillow                                              |
 
 The name identifies the format in `DataExplorer(..., format=...)` and in CSS (see
-[Customizing icons](DEVELOPMENT.md#customizing-icons)).
+[Customizing icons](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/DEVELOPMENT.md#customizing-icons)).
 
 ### Format options
 
@@ -207,7 +207,7 @@ DataExplorer(
 )
 ```
 
-![DataExplorer showing a Delta Lake table in a notebook](figs/data-explorer.png)
+![DataExplorer showing a Delta Lake table in a notebook](https://raw.githubusercontent.com/sugibuchi/jupyter-storage-explorer/main/figs/data-explorer.png)
 
 It remembers its settings like `StorageExplorer`'s data browser, and shares them with it. If polars (or e.g.
 `deltalake`) is missing, it raises an error with the `%pip install` command.
@@ -232,4 +232,4 @@ It remembers its settings like `StorageExplorer`'s data browser, and shares them
 ## Development
 
 Building from source, the JupyterLab extension, releasing, and customizing the explorer's icons with CSS:
-see [DEVELOPMENT.md](DEVELOPMENT.md).
+see [DEVELOPMENT.md](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/DEVELOPMENT.md).

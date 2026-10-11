@@ -3,9 +3,9 @@
 [![PyPI - Version](https://img.shields.io/pypi/v/jupyter-storage-explorer-launcher?color=blue)](https://pypi.org/project/jupyter-storage-explorer-launcher/)
 
 Adds **Storage Explorer** to JupyterLab's launcher (section *Other*) and command palette. It opens
-[Jupyter Storage Explorer](../README.md) in its own tab, with a kernel of its own that stops when the tab is closed.
+[Jupyter Storage Explorer](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/README.md) in its own tab, with a kernel of its own that stops when the tab is closed.
 
-![The Storage Explorer item in JupyterLab's launcher](figs/launcher.png)
+![The Storage Explorer item in JupyterLab's launcher](https://raw.githubusercontent.com/sugibuchi/jupyter-storage-explorer/main/launcher/figs/launcher.png)
 
 The tab opens on the launcher's folder: the one JupyterLab's file browser showed when the launcher was opened (like the
 launcher's Notebook and Console items; open a new launcher after changing folder). From the command palette, it opens
@@ -42,7 +42,7 @@ everyone. The directories are searched in Jupyter's usual order (`jupyter --path
 found is used. Without one, the tab shows an explorer of the folder it opens on.
 
 The file may also have a `style()` function returning CSS (without `<style>`), e.g. to customize the explorer's icons
-(see [Customizing icons](../DEVELOPMENT.md#customizing-icons)). It applies to the whole JupyterLab page while the tab is
+(see [Customizing icons](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/DEVELOPMENT.md#customizing-icons)). It applies to the whole JupyterLab page while the tab is
 open:
 
 ```python
