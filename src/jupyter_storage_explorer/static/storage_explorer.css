@@ -59,13 +59,61 @@
   flex: 1 1 0;
 }
 
+/* Each pane is a column: its bar (filter, and for the list the pager) on top,
+   then the tree or list. The tree's pane is as wide as the tree, which can be
+   resized from its corner. */
+.jse-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.jse-tree-pane {
+  flex: none;
+  max-width: 70%;
+  border-right: 1px solid var(--jse-border);
+}
+
+.jse-list-pane {
+  flex: 1;
+  min-width: 0;
+}
+
+.jse-pane-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
+  padding: 2px 6px;
+  border-bottom: 1px solid var(--jse-border);
+  background: var(--jse-bg-alt);
+}
+
+.jse-pager {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  color: var(--jse-fg-muted);
+  font-size: 0.9em;
+  white-space: nowrap;
+}
+
+.jse-pager[hidden] {
+  display: none;
+}
+
+.jse-tree-note {
+  padding: 4px 10px;
+}
+
 .jse-tree {
+  flex: 1;
+  min-height: 0;
   width: 260px;
   min-width: 120px;
-  max-width: 70%;
   overflow: auto;
   resize: horizontal;
-  border-right: 1px solid var(--jse-border);
   padding: 4px 0;
 }
 
@@ -99,7 +147,7 @@
 
 .jse-list {
   flex: 1;
-  min-width: 0;
+  min-height: 0;
   overflow: auto;
 }
 

@@ -231,3 +231,8 @@
   align-items: center;
   gap: 6px;
 }
+
+/* Filtered out by "Filter columns" (display: flex would otherwise show it). */
+.jse-query-cols label[hidden] {
+  display: none;
+}

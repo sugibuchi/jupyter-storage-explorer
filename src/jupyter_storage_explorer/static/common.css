@@ -124,6 +124,47 @@
   background: var(--jse-bg-alt);
 }
 
+/* A filter (see createFilter in common.js): a text field and a ".*" toggle. */
+.jse-filter {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  max-width: 320px;
+}
+
+.jse-dialog-body .jse-filter {
+  max-width: none;
+  margin: 6px 0;
+}
+
+.jse-filter-input {
+  flex: 1;
+  min-width: 0;
+  padding: 1px 6px;
+  border: 1px solid var(--jse-border);
+  border-radius: 3px;
+  background: var(--jse-bg);
+  color: var(--jse-fg);
+  font: inherit;
+}
+
+/* An invalid regular expression: it filters nothing until fixed. */
+.jse-filter-input.jse-invalid {
+  border-color: var(--jse-error);
+  outline-color: var(--jse-error);
+}
+
+.jse-filter-regex {
+  font-family: var(--jp-code-font-family, monospace);
+}
+
+.jse-filter-regex.jse-on {
+  border-color: var(--jse-accent);
+  background: var(--jse-accent-bg);
+}
+
 .jse-spacer {
   flex: 1;
 }

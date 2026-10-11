@@ -221,7 +221,29 @@ function render({ model, el }) {
   // The status bar: messages on the left (hidden with the preview panel open), the switch on the right.
   const statusBarEl = h("div", { className: "jse-status-bar" }, statusEl, unsafeEl);
   // Tree and list; its height is the `height` trait until resized by dragging.
-  const panesEl = h("div", { className: "jse-panes" }, treeEl, listEl);
+  // Above each pane, a bar: a filter for the tree's folders; for the list, a
+  // filter and the pager (pages of PAGE_SIZE items; see renderList).
+  const PAGE_SIZE = 100;
+  let listPage = 0;
+  const treeFilter = createFilter({ placeholder: "Filter folders", onChange: () => renderTree() });
+  const listFilter = createFilter({
+    placeholder: "Filter by name",
+    onChange() {
+      listPage = 0;
+      renderList();
+    },
+  });
+  const prevPageBtn = h("button", { className: "jse-btn", title: "Previous page", textContent: "◀" });
+  const nextPageBtn = h("button", { className: "jse-btn", title: "Next page", textContent: "▶" });
+  const pageLabel = h("span", { className: "jse-page-label" });
+  const pagerEl = h("div", { className: "jse-pager", hidden: true }, prevPageBtn, pageLabel, nextPageBtn);
+  // Each pane is a column, its bar on top, so the bars follow the tree's width when it is resized.
+  const panesEl = h(
+    "div",
+    { className: "jse-panes" },
+    h("div", { className: "jse-pane jse-tree-pane" }, h("div", { className: "jse-pane-bar" }, treeFilter.el), treeEl),
+    h("div", { className: "jse-pane jse-list-pane" }, h("div", { className: "jse-pane-bar" }, listFilter.el, pagerEl), listEl),
+  );
   // Bottom edge of the widget: resizes the last area (preview panel or tree and list).
   const grip = h("div", { className: "jse-grip", title: "Drag to resize" });
   // Preview panel below the tree and list; the splitter on its top edge moves
@@ -1215,9 +1237,37 @@ function render({ model, el }) {
       expandRoot = false;
     }
 
+    // While the folder filter is active, of the folders loaded so far: those
+    // whose names match, and those leading to them (shown open), so a match
+    // deep down stays reachable; the root and the folder shown always stay.
+    let shown = null;
+    let opened = null;
+    if (treeFilter.active()) {
+      shown = new Set([root]);
+      opened = new Set();
+      const visit = (path) => {
+        let found = false;
+        for (const child of tree[path] ?? []) {
+          const below = visit(child.path);
+          if (below) opened.add(child.path);
+          if (below || treeFilter.test(child.name)) {
+            shown.add(child.path);
+            found = true;
+          }
+        }
+        return found;
+      };
+      if (visit(root)) opened.add(root);
+      const chain = ancestors(current);
+      chain.forEach((path, i) => {
+        shown.add(path);
+        if (i < chain.length - 1) opened.add(path);
+      });
+    }
+
     function node(dir, depth) {
       const children = tree[dir.path];
-      const isOpen = expanded.has(dir.path);
+      const isOpen = expanded.has(dir.path) || Boolean(opened?.has(dir.path));
       if (isOpen) requestChildren(dir.path);
 
       const twisty = h("span", {
@@ -1244,11 +1294,16 @@ function render({ model, el }) {
       row.addEventListener("contextmenu", (ev) => showMenu(ev, itemMenu([{ ...dir, type: "directory" }], false)));
 
       const wrap = h("div", {}, row);
-      if (isOpen && children) for (const child of children) wrap.append(node(child, depth + 1));
+      if (isOpen && children) {
+        for (const child of children) if (!shown || shown.has(child.path)) wrap.append(node(child, depth + 1));
+      }
       return wrap;
     }
 
     treeEl.replaceChildren(node({ name: treeRootLabel(root), path: root }, 0));
+    if (shown && shown.size === ancestors(current).length) {
+      treeEl.append(h("div", { className: "jse-placeholder jse-tree-note", textContent: "No loaded folders match" }));
+    }
     treeEl.querySelector(".jse-active")?.scrollIntoView({ block: "nearest" });
   }
 
@@ -1309,6 +1364,7 @@ function render({ model, el }) {
         th.addEventListener("click", () => {
           sort.asc = sort.key === col.key ? !sort.asc : true;
           sort.key = col.key;
+          listPage = 0;
           renderList();
         });
         return th;
@@ -1317,8 +1373,19 @@ function render({ model, el }) {
 
     const selected = new Set(model.get("_selected"));
     const entries = [...model.get("_entries")].sort(compare);
+    // Filtered by name, then cut into pages. The selection keeps items filtered
+    // out or on other pages, and right-click actions apply to them too.
+    const matching = listFilter.active() ? entries.filter((e) => listFilter.test(e.name)) : entries;
+    const pages = Math.max(1, Math.ceil(matching.length / PAGE_SIZE));
+    listPage = Math.min(listPage, pages - 1);
+    const first = listPage * PAGE_SIZE;
+    const page = matching.slice(first, first + PAGE_SIZE);
+    pagerEl.hidden = pages < 2;
+    pageLabel.textContent = `${(first + 1).toLocaleString()}–${(first + page.length).toLocaleString()} of ${matching.length.toLocaleString()}`;
+    prevPageBtn.disabled = listPage === 0;
+    nextPageBtn.disabled = listPage >= pages - 1;
     tbody.replaceChildren(
-      ...entries.map((entry) => {
+      ...page.map((entry) => {
         const isDir = entry.type === "directory";
         const tr = h(
           "tr",
@@ -1363,9 +1430,21 @@ function render({ model, el }) {
         return tr;
       }),
     );
+    if (!page.length && entries.length) {
+      tbody.append(h("tr", {}, h("td", { className: "jse-placeholder", colSpan: columns.length, textContent: "No items match the filter" })));
+    }
     updatePreviewBtn();
     renderStatus();
   }
+
+  function showPage(delta) {
+    listPage += delta;
+    renderList();
+    listEl.scrollTop = 0;
+  }
+
+  prevPageBtn.addEventListener("click", () => showPage(-1));
+  nextPageBtn.addEventListener("click", () => showPage(1));
 
   // What the Preview button previews, and in which format: the single
   // selected item, or with nothing selected, the current folder (e.g. one just
@@ -1408,9 +1487,11 @@ function render({ model, el }) {
       statusEl.textContent = error;
       return;
     }
-    const count = model.get("_entries").length;
+    const entries = model.get("_entries");
+    const count = `${entries.length} item${entries.length === 1 ? "" : "s"}`;
     const sel = model.get("_selected").length;
-    statusEl.textContent = `${count} item${count === 1 ? "" : "s"}` + (sel ? `, ${sel} selected` : "");
+    const matching = listFilter.active() ? `${entries.filter((e) => listFilter.test(e.name)).length} of ${count} match` : count;
+    statusEl.textContent = matching + (sel ? `, ${sel} selected` : "");
   }
 
   // --- Dialog for "Python code" ---
@@ -1622,6 +1703,11 @@ function render({ model, el }) {
     }
     renderTree();
     renderPath();
+    // Another folder starts at its first page (its entries may have been drawn already).
+    if (listPage) {
+      listPage = 0;
+      renderList();
+    }
   }
 
   // "fill": the widget fills its container (see "jse-fill" in the CSS);
