@@ -708,6 +708,65 @@ class StorageExplorer(anywidget.AnyWidget):
                 errors.append(f"{_basename(source)}: {exc}")
         return moved, skipped
 
+    # --- Download to the Jupyter server: files dropped on JupyterLab's file browser ---
+
+    def _download_to_server(
+        self, paths: Sequence[str], dest: str, if_exists: str = "ask"
+    ) -> dict[str, list[str]]:
+        """Copy files of the filesystem shown into ``dest``, a folder on the kernel's machine.
+
+        For files dragged onto JupyterLab's file browser, whose drops the
+        launcher's JupyterLab extension handles; ``dest`` is the browser's
+        folder, which the kernel reaches when it runs where the Jupyter server
+        does. ``if_exists`` as for ``_move``. Folders are not downloaded.
+        """
+        if not os.path.isdir(dest):
+            # e.g. the kernel runs elsewhere than the Jupyter server (a remote kernel).
+            raise ValueError(f"{dest}: folder not found from the kernel")
+        files, errors = [], []
+        for path in paths:
+            name = _safe_name(_basename(path))
+            if _is_dir(self._fs, path):
+                errors.append(f"{name}: folders are not downloaded")
+            else:
+                files.append((path, os.path.join(dest, name)))
+        existing = {target for _, target in files if os.path.exists(target)}
+        if if_exists == "ask" and existing:
+            return {"conflicts": sorted(os.path.basename(t) for t in existing)}
+        copied, skipped = [], []
+        for source, target in files:
+            name = os.path.basename(target)
+            if target in existing and if_exists == "skip":
+                skipped.append(name)
+                continue
+            # Into a temporary file next to the target first, so a failed copy
+            # neither leaves a partial file nor spoils the file it would replace.
+            handle, temp_path = tempfile.mkstemp(prefix=".jse-download-", dir=dest)
+            os.close(handle)
+            try:
+                self._fs.get_file(source, temp_path)  # streams, so any size works
+                os.replace(temp_path, target)
+                copied.append(name)
+            except Exception as exc:
+                errors.append(f"{name}: {exc}")
+            finally:
+                with contextlib.suppress(FileNotFoundError):
+                    os.unlink(temp_path)
+        return {"copied": copied, "skipped": skipped, "errors": errors}
+
+    def _download_to_server_request(self, content: dict[str, Any]) -> dict[str, Any]:
+        """Answer "download_to_server": ``dest`` is relative to the server's folder ``root``."""
+        dest = os.path.join(
+            os.path.expanduser(content["root"]),
+            *filter(None, content["dest"].split("/")),
+        )
+        try:
+            return self._download_to_server(
+                content["paths"], dest, content.get("if_exists", "ask")
+            )
+        except Exception as exc:
+            return {"errors": [f"{type(exc).__name__}: {exc}"]}
+
     # --- Upload from the user's computer: the browser sends files in pieces ---
 
     def _upload_check(self, dest: str, names: list[str]) -> dict[str, Any]:
@@ -801,6 +860,9 @@ class StorageExplorer(anywidget.AnyWidget):
             "upload_done": lambda c, _: self._reply(c, self._upload_done(c["dest"])),
             "vendor": lambda c, _: self._reply(c, self._vendor_source(c["name"])),
             "move": lambda c, _: self._reply(c, self._move_request(c)),
+            "download_to_server": lambda c, _: self._reply(
+                c, self._download_to_server_request(c)
+            ),
             "query_rows": lambda c, _: self._reply(c, self._query_request(c)),
             "query_check": lambda c, _: self._reply(c, self._query_request(c)),
             "query_save": lambda c, _: self._reply(c, self._query_request(c)),

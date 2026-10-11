@@ -9,6 +9,9 @@
 // JupyterLab restores open consoles when the page is reloaded, reconnected to
 // their kernels but without their outputs. Explorer tabs are recognised by
 // their session name and set up again, running `launch()` once more.
+//
+// A second plugin (download.ts) downloads files dragged from any explorer,
+// in a tab or a notebook, onto JupyterLab's file browser.
 
 import { JupyterFrontEnd, JupyterFrontEndPlugin } from '@jupyterlab/application';
 import { ICommandPalette } from '@jupyterlab/apputils';
@@ -16,6 +19,7 @@ import { ConsolePanel, IConsoleTracker } from '@jupyterlab/console';
 import { ILauncher } from '@jupyterlab/launcher';
 import { LabIcon } from '@jupyterlab/ui-components';
 
+import { downloadPlugin } from './download';
 import iconSvg from '../style/storage-explorer.svg';
 
 const COMMAND = 'storage-explorer:open';
@@ -90,4 +94,4 @@ const plugin: JupyterFrontEndPlugin<void> = {
   }
 };
 
-export default plugin;
+export default [plugin, downloadPlugin];

@@ -54,4 +54,8 @@ def style():
     """
 ```
 
+It also lets you drag files from any Storage Explorer, in its tab or in a notebook, onto JupyterLab's file browser: after
+asking, the explorer's kernel downloads them into the folder dropped on, or the one the file browser shows. This needs
+the kernel to run where the Jupyter server does, as it does by default.
+
 Requires JupyterLab 4.
