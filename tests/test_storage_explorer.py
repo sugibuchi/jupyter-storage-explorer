@@ -315,7 +315,10 @@ class TestDelete:
 
     def test_folders_are_not_deleted(self, mem_explorer):
         reply = self.delete(mem_explorer, ["/data/table"])
-        assert reply == {"deleted": [], "errors": ["table: folders are not deleted"]}
+        assert reply == {
+            "deleted": [],
+            "errors": ["table: folders are not deleted (turn on unsafe mode first)"],
+        }
         assert mem_explorer._fs.exists("/data/table/_delta_log/0.json")
 
     def test_closes_the_preview_of_a_deleted_file(self, mem_explorer):
@@ -364,7 +367,7 @@ class TestPaste:
         assert reply == {
             "pasted": ["a.csv"],
             "skipped": [],
-            "errors": ["table: folders are not pasted"],
+            "errors": ["table: folders are not pasted (turn on unsafe mode first)"],
         }
         assert mem_explorer._fs.cat_file("/other/a.csv") == b"x,y\n1,2\n"
         assert mem_explorer._fs.exists("/data/a.csv")  # copied, not moved
@@ -395,7 +398,9 @@ class TestPaste:
     def test_folder_by_url_is_not_pasted(self, mem_explorer, tmp_path):
         local = make(str(tmp_path))
         reply = self.paste(local, ["/data/table"], local._root, source=mem_explorer)
-        assert reply["errors"] == ["table: folders are not pasted"]
+        assert reply["errors"] == [
+            "table: folders are not pasted (turn on unsafe mode first)"
+        ]
         assert list(tmp_path.iterdir()) == []
 
     def test_unreadable_url(self, tmp_path):
@@ -415,6 +420,125 @@ class TestPaste:
         assert list(tmp_path.iterdir()) == []
 
 
+class TestFolderOperations:
+    """Moving, deleting and pasting folders: only in unsafe mode ("unsafe")."""
+
+    @pytest.fixture
+    def explorer(self, memfs):
+        memfs.pipe(
+            {
+                "/data/sub/x.txt": b"x",
+                "/data/sub/deep/y.txt": b"y",
+                "/data/a.csv": b"a",
+                "/other/keep.txt": b"k",
+            }
+        )
+        return make("/", fs=memfs)
+
+    def request(self, widget, kind, /, **content):
+        """``widget``'s reply to a ``kind`` request (``content`` may have its own "explorer")."""
+        return without_ids(widget.request({"type": kind, "rid": 1, **content}))
+
+    def test_move(self, explorer):
+        explorer._current_dir = "/data/sub/deep"
+        reply = self.request(
+            explorer, "move", paths=["/data/sub"], dest="/other", unsafe=True
+        )
+        assert reply == {"moved": ["sub"], "skipped": [], "errors": []}
+        assert sorted(explorer._fs.find("/other")) == [
+            "/other/keep.txt",
+            "/other/sub/deep/y.txt",
+            "/other/sub/x.txt",
+        ]
+        assert not explorer._fs.exists("/data/sub")
+        # The list follows the folder it showed to where it was moved.
+        assert explorer._current_dir == "/other/sub/deep"
+
+    @pytest.mark.parametrize(
+        ("paths", "dest", "error"),
+        [
+            (
+                ["/data/sub"],
+                "/data/sub/deep",
+                "sub: a folder cannot be moved into itself",
+            ),
+            (["/"], "/other", "/: the top folder is not moved"),
+        ],
+    )
+    def test_move_refused(self, explorer, paths, dest, error):
+        reply = self.request(explorer, "move", paths=paths, dest=dest, unsafe=True)
+        assert reply["errors"] == [error]
+        assert explorer._fs.exists("/data/sub/x.txt")
+
+    def test_move_onto_an_existing_folder_is_refused(self, explorer):
+        explorer._fs.pipe_file("/other/sub/old.txt", b"o")
+        reply = self.request(
+            explorer, "move", paths=["/data/sub"], dest="/other", unsafe=True
+        )
+        assert reply["errors"] == ["sub: already exists in that folder"]
+        assert explorer._fs.exists("/other/sub/old.txt")
+        assert explorer._fs.exists("/data/sub/x.txt")
+
+    def test_delete(self, explorer):
+        explorer._current_dir = "/data/sub/deep"
+        explorer._open_preview("/data/sub/x.txt")
+        reply = self.request(explorer, "delete", paths=["/data/sub"], unsafe=True)
+        assert reply == {"deleted": ["sub"], "errors": []}
+        assert explorer._fs.find("/data") == ["/data/a.csv"]
+        assert explorer._preview == {}
+        # The list shows the deleted folder's parent.
+        assert explorer._current_dir == "/data"
+        assert not any(k.startswith("/data/sub") for k in explorer._tree)
+
+    def test_delete_the_top_folder_is_refused(self, explorer):
+        reply = self.request(explorer, "delete", paths=["/"], unsafe=True)
+        assert reply == {"deleted": [], "errors": ["/: the top folder is not deleted"]}
+
+    def test_paste_within_the_filesystem(self, explorer):
+        files = [{"path": "/data/sub", "url": explorer._url("/data/sub")}]
+        content = {
+            "explorer": explorer._explorer_id,
+            "filesystem": explorer._filesystem,
+            "files": files,
+            "dest": "/other",
+        }
+        reply = self.request(explorer, "paste", unsafe=True, **content)
+        assert reply == {"pasted": ["sub"], "skipped": [], "errors": []}
+        assert explorer._fs.cat_file("/other/sub/deep/y.txt") == b"y"
+        assert explorer._fs.exists("/data/sub/x.txt")  # copied, not moved
+        into_itself = self.request(
+            explorer, "paste", unsafe=True, **{**content, "dest": "/data/sub/deep"}
+        )
+        assert into_itself["errors"] == ["sub: a folder cannot be pasted into itself"]
+
+    def test_paste_from_another_explorer_by_url(self, explorer, tmp_path):
+        local = make(str(tmp_path))
+        reply = self.request(
+            local,
+            "paste",
+            explorer=explorer._explorer_id,
+            filesystem=explorer._filesystem,
+            files=[{"path": "/data/sub", "url": explorer._url("/data/sub")}],
+            dest=local._root,
+            unsafe=True,
+        )
+        assert reply == {"pasted": ["sub"], "skipped": [], "errors": []}
+        assert (tmp_path / "sub" / "deep" / "y.txt").read_bytes() == b"y"
+        assert (tmp_path / "sub" / "x.txt").read_bytes() == b"x"
+
+    @pytest.mark.parametrize(
+        ("type", "content"),
+        [
+            ("move", {"paths": ["/data/sub"], "dest": "/other"}),
+            ("delete", {"paths": ["/data/sub"]}),
+        ],
+    )
+    def test_locked(self, explorer, type, content):
+        reply = self.request(explorer, type, **content)  # no "unsafe"
+        assert "turn on unsafe mode first" in reply["errors"][0]
+        assert explorer._fs.exists("/data/sub/x.txt")
+
+
 class TestMove:
     def move(self, explorer, paths, dest, if_exists="ask"):
         return explorer.request(
@@ -430,7 +554,9 @@ class TestMove:
     def test_move(self, mem_explorer):
         reply = self.move(mem_explorer, ["/data/a.csv", "/data/table"], "/other")
         assert reply["moved"] == ["a.csv"]
-        assert reply["errors"] == ["table: folders are not moved"]
+        assert reply["errors"] == [
+            "table: folders are not moved (turn on unsafe mode first)"
+        ]
         assert mem_explorer._fs.exists("/other/a.csv")
         assert not mem_explorer._fs.exists("/data/a.csv")
 

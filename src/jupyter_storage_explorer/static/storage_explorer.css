@@ -479,3 +479,85 @@
 .jse-splitter:hover {
   background: var(--jse-accent-bg);
 }
+
+/* The status bar: messages on the left (.jse-status, without its own border
+   here), the "Unsafe mode" slider on the right. */
+.jse-status-bar {
+  display: flex;
+  align-items: center;
+  border-top: 1px solid var(--jse-border);
+  background: var(--jse-bg-alt);
+}
+
+.jse-status-bar .jse-status {
+  flex: 1;
+  min-width: 0;
+  border-top: none;
+}
+
+.jse-unsafe {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto; /* stays right when the message is hidden */
+  padding: 2px 8px;
+  color: var(--jse-fg-muted);
+  font-size: 0.9em;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+
+/* The checkbox, hidden but focusable; the slider below shows its state. */
+.jse-switch-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Track and knob. */
+.jse-switch {
+  position: relative;
+  flex: none;
+  width: 26px;
+  height: 14px;
+  border-radius: 7px;
+  background: var(--jse-border);
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 15%);
+  transition: background 0.15s;
+}
+
+.jse-switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 30%);
+  transition: transform 0.15s;
+}
+
+.jse-switch-input:focus-visible + .jse-switch {
+  outline: 2px solid var(--jse-accent);
+  outline-offset: 2px;
+}
+
+/* On: risky operations are allowed for the next operation. */
+.jse-unsafe.jse-on {
+  color: var(--jse-error);
+  font-weight: 600;
+}
+
+.jse-unsafe.jse-on .jse-switch {
+  background: var(--jse-error);
+}
+
+.jse-unsafe.jse-on .jse-switch::after {
+  transform: translateX(12px);
+}

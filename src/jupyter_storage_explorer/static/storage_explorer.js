@@ -201,6 +201,25 @@ function render({ model, el }) {
   const tbody = h("tbody");
   const listEl = h("div", { className: "jse-list" }, h("table", {}, h("thead", {}, headRow), tbody));
   const statusEl = h("div", { className: "jse-status" });
+  // "Unsafe mode", at the right end of the status bar (see takeUnsafe): a
+  // slider. The checkbox is hidden but still focusable (Space toggles it);
+  // the track and knob are drawn by CSS.
+  const unsafeInput = h("input", { type: "checkbox", role: "switch", className: "jse-switch-input" });
+  const unsafeLabel = h("span");
+  const unsafeEl = h(
+    "label",
+    {
+      className: "jse-unsafe",
+      title:
+        "For the next operation only: allows risky operations (moving, copying, pasting and deleting folders). " +
+        "Turns off when any operation starts.",
+    },
+    unsafeInput,
+    h("span", { className: "jse-switch", ariaHidden: "true" }),
+    unsafeLabel,
+  );
+  // The status bar: messages on the left (hidden with the preview panel open), the switch on the right.
+  const statusBarEl = h("div", { className: "jse-status-bar" }, statusEl, unsafeEl);
   // Tree and list; its height is the `height` trait until resized by dragging.
   const panesEl = h("div", { className: "jse-panes" }, treeEl, listEl);
   // Bottom edge of the widget: resizes the last area (preview panel or tree and list).
@@ -262,13 +281,44 @@ function render({ model, el }) {
     h("div", { className: "jse-toolbar" }, fsSelect, upBtn, refreshBtn, pathEl, previewBtn),
     panesEl,
     previewEl,
-    statusEl,
+    statusBarEl,
     grip,
     dialogEl,
     editorEl,
     confirmEl,
     menuEl,
   );
+
+  // --- "Unsafe mode": while on, risky operations are offered (today:
+  // moving, copying, pasting and deleting folders). Any operation turns it
+  // off as it starts, risky or not, so it allows one operation at a time. The
+  // kernel refuses folders unless the request says it was on ("unsafe") ---
+
+  const unsafe = () => model.get("_unsafe_mode");
+
+  function renderUnsafe() {
+    const on = unsafe();
+    unsafeInput.checked = on;
+    unsafeEl.classList.toggle("jse-on", on);
+    unsafeLabel.textContent = on ? "Unsafe mode on" : "Unsafe mode";
+  }
+
+  unsafeInput.addEventListener("change", () => {
+    model.set("_unsafe_mode", unsafeInput.checked);
+    model.save_changes();
+  });
+
+  // Whether the switch is on for an operation starting now; turns it off.
+  function takeUnsafe() {
+    const on = unsafe();
+    if (on) {
+      model.set("_unsafe_mode", false);
+      model.save_changes();
+    }
+    return on;
+  }
+
+  const isFolder = (item) => item.type === "directory";
 
   // --- Right-click menu ---
 
@@ -500,6 +550,7 @@ function render({ model, el }) {
 
   // From JupyterLab's file browser: the kernel copies the files itself.
   async function confirmUpload(paths, dest) {
+    takeUnsafe(); // an operation, though not on folders
     const root = serverRoot();
     if (root == null) {
       flash("Cannot upload: JupyterLab did not say where its files are");
@@ -560,6 +611,7 @@ function render({ model, el }) {
   let localUploadBusy = false;
 
   async function uploadLocalFiles({ files: dropped, folders }, dest) {
+    takeUnsafe(); // an operation, though not on folders
     const errors = folders.map((name) => `${name}: folders are not uploaded`);
     // Files over the widget's max_upload_bytes are refused before sending anything.
     const limit = model.get("_max_upload_bytes");
@@ -644,21 +696,37 @@ function render({ model, el }) {
     uploadLocalFiles(droppedFiles(ev.dataTransfer), dropTarget(ev).dir);
   });
 
-  // --- Move: drag files in the list onto a folder (list or tree) ---
+  // --- Move: drag files (and, in unsafe mode, folders) in the list onto a folder (list or tree) ---
 
-  // Our own drag data type, so moves are told apart from uploads.
+  // Our own drag data type, so moves are told apart from uploads:
+  // {paths, folders: whether unsafe mode was on when the drag started}.
   const MOVE_MIME = "application/x-jse-move";
   const isMoveDrag = (ev) => Array.from(ev.dataTransfer?.types ?? []).includes(MOVE_MIME);
 
-  // Files a drag starting on `entry` moves: the selected files if it is
-  // selected, else just it. Folders are not moved.
-  function draggedFiles(entry) {
+  // Entries a drag starting on `entry` moves: the selected ones if it is
+  // selected, else just it. Folders only with `folders` (unsafe mode).
+  function draggedItems(entry, folders) {
+    const allowed = (e) => folders || !isFolder(e);
+    if (!allowed(entry)) return [];
     const selected = model.get("_selected");
-    if (!selected.includes(entry.path)) return [entry.path];
-    return model
-      .get("_entries")
-      .filter((e) => selected.includes(e.path) && e.type !== "directory")
-      .map((e) => e.path);
+    if (!selected.includes(entry.path)) return [entry];
+    return model.get("_entries").filter((e) => selected.includes(e.path) && allowed(e));
+  }
+
+  // A list row's drag: a move within the explorer, and for files a download
+  // onto JupyterLab's file browser. Starting a drag is an operation (see takeUnsafe).
+  function startDrag(ev, entry) {
+    const folders = takeUnsafe();
+    const items = draggedItems(entry, folders);
+    if (!items.length) {
+      ev.preventDefault(); // a folder, locked
+      flash("Turn on unsafe mode to move folders");
+      return;
+    }
+    ev.dataTransfer.setData(MOVE_MIME, JSON.stringify({ paths: items.map((e) => e.path), folders }));
+    const files = items.filter((e) => !isFolder(e)).map((e) => e.path);
+    if (files.length) startDownloadDrag(ev, files);
+    ev.dataTransfer.effectAllowed = "copyMove";
   }
 
   // Only a folder (row or tree node) is a target; the list itself is the folder they are in.
@@ -686,7 +754,9 @@ function render({ model, el }) {
     ev.stopPropagation();
     highlightDrop(null);
     const node = moveTarget(ev);
-    if (node) confirmMove(JSON.parse(ev.dataTransfer.getData(MOVE_MIME)), node.dataset.dropDir);
+    if (!node) return;
+    const { paths, folders } = JSON.parse(ev.dataTransfer.getData(MOVE_MIME));
+    confirmMove(paths, node.dataset.dropDir, folders);
   });
   panesEl.addEventListener("dragend", () => highlightDrop(null));
 
@@ -717,7 +787,8 @@ function render({ model, el }) {
     globalThis[DRAG_REGISTRY] = drag;
   }
 
-  async function confirmMove(paths, dest) {
+  // `folders`: whether unsafe mode was on when the drag started.
+  async function confirmMove(paths, dest, folders = false) {
     const parentOf = (p) => p.slice(0, p.lastIndexOf("/"));
     const toMove = paths.filter((p) => p !== dest && parentOf(p) !== dest.replace(/\/$/, ""));
     if (!toMove.length) {
@@ -733,59 +804,77 @@ function render({ model, el }) {
       ],
     );
     if (!ok) return;
-    let reply = await request({ type: "move", paths: toMove, dest, if_exists: "ask" });
+    const content = { type: "move", paths: toMove, dest, unsafe: folders };
+    let reply = await request({ ...content, if_exists: "ask" });
     if (reply.conflicts) {
       const choice = await askConflicts(reply.conflicts, dest);
       if (!choice) {
         flash("Move cancelled");
         return;
       }
-      reply = await request({ type: "move", paths: toMove, dest, if_exists: choice });
+      reply = await request({ ...content, if_exists: choice });
     }
     const { moved = [], skipped = [], errors = [] } = reply;
     const parts = [];
-    if (moved.length) parts.push(`Moved ${moved.length === 1 ? moved[0] : `${moved.length} files`}`);
+    if (moved.length) parts.push(`Moved ${moved.length === 1 ? moved[0] : `${moved.length} items`}`);
     if (skipped.length) parts.push(`skipped ${skipped.length} existing`);
     parts.push(...errors.map((e) => `Failed: ${e}`));
     flash(parts.join("; ") || "Nothing moved");
   }
 
-  // --- Delete: files chosen with "Delete" in the right-click menu ---
+  // --- Delete: files (and, in unsafe mode, folders) chosen with "Delete" in the right-click menu ---
 
-  async function confirmDelete(paths) {
+  // targets: [{path, type}].
+  async function confirmDelete(targets) {
+    const folders = takeUnsafe();
+    if (targets.some(isFolder) && !folders) {
+      flash("Turn on unsafe mode to delete folders");
+      return;
+    }
+    const paths = targets.map((t) => t.path);
     const names = paths.map((p) => p.slice(p.lastIndexOf("/") + 1));
+    const note = targets.some(isFolder)
+      ? "Folders are deleted with everything in them. This cannot be undone."
+      : "This cannot be undone.";
     const ok = await ask(
-      [h("div", { textContent: `Delete ${describeFiles(names)}?` }), h("div", { className: "jse-note", textContent: "This cannot be undone." })],
+      [h("div", { textContent: `Delete ${describeFiles(names)}?` }), h("div", { className: "jse-note", textContent: note })],
       [
         { label: "Cancel", value: null },
         { label: "Delete", value: true, primary: true },
       ],
     );
     if (!ok) return;
-    const { deleted = [], errors = [] } = await request({ type: "delete", paths });
+    const { deleted = [], errors = [] } = await request({ type: "delete", paths, unsafe: folders });
     const parts = [];
-    if (deleted.length) parts.push(`Deleted ${deleted.length === 1 ? deleted[0] : `${deleted.length} files`}`);
+    if (deleted.length) parts.push(`Deleted ${deleted.length === 1 ? deleted[0] : `${deleted.length} items`}`);
     parts.push(...errors.map((e) => `Failed: ${e}`));
     flash(parts.join("; ") || "Nothing deleted");
   }
 
-  // --- Copy and paste: "Copy" puts files on a clipboard shared by the
-  // explorers on the page (and their URLs on the system clipboard); "Paste"
-  // copies them into a folder ---
+  // --- Copy and paste: "Copy" puts files (and, in unsafe mode, folders) on a
+  // clipboard shared by the explorers on the page (and their URLs on the
+  // system clipboard); "Paste" copies them into a folder ---
 
   const CLIPBOARD = Symbol.for("jupyter-storage-explorer.clipboard");
 
-  // files: [{path, url}] of the filesystem shown.
-  async function copyFiles(files) {
+  // targets: [{path, url, type}] of the filesystem shown.
+  async function copyFiles(targets) {
+    const hasFolders = targets.some(isFolder);
+    if (!takeUnsafe() && hasFolders) {
+      flash("Turn on unsafe mode to copy folders");
+      return;
+    }
     globalThis[CLIPBOARD] = {
       // Pasted in this explorer, on this filesystem, they are copied within it.
       explorer: model.get("_explorer_id"),
       filesystem: model.get("_filesystem"),
-      files: files.map(({ path, url }) => ({ path, url, name: url.slice(url.replace(/\/$/, "").lastIndexOf("/") + 1) })),
+      // Pasting folders needs unsafe mode again.
+      folders: hasFolders,
+      files: targets.map(({ path, url }) => ({ path, url, name: url.slice(url.replace(/\/$/, "").lastIndexOf("/") + 1) })),
     };
-    const what = files.length === 1 ? globalThis[CLIPBOARD].files[0].name : `${files.length} files`;
+    const what = targets.length === 1 ? globalThis[CLIPBOARD].files[0].name : `${targets.length} items`;
     try {
-      await navigator.clipboard.writeText(files.map((f) => f.url).join("\n"));
+      await navigator.clipboard.writeText(targets.map((f) => f.url).join("\n"));
       flash(`Copied ${what}`);
     } catch {
       // Paste still works; only the URLs are not on the system clipboard.
@@ -793,15 +882,22 @@ function render({ model, el }) {
     }
   }
 
-  // The "Paste" item for folder `dest`; greyed out when nothing was copied.
+  // The "Paste" item for folder `dest`: greyed out when nothing was copied,
+  // and null (left out) when folders were copied and unsafe mode is off.
   function pasteItem(dest) {
     const clip = globalThis[CLIPBOARD];
     if (!clip?.files.length) return { label: "Paste", disabled: true };
-    const label = clip.files.length === 1 ? `Paste ${clip.files[0].name}` : `Paste ${clip.files.length} files`;
+    if (clip.folders && !unsafe()) return null;
+    const label = clip.files.length === 1 ? `Paste ${clip.files[0].name}` : `Paste ${clip.files.length} items`;
     return { label, action: () => confirmPaste(clip, dest) };
   }
 
   async function confirmPaste(clip, dest) {
+    const folders = takeUnsafe();
+    if (clip.folders && !folders) {
+      flash("Turn on unsafe mode to paste folders");
+      return;
+    }
     const ok = await ask(
       [h("div", { textContent: `Paste ${describeFiles(clip.files.map((f) => f.name))}?` }), h("div", { className: "jse-note", textContent: `Into ${dest}` })],
       [
@@ -810,7 +906,7 @@ function render({ model, el }) {
       ],
     );
     if (!ok) return;
-    const content = { type: "paste", explorer: clip.explorer, filesystem: clip.filesystem, files: clip.files, dest };
+    const content = { type: "paste", explorer: clip.explorer, filesystem: clip.filesystem, files: clip.files, dest, unsafe: folders };
     flash("Pasting…");
     let reply = await request({ ...content, if_exists: "ask" });
     if (reply.conflicts) {
@@ -823,7 +919,7 @@ function render({ model, el }) {
     }
     const { pasted = [], skipped = [], errors = [] } = reply;
     const parts = [];
-    if (pasted.length) parts.push(`Pasted ${pasted.length === 1 ? pasted[0] : `${pasted.length} files`}`);
+    if (pasted.length) parts.push(`Pasted ${pasted.length === 1 ? pasted[0] : `${pasted.length} items`}`);
     if (skipped.length) parts.push(`skipped ${skipped.length} existing`);
     parts.push(...errors.map((e) => `Failed: ${e}`));
     flash(parts.join("; ") || "Nothing pasted");
@@ -832,7 +928,8 @@ function render({ model, el }) {
   // Right-clicking empty space in the list: paste into the folder shown.
   listEl.addEventListener("contextmenu", (ev) => {
     if (ev.target instanceof Element && ev.target.closest("tbody tr")) return; // a row's own menu
-    showMenu(ev, [pasteItem(model.get("_current_dir"))]);
+    // Folders on the clipboard while locked: a greyed-out "Paste", not an empty menu.
+    showMenu(ev, [pasteItem(model.get("_current_dir")) ?? { label: "Paste", disabled: true }]);
   });
 
   // --- Download to local: the kernel sends each file's bytes; the browser saves them ---
@@ -841,6 +938,7 @@ function render({ model, el }) {
   const downloads = { pending: 0, done: 0, errors: [] };
 
   function download(paths) {
+    takeUnsafe(); // an operation, though not on folders
     downloads.pending += paths.length;
     flash(`Downloading ${paths.length === 1 ? "1 file" : `${paths.length} files`} to local…`);
     model.send({ type: "download", paths });
@@ -871,6 +969,7 @@ function render({ model, el }) {
   // download_to_jupyterlab_path (on the Jupyter server's machine) ---
 
   async function downloadToJupyterLab(paths) {
+    takeUnsafe(); // an operation, though not on folders
     const dest = model.get("_download_to_jupyterlab_path");
     const names = paths.map((p) => p.slice(p.lastIndexOf("/") + 1));
     const confirmed = await ask(
@@ -982,16 +1081,23 @@ function render({ model, el }) {
       }
     }
     // Locations are copied only as URLs: fsspec's paths can differ from the
-    // storage's own notion of a path (e.g. abfs's "container/key"). Files are
-    // copied for "Paste" too (their URLs also go to the clipboard), folders as URLs only.
-    const files = targets.every((t) => t.type !== "directory");
+    // storage's own notion of a path (e.g. abfs's "container/key"). "Copy"
+    // copies for "Paste" too (and puts the URLs on the clipboard); folders
+    // only in unsafe mode, otherwise "Copy URL".
+    const files = !targets.some(isFolder);
+    // Folder operations are dangerous: offered only in unsafe mode.
+    const allowed = files || unsafe();
+    const what = files ? "files" : "items";
     if (targets.every((t) => t.url)) {
-      if (files) items.push({ label: count ? `Copy ${count}files` : "Copy", action: () => copyFiles(targets) });
-      else items.push({ label: `Copy ${count}URL${count ? "s" : ""}`, action: () => copy(targets.map((t) => t.url), count ? `${count}URLs` : "URL") });
+      if (allowed) items.push({ label: count ? `Copy ${count}${what}` : "Copy", action: () => copyFiles(targets) });
+      if (!files) items.push({ label: `Copy ${count}URL${count ? "s" : ""}`, action: () => copy(targets.map((t) => t.url), count ? `${count}URLs` : "URL") });
     }
-    if (single?.type === "directory") items.push(pasteItem(single.path));
-    if (files) {
-      items.push("-", { label: count ? `Delete ${count}files` : "Delete", action: () => confirmDelete(targets.map((t) => t.path)) });
+    if (single?.type === "directory") {
+      const paste = pasteItem(single.path);
+      if (paste) items.push(paste);
+    }
+    if (allowed) {
+      items.push("-", { label: count ? `Delete ${count}${what}` : "Delete", action: () => confirmDelete(targets) });
     }
     return items;
   }
@@ -1169,19 +1275,15 @@ function render({ model, el }) {
           // Depth from the root, as in the tree: ancestors() lists the root down to
           // this folder, so a top-level folder gives 2 entries, i.e. depth 1.
           if (entry.path.startsWith(model.get("_root"))) tr.dataset.depth = ancestors(entry.path).length - 1;
-        } else {
+        } else if (entry.format) {
           // e.g. "csv", "json-lines"; lets CSS style the icon per format.
-          if (entry.format) tr.dataset.fileFormat = entry.format;
-          // Files can be dragged onto a folder to move them there, or onto
-          // JupyterLab's file browser to download them to the Jupyter server.
-          tr.draggable = true;
-          tr.addEventListener("dragstart", (ev) => {
-            const paths = draggedFiles(entry);
-            ev.dataTransfer.setData(MOVE_MIME, JSON.stringify(paths));
-            startDownloadDrag(ev, paths);
-            ev.dataTransfer.effectAllowed = "copyMove";
-          });
+          tr.dataset.fileFormat = entry.format;
         }
+        // Files (and, in unsafe mode, folders) can be dragged onto a folder to move
+        // them there; files onto JupyterLab's file browser to download them to
+        // the Jupyter server (see startDrag).
+        tr.draggable = true;
+        tr.addEventListener("dragstart", (ev) => startDrag(ev, entry));
         tr.addEventListener("click", (ev) => select(entry.path, ev.ctrlKey || ev.metaKey));
         tr.addEventListener("dblclick", () => {
           if (isDir) navigate(entry.path);
@@ -1315,6 +1417,7 @@ function render({ model, el }) {
 
   function saveEdit() {
     if (!editing || saveBtn.disabled) return;
+    takeUnsafe(); // an operation, though not on folders
     editing.saving = true;
     editorMessage("Saving…");
     updateEditorButtons();
@@ -1535,12 +1638,14 @@ function render({ model, el }) {
     "change:_current_format": updatePreviewBtn,
     "change:_selected_format": updatePreviewBtn,
     "change:_current_query": updatePreviewBtn,
+    "change:_unsafe_mode": renderUnsafe,
     "msg:custom": onCustomMsg,
   };
   for (const [event, handler] of Object.entries(handlers)) model.on(event, handler);
 
   applyHeight();
   renderFsSelect();
+  renderUnsafe();
   onDirChange();
   renderList();
   renderPreview();
