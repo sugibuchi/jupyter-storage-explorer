@@ -22,7 +22,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.3.0  # no major-version tags (e.g. v10) since v8
 
       - name: Ruff check
         run: uvx ruff check src launcher/src tests
@@ -37,7 +37,7 @@ jobs:
         with:
           fetch-depth: 0  # the version comes from the git tags (hatch-vcs)
 
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.3.0  # no major-version tags (e.g. v10) since v8
         with:
           python-version: "3.14"
 

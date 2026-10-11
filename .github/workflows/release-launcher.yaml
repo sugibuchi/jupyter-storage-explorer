@@ -43,7 +43,7 @@ jobs:
           case "$TAG" in v*) ;; *) echo "not a version tag: $TAG"; exit 1 ;; esac
           test "$(git describe --tags --exact-match)" = "$TAG"
 
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.3.0  # no major-version tags (e.g. v10) since v8
 
       # Node.js comes with nodejs-wheel, as in development (see DEVELOPMENT.md).
       - name: Build the JupyterLab extension

@@ -22,7 +22,7 @@ jobs:
         with:
           fetch-depth: 0  # the version comes from the git tags (hatch-vcs)
 
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.3.0  # no major-version tags (e.g. v10) since v8
 
       - name: Build the package
         run: uv build --package jupyter-storage-explorer --out-dir dist
