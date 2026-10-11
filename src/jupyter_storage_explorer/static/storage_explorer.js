@@ -942,8 +942,17 @@ function render({ model, el }) {
       return wrap;
     }
 
-    treeEl.replaceChildren(node({ name: rootLabel(root), path: root }, 0));
+    treeEl.replaceChildren(node({ name: treeRootLabel(root), path: root }, 0));
     treeEl.querySelector(".jse-active")?.scrollIntoView({ block: "nearest" });
+  }
+
+  // A root of just "/" (e.g. memory://, or a DirFileSystem's "") does not tell
+  // filesystems apart, so with several, the tree names the one shown too:
+  // "/ [Scratch (memory)]".
+  function treeRootLabel(root) {
+    const label = rootLabel(root);
+    if (label !== "/" || model.get("_filesystem_names").length < 2) return label;
+    return `${label} [${model.get("_filesystem")}]`;
   }
 
   function renderPath() {
