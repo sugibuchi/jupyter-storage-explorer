@@ -11,6 +11,7 @@ All Python goes through uv (never call `python`/`pip` directly). Node.js comes w
 uv sync                              # both workspace packages, editable, with dev dependencies
 uv run pytest                        # all tests (tests/)
 uv run pytest tests/test_query.py -k range   # one file / matching tests
+uv run pytest --cov                  # with coverage of src/jupyter_storage_explorer (CI uploads it to Codecov)
 uvx ruff check src launcher/src tests  # lint (ruff is not a dev dependency; config in pyproject.toml)
 uvx ruff format src launcher/src tests # format
 uv run jupyter lab                   # try the widgets in a browser (see notebooks/)

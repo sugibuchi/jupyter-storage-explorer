@@ -1,0 +1,57 @@
+# Lint and test on every push and pull request, and upload the test coverage
+# to Codecov (the README's badge). Uploading needs the repository secret
+# CODECOV_TOKEN, from the repository's settings on codecov.io.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.3.0  # no major-version tags (e.g. v10) since v8
+
+      - name: Ruff check
+        run: uvx ruff check src launcher/src tests
+
+      - name: Ruff format check
+        run: uvx ruff format --check src launcher/src tests
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0  # the version comes from the git tags (hatch-vcs)
+
+      - uses: astral-sh/setup-uv@v10.3.0  # no major-version tags (e.g. v10) since v8
+        with:
+          python-version: "3.14"
+
+      # The launcher is left out: its JupyterLab extension is not built here,
+      # and the tests do not use it.
+      - name: Install the project
+        run: uv sync --no-install-package jupyter-storage-explorer-launcher
+
+      - name: Test with coverage
+        run: uv run --no-sync pytest --cov --cov-report=term --cov-report=xml:coverage.xml
+
+      - name: Upload coverage to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v7
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage.xml

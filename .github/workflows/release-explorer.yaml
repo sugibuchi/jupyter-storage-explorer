@@ -18,11 +18,11 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0  # the version comes from the git tags (hatch-vcs)
 
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v10.3.0  # no major-version tags (e.g. v10) since v8
 
       - name: Build the package
         run: uv build --package jupyter-storage-explorer --out-dir dist
@@ -43,7 +43,7 @@ jobs:
               sys.exit(f"expected {expected} for tag {version}")
           EOF
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dist
           path: dist/
@@ -55,7 +55,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: dist
           path: dist/
@@ -78,7 +78,7 @@ jobs:
     permissions:
       id-token: write  # trusted publishing
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: dist
           path: dist/
