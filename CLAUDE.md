@@ -21,12 +21,25 @@ uv run notebooks/make_samples.py     # regenerate the sample data the notebooks 
 Tests cover the Python side only. Fixtures in `tests/conftest.py`: `memfs` (a cleared fsspec memory filesystem) and
 `make_target` (writes a file there and returns its `Target`). Anything polars reads by URL (`scan`, polars previews,
 the data browser) needs real local files (`tmp_path`), as polars cannot read `memory://`. The widget tests subclass the
-widget to capture `send()` and drive it through `_on_custom_msg`, as the frontend would. The JavaScript is checked by
-hand in JupyterLab; drag and drop in the widgets only works in a browser, not in IntelliJ's notebook view.
+widget to capture `send()` and drive it through `_on_custom_msg`, as the frontend would.
+
+The JavaScript is not covered by tests or CI. Check its syntax by joining it as the kernel does and running
+`uv run node --check` on the result (`_static.esm("storage_explorer")`, also `"data_explorer"`). Check behaviour in a
+real browser: `uv run jupyter lab --no-browser`, then a Playwright script run with
+`uv run --with playwright python script.py`, using the installed Edge (`p.chromium.launch(channel="msedge")`), so no
+browser download. In such scripts: write a temporary notebook under `notebooks/` with a new name each run (a reused
+name reuses its kernel, which keeps the old JavaScript), open it in a reset workspace
+(`/lab/workspaces/<name>/tree/notebooks/<file>?reset&token=...`), and delete it afterwards. Drag and drop in the widgets
+only works in a browser, not in IntelliJ's notebook view.
 
 Python and `src/jupyter_storage_explorer/static/` changes need no build: restart the kernel. The launcher's JupyterLab
 extension (`launcher/labextension/`, TypeScript) is built by hand: `uv run jlpm install` / `uv run jlpm build` there,
-then `uv sync` at the root and restart JupyterLab. Releases are tag-driven GitHub Actions; see DEVELOPMENT.md.
+then `uv sync` at the root and restart JupyterLab.
+
+CI (`.github/workflows/ci.yaml`) runs ruff and pytest with coverage (uploaded to Codecov) on pull requests and pushes to
+`main`. Releases are tag-driven GitHub Actions (see DEVELOPMENT.md); the maintainer pushes the version tag. In the
+workflows, `astral-sh/setup-uv` must be pinned to a full version (e.g. `@v10.3.0`): since v8 it publishes no
+major-version tags.
 
 ## Layout
 
@@ -36,7 +49,9 @@ A uv workspace of two packages released together (version from git tags via hatc
   `DataExplorer`. Runtime dependencies are only anywidget, fsspec, pygments, traitlets; polars, pandas, pyarrow,
   deltalake, fastexcel, openpyxl, Pillow, PySpark are all optional and probed at run time.
 - `jupyter-storage-explorer-launcher` (`launcher/`): a JupyterLab launcher item opening a tab whose kernel runs
-  `launch()`, which loads the user's `storage-explorer/launcher.py` from Jupyter's config paths.
+  `launch()`, which loads the user's `storage-explorer/launcher.py` from Jupyter's config paths. Its extension has a
+  second plugin, `download.ts`: files dragged from any explorer onto JupyterLab's file browser are downloaded to the
+  Jupyter server.
 
 ## Architecture
 
@@ -54,6 +69,28 @@ break sync.
 **Storage.** Everything is an fsspec filesystem; `StorageExplorer` can hold several named ones (`filesystems=`).
 `_urls.default_url` turns paths into the URLs shown to users and passed to libraries (plain paths for local files,
 `abfs://container@account.dfs.core.windows.net/...` for Azure); subclasses can override `StorageExplorer._url`.
+
+**File operations.** `StorageExplorer`'s methods are grouped in sections (UI logic first, one section per operation),
+ending with a *File operations* block: the only methods that call fsspec on the filesystem shown (`self._fs`), e.g.
+`_ls`, `_info`, `_exists`, `_isdir`, `_read_bytes`, `_put_file`, `_makedirs`. Other methods go through them, never
+through fsspec directly. `_mv`, `_cp`, `_rm` and `_mkdir` are hooks subclasses may override (e.g. a trash folder).
+Operations that copy into storage go through a temporary file, so a failure leaves no partial file. Object stores (S3,
+GCS) have no empty folders, which matters for creating folders.
+
+**Unsafe mode.** Folder operations (move, copy and paste, delete) are offered only while the "Unsafe mode" slider in
+the status bar is on (trait `_unsafe_mode`). In the frontend, every operation calls `takeUnsafe()` as it starts, which
+turns it off (one operation at a time), and sends whether it was on with its request (`"unsafe"`); the kernel refuses
+folders without it (the methods' `folders=` parameter).
+
+**Between explorers and with JupyterLab.** Drag data can only be text, so the frontend shares objects page-wide under
+`Symbol.for(...)` keys on `globalThis`: `"jupyter-storage-explorer.clipboard"` (Copy, for Paste in any explorer:
+pasted within the same explorer and filesystem by path with `_cp`, otherwise from the URL) and
+`"jupyter-storage-explorer.drag"` (the current file drag, with a `download` function, read by the launcher's
+`download.ts`).
+
+**Lists.** The file list is filtered (by name), sorted and paged (100 per page) in the browser, from the full listing
+the kernel sends; selection survives filtering and paging. Filters (tree, list, *Select columns*) use `createFilter`
+in `common.js`: text or a regular expression, always case-insensitive.
 
 **Formats** (`formats/`). Each `DataFormat` subclass (`base.py`) declares `name`, `label`, `priority`, `extensions` and
 which package sets can read it (`preferred_requirements` for previews and code, `code_only_requirements` such as PySpark
@@ -81,5 +118,8 @@ storage options (`spark_url()` rewrites `abfs`/`s3` to `abfss`/`s3a`).
 
 - Comments and docstrings are written in full sentences explaining *why*; keep that density and tone.
 - `from __future__ import annotations` everywhere, with type-only imports under `TYPE_CHECKING` (ruff `TC` rules).
-- The README documents user-facing options and formats; update its "Supported formats" and "Format options" tables when
-  formats or options change.
+- The README documents user-facing options and formats; update "Using the explorer" (and its "Unsafe operations"),
+  "Supported formats", "Format options" and "StorageExplorer options" when operations, formats or options change. Keep
+  it short.
+- Images and links to other files in the READMEs are absolute URLs (`raw.githubusercontent.com/.../main/...` for
+  images, `github.com/.../blob/main/...` for files): PyPI shows the README but cannot resolve relative paths.
