@@ -119,6 +119,55 @@ def test_settings_kept_per_explorer():
     assert Explorer(DF.lazy()).settings == QuerySettings()
 
 
+# Settings as the user might make them in the widget.
+RESULT_SETTINGS = {
+    "filters": {"a": {"op": "range", "min": "2", "max": ""}},
+    "sort": {"column": "a", "descending": True},
+    "hidden": ["b"],
+}
+
+
+class TestResult:
+    """explorer.result(): the data with the widget's settings applied."""
+
+    def explorer(self, data: Any, **kwargs) -> Explorer:
+        explorer = Explorer(data, **kwargs)
+        # As the frontend does when the user changes the settings.
+        explorer.request({"type": "query_rows", "settings": RESULT_SETTINGS})
+        return explorer
+
+    def test_lazy_stays_lazy(self):
+        result = self.explorer(DF.lazy()).result()
+        assert isinstance(result, pl.LazyFrame)
+        assert result.collect().to_dict(as_series=False) == {"a": [3, 2]}
+
+    def test_eager_is_computed(self):
+        result = self.explorer(DF.to_pandas()).result()
+        assert type(result).__module__.startswith("pandas")
+        assert result["a"].tolist() == [3, 2]
+        assert list(result.columns) == ["a"]
+
+    def test_spark_like_stays_spark_like(self):
+        data = DuckDBSession().createDataFrame(DF.rows(), schema="a bigint, b string")
+        result = self.explorer(data).result()
+        assert type(result) is type(data)
+        assert [row[0] for row in result.collect()] == [3, 2]
+
+    def test_all_the_data_after_memory_mode(self):
+        data = pl.LazyFrame({"a": list(range(100)), "b": ["x"] * 100})
+        explorer = self.explorer(data, mode="memory", max_memory_rows=10)
+        assert explorer.query["mode"]["memory"] == {"rows": 10, "cut": True}
+        # The widget showed rows 0-9 only; the result covers all 100.
+        assert explorer.result().collect()["a"].to_list()[:3] == [99, 98, 97]
+
+    def test_without_changes(self):
+        assert Explorer(DF).result().equals(DF)
+
+    def test_from_settings_given(self):
+        explorer = Explorer(DF.lazy(), settings=QuerySettings(hidden=["a"]))
+        assert explorer.result().collect_schema().names() == ["b"]
+
+
 def test_not_a_dataframe():
     with pytest.raises(TypeError, match="takes a dataframe, not a location"):
         Explorer("data/orders.csv")

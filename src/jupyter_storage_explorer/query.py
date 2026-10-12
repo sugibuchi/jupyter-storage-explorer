@@ -524,6 +524,8 @@ class DataQuery:
         """
         native = self.scan()
         data = nw.from_native(native)
+        # The data as given (or as the function returned it), for ``result``.
+        self.native = native
         # The data's own library (queries in memory may run in polars instead)
         # and type, e.g. "LazyFrame".
         self.implementation = data.implementation
@@ -632,6 +634,22 @@ class DataQuery:
         except Exception as exc:
             return {"error": f"{type(exc).__name__}: {exc}"}
         return self._view(content)
+
+    def result(self) -> Any:
+        """The data with the remembered settings applied (filters, sort order,
+        hidden columns left out), as a dataframe of the data's own library.
+
+        Built on the data itself, not on rows held in memory: it covers all of
+        it, and stays lazy if the data is (e.g. a polars LazyFrame or a Spark
+        DataFrame); eager data (e.g. pandas) gives the result computed. Filters
+        run in the data's library, so their details (e.g. regex syntax) may
+        differ from what the data browser showed in memory mode, which uses
+        polars.
+        """
+        data = nw.from_native(self.native)
+        schema = data.collect_schema()
+        settings = normalize_settings(self.store.get(self.key), schema)
+        return build_query(data, schema, settings).to_native()
 
     def opening(self) -> dict[str, Any]:
         """What the frontend needs to show the data: its columns, remembered
