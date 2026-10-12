@@ -12,12 +12,16 @@ launcher's Notebook and Console items; open a new launcher after changing folder
 on the folder the file browser shows. When the page is reloaded, JupyterLab restores the tab and the explorer is shown
 again, from the settings read again in the same kernel.
 
+It also lets you drag files from any Storage Explorer, in its tab or in a notebook, onto JupyterLab's file browser: after
+asking, the explorer's kernel downloads them into the folder dropped on, or the one the file browser shows. This needs
+the kernel to run where the Jupyter server does, as it does by default.
+
 ```bash
 pip install jupyter-storage-explorer-launcher
 ```
 
 Install it in the environment of JupyterLab and of the default kernel (on JupyterHub, usually the single-user image),
-then restart JupyterLab. It installs `jupyter-storage-explorer` too.
+then restart JupyterLab. It installs `jupyter-storage-explorer` too. Requires JupyterLab 4.
 
 ## Configuration
 
@@ -75,9 +79,3 @@ def style():
 ```
 
 An error in a file (a function that fails, an unknown parameter) is shown in the tab, with the file's path.
-
-It also lets you drag files from any Storage Explorer, in its tab or in a notebook, onto JupyterLab's file browser: after
-asking, the explorer's kernel downloads them into the folder dropped on, or the one the file browser shows. This needs
-the kernel to run where the Jupyter server does, as it does by default.
-
-Requires JupyterLab 4.
