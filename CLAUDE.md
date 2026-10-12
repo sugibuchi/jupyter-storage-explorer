@@ -86,11 +86,15 @@ file by file). Tests use fsspec's `AsyncFileSystemWrapper` around a memory files
 async one. Copies into storage go through a temporary file, so a failure leaves no partial file. Object stores (S3,
 GCS) have no empty folders, which matters for creating folders.
 
-**Jobs.** Move, delete, paste and both downloads to JupyterLab run in the background (`jobs.py`). Each operation is a
-`*_task` method: it plans on the main thread (checks, conflicts to ask about, returned as a dict), and returns a
-`_Task` whose `work(progress)` runs in the `JobRunner`'s worker thread (one job at a time) and whose `finish` (refresh
-the list) runs back on the main thread. Work functions must not touch traits or `send`; they report to the `Progress`
-and stop when `progress.check()` raises `OperationCancelled`. Requests answer `{"job": id}`; the kernel sends
+**Jobs.** Move, delete, paste, uploads (from JupyterLab's file browser, and the storage half of uploads from the
+computer) and both downloads to JupyterLab run in the background (`jobs.py`). Each is planned by a `FileTasks` method
+(`file_tasks.py`, no widget involved) on the main thread: checks, conflicts to ask about (returned as a dict), else a
+`Task` whose `work(progress)` runs in the `JobRunner`'s worker thread (one job at a time) and records what it changed
+(`moved`, `removed`, `changed` folders). `StorageExplorer` only answers requests (`_plan_request`, `_start`) and,
+once a job has ended, shows those changes (`_finish`, on the main thread). Work functions must not touch traits or
+`send`; they report to the `Progress` and stop when `progress.check()` raises `OperationCancelled`. A drop from
+JupyterLab's file browser is a copy from the kernel's local disk (`FileTasks.upload`); files from the computer arrive in
+pieces (`incoming.py`), and the last piece starts `FileTasks.upload_file`. Path helpers are in `_paths.py`. Requests answer `{"job": id}`; the kernel sends
 `{"type": "job", ...}` as the job runs and with its result when it ends, and the frontend's `jobResult()` waits for
 that. The main thread is reached through the kernel's asyncio loop (`call_soon_threadsafe`); without a running loop
 (tests), jobs run synchronously, so tests see the result at once.

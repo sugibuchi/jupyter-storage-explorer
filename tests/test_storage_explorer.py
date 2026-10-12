@@ -8,14 +8,14 @@ import fsspec
 import polars as pl
 import pytest
 
-from jupyter_storage_explorer import StorageExplorer
+from jupyter_storage_explorer import StorageExplorer, _paths
+from jupyter_storage_explorer.incoming import format_size
 from jupyter_storage_explorer.operations import (
     AsyncFsspecOperations,
     FileSystemOperations,
     FsspecOperations,
 )
 from jupyter_storage_explorer.query import QuerySettingsStore
-from jupyter_storage_explorer.storage_explorer import _format_size, _join, _safe_name
 
 
 class Explorer(StorageExplorer):
@@ -83,7 +83,7 @@ def entries(explorer: Explorer) -> list[dict[str, Any]]:
             "name": name,
             "path": listing["paths"][i]
             if listing["paths"] is not None
-            else _join(listing["dir"], name),
+            else _paths.join(listing["dir"], name),
             "type": "directory" if listing["is_dir"][i] else "file",
             "size": listing["sizes"][i],
             "mtime": listing["mtimes"][i],
@@ -955,7 +955,9 @@ class TestUpload:
         assert "error" not in mem_explorer.request(
             {**piece, "last": False}, [b"hello "]
         )
-        assert mem_explorer.request({**piece, "last": True}, [b"world"])["done"] is True
+        # The last piece starts a job copying the file to the storage.
+        last = mem_explorer.request({**piece, "last": True}, [b"world"])
+        assert last["copied"] == ["c.txt"]
         assert mem_explorer._fs.cat_file("/other/c.txt") == b"hello world"
 
     def test_too_large(self, memfs):
@@ -991,6 +993,7 @@ class TestUpload:
         (tmp_path / "sub").mkdir()
         content = {
             "type": "upload",
+            "rid": 1,
             "root": str(tmp_path),
             "paths": ["f.txt", "sub", "nope.txt"],
             "dest": "/other",
@@ -998,9 +1001,25 @@ class TestUpload:
         reply = mem_explorer.request(content)
         assert reply["copied"] == ["f.txt"]
         assert reply["errors"] == [
-            "sub: folders are not uploaded",
             "nope.txt: not found from the kernel",
+            "sub: folders are not uploaded (turn on unsafe mode first)",
         ]
+
+    def test_folders_from_jupyterlab_in_unsafe_mode(self, mem_explorer, tmp_path):
+        (tmp_path / "sub" / "deep").mkdir(parents=True)
+        (tmp_path / "sub" / "deep" / "g.txt").write_text("g", encoding="utf-8")
+        reply = mem_explorer.request(
+            {
+                "type": "upload",
+                "rid": 1,
+                "root": str(tmp_path),
+                "paths": ["sub"],
+                "dest": "/other",
+                "unsafe": True,
+            }
+        )
+        assert reply["copied"] == ["sub"]
+        assert mem_explorer._fs.cat_file("/other/sub/deep/g.txt") == b"g"
 
 
 class TestDownloadToServer:
@@ -1076,14 +1095,14 @@ def test_vendor(mem_explorer):
 
 
 def test_safe_name():
-    assert _safe_name("a/b\\c.txt") == "c.txt"
+    assert _paths.safe_name("a/b\\c.txt") == "c.txt"
     with pytest.raises(ValueError):
-        _safe_name("..")
+        _paths.safe_name("..")
 
 
-def test_format_size():
-    assert _format_size(10 * 1024 * 1024) == "10 MB"
-    assert _format_size(1536) == "1.5 KB"
+def testformat_size():
+    assert format_size(10 * 1024 * 1024) == "10 MB"
+    assert format_size(1536) == "1.5 KB"
 
 
 def test_local_explorer_starts_in_the_folder(tmp_path):

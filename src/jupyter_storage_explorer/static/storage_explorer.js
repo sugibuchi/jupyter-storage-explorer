@@ -605,7 +605,6 @@ function render({ model, el }) {
     else if (msg.type === "edit_open") onEditOpen(msg);
     else if (msg.type === "edit_save") onEditSave(msg);
     else if (msg.type === "download") onDownload(msg, buffers);
-    else if (msg.type === "upload") onUpload(msg);
     else if (msg.type === "reply") onReply(msg);
     else if (msg.type === "job") onJob(msg);
   }
@@ -625,7 +624,6 @@ function render({ model, el }) {
   // the Jupyter server runs in.
   const CONTENTS_MIME = "application/x-jupyter-icontents";
   let dropHighlight = null;
-  let uploadRequest = null; // {root, paths, dest} awaiting the kernel's reply
 
   // Where JupyterLab's paths are relative to (the server's folder on disk),
   // from the configuration JupyterLab puts in every page.
@@ -715,17 +713,20 @@ function render({ model, el }) {
     );
   }
 
-  function uploadSummary(copied, skipped, errors) {
+  // `result`: a job's result, for its "cancelled" or failure (see jobOutcome).
+  function uploadSummary(copied, skipped, errors, result = {}) {
     const parts = [];
-    if (copied.length) parts.push(`Uploaded ${copied.length === 1 ? copied[0] : `${copied.length} files`}`);
+    if (copied.length) parts.push(`Uploaded ${copied.length === 1 ? copied[0] : `${copied.length} items`}`);
     if (skipped.length) parts.push(`skipped ${skipped.length} existing`);
     parts.push(...errors.map((e) => `Failed: ${e}`));
+    parts.push(...jobOutcome(result, parts, "Upload"));
     flash(parts.join("; ") || "Nothing uploaded");
   }
 
-  // From JupyterLab's file browser: the kernel copies the files itself.
+  // From JupyterLab's file browser: the kernel copies the files (and, in
+  // unsafe mode, folders) itself, as a job.
   async function confirmUpload(paths, dest) {
-    takeUnsafe(); // an operation, though not on folders
+    const folders = takeUnsafe();
     const root = serverRoot();
     if (root == null) {
       flash("Cannot upload: JupyterLab did not say where its files are");
@@ -733,28 +734,19 @@ function render({ model, el }) {
     }
     const names = paths.map((p) => p.slice(p.lastIndexOf("/") + 1));
     if (!(await askUpload(names, dest))) return;
-    uploadRequest = { root, paths, dest };
-    // Blocked until the kernel's "upload" message answers (onUpload).
-    busyStart(`Uploading ${describeFiles(names)}…`);
-    model.send({ type: "upload", ...uploadRequest, if_exists: "ask" });
-  }
-
-  async function onUpload(msg) {
-    if (uploadRequest?.dest !== msg.dest) return;
-    busyEnd();
-    if (msg.conflicts) {
-      const choice = await askConflicts(msg.conflicts, msg.dest);
+    const content = { type: "upload", root, paths, dest, unsafe: folders };
+    const text = `Uploading ${describeFiles(names)}…`;
+    let reply = await busy(text, () => request({ ...content, if_exists: "ask" }));
+    if (reply.conflicts) {
+      const choice = await askConflicts(reply.conflicts, dest);
       if (!choice) {
-        uploadRequest = null;
         flash("Upload cancelled");
         return;
       }
-      busyStart("Uploading…");
-      model.send({ type: "upload", ...uploadRequest, if_exists: choice });
-      return;
+      reply = await busy(text, () => request({ ...content, if_exists: choice }));
     }
-    uploadRequest = null;
-    uploadSummary(msg.copied ?? [], msg.skipped ?? [], msg.errors ?? []);
+    const result = await jobResult(reply);
+    uploadSummary(result.copied ?? [], result.skipped ?? [], result.errors ?? [], result);
   }
 
   // --- Upload from the computer (native drag and drop): the browser sends
@@ -826,6 +818,9 @@ function render({ model, el }) {
         }
       }
       // Blocked while the pieces are sent; the busy dialog shows the progress.
+      // After a file's last piece, the kernel copies it to the storage as a
+      // job, which goes on in the background once all pieces are sent.
+      const jobs = [];
       await busy("Uploading…", async () => {
         for (const [i, file] of toSend.entries()) {
           const id = `${Date.now()}-${i}`;
@@ -840,11 +835,16 @@ function render({ model, el }) {
               errors.push(reply.error);
               break;
             }
-            if (last) copied.push(file.name);
+            if (last) jobs.push(jobResult(reply));
           } while (offset < file.size);
         }
-        if (copied.length) await request({ type: "upload_done", dest });
       });
+      for (const result of await Promise.all(jobs)) {
+        copied.push(...(result.copied ?? []));
+        errors.push(...(result.errors ?? []));
+        if (result.state === "failed") errors.push(result.error);
+        else if (result.state === "cancelled") errors.push("cancelled");
+      }
     } finally {
       localUploadBusy = false;
     }
