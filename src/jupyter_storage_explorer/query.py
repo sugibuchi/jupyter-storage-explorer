@@ -362,6 +362,19 @@ class QuerySettings:
             "widths": dict(self.widths),
         }
 
+    def to_json(self, indent: int | None = 4) -> str:
+        """As JSON (see ``to_dict``), e.g. to copy settings made in the data
+        browser into a notebook cell, as ``QuerySettings.from_json(...)``."""
+        return json.dumps(self.to_dict(), indent=indent, default=_as_text)
+
+    @classmethod
+    def from_json(cls, text: str) -> QuerySettings:
+        """From ``to_json``'s text."""
+        settings = json.loads(text)
+        if not isinstance(settings, dict):
+            raise ValueError("query settings must be a JSON object")
+        return cls.from_dict(settings)
+
     @classmethod
     def from_dict(cls, settings: dict[str, Any]) -> QuerySettings:
         """From the data browser's form (see ``to_dict``)."""

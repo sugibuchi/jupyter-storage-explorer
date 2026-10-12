@@ -211,12 +211,11 @@ DataExplorer(orders_df, settings=QuerySettings(sort="date", descending=True))
 
 ![DataExplorer showing a Delta Lake table in a notebook](https://raw.githubusercontent.com/sugibuchi/jupyter-storage-explorer/main/figs/data-explorer.png)
 
-Lazy data (polars LazyFrame, DuckDB, Spark, ...) starts **Live**, unless it has at most 1,000 rows; eager data (pandas,
-PyArrow, a polars DataFrame) is always **In memory**. Pass a function instead of a dataframe (e.g.
-`lambda: pl.scan_parquet(url)`) for **⟳** to read the data again.
+Lazy data starts **Live**, eager data **In memory**. Pass a function (`lambda: pl.scan_parquet(url)`) for **⟳** to
+read the data again.
 
-`QuerySettings` sets the filters, sort order, hidden columns and widths to start with, and `explorer.settings` gives
-the current ones:
+`QuerySettings` sets the filters, sort order, hidden columns and widths to start with. `explorer.settings.to_json()`
+gives the current ones as text, to paste into your code as `QuerySettings.from_json("""...""")`:
 
 ```python
 QuerySettings(

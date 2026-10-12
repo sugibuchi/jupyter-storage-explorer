@@ -129,6 +129,24 @@ class TestQuerySettings:
         }
         assert QuerySettings.from_dict(settings.to_dict()) == settings
 
+    def test_json(self):
+        settings = QuerySettings(
+            filters={"d": {"op": "range", "min": dt.date(2025, 1, 2)}},
+            sort="a",
+            descending=True,
+        )
+        text = settings.to_json()
+        assert text.startswith('{\n    "filters": {')  # indented by 4
+        assert '"min": "2025-01-02"' in text  # dates as ISO text
+        assert QuerySettings.from_json(text) == QuerySettings(
+            filters={"d": {"op": "range", "min": "2025-01-02"}},
+            sort="a",
+            descending=True,
+        )
+        assert "\n" not in settings.to_json(indent=None)
+        with pytest.raises(ValueError, match="JSON object"):
+            QuerySettings.from_json("[]")
+
     def test_values_from_python(self):
         df = pl.DataFrame(
             {"n": [0, 1, -1], "d": [dt.date(2025, 1, d) for d in (1, 2, 3)]}
