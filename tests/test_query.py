@@ -373,6 +373,14 @@ class TestModes:
             == "live"
         )
 
+    def test_total_counted_in_memory_only(self):
+        at_least_40 = {"filters": {"n": {"op": "range", "min": "40", "max": ""}}}
+        live = mode_query()
+        assert rows_of(live, window=5)["total"] is None
+        memory = mode_query(mode="memory", max_memory_rows=100)
+        reply = rows_of(memory, window=5, settings=at_least_40)
+        assert (len(reply["rows"]), reply["total"]) == (5, 10)
+
     def test_reload_keeps_the_mode_chosen(self):
         query = mode_query()
         query.handle({"type": "query_mode", "mode": "memory"})

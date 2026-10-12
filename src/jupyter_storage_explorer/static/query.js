@@ -118,6 +118,7 @@ function createQueryPanel(host, path, data) {
     rows: [],
     more: false,
     limited: false, // the result has more rows than live_limit
+    total: null, // rows in the result, when the kernel counted them (in memory)
     switching: false,
     page: 0, // page within the window
     loading: false,
@@ -134,9 +135,10 @@ function createQueryPanel(host, path, data) {
     view.loading = false;
     if (reply.settings) view.settings = reply.settings;
     if (reply.error) {
-      Object.assign(view, { error: reply.error, rows: [], more: false, limited: false, start: 0, page: 0 });
+      Object.assign(view, { error: reply.error, rows: [], more: false, limited: false, total: null, start: 0, page: 0 });
     } else {
-      Object.assign(view, { error: "", start: reply.offset, rows: reply.rows, more: reply.more, limited: Boolean(reply.limited), page });
+      const { offset: start, rows, more, limited, total } = reply;
+      Object.assign(view, { error: "", start, rows, more, limited: Boolean(limited), total: total ?? null, page });
     }
     draw();
   }
@@ -219,10 +221,14 @@ function createQueryPanel(host, path, data) {
     else if (view.loading) status = "Loading…";
     else if (!pageRows.length) status = "No rows";
     else {
-      // Without a total when there are more, or when live mode cut the result off.
-      const known = !view.more && !view.limited;
-      const total = known ? ` of ${(view.start + view.rows.length).toLocaleString()}` : "";
-      status = `Rows ${(first + 1).toLocaleString()}–${(first + pageRows.length).toLocaleString()}${total}`;
+      // In memory, the kernel counts the result. Live, the total is known once
+      // the last rows are read; until then, the rows read so far and "+".
+      const read = view.start + view.rows.length;
+      let total;
+      if (view.total != null) total = view.total.toLocaleString();
+      else if (view.more || view.limited) total = `${read.toLocaleString()}+`;
+      else total = read.toLocaleString();
+      status = `Rows ${(first + 1).toLocaleString()}–${(first + pageRows.length).toLocaleString()} / ${total}`;
     }
 
     const prev = queryButton("◀", prevPage, "Previous page");

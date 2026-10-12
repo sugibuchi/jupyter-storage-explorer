@@ -557,7 +557,9 @@ class DataQuery:
         settings applied; also remembers those settings.
 
         "limited": the result has more rows than the live mode gives (see
-        ``live_limit``).
+        ``live_limit``). "total": the number of rows in the result, in memory
+        mode only (counting live data could mean reading all of it, e.g. a
+        Spark job), else None.
         """
         settings = normalize_settings(content.get("settings"), self.schema)
         self.store.set(self.key, settings)
@@ -571,6 +573,9 @@ class DataQuery:
             # One extra row tells whether there are more.
             query = build_query(self.lf, self.schema, settings)
             df = fetch_rows(query, offset, window + 1)
+            total = None
+            if self.mode == "memory":
+                total = query.select(nw.len()).collect().item()
         except Exception as exc:
             return {"error": f"{type(exc).__name__}: {exc}", "settings": settings}
         beyond = len(df) > window
@@ -583,6 +588,7 @@ class DataQuery:
             "rows": [[jsonable(v) for v in row] for row in df.rows()],
             "more": beyond and not limited,
             "limited": limited,
+            "total": total,
             "settings": settings,
         }
 
