@@ -52,7 +52,9 @@ A uv workspace of two packages released together (version from git tags via hatc
   dependencies are only anywidget, fsspec, narwhals, pygments, traitlets; polars, pandas, pyarrow, deltalake,
   fastexcel, openpyxl, Pillow, PySpark are all optional and probed at run time.
 - `jupyter-storage-explorer-launcher` (`launcher/`): a JupyterLab launcher item opening a tab whose kernel runs
-  `launch()`, which loads the user's `storage-explorer/launcher.py` from Jupyter's config paths. Its extension has a
+  `launch()`. It merges every `storage-explorer/launcher.py` in Jupyter's config paths as layers, system to user (their
+  `filesystems()`, `formats()`, `format_options()`, `operations()`, `parameters()`, `style()` functions; `final()`
+  names what later layers cannot change; see `load_settings`, tested in `tests/test_launcher.py`). Its extension has a
   second plugin, `download.ts`: files dragged from any explorer onto JupyterLab's file browser are downloaded to the
   Jupyter server.
 
