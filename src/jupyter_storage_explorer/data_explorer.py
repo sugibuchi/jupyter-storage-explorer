@@ -116,6 +116,15 @@ class DataExplorer(anywidget.AnyWidget):
         )
         self.on_msg(self._on_custom_msg)
 
+    def result(self) -> Any:
+        """The data with the widget's filters, sort order and hidden columns
+        applied, as a dataframe of its own library: lazy data stays lazy (e.g.
+        a polars LazyFrame, a Spark DataFrame), eager data (e.g. pandas) is
+        computed. It covers all the data, also after In memory mode, where
+        the widget showed its first rows only. See ``DataQuery.result``.
+        """
+        return self._data.result()
+
     @property
     def settings(self) -> QuerySettings:
         """The filters, sort order, hidden columns and widths in use, e.g. to

@@ -214,6 +214,15 @@ DataExplorer(orders_df, settings=QuerySettings(sort="date", descending=True))
 Lazy data starts **Live**, eager data **In memory**. Pass a function (`lambda: pl.scan_parquet(url)`) for **⟳** to
 read the data again.
 
+`explorer.result()` gives the data with the widget's filters, sort order and hidden columns applied, as a dataframe of
+the same library (lazy data stays lazy), to continue your analysis in code:
+
+```python
+explorer = DataExplorer(pl.scan_parquet("sales/*.parquet"))
+# ... filter and sort in the widget ...
+explorer.result().group_by("region").agg(pl.col("amount").sum()).collect()
+```
+
 `QuerySettings` sets the filters, sort order, hidden columns and widths to start with. To keep settings made in the
 widget, print them as text and paste them into your code:
 
