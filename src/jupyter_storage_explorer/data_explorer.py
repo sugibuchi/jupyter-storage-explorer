@@ -1,145 +1,127 @@
-"""Data explorer widget: the data browser ("Query data") for one dataset."""
+"""Data explorer widget: the data browser ("Query data") for one dataframe."""
 
 from __future__ import annotations
 
-import functools
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import anywidget
 import traitlets
-from fsspec.core import url_to_fs
 
 from jupyter_storage_explorer import _static
-from jupyter_storage_explorer._urls import default_url
-from jupyter_storage_explorer.formats import (
-    DataFormat,
-    Target,
-    explorer_formats,
-    matching_formats,
+from jupyter_storage_explorer.query import (
+    DataQuery,
+    QuerySettings,
+    QuerySettingsStore,
+    normalize_settings,
 )
-from jupyter_storage_explorer.formats.requirements import Polars
-from jupyter_storage_explorer.query import DataQuery, QuerySettingsStore
-from jupyter_storage_explorer.query import default_store as default_query_settings
 
-if TYPE_CHECKING:
-    from collections.abc import Mapping, Sequence
+# The key DataExplorer's settings are kept under, in its own store.
+_KEY = "data"
 
-    from jupyter_storage_explorer.formats.base import Requirement
-
-
-def _missing_packages_error(
-    needed_for: str, missing: Sequence[Requirement]
-) -> ImportError:
-    """An error saying which packages to install, with the notebook commands."""
-    names = " and ".join(r.package for r in missing)
-    commands = "\n".join(f"    {r.install_command}" for r in missing)
-    return ImportError(
-        f"{needed_for} needs {names}, not installed in this kernel. Install it "
-        f"in a notebook cell, then run this again (no restart is needed):\n\n"
-        f"{commands}"
-    )
+# Names shown for libraries whose narwhals name is not the usual one.
+_LIBRARY_LABELS = {
+    "pyarrow": "PyArrow",
+    "duckdb": "DuckDB",
+    "pyspark": "Spark",
+    "pyspark[connect]": "Spark Connect",
+    "sqlframe": "SQLFrame",
+}
 
 
 class DataExplorer(anywidget.AnyWidget):
-    """The data browser for one dataset: page through it, sort, filter and
+    """The data browser for one dataframe: page through it, sort, filter and
     choose columns, as "Query data" does in ``StorageExplorer``.
 
-    ``url`` is the location of a Delta Lake table, a Parquet file or folder of
-    Parquet files, a CSV, JSON Lines or Excel file, e.g.
-    ``"s3://bucket/sales"`` or ``"data/orders.csv"``. Extra keyword arguments
-    are passed to fsspec as storage options. ``format`` chooses one of the
-    formats that match by name (e.g. "parquet"); by default the best match is
-    used. ``formats`` replaces the formats to choose from (default:
-    ``default_formats()``); or ``format_options`` gives keyword arguments to
-    create the default formats with, as in ``StorageExplorer``.
+    ``data`` is any dataframe narwhals supports, lazy (polars LazyFrame,
+    DuckDB, Spark, Dask, Ibis, ...) or eager (pandas, polars DataFrame,
+    PyArrow, ...), or a function returning one, called again by the reload
+    button (e.g. ``lambda: pl.scan_parquet(url)``, to read a file again).
+    E.g.::
 
-    Needs polars (plus deltalake for Delta Lake tables, fastexcel for Excel);
-    if a package is missing, an ImportError says how to install it.
+        DataExplorer(pl.scan_parquet("s3://bucket/sales/*.parquet"))
+        DataExplorer(spark.table("sales"), mode="memory")
+        DataExplorer(pandas_df, settings=QuerySettings(sort="date", descending=True))
 
-    Settings (filters, sort, hidden columns, widths) are remembered per
-    dataset by ``query_settings``, shared with ``StorageExplorer`` (see
-    there). ``height`` is the height of the table area; ``"fill"`` makes the
-    widget as tall as its container (e.g. a tab, not a notebook cell).
+    Queries run on the data itself ("live") or on its first rows read into
+    memory (see ``DataQuery``), switched in the widget. ``mode`` is the mode to
+    start in: "auto" (live for lazy data, unless it has at most
+    ``max_live_rows`` rows), "live" (for lazy data only) or "memory".
+    ``max_live_rows`` is also the most rows a live query gives when the
+    data's library cannot skip rows (e.g. Spark); ``max_memory_rows`` the most
+    rows read into memory.
+
+    ``settings`` (a ``QuerySettings``) are the filters, sort order, hidden
+    columns and widths to start with; ``settings`` (the property) gives those
+    of the widget, as changed by the user. ``title`` is shown above the table
+    (default: the dataframe's type). ``height`` is the height of the table
+    area; ``"fill"`` makes the widget as tall as its container (e.g. a tab,
+    not a notebook cell).
     """
 
     _esm = _static.esm("data_explorer")
     _css = _static.css("data_explorer")
 
-    # Shown above the table: the URL as given, and the format's label.
+    # Shown above the table: the title, and the data's library.
     title = traitlets.Unicode().tag(sync=True)
-    format = traitlets.Unicode().tag(sync=True)
-    # The data's columns and remembered settings: {"columns", "settings"}.
+    library = traitlets.Unicode().tag(sync=True)
+    # The data's columns, settings and mode: {"columns", "settings", "mode"}.
     query = traitlets.Dict().tag(sync=True)
     height = traitlets.Unicode("400px").tag(sync=True)
 
     def __init__(
         self,
-        url: str,
+        data: Any,
         *,
-        format: str | None = None,
-        formats: Sequence[DataFormat] | None = None,
-        format_options: Mapping[str, Any] | None = None,
+        settings: QuerySettings | None = None,
+        mode: str = "auto",
+        max_live_rows: int = 1000,
+        max_memory_rows: int = 100_000,
+        title: str | None = None,
         height: str = "400px",
-        query_settings: QuerySettingsStore | None = None,
-        **storage_options: Any,
     ) -> None:
-        # Checked first, so nothing is read without the package to show it.
-        if not Polars().is_installed():
-            raise _missing_packages_error("DataExplorer", [Polars()])
-        self.fs, path = url_to_fs(url, **storage_options)
-        fmt, target = self._open(
-            path, format, explorer_formats(formats, format_options)
-        )
-        self._data = DataQuery(
-            functools.partial(fmt.scan, target.url, target.is_dir),
-            target.url,
-            query_settings or default_query_settings,
-        )
+        if isinstance(data, str):
+            raise TypeError(
+                "DataExplorer takes a dataframe, not a location: read it first, "
+                'e.g. DataExplorer(pl.scan_parquet("...")), or browse it with '
+                "StorageExplorer"
+            )
+        # Settings live in this explorer only: a dataframe has no location to
+        # remember them by, unlike files in StorageExplorer.
+        self._store = QuerySettingsStore()
+        if settings is not None:
+            self._store.set(_KEY, settings.to_dict())
+        try:
+            self._data = DataQuery(
+                data,
+                _KEY,
+                self._store,
+                mode=mode,
+                max_live_rows=max_live_rows,
+                max_memory_rows=max_memory_rows,
+            )
+        except TypeError as exc:
+            if "Unsupported dataframe type" not in str(exc):
+                raise
+            raise TypeError(
+                f"DataExplorer needs a dataframe narwhals supports (pandas, polars, "
+                f"PyArrow, DuckDB, Spark, ...) or a function returning one, not "
+                f"{type(data).__name__}"
+            ) from exc
+        library = self._data.implementation.value
         super().__init__(
-            title=url, format=fmt.label, query=self._data.opening(), height=height
+            title=title if title is not None else self._data.type_name,
+            library=_LIBRARY_LABELS.get(library, library),
+            query=self._data.opening(),
+            height=height,
         )
         self.on_msg(self._on_custom_msg)
 
-    def _open(
-        self,
-        path: str,
-        format: str | None,
-        formats: Sequence[DataFormat],
-    ) -> tuple[DataFormat, Target]:
-        """The format to query ``path`` with, and the target to scan."""
-        info = self.fs.info(path)
-        children = None
-        if info.get("type") == "directory":
-            # Some backends include the directory itself in its own listing.
-            children = [
-                i
-                for i in self.fs.ls(path, detail=True)
-                if i["name"].rstrip("/") != path.rstrip("/")
-            ]
-        target = Target(
-            fs=self.fs, path=path, url=self._url(path), info=info, children=children
-        )
-        matching = matching_formats(target, formats)
-        if format is not None:
-            matching = [f for f in matching if f.name == format]
-        queryable = [f for f in matching if f.query_requirements]
-        if not queryable:
-            found = f" (it looks like {matching[0].label})" if matching else ""
-            wanted = f"as {format}" if format is not None else "as a table"
-            raise ValueError(f"{target.url} cannot be queried {wanted}{found}")
-        fmt = queryable[0]
-        missing = [r() for r in fmt.query_requirements if not r().is_installed()]
-        if missing:
-            raise _missing_packages_error(f"Querying {fmt.label}", missing)
-        return fmt, target
-
-    def _url(self, path: str) -> str:
-        """Location of ``path``, used to read the data and to remember its settings.
-
-        The same as ``StorageExplorer``'s, so settings are shared between the
-        two. Override in a subclass to change it.
-        """
-        return default_url(self.fs, path)
+    @property
+    def settings(self) -> QuerySettings:
+        """The filters, sort order, hidden columns and widths in use, e.g. to
+        open other data with them."""
+        settings = normalize_settings(self._store.get(_KEY), self._data.schema)
+        return QuerySettings.from_dict(settings)
 
     def _on_custom_msg(
         self, _widget: Any, content: dict[str, Any], _buffers: Any

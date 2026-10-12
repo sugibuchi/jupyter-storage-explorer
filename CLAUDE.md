@@ -45,9 +45,10 @@ major-version tags.
 
 A uv workspace of two packages released together (version from git tags via hatch-vcs):
 
-- `jupyter-storage-explorer` (root, `src/jupyter_storage_explorer/`): the anywidget widgets `StorageExplorer` and
-  `DataExplorer`. Runtime dependencies are only anywidget, fsspec, pygments, traitlets; polars, pandas, pyarrow,
-  deltalake, fastexcel, openpyxl, Pillow, PySpark are all optional and probed at run time.
+- `jupyter-storage-explorer` (root, `src/jupyter_storage_explorer/`): the anywidget widgets `StorageExplorer` (files)
+  and `DataExplorer` (a dataframe given by the user, any library narwhals supports, with `QuerySettings`). Runtime
+  dependencies are only anywidget, fsspec, narwhals, pygments, traitlets; polars, pandas, pyarrow, deltalake,
+  fastexcel, openpyxl, Pillow, PySpark are all optional and probed at run time.
 - `jupyter-storage-explorer-launcher` (`launcher/`): a JupyterLab launcher item opening a tab whose kernel runs
   `launch()`, which loads the user's `storage-explorer/launcher.py` from Jupyter's config paths. Its extension has a
   second plugin, `download.ts`: files dragged from any explorer onto JupyterLab's file browser are downloaded to the

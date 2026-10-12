@@ -26,6 +26,7 @@ import copy
 import datetime as dt
 import json
 import pathlib
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 import narwhals as nw
@@ -139,15 +140,28 @@ def _normalize_filter(f: dict[str, Any], kind: str) -> dict[str, Any] | None:
     if op in _NO_VALUE:
         return {"op": op}
     if op == "range":
-        bounds = {b: str(f.get(b) or "") for b in ("min", "max")}
+        # Bounds may be given as numbers or dates (from Python, see QuerySettings).
+        bounds = {b: _as_text(f.get(b)) for b in ("min", "max")}
         if not any(v.strip() for v in bounds.values()):
             return None  # no bound: nothing to filter
         normalized: dict[str, Any] = {"op": op, **bounds}
     else:
-        normalized = {"op": op, "value": str(f.get("value", ""))}
+        normalized = {"op": op, "value": _as_text(f.get("value"))}
     if kind == "text" and op in _CASE_OPS:
         normalized["case_sensitive"] = bool(f.get("case_sensitive", True))
     return normalized
+
+
+def _as_text(value: Any) -> str:
+    """A filter value as the frontend's text: "" for none, ISO for dates,
+    "true"/"false" for booleans."""
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return str(value).lower()
+    if isinstance(value, (dt.date, dt.time)):
+        return value.isoformat()
+    return str(value)
 
 
 def _parse_value(value: str, dtype: Any, kind: str) -> Any:
@@ -308,6 +322,59 @@ def build_query(lf: nw.LazyFrame, schema: Any, settings: dict[str, Any]) -> Any:
     return lf.select(visible)
 
 
+@dataclass
+class QuerySettings:
+    """The data browser's settings for one dataset, to write in a notebook:
+    filters, sort order, hidden columns and column widths. E.g.::
+
+        QuerySettings(
+            filters={
+                "price": {"op": "range", "min": 10},  # price >= 10
+                "name": {"op": "contains", "value": "tea", "case_sensitive": False},
+                "comment": {"op": "not_null"},
+            },
+            sort="date",
+            descending=True,
+            hidden=["comment"],
+        )
+
+    Filter types ("op"): "not_null", "null", "not_empty", "empty",
+    "contains", "regex", "range" ("min" and/or "max", both included) and
+    "eq" (booleans), as offered for the column's type in the data browser.
+    Settings that do not fit the data (unknown columns, filters for another
+    type) are left out when it opens.
+    """
+
+    filters: dict[str, dict[str, Any]] = field(default_factory=dict)
+    sort: str | None = None  # a column name
+    descending: bool = False
+    hidden: list[str] = field(default_factory=list)
+    widths: dict[str, int] = field(default_factory=dict)  # px
+
+    def to_dict(self) -> dict[str, Any]:
+        """As the data browser keeps settings (see the module docstring)."""
+        return {
+            "filters": copy.deepcopy(self.filters),
+            "sort": None
+            if self.sort is None
+            else {"column": self.sort, "descending": self.descending},
+            "hidden": list(self.hidden),
+            "widths": dict(self.widths),
+        }
+
+    @classmethod
+    def from_dict(cls, settings: dict[str, Any]) -> QuerySettings:
+        """From the data browser's form (see ``to_dict``)."""
+        sort = settings.get("sort") or {}
+        return cls(
+            filters=copy.deepcopy(settings.get("filters") or {}),
+            sort=sort.get("column"),
+            descending=bool(sort.get("descending")),
+            hidden=list(settings.get("hidden") or []),
+            widths=dict(settings.get("widths") or {}),
+        )
+
+
 class QuerySettingsStore:
     """Remembers the data browser's settings per dataset (keyed by its location).
 
@@ -436,12 +503,18 @@ class DataQuery:
     def _open(self, mode: str) -> None:
         """Read the data (again) and set up queries in ``mode`` ("auto", "live" or "memory").
 
-        Sets ``source`` (the lazy data, or None for eager data), ``mode``,
+        Sets ``implementation`` (the data's library), ``source`` (the lazy
+        data, or None for eager data), ``mode``,
         ``lf`` (what queries run on), ``schema``, ``memory`` ({"rows",
         "cut"}: rows held and whether there are more, or None in live mode)
         and ``fixed`` (why the mode cannot be switched, or "").
         """
-        data = nw.from_native(self.scan())
+        native = self.scan()
+        data = nw.from_native(native)
+        # The data's own library (queries in memory may run in polars instead)
+        # and type, e.g. "LazyFrame".
+        self.implementation = data.implementation
+        self.type_name = type(nw.to_native(native, pass_through=True)).__name__
         if isinstance(data, nw.DataFrame):
             if mode == "live":
                 raise ValueError(
