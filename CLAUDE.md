@@ -89,7 +89,9 @@ pasted within the same explorer and filesystem by path with `_cp`, otherwise fro
 `download.ts`).
 
 **Lists.** The file list is filtered (by name), sorted and paged (100 per page) in the browser, from the full listing
-the kernel sends; selection survives filtering and paging. Filters (tree, list, *Select columns*) use `createFilter`
+the kernel sends; selection survives filtering and paging. Folders can hold tens of thousands of items, so the listing
+(`_listing`, see `_make_listing`) is sent as columns, without paths or URLs: the frontend joins paths and asks for URLs
+(`"urls"`) when copying. It sorts once per listing, not per keystroke. Filters (tree, list, *Select columns*) use `createFilter`
 in `common.js`: text or a regular expression, always case-insensitive.
 
 **Formats** (`formats/`). Each `DataFormat` subclass (`base.py`) declares `name`, `label`, `priority`, `extensions` and

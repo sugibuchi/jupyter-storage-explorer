@@ -785,7 +785,7 @@ function render({ model, el }) {
     if (!allowed(entry)) return [];
     const selected = model.get("_selected");
     if (!selected.includes(entry.path)) return [entry];
-    return model.get("_entries").filter((e) => selected.includes(e.path) && allowed(e));
+    return listedEntries().filter((e) => selected.includes(e.path) && allowed(e));
   }
 
   // A list row's drag: a move within the explorer, and for files a download
@@ -937,24 +937,37 @@ function render({ model, el }) {
 
   const CLIPBOARD = Symbol.for("jupyter-storage-explorer.clipboard");
 
-  // targets: [{path, url, type}] of the filesystem shown.
+  // Whether an item of the list or the tree has a URL (see _url in the kernel).
+  const hasUrl = (item) => !item.no_url;
+
+  // The URLs of items ({path}), from the kernel: the listing does not carry them.
+  async function urlsOf(items) {
+    const { urls } = await request({ type: "urls", paths: items.map((t) => t.path) });
+    return urls;
+  }
+
+  // targets: [{path, type}] of the filesystem shown, all with URLs.
   async function copyFiles(targets) {
     const hasFolders = targets.some(isFolder);
     if (!takeUnsafe() && hasFolders) {
       flash("Turn on unsafe mode to copy folders");
       return;
     }
+    const urls = await urlsOf(targets);
     globalThis[CLIPBOARD] = {
       // Pasted in this explorer, on this filesystem, they are copied within it.
       explorer: model.get("_explorer_id"),
       filesystem: model.get("_filesystem"),
       // Pasting folders needs unsafe mode again.
       folders: hasFolders,
-      files: targets.map(({ path, url }) => ({ path, url, name: url.slice(url.replace(/\/$/, "").lastIndexOf("/") + 1) })),
+      files: targets.map(({ path }, i) => {
+        const url = urls[i];
+        return { path, url, name: url.slice(url.replace(/\/$/, "").lastIndexOf("/") + 1) };
+      }),
     };
     const what = targets.length === 1 ? globalThis[CLIPBOARD].files[0].name : `${targets.length} items`;
     try {
-      await navigator.clipboard.writeText(targets.map((f) => f.url).join("\n"));
+      await navigator.clipboard.writeText(urls.join("\n"));
       flash(`Copied ${what}`);
     } catch {
       // Paste still works; only the URLs are not on the system clipboard.
@@ -1172,14 +1185,14 @@ function render({ model, el }) {
     if (!menuEl.hidden) placeMenu(); // rows shown above may have pushed it out of the widget
   }
 
-  // Menu items for one or more items ({path, url, type}). The tree passes
+  // Menu items for one or more items ({path, type, no_url}). The tree passes
   // withOpen = false: clicking a tree folder already opens it.
   function itemMenu(targets, withOpen = true) {
     const single = targets.length === 1 ? targets[0] : null;
     const count = targets.length > 1 ? `${targets.length} ` : "";
     // Items without a URL (the kernel's _url gave None) are not treated as data:
     // no preview, code or editing.
-    const data = single?.url ? single : null;
+    const data = single && hasUrl(single) ? single : null;
     // The reply arrives after the menu is built, so the refs below are set by then.
     const info = data ? requestMenuInfo(data.path) : null;
     const items = [
@@ -1231,9 +1244,14 @@ function render({ model, el }) {
     // Folder operations are dangerous: offered only in unsafe mode.
     const allowed = files || unsafe();
     const what = files ? "files" : "items";
-    if (targets.every((t) => t.url)) {
+    if (targets.every(hasUrl)) {
       if (allowed) items.push({ label: count ? `Copy ${count}${what}` : "Copy", action: () => copyFiles(targets) });
-      if (!files) items.push({ label: `Copy ${count}URL${count ? "s" : ""}`, action: () => copy(targets.map((t) => t.url), count ? `${count}URLs` : "URL") });
+      if (!files) {
+        items.push({
+          label: `Copy ${count}URL${count ? "s" : ""}`,
+          action: async () => copy(await urlsOf(targets), count ? `${count}URLs` : "URL"),
+        });
+      }
     }
     if (single?.type === "directory") {
       const paste = pasteItem(single.path);
@@ -1364,7 +1382,8 @@ function render({ model, el }) {
       return wrap;
     }
 
-    treeEl.replaceChildren(node({ name: treeRootLabel(root), path: root }, 0));
+    // The root's menu offers no previews, code or copying (no_url).
+    treeEl.replaceChildren(node({ name: treeRootLabel(root), path: root, no_url: true }, 0));
     if (shown && shown.size === ancestors(current).length) {
       treeEl.append(h("div", { className: "jse-placeholder jse-tree-note", textContent: "No loaded folders match" }));
     }
@@ -1405,13 +1424,36 @@ function render({ model, el }) {
     return sort.asc ? r : -r;
   }
 
+  // The current directory's items, {name, path, type, size, mtime, format,
+  // no_url}, from the kernel's columns (_listing; see _make_listing), decoded
+  // once per listing.
+  let decoded = { listing: null, entries: [] };
+
+  function listedEntries() {
+    const l = model.get("_listing");
+    if (decoded.listing !== l) {
+      const noUrl = new Set(l.no_url ?? []);
+      const entries = (l.names ?? []).map((name, i) => ({
+        name,
+        path: l.paths ? l.paths[i] : join(l.dir, name),
+        type: l.is_dir[i] ? "directory" : "file",
+        size: l.sizes[i],
+        mtime: l.mtimes[i],
+        format: l.formats[l.format[i]],
+        no_url: noUrl.has(i),
+      }));
+      decoded = { listing: l, entries };
+    }
+    return decoded.entries;
+  }
+
   // The listing sorted, kept until the listing or the sort order changes, so
   // that filtering and paging (each keystroke, each page) only filter and
   // slice it.
   let sorted = { entries: null, key: null, asc: null, list: [] };
 
   function sortedEntries() {
-    const entries = model.get("_entries");
+    const entries = listedEntries();
     if (sorted.entries !== entries || sorted.key !== sort.key || sorted.asc !== sort.asc) {
       sorted = { entries, key: sort.key, asc: sort.asc, list: [...entries].sort(compare) };
     }
@@ -1430,8 +1472,8 @@ function render({ model, el }) {
     // While the preview panel is open, it follows a single selected file.
     // Folders are not previewed on click (use Preview for e.g. a Delta table).
     if (!previewEl.hidden && next.length === 1 && next[0] !== model.get("_preview").path) {
-      const entry = model.get("_entries").find((e) => e.path === next[0]);
-      if (entry && entry.type !== "directory" && entry.url) openPreview(next[0]);
+      const entry = listedEntries().find((e) => e.path === next[0]);
+      if (entry && entry.type !== "directory" && hasUrl(entry)) openPreview(next[0]);
     }
   }
 
@@ -1495,7 +1537,7 @@ function render({ model, el }) {
         tr.addEventListener("click", (ev) => select(entry.path, ev.ctrlKey || ev.metaKey));
         tr.addEventListener("dblclick", () => {
           if (isDir) navigate(entry.path);
-          else if (entry.url) openPreview(entry.path); // no URL: no preview
+          else if (hasUrl(entry)) openPreview(entry.path); // no URL: no preview
         });
         tr.addEventListener("contextmenu", (ev) => {
           // Like file managers: right-clicking outside the selection selects that item.
@@ -1566,7 +1608,7 @@ function render({ model, el }) {
       statusEl.textContent = error;
       return;
     }
-    const entries = model.get("_entries");
+    const entries = listedEntries();
     const count = `${entries.length} item${entries.length === 1 ? "" : "s"}`;
     const sel = model.get("_selected").length;
     const matching = listFilter.active() ? `${entries.filter((e) => listFilter.test(e.name)).length} of ${count} match` : count;
@@ -1866,7 +1908,7 @@ function render({ model, el }) {
     "change:_root": onDirChange,
     "change:_filesystem": onFilesystemChange,
     "change:_filesystem_names": renderFsSelect,
-    "change:_entries": renderList,
+    "change:_listing": renderList,
     "change:_selected": renderList,
     "change:_error": renderStatus,
     "change:_height": applyHeight,

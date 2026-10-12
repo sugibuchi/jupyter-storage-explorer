@@ -10,7 +10,7 @@ import pytest
 
 from jupyter_storage_explorer import StorageExplorer
 from jupyter_storage_explorer.query import QuerySettingsStore
-from jupyter_storage_explorer.storage_explorer import _format_size, _safe_name
+from jupyter_storage_explorer.storage_explorer import _format_size, _join, _safe_name
 
 
 class Explorer(StorageExplorer):
@@ -51,20 +51,93 @@ def local(tmp_path) -> Explorer:
     return make(str(tmp_path))
 
 
+def entries(explorer: Explorer) -> list[dict[str, Any]]:
+    """The items of ``_listing`` as the frontend decodes them (listedEntries)."""
+    listing = explorer._listing
+    no_url = set(listing["no_url"])
+    return [
+        {
+            "name": name,
+            "path": listing["paths"][i]
+            if listing["paths"] is not None
+            else _join(listing["dir"], name),
+            "type": "directory" if listing["is_dir"][i] else "file",
+            "size": listing["sizes"][i],
+            "mtime": listing["mtimes"][i],
+            "format": listing["formats"][listing["format"][i]],
+            "no_url": i in no_url,
+        }
+        for i, name in enumerate(listing["names"])
+    ]
+
+
 def path_of(explorer: Explorer, name: str) -> str:
-    return next(e["path"] for e in explorer._entries if e["name"] == name)
+    return next(e["path"] for e in entries(explorer) if e["name"] == name)
 
 
 class TestListing:
     def test_entries_and_tree(self, mem_explorer):
         mem_explorer._current_dir = "/data"
-        entries = {e["name"]: e for e in mem_explorer._entries}
-        assert entries["a.csv"]["format"] == "csv"
-        assert entries["notes.md"]["format"] == "markdown"
-        assert entries["table"]["type"] == "directory"
-        assert entries["table"]["format"] == ""  # folders are not detected in the list
+        by_name = {e["name"]: e for e in entries(mem_explorer)}
+        assert by_name["a.csv"]["format"] == "csv"
+        assert by_name["a.csv"]["path"] == "/data/a.csv"
+        assert by_name["a.csv"]["size"] == 8
+        assert by_name["notes.md"]["format"] == "markdown"
+        assert by_name["table"]["type"] == "directory"
+        assert by_name["table"]["format"] == ""  # folders are not detected in the list
+        assert not any(e["no_url"] for e in by_name.values())
         assert [d["name"] for d in mem_explorer._tree["/"]] == ["data", "other"]
         assert mem_explorer.folder_url == "memory:///data"
+
+    def test_listing_is_compact(self, mem_explorer):
+        mem_explorer._current_dir = "/data"
+        listing = mem_explorer._listing
+        assert listing["dir"] == "/data"
+        assert listing["paths"] is None  # each path is dir + "/" + name
+        # Each format name once, and none ("") first.
+        assert listing["formats"][0] == ""
+        assert sorted(listing["formats"]) == ["", "csv", "markdown"]
+        assert all(isinstance(t, int) for t in listing["mtimes"] if t is not None)
+        assert "url" not in listing and "urls" not in listing
+
+    def test_urls_on_request(self, mem_explorer):
+        reply = mem_explorer.request(
+            {"type": "urls", "rid": 1, "paths": ["/data/a.csv", "/data"]}
+        )
+        assert reply == {
+            "type": "reply",
+            "rid": 1,
+            "urls": ["memory:///data/a.csv", "memory:///data"],
+        }
+
+    def test_items_without_url(self, memfs):
+        class NoCsvUrls(Explorer):
+            def _url(self, path):
+                return None if path.endswith((".csv", "/sub")) else super()._url(path)
+
+        memfs.pipe_file("/d/a.csv", b"x")
+        memfs.pipe_file("/d/b.txt", b"x")
+        memfs.pipe_file("/d/sub/c.txt", b"x")
+        explorer = NoCsvUrls("/d", fs=memfs, query_settings=QuerySettingsStore())
+        assert {e["name"] for e in entries(explorer) if e["no_url"]} == {"a.csv", "sub"}
+        assert explorer._tree["/d"] == [
+            {"name": "sub", "path": "/d/sub", "no_url": True}
+        ]
+
+    def test_paths_listed_when_not_joined(self, mem_explorer, monkeypatch):
+        # A filesystem whose listing names items other than "dir/name".
+        listed = mem_explorer._ls("/data")
+        monkeypatch.setattr(
+            mem_explorer,
+            "_ls",
+            lambda path: [
+                {**i, "name": "/elsewhere/" + i["name"].rsplit("/", 1)[1]}
+                for i in listed
+            ],
+        )
+        mem_explorer._current_dir = "/data"
+        assert mem_explorer._listing["paths"] is not None
+        assert path_of(mem_explorer, "a.csv") == "/elsewhere/a.csv"
 
     def test_current_directory_format(self, mem_explorer):
         mem_explorer._current_dir = "/data/table"
@@ -81,7 +154,7 @@ class TestListing:
     def test_listing_error(self, mem_explorer):
         mem_explorer._current_dir = "/missing"
         assert mem_explorer._error.startswith("Cannot list /missing")
-        assert mem_explorer._entries == []
+        assert entries(mem_explorer) == []
 
     def test_expand(self, mem_explorer):
         mem_explorer.message({"type": "expand", "path": "/data"})
@@ -191,6 +264,20 @@ class TestEditor:
         )
         assert "error" not in saved
         assert mem_explorer._fs.cat_file("/data/notes.md") == b"new"
+
+    def test_save_updates_the_size_listed(self, mem_explorer):
+        mem_explorer._current_dir = "/data"
+        opened = mem_explorer.request({"type": "edit_open", "path": "/data/notes.md"})
+        mem_explorer.request(
+            {
+                "type": "edit_save",
+                "path": "/data/notes.md",
+                "text": "longer text",
+                "version": opened["version"],
+            }
+        )
+        sizes = {e["name"]: e["size"] for e in entries(mem_explorer)}
+        assert sizes == {"a.csv": 8, "notes.md": 11, "table": None}
 
     def test_refuses_to_overwrite_changes_made_elsewhere(self, mem_explorer):
         opened = mem_explorer.request({"type": "edit_open", "path": "/data/notes.md"})
@@ -311,7 +398,7 @@ class TestDelete:
         assert reply == {"deleted": ["a.csv", "notes.md"], "errors": []}
         assert not mem_explorer._fs.exists("/data/a.csv")
         # The list shows the folder without them.
-        assert [e["name"] for e in mem_explorer._entries] == ["table"]
+        assert [e["name"] for e in entries(mem_explorer)] == ["table"]
 
     def test_folders_are_not_deleted(self, mem_explorer):
         reply = self.delete(mem_explorer, ["/data/table"])
@@ -371,7 +458,7 @@ class TestPaste:
         }
         assert mem_explorer._fs.cat_file("/other/a.csv") == b"x,y\n1,2\n"
         assert mem_explorer._fs.exists("/data/a.csv")  # copied, not moved
-        assert "a.csv" in [e["name"] for e in mem_explorer._entries]
+        assert "a.csv" in [e["name"] for e in entries(mem_explorer)]
 
     @pytest.mark.parametrize(
         ("if_exists", "content"), [("skip", b"b"), ("overwrite", b"new")]
@@ -393,7 +480,7 @@ class TestPaste:
         reply = self.paste(local, ["/data/a.csv"], local._root, source=mem_explorer)
         assert reply["pasted"] == ["a.csv"]
         assert (tmp_path / "a.csv").read_bytes() == b"x,y\n1,2\n"
-        assert "a.csv" in [e["name"] for e in local._entries]
+        assert "a.csv" in [e["name"] for e in entries(local)]
 
     def test_folder_by_url_is_not_pasted(self, mem_explorer, tmp_path):
         local = make(str(tmp_path))
@@ -554,7 +641,7 @@ class TestCreateFolder:
             "hidden": False,
         }
         assert mem_explorer._fs.isdir("/data/new")
-        assert "new" in [e["name"] for e in mem_explorer._entries]
+        assert "new" in [e["name"] for e in entries(mem_explorer)]
         assert "new" in [d["name"] for d in mem_explorer._tree["/data"]]
 
     def test_on_a_local_disk(self, tmp_path):
