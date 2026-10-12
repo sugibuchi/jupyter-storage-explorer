@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import base64
-import contextlib
 import dataclasses
 import datetime as dt
 import functools
 import hashlib
 import os
-import tempfile
 import uuid
 from typing import TYPE_CHECKING, Any
 
@@ -17,8 +15,9 @@ import anywidget
 import traitlets
 from fsspec.core import url_to_fs
 
-from jupyter_storage_explorer import _static
+from jupyter_storage_explorer import _paths, _static
 from jupyter_storage_explorer._urls import default_url
+from jupyter_storage_explorer.file_tasks import FileTasks, Plan, Task
 from jupyter_storage_explorer.formats import (
     DataFormat,
     MediaPreview,
@@ -32,7 +31,15 @@ from jupyter_storage_explorer.formats import (
 )
 from jupyter_storage_explorer.formats import detect as detect_format
 from jupyter_storage_explorer.formats.base import jsonable
+from jupyter_storage_explorer.incoming import IncomingFiles
+from jupyter_storage_explorer.jobs import JobRunner
 from jupyter_storage_explorer.listing import Listing
+from jupyter_storage_explorer.operations import (
+    AsyncFsspecOperations,
+    FsspecOperations,
+    OperationChain,
+    Progress,
+)
 from jupyter_storage_explorer.query import DataQuery, QuerySettingsStore
 from jupyter_storage_explorer.query import default_store as default_query_settings
 
@@ -40,6 +47,9 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
 
     from fsspec import AbstractFileSystem
+
+    from jupyter_storage_explorer.jobs import Job
+    from jupyter_storage_explorer.operations import FileSystemOperations
 
 # JavaScript libraries the frontend may ask for (see static/vendor/README.md);
 # only these names are served.
@@ -80,71 +90,9 @@ def _open(
     return fs, root or fs.root_marker
 
 
-def _parent(path: str, fs: AbstractFileSystem) -> str:
-    """The directory containing ``path``, as the filesystem names it (e.g. "/" on memory://)."""
-    path = _norm(path)
-    if "/" not in path:
-        return ""  # a top-level item of a filesystem whose top level is "" (e.g. DirFileSystem)
-    parent = path.rsplit("/", 1)[0]
-    return parent or fs.root_marker or "/"
-
-
-def _format_size(size: int) -> str:
-    """E.g. "10 MB" or "1.5 GB", as shown to users."""
-    for unit in ("B", "KB", "MB", "GB"):
-        if size < 1024 or unit == "GB":
-            return f"{size:g} {unit}" if size == int(size) else f"{size:.1f} {unit}"
-        size /= 1024
-    raise AssertionError("unreachable")
-
-
-def _safe_name(name: str) -> str:
-    """A file name from the browser, without any directory part (so it cannot escape the target folder)."""
-    name = name.replace("\\", "/").rsplit("/", 1)[-1]
-    if name in ("", ".", ".."):
-        raise ValueError(f"invalid file name: {name!r}")
-    return name
-
-
 def _version(data: bytes) -> str:
     """Identifies file contents, to detect changes made elsewhere while editing."""
     return hashlib.sha256(data).hexdigest()
-
-
-def _norm(path: str) -> str:
-    return path.rstrip("/") or path
-
-
-def _basename(path: str) -> str:
-    return _norm(path).rsplit("/", 1)[-1] or path
-
-
-def _join(parent: str, name: str) -> str:
-    return parent + name if not parent or parent.endswith("/") else f"{parent}/{name}"
-
-
-def _folder_name_error(name: str) -> str | None:
-    """Why ``name`` cannot name a new folder, or None if it can. The same checks
-    as the frontend's (see folderNameError in storage_explorer.js)."""
-    if not name.strip():
-        return "enter a name"
-    if name != name.strip():
-        return "no spaces at the start or the end"
-    if name in (".", ".."):
-        return f"{name!r} is not a folder name"
-    if "/" in name or "\\" in name:
-        return "a name, without / or \\"
-    if any(ord(c) < 32 or ord(c) == 127 for c in name):
-        return "no control characters"
-    if len(name) > 255:
-        return "at most 255 characters"
-    return None
-
-
-def _inside(path: str, folder: str) -> bool:
-    """Whether ``path`` is ``folder`` or something in it."""
-    path, folder = _norm(path), _norm(folder)
-    return path == folder or path.startswith(folder.rstrip("/") + "/")
 
 
 def _to_timestamp(value: Any) -> float | None:
@@ -167,8 +115,8 @@ def _entry(info: dict[str, Any]) -> dict[str, Any]:
         None,
     )
     return {
-        "name": _basename(info["name"]),
-        "path": _norm(info["name"]),
+        "name": _paths.basename(info["name"]),
+        "path": _paths.norm(info["name"]),
         "type": "directory" if is_dir else "file",
         "size": None if is_dir else info.get("size"),
         "mtime": mtime,
@@ -193,12 +141,25 @@ class StorageExplorer(anywidget.AnyWidget):
     to local" saves the selected files (not folders) in the browser, and
     "Download to JupyterLab" copies them into a folder of the Jupyter server.
     "Copy" and "Paste" copy files into a folder, also between explorers (see
-    ``_paste``), and "Delete" deletes files (see ``_rm``). Files
+    ``_paste_task``), and "Delete" deletes files. Files
     dragged from JupyterLab's file browser or from the user's computer onto
     the list or tree are uploaded after a confirmation, and files dragged
-    within the widget onto a folder are moved there (see ``_mv``). Folders
+    within the widget onto a folder are moved there. Folders
     are moved, copied, pasted and deleted only in "Unsafe mode", turned on
     in the status bar and off again by any operation.
+
+    Moving, deleting, pasting and downloading to JupyterLab run in the
+    background, one at a time, with their progress shown and a button to
+    cancel them; the explorer stays usable meanwhile. They are done by
+    ``operations``, a list of ``FileSystemOperations`` objects (see
+    operations.py): the first that supports an operation for the filesystem
+    does it. By default ``default_operations()``: with fsspec, many files at
+    a time on asynchronous filesystems (e.g. s3fs). A list given replaces
+    it; put objects of your own before the defaults to do some operations
+    differently, e.g. server-side copies with a storage's own client, or
+    deleting into a trash folder::
+
+        StorageExplorer(url, operations=[MyOps(), *StorageExplorer.default_operations()])
 
     Examples:
         StorageExplorer()                          # current local directory
@@ -329,10 +290,17 @@ class StorageExplorer(anywidget.AnyWidget):
         download_to_jupyterlab_path: str | None = ".",
         query_settings: QuerySettingsStore | None = None,
         max_browser_items: int | None = 20_000,
+        operations: Sequence[FileSystemOperations] | None = None,
         **storage_options: Any,
     ) -> None:
         self._query_settings = query_settings or default_query_settings
         self._max_browser_items = max_browser_items
+        # How files are moved, copied, deleted and downloaded (see operations.py),
+        # and the jobs doing it in the background (see jobs.py).
+        self._operations = OperationChain(
+            self.default_operations() if operations is None else operations
+        )
+        self._jobs = JobRunner(self._send_job)
         # The current directory's items, kept for "list" requests (and paths).
         self._full_listing = Listing(self._make_listing("", []))
         self._listing_version = 0
@@ -340,8 +308,8 @@ class StorageExplorer(anywidget.AnyWidget):
         self._queries: dict[str, DataQuery] = {}
         self._formats = explorer_formats(formats, format_options)
         self._preview_limits = preview_limits or PreviewLimits()
-        # Uploads from the user's computer in progress: id -> {"file", "target", ...}.
-        self._incoming: dict[str, dict[str, Any]] = {}
+        # Files being received from the user's computer (see incoming.py).
+        self._incoming = IncomingFiles(max_upload_bytes)
         # Name -> (filesystem, top-level path), and the folder each was left in.
         if filesystems is not None:
             if path is not None or fs is not None or storage_options:
@@ -376,6 +344,14 @@ class StorageExplorer(anywidget.AnyWidget):
         )
         self.on_msg(self._on_custom_msg)
         self._filesystem = name  # shows its top level (see _on_filesystem)
+
+    @staticmethod
+    def default_operations() -> list[FileSystemOperations]:
+        """The file operations used unless ``operations`` is given: on
+        asynchronous fsspec filesystems (s3fs, gcsfs, adlfs, ...) many files
+        at a time (``AsyncFsspecOperations``), and everything else with fsspec
+        (``FsspecOperations``). New objects each time."""
+        return [AsyncFsspecOperations(), FsspecOperations()]
 
     @traitlets.validate("_filesystem")
     def _validate_filesystem(self, proposal: dict[str, Any]) -> str:
@@ -455,20 +431,18 @@ class StorageExplorer(anywidget.AnyWidget):
                 c["path"], c["text"], c.get("version")
             ),
             "download": lambda c, _: self._download(c["paths"]),
-            "upload": lambda c, _: self._upload(
-                c["root"], c["paths"], c["dest"], c.get("if_exists", "ask")
-            ),
+            "upload": lambda c, _: self._reply(c, self._upload_request(c)),
             "upload_check": lambda c, _: self._reply(
                 c, self._upload_check(c["dest"], c["names"])
             ),
             "upload_chunk": lambda c, b: self._reply(c, self._upload_chunk(c, b)),
-            "upload_done": lambda c, _: self._reply(c, self._upload_done(c["dest"])),
             "vendor": lambda c, _: self._reply(c, self._vendor_source(c["name"])),
             # The listing has no URLs (see _make_listing): asked for when copying.
             "urls": lambda c, _: self._reply(
                 c, {"urls": [self._url(p) for p in c["paths"]]}
             ),
             "list": lambda c, _: self._reply(c, self._list_page(c)),
+            "job_cancel": lambda c, _: self._cancel_job(c),
             "move": lambda c, _: self._reply(c, self._move_request(c)),
             "download_to_server": lambda c, _: self._reply(
                 c, self._download_to_server_request(c)
@@ -535,7 +509,7 @@ class StorageExplorer(anywidget.AnyWidget):
         out, cur = [], self._root
         for segment in filter(None, path[len(self._root) :].split("/")):
             out.append(cur)
-            cur = _join(cur, segment)
+            cur = _paths.join(cur, segment)
         return out
 
     def _load_children(self, path: str) -> None:
@@ -550,8 +524,8 @@ class StorageExplorer(anywidget.AnyWidget):
         dirs = []
         for info in infos:
             if info.get("type") == "directory":
-                child = _norm(info["name"])
-                dirs.append({"name": _basename(child), "path": child})
+                child = _paths.norm(info["name"])
+                dirs.append({"name": _paths.basename(child), "path": child})
                 if self._url(child) is None:
                     dirs[-1]["no_url"] = True
         dirs.sort(key=lambda d: d["name"].lower())
@@ -598,7 +572,8 @@ class StorageExplorer(anywidget.AnyWidget):
             if self._url(entry["path"]) is None:
                 listing["no_url"].append(i)
         if any(
-            p != _join(path, n) for p, n in zip(paths, listing["names"], strict=True)
+            p != _paths.join(path, n)
+            for p, n in zip(paths, listing["names"], strict=True)
         ):
             listing["paths"] = paths
         return listing
@@ -648,7 +623,7 @@ class StorageExplorer(anywidget.AnyWidget):
         columns = self._full_listing.columns
         if columns["paths"] is not None:
             return columns["paths"]
-        return [_join(columns["dir"], name) for name in columns["names"]]
+        return [_paths.join(columns["dir"], name) for name in columns["names"]]
 
     def _refresh(self) -> None:
         """Drop cached listings and reload the current directory."""
@@ -671,14 +646,14 @@ class StorageExplorer(anywidget.AnyWidget):
         tree, and if the list shows it (or a folder in it), shows the same
         folder where it was moved to, or the deleted folder's parent.
         """
-        if _inside(self._preview.get("path") or "", path):
+        if _paths.inside(self._preview.get("path") or "", path):
             self._close_preview()
-        self._tree = {k: v for k, v in self._tree.items() if not _inside(k, path)}
-        if _inside(self._current_dir, path):
+        self._tree = {k: v for k, v in self._tree.items() if not _paths.inside(k, path)}
+        if _paths.inside(self._current_dir, path):
             self._current_dir = (
-                _parent(path, self._fs)
+                _paths.parent(path, self._fs)
                 if moved_to is None
-                else moved_to + _norm(self._current_dir)[len(_norm(path)) :]
+                else moved_to + _paths.norm(self._current_dir)[len(_paths.norm(path)) :]
             )
 
     def _update_entry(self, path: str) -> None:
@@ -697,7 +672,7 @@ class StorageExplorer(anywidget.AnyWidget):
         them would mean listing each one), files without a URL and
         unrecognised files.
         """
-        path = _norm(info["name"])
+        path = _paths.norm(info["name"])
         if info.get("type") == "directory" or (url := self._url(path)) is None:
             return ""
         target = Target(fs=self._fs, path=path, url=url, info=info)
@@ -786,7 +761,7 @@ class StorageExplorer(anywidget.AnyWidget):
         """
         base = {
             "path": path,
-            "name": _basename(path),
+            "name": _paths.basename(path),
             "format": None,
             "sections": [],
             "error": "",
@@ -878,7 +853,7 @@ class StorageExplorer(anywidget.AnyWidget):
         try:
             reply["text"], reply["version"] = self._read_text(path)
         except Exception as exc:
-            reply["error"] = f"Cannot open {_basename(path)}: {exc}"
+            reply["error"] = f"Cannot open {_paths.basename(path)}: {exc}"
         self.send(reply)
 
     def _edit_save(self, path: str, text: str, version: str | None) -> None:
@@ -931,7 +906,7 @@ class StorageExplorer(anywidget.AnyWidget):
             reply: dict[str, Any] = {
                 "type": "download",
                 "path": path,
-                "name": _basename(path),
+                "name": _paths.basename(path),
             }
             try:
                 if not self._allow_download_to_local:
@@ -946,132 +921,80 @@ class StorageExplorer(anywidget.AnyWidget):
                     )
                 data = self._read_bytes(path)
             except Exception as exc:
-                reply["error"] = f"{_basename(path)}: {exc}"
+                reply["error"] = f"{_paths.basename(path)}: {exc}"
                 self.send(reply)
             else:
                 self.send(reply, [data])
 
-    # --- Upload: files dragged in from JupyterLab's file browser ---
+    # --- Jobs: move, delete, paste, upload and download run in the
+    # background. Each is planned by FileTasks (file_tasks.py), its work runs
+    # in a job's worker thread (jobs.py), and once it has ended, _finish shows
+    # what it changed, back on the main thread ---
 
-    def _upload(self, root: str, paths: list[str], dest: str, if_exists: str) -> None:
-        """Answer a drop from JupyterLab's file browser: ``paths`` are relative to its server folder ``root``."""
-        base = os.path.expanduser(root)
-        sources = [os.path.join(base, *p.split("/")) for p in paths]
-        reply: dict[str, Any] = {"type": "upload", "dest": dest}
+    def _tasks(self) -> FileTasks:
+        """Plans operations on the filesystem shown."""
+        return FileTasks(self._fs, self._root, self._operations)
+
+    def _start(self, plan: Plan) -> dict[str, Any]:
+        """Run ``plan`` as a job: {"job": its id}; or the reply as it is if
+        there is nothing to run (e.g. {"conflicts": [...]} to ask about)."""
+        if isinstance(plan, dict):
+            return plan
+        job = self._jobs.submit(
+            plan.kind, plan.title, plan.work, lambda job: self._finish(plan)
+        )
+        return {"job": job.id}
+
+    def _run_now(self, plan: Plan) -> dict[str, Any]:
+        """Run ``plan`` in this thread, without a job (e.g. from Python): its result."""
+        if isinstance(plan, dict):
+            return plan
         try:
-            reply.update(self._upload_files(sources, dest, if_exists))
-        except Exception as exc:
-            reply["errors"] = [f"{type(exc).__name__}: {exc}"]
-        self.send(reply)
+            return plan.work(Progress())
+        finally:
+            self._finish(plan)
 
-    def _upload_files(
-        self, sources: Sequence[str], dest: str, if_exists: str = "ask"
-    ) -> dict[str, list[str]]:
-        """Copy local files (paths on the kernel's machine) into directory ``dest``.
+    def _finish(self, task: Task) -> None:
+        """After ``task``, whatever its outcome: follow what it moved or
+        removed, and show the folders it changed."""
+        if task.cleanup is not None:
+            task.cleanup()
+        if task.fs is not self._fs:
+            task.fs.invalidate_cache()  # the user has switched filesystems
+            return
+        for source, target in task.moved:
+            self._forget(source, moved_to=target)
+        for path in task.removed:
+            self._forget(path)
+        for folder in task.changed:
+            self._refresh_dir(folder)
 
-        ``if_exists`` decides what happens to files already in ``dest``: "ask"
-        copies nothing and returns {"conflicts": [names]} if there are any;
-        "overwrite" replaces them; "skip" leaves them. Otherwise returns
-        {"copied": [...], "skipped": [...], "errors": [...]} (file names).
-        Folders are not uploaded.
-        """
-        files, errors = [], []
-        for source in sources:
-            name = os.path.basename(source.rstrip("/\\"))
-            if os.path.isdir(source):
-                errors.append(f"{name}: folders are not uploaded")
-            elif not os.path.isfile(source):
-                # e.g. the kernel runs elsewhere than the Jupyter server (a remote kernel).
-                errors.append(f"{name}: not found from the kernel")
-            else:
-                files.append((source, _join(dest, name)))
-        existing = {target for _, target in files if self._exists(target)}
-        if if_exists == "ask" and existing:
-            return {"conflicts": sorted(_basename(t) for t in existing)}
-        copied, skipped = [], []
-        for source, target in files:
-            if target in existing and if_exists == "skip":
-                skipped.append(_basename(target))
-                continue
-            try:
-                self._put_file(source, target)
-                copied.append(_basename(target))
-            except Exception as exc:
-                errors.append(f"{_basename(target)}: {exc}")
-        if copied:
-            self._refresh_dir(dest)
-        return {"copied": copied, "skipped": skipped, "errors": errors}
+    def _send_job(self, job: Job) -> None:
+        """Tell the frontend how ``job`` is doing (see Job.snapshot)."""
+        self.send({"type": "job", **job.snapshot()})
 
-    # --- Upload from the user's computer: the browser sends files in pieces ---
+    def _cancel_job(self, content: dict[str, Any]) -> None:
+        self._jobs.cancel(content.get("id", ""))
 
-    def _upload_check(self, dest: str, names: list[str]) -> dict[str, Any]:
-        """Which of ``names`` already exist in ``dest``."""
-        return {
-            "conflicts": [n for n in names if self._exists(_join(dest, _safe_name(n)))]
-        }
-
-    def _upload_chunk(
-        self, content: dict[str, Any], buffers: list[Any]
-    ) -> dict[str, Any]:
-        """Append one piece of a file; on the last piece, copy the whole file to the storage.
-
-        Pieces go to a local temporary file first, so a failed or abandoned
-        upload never leaves a partial file in the storage.
-        """
-        upload_id = content["id"]
+    def _plan_request(self, plan: Callable[[], Plan]) -> dict[str, Any]:
+        """Answer a request for an operation: start ``plan()``, or say why not."""
         try:
-            state = self._incoming.get(upload_id)
-            if state is None:
-                target = _join(content["dest"], _safe_name(content["name"]))
-                handle, temp_path = tempfile.mkstemp(prefix="jse-upload-")
-                # Opened per piece below, so none stays open between messages.
-                os.close(handle)
-                # The filesystem is kept, as the user may switch to another meanwhile.
-                state = {"path": temp_path, "target": target, "size": 0, "fs": self._fs}
-                self._incoming[upload_id] = state
-            if buffers:
-                piece = bytes(buffers[0])
-                state["size"] += len(piece)
-                # The frontend checks too; this guards against a file larger than it said.
-                limit = self._max_upload_bytes
-                if limit is not None and state["size"] > limit:
-                    raise ValueError(
-                        f"too large to upload (over {_format_size(limit)})"
-                    )
-                with open(state["path"], "ab") as f:
-                    f.write(piece)
-            if not content["last"]:
-                return {}
-            self._put_file(state["path"], state["target"], fs=state["fs"])
-            result: dict[str, Any] = {"done": True}
+            return self._start(plan())
         except Exception as exc:
-            # The frontend stops sending this file after an error.
-            result = {"error": f"{_basename(content['name'])}: {exc}"}
-        self._discard_upload(upload_id)
-        return result
+            return {"errors": [f"{type(exc).__name__}: {exc}"]}
 
-    def _discard_upload(self, upload_id: str) -> None:
-        state = self._incoming.pop(upload_id, None)
-        if state is not None:
-            with contextlib.suppress(FileNotFoundError):
-                os.unlink(state["path"])
-
-    def _upload_done(self, dest: str) -> dict[str, Any]:
-        self._refresh_dir(dest)
-        return {}
-
-    # --- Move: files (and, in unsafe mode, folders) dragged onto a folder in the list or tree ---
+    # --- Move: files (and, in unsafe mode, folders) dragged onto a folder;
+    # delete: chosen with "Delete" in the right-click menu ---
 
     def _move_request(self, content: dict[str, Any]) -> dict[str, Any]:
-        try:
-            return self._move(
+        return self._plan_request(
+            lambda: self._tasks().move(
                 content["paths"],
                 content["dest"],
                 content.get("if_exists", "ask"),
                 folders=bool(content.get("unsafe")),
             )
-        except Exception as exc:
-            return {"errors": [f"{type(exc).__name__}: {exc}"]}
+        )
 
     def _move(
         self,
@@ -1079,122 +1002,20 @@ class StorageExplorer(anywidget.AnyWidget):
         dest: str,
         if_exists: str = "ask",
         folders: bool = False,
-    ) -> dict[str, list[str]]:
-        """Move files into directory ``dest`` on the filesystem shown, each with ``_mv``.
-
-        ``if_exists`` decides what happens to files already in ``dest``: "ask"
-        moves nothing and returns {"conflicts": [names]} if there are any;
-        "overwrite" replaces them; "skip" leaves them (and the file to move).
-        Otherwise returns {"moved": [...], "skipped": [...], "errors": [...]}
-        (names). Folders are moved only with ``folders`` (the widget's unsafe
-        mode was on), and never onto anything that exists.
-        """
-        moves, errors = self._plan_moves(paths, dest, folders)
-        existing = {target for _, target, _ in moves if self._exists(target)}
-        if if_exists == "ask" and existing:
-            return {"conflicts": sorted(_basename(t) for t in existing)}
-        moved, skipped = self._move_files(moves, existing, if_exists, errors)
-        for source, target in moved:
-            self._forget(source, moved_to=target)
-        if moved:
-            for folder in {dest, *(_parent(s, self._fs) for s, _ in moved)}:
-                self._refresh_dir(folder)
-        return {
-            "moved": [_basename(s) for s, _ in moved],
-            "skipped": skipped,
-            "errors": errors,
-        }
-
-    def _plan_moves(
-        self, paths: Sequence[str], dest: str, folders: bool = False
-    ) -> tuple[list[tuple[str, str, bool]], list[str]]:
-        """(source, target, is folder) for the items to move, and errors for the rest."""
-        moves, errors = [], []
-        for path in paths:
-            name = _basename(path)
-            target = _join(dest, name)
-            if _norm(path) == _norm(target):
-                continue  # already in that folder
-            if not self._isdir(path):
-                moves.append((path, target, False))
-            elif not folders:
-                errors.append(
-                    f"{name}: folders are not moved (turn on unsafe mode first)"
-                )
-            elif _norm(path) == _norm(self._root):
-                errors.append(f"{name}: the top folder is not moved")
-            elif _inside(dest, path):
-                errors.append(f"{name}: a folder cannot be moved into itself")
-            elif self._exists(target):
-                # Folders are never merged into, or replace, what is there.
-                errors.append(f"{name}: already exists in that folder")
-            else:
-                moves.append((path, target, True))
-        return moves, errors
-
-    def _move_files(
-        self,
-        moves: list[tuple[str, str, bool]],
-        existing: set[str],
-        if_exists: str,
-        errors: list[str],
-    ) -> tuple[list[tuple[str, str]], list[str]]:
-        """Move each (source, target, is folder); returns the (source, target)
-        pairs moved and the names skipped, and adds failures to ``errors``."""
-        moved, skipped = [], []
-        for source, target, is_folder in moves:
-            if target in existing and if_exists == "skip":
-                skipped.append(_basename(target))
-                continue
-            try:
-                if target in existing:
-                    # Renaming onto an existing file fails on some systems.
-                    self._rm(target)
-                self._mv(source, target, recursive=is_folder)
-                moved.append((source, target))
-            except Exception as exc:
-                errors.append(f"{_basename(source)}: {exc}")
-        return moved, skipped
-
-    # --- Delete: files (and, in unsafe mode, folders) chosen with "Delete" in the right-click menu ---
+    ) -> dict[str, Any]:
+        """Move files into folder ``dest``, now (see ``FileTasks.move``)."""
+        return self._run_now(self._tasks().move(paths, dest, if_exists, folders))
 
     def _delete_request(self, content: dict[str, Any]) -> dict[str, Any]:
-        try:
-            return self._delete(content["paths"], folders=bool(content.get("unsafe")))
-        except Exception as exc:
-            return {"errors": [f"{type(exc).__name__}: {exc}"]}
+        return self._plan_request(
+            lambda: self._tasks().delete(
+                content["paths"], folders=bool(content.get("unsafe"))
+            )
+        )
 
-    def _delete(
-        self, paths: Sequence[str], folders: bool = False
-    ) -> dict[str, list[str]]:
-        """Delete files of the filesystem shown, each with ``_rm``.
-
-        Folders, with everything in them, only with ``folders`` (the widget's
-        unsafe mode was on); never the top folder. Returns
-        {"deleted": [...], "errors": [...]} (names).
-        """
-        deleted, errors = [], []
-        for path in paths:
-            name = _basename(path)
-            is_folder = self._isdir(path)
-            if is_folder and not folders:
-                errors.append(
-                    f"{name}: folders are not deleted (turn on unsafe mode first)"
-                )
-                continue
-            if is_folder and _norm(path) == _norm(self._root):
-                errors.append(f"{name}: the top folder is not deleted")
-                continue
-            try:
-                self._rm(path, recursive=is_folder)
-                deleted.append(path)
-            except Exception as exc:
-                errors.append(f"{name}: {exc}")
-        for path in deleted:
-            self._forget(path)
-        for folder in {_parent(p, self._fs) for p in deleted}:
-            self._refresh_dir(folder)
-        return {"deleted": [_basename(p) for p in deleted], "errors": errors}
+    def _delete(self, paths: Sequence[str], folders: bool = False) -> dict[str, Any]:
+        """Delete files, now (see ``FileTasks.delete``)."""
+        return self._run_now(self._tasks().delete(paths, folders))
 
     # --- Paste: files (and, in unsafe mode, folders) copied with "Copy" (in any
     # explorer), into a folder ---
@@ -1206,16 +1027,15 @@ class StorageExplorer(anywidget.AnyWidget):
             content.get("explorer") == self._explorer_id
             and content.get("filesystem") == self._filesystem
         )
-        try:
-            return self._paste(
+        return self._plan_request(
+            lambda: self._tasks().paste(
                 content["files"],
                 content["dest"],
                 content.get("if_exists", "ask"),
                 same_filesystem=same,
                 folders=bool(content.get("unsafe")),
             )
-        except Exception as exc:
-            return {"errors": [f"{type(exc).__name__}: {exc}"]}
+        )
 
     def _paste(
         self,
@@ -1224,80 +1044,68 @@ class StorageExplorer(anywidget.AnyWidget):
         if_exists: str = "ask",
         same_filesystem: bool = False,
         folders: bool = False,
-    ) -> dict[str, list[str]]:
-        """Copy files into folder ``dest`` of the filesystem shown.
+    ) -> dict[str, Any]:
+        """Copy files into folder ``dest``, now (see ``FileTasks.paste``)."""
+        return self._run_now(
+            self._tasks().paste(files, dest, if_exists, same_filesystem, folders)
+        )
 
-        ``files`` are {"path", "url"} as copied. With ``same_filesystem``
-        (copied in this explorer, from the filesystem shown) they are copied
-        within it, with ``_cp`` and the explorer's own credentials; otherwise
-        read from their URLs (see ``_copy_from_url``). ``if_exists`` as for
-        ``_move``; nothing is pasted into the folder it is in. Folders, file by
-        file, only with ``folders`` (the widget's unsafe mode was
-        on), never into themselves nor onto anything that exists. Returns
-        {"pasted": [...], "skipped": [...], "errors": [...]} (names).
-        """
-        plans, errors = self._plan_paste(files, dest, same_filesystem, folders)
-        existing = {target for _, target, _ in plans if self._exists(target)}
-        if if_exists == "ask" and existing:
-            return {"conflicts": sorted(_basename(t) for t in existing)}
-        pasted, skipped = [], []
-        for source, target, is_folder in plans:
-            name = _basename(target)
-            if target in existing and if_exists == "skip":
-                skipped.append(name)
-                continue
-            try:
-                if not same_filesystem:
-                    self._copy_from_url(source, target)
-                elif is_folder:
-                    self._copy_folder(source, target)
-                else:
-                    self._cp(source, target)
-                pasted.append(name)
-            except Exception as exc:
-                errors.append(f"{name}: {exc}")
-        if pasted:
-            self._refresh_dir(dest)
-        return {"pasted": pasted, "skipped": skipped, "errors": errors}
+    # --- Upload: files (and, in unsafe mode, folders) dragged in from
+    # JupyterLab's file browser, which the kernel copies itself ---
 
-    def _plan_paste(
+    def _upload_request(self, content: dict[str, Any]) -> dict[str, Any]:
+        """Answer "upload": ``paths`` are relative to JupyterLab's server folder ``root``."""
+        base = os.path.expanduser(content["root"])
+        sources = [os.path.join(base, *p.split("/")) for p in content["paths"]]
+        return self._plan_request(
+            lambda: self._tasks().upload(
+                sources,
+                content["dest"],
+                content.get("if_exists", "ask"),
+                folders=bool(content.get("unsafe")),
+            )
+        )
+
+    def _upload_files(
         self,
-        files: Sequence[dict[str, Any]],
+        sources: Sequence[str],
         dest: str,
-        same_filesystem: bool,
-        folders: bool,
-    ) -> tuple[list[tuple[str, str, bool]], list[str]]:
-        """(source path or URL, target, is folder) for the items to paste, and
-        errors for the rest (see ``_paste``)."""
-        plans, errors = [], []
-        for file in files:
-            path, url = file.get("path"), file.get("url")
-            name = _basename(path if same_filesystem else url)
-            try:
-                name = _safe_name(name)
-                target = _join(dest, name)
-                if same_filesystem:
-                    is_folder = self._isdir(path)
-                else:
-                    source_fs, source_path = url_to_fs(url)
-                    is_folder = self._isdir(source_path, fs=source_fs)
-            except Exception as exc:
-                errors.append(f"{name}: {exc}")
-                continue
-            if same_filesystem and _norm(path) == _norm(target):
-                errors.append(f"{name}: already in that folder")
-            elif is_folder and not folders:
-                errors.append(
-                    f"{name}: folders are not pasted (turn on unsafe mode first)"
-                )
-            elif is_folder and same_filesystem and _inside(dest, path):
-                errors.append(f"{name}: a folder cannot be pasted into itself")
-            elif is_folder and self._exists(target):
-                # Folders are never merged into, or replace, what is there.
-                errors.append(f"{name}: already exists in that folder")
-            else:
-                plans.append((path if same_filesystem else url, target, is_folder))
-        return plans, errors
+        if_exists: str = "ask",
+        folders: bool = False,
+    ) -> dict[str, Any]:
+        """Copy local files into folder ``dest``, now (see ``FileTasks.upload``)."""
+        return self._run_now(self._tasks().upload(sources, dest, if_exists, folders))
+
+    # --- Upload from the user's computer: the browser sends files in pieces
+    # (see incoming.py); the last one starts a job copying the whole file ---
+
+    def _upload_check(self, dest: str, names: list[str]) -> dict[str, Any]:
+        """Which of ``names`` already exist in ``dest``."""
+        return {
+            "conflicts": [
+                n for n in names if self._exists(_paths.join(dest, _paths.safe_name(n)))
+            ]
+        }
+
+    def _upload_chunk(
+        self, content: dict[str, Any], buffers: list[Any]
+    ) -> dict[str, Any]:
+        """Add one piece of a file; the last one starts a job copying the file
+        to the storage: {"job": id}. The frontend stops sending a file after
+        an error ({"error": ...})."""
+        upload_id = content["id"]
+        try:
+            target = _paths.join(content["dest"], _paths.safe_name(content["name"]))
+            piece = bytes(buffers[0]) if buffers else None
+            self._incoming.add(upload_id, piece, target, self._fs)
+            if not content["last"]:
+                return {}
+            incoming = self._incoming.pop(upload_id)
+        except Exception as exc:
+            self._incoming.discard(upload_id)
+            return {"error": f"{_paths.basename(content['name'])}: {exc}"}
+        tasks = FileTasks(incoming.fs, self._root, self._operations)
+        return self._start(tasks.upload_file(incoming.path, incoming.target))
 
     # --- Create a folder: "Create a folder" in the right-click menu ---
 
@@ -1308,18 +1116,19 @@ class StorageExplorer(anywidget.AnyWidget):
             return {"error": f"{type(exc).__name__}: {exc}"}
 
     def _create_folder(self, dest: str, name: str) -> dict[str, Any]:
-        """Create folder ``name`` (a name, not a path) in folder ``dest``, with ``_mkdir``.
+        """Create folder ``name`` (a name, not a path) in folder ``dest``, with
+        the operations' ``mkdir`` (quick: not a job).
 
         Returns {"created": name}, with "hidden": True when the new folder does
         not show, as on object stores (S3, Google Cloud Storage), which have no
         empty folders; or {"error": reason}.
         """
-        if (error := _folder_name_error(name)) is not None:
+        if (error := _paths.folder_name_error(name)) is not None:
             return {"error": error}
-        path = _join(dest, name)
+        path = _paths.join(dest, name)
         if self._exists(path):
             return {"error": f"{name} already exists"}  # the dialog shows where
-        self._mkdir(path)
+        self._operations.mkdir(self._fs, path)
         self._refresh_dir(dest)
         return {"created": name, "hidden": not self._isdir(path)}
 
@@ -1332,14 +1141,13 @@ class StorageExplorer(anywidget.AnyWidget):
         """Answer "download_to_jupyterlab": copy into ``download_to_jupyterlab_path``."""
         if not self._download_to_jupyterlab_path:
             return {"errors": ["downloading to JupyterLab is not allowed"]}
-        try:
-            return self._copy_to_folder(
+        return self._plan_request(
+            lambda: self._tasks().download(
                 content["paths"],
                 self._download_to_jupyterlab_path,
                 content.get("if_exists", "ask"),
             )
-        except Exception as exc:
-            return {"errors": [f"{type(exc).__name__}: {exc}"]}
+        )
 
     def _download_to_server_request(self, content: dict[str, Any]) -> dict[str, Any]:
         """Answer "download_to_server": ``dest`` is relative to the server's folder ``root``."""
@@ -1347,68 +1155,28 @@ class StorageExplorer(anywidget.AnyWidget):
             os.path.expanduser(content["root"]),
             *filter(None, content["dest"].split("/")),
         )
-        try:
-            return self._copy_to_folder(
+        return self._plan_request(
+            lambda: self._tasks().download(
                 content["paths"], dest, content.get("if_exists", "ask")
             )
-        except Exception as exc:
-            return {"errors": [f"{type(exc).__name__}: {exc}"]}
+        )
 
     def _copy_to_folder(
         self, paths: Sequence[str], dest: str, if_exists: str = "ask"
-    ) -> dict[str, list[str]]:
-        """Copy files of the filesystem shown into ``dest``, a folder on the kernel's machine.
-
-        ``dest`` is ``download_to_jupyterlab_path`` ("Download to JupyterLab"), or
-        the folder of JupyterLab's file browser files were dropped on (the
-        launcher's JupyterLab extension handles such drops), which the kernel
-        reaches when it runs where the Jupyter server does. ``if_exists`` as
-        for ``_move``. Folders are not copied.
-        """
-        if not os.path.isdir(dest):
-            # e.g. the kernel runs elsewhere than the Jupyter server (a remote kernel).
-            raise ValueError(f"{dest}: folder not found from the kernel")
-        files, errors = [], []
-        for path in paths:
-            name = _safe_name(_basename(path))
-            if self._isdir(path):
-                errors.append(f"{name}: folders are not downloaded")
-            else:
-                files.append((path, os.path.join(dest, name)))
-        existing = {target for _, target in files if os.path.exists(target)}
-        if if_exists == "ask" and existing:
-            return {"conflicts": sorted(os.path.basename(t) for t in existing)}
-        copied, skipped = [], []
-        for source, target in files:
-            name = os.path.basename(target)
-            if target in existing and if_exists == "skip":
-                skipped.append(name)
-                continue
-            # Into a temporary file next to the target first, so a failed copy
-            # neither leaves a partial file nor spoils the file it would replace.
-            handle, temp_path = tempfile.mkstemp(prefix=".jse-download-", dir=dest)
-            os.close(handle)
-            try:
-                self._get_file(source, temp_path)
-                os.replace(temp_path, target)
-                copied.append(name)
-            except Exception as exc:
-                errors.append(f"{name}: {exc}")
-            finally:
-                with contextlib.suppress(FileNotFoundError):
-                    os.unlink(temp_path)
-        return {"copied": copied, "skipped": skipped, "errors": errors}
+    ) -> dict[str, Any]:
+        """Copy files into ``dest`` on the kernel's machine, now (see ``FileTasks.download``)."""
+        return self._run_now(self._tasks().download(paths, dest, if_exists))
 
     # --- File operations: wrappers of fsspec calls on the filesystem shown
-    # (``self._fs``); the methods above go through them, never through
-    # fsspec directly. Override _mv, _cp or _rm to change how files are
-    # moved, copied or deleted ---
+    # (``self._fs``) for listing, reading and writing; the methods above go
+    # through them, never through fsspec directly. Moving, copying and
+    # deleting go through the operations objects instead (see operations.py) ---
 
     def _ls(self, path: str) -> list[dict[str, Any]]:
         """The items in directory ``path`` (fsspec's ``ls(detail=True)`` entries)."""
         infos = self._fs.ls(path, detail=True)
         # Some backends include the directory itself in its own listing.
-        return [i for i in infos if _norm(i["name"]) != _norm(path)]
+        return [i for i in infos if _paths.norm(i["name"]) != _paths.norm(path)]
 
     def _info(self, path: str) -> dict[str, Any]:
         return self._fs.info(path)
@@ -1431,10 +1199,6 @@ class StorageExplorer(anywidget.AnyWidget):
         self._fs.pipe_file(path, data)
         self._fs.invalidate_cache(path)
 
-    def _get_file(self, path: str, local_path: str) -> None:
-        """Copy the file at ``path`` to ``local_path`` on the kernel's machine; streams, so any size works."""
-        self._fs.get_file(path, local_path)
-
     def _put_file(
         self, local_path: str, path: str, fs: AbstractFileSystem | None = None
     ) -> None:
@@ -1448,93 +1212,3 @@ class StorageExplorer(anywidget.AnyWidget):
     def _invalidate_cache(self, path: str | None = None) -> None:
         """Forget cached listings (of ``path``, else all), so changes made elsewhere show."""
         self._fs.invalidate_cache(path)
-
-    def _makedirs(self, path: str) -> None:
-        """Create folder ``path`` and its parents if missing (local disks need
-        them before writing a file; object stores have no folders to create)."""
-        self._fs.makedirs(path, exist_ok=True)
-
-    def _mkdir(self, path: str) -> None:
-        """Create the new folder ``path`` ("Create a folder"); its parent exists.
-
-        Override in a subclass to change how folders are created, e.g. to put a
-        placeholder file in it on an object store, where empty folders do not
-        exist.
-        """
-        self._fs.makedirs(path, exist_ok=False)
-
-    def _mv(self, source: str, target: str, recursive: bool = False) -> None:
-        """Move one file, or with ``recursive`` a folder with everything in it,
-        to path ``target``, which does not exist (an existing file is removed
-        first when overwriting).
-
-        Override in a subclass to change how files are moved, e.g. to log
-        moves, or to copy and delete on storage that cannot rename.
-        """
-        if recursive:
-            self._fs.mv(source, target, recursive=True)
-        else:
-            self._fs.mv(source, target)
-
-    def _cp(self, source: str, target: str) -> None:
-        """Copy one file within the filesystem shown to path ``target``; folders
-        are copied with it file by file (see ``_copy_folder``).
-
-        Override in a subclass to change how files are copied, as ``_mv``.
-        """
-        self._fs.cp_file(source, target)
-
-    def _rm(self, path: str, recursive: bool = False) -> None:
-        """Delete one file, or with ``recursive`` a folder with everything in it:
-        for "Delete", and a file a move or paste replaces.
-
-        Override in a subclass to change how files are deleted, e.g. to log
-        deletions, or to move files to a trash folder instead.
-        """
-        if recursive:
-            self._fs.rm(path, recursive=True)
-        else:
-            self._fs.rm_file(path)
-
-    def _copy_folder(
-        self, source: str, target: str, source_fs: AbstractFileSystem | None = None
-    ) -> None:
-        """Copy folder ``source`` with everything in it to path ``target``, file
-        by file: within the filesystem shown with ``_cp``, or from ``source_fs``
-        (another storage) through local temporary files (see ``_copy_from``).
-        Empty subfolders are not copied (object stores have none)."""
-        self._makedirs(target)
-        made = {target}
-        for path in (source_fs or self._fs).find(source):
-            relative = _norm(path)[len(_norm(source)) :].lstrip("/")
-            dest = _join(target, relative)
-            parent = _parent(dest, self._fs)
-            if parent not in made:
-                self._makedirs(parent)
-                made.add(parent)
-            if source_fs is None:
-                self._cp(path, dest)
-            else:
-                self._copy_from(source_fs, path, dest)
-
-    def _copy_from(self, source_fs: AbstractFileSystem, path: str, target: str) -> None:
-        """Copy file ``path`` of another filesystem to path ``target`` of the one
-        shown, through a local temporary file, so a failed copy never leaves a
-        partial file in the storage."""
-        handle, temp_path = tempfile.mkstemp(prefix="jse-paste-")
-        os.close(handle)
-        try:
-            source_fs.get_file(path, temp_path)
-            self._put_file(temp_path, target)
-        finally:
-            with contextlib.suppress(FileNotFoundError):
-                os.unlink(temp_path)
-
-    def _copy_from_url(self, url: str, target: str) -> None:
-        """Copy the file or folder at ``url`` (any storage fsspec reads, with the
-        environment's credentials) to path ``target`` of the filesystem shown."""
-        source_fs, source_path = url_to_fs(url)
-        if self._isdir(source_path, fs=source_fs):
-            self._copy_folder(source_path, target, source_fs=source_fs)
-        else:
-            self._copy_from(source_fs, source_path, target)

@@ -682,3 +682,79 @@
     transform: rotate(360deg);
   }
 }
+/* Jobs running in the kernel (moves, deletions, pastes, downloads), above the
+   status bar: per job, its title, counts and Cancel, and a progress bar. */
+.jse-jobs {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 8px;
+  border-top: 1px solid var(--jse-border);
+  background: var(--jse-bg-alt);
+}
+
+.jse-jobs[hidden] {
+  display: none;
+}
+
+.jse-job-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.jse-job-title {
+  flex: none;
+  max-width: 50%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.jse-job-detail {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--jse-fg-muted);
+  font-size: 0.9em;
+}
+
+.jse-job-cancel {
+  flex: none;
+}
+
+.jse-job-bar {
+  position: relative;
+  height: 4px;
+  margin-top: 3px;
+  border-radius: 2px;
+  background: var(--jse-border);
+  overflow: hidden;
+}
+
+.jse-job-fill {
+  width: 0;
+  height: 100%;
+  background: var(--jse-accent);
+  transition: width 0.2s;
+}
+
+/* Totals not known yet (counting files): a stripe moving across. */
+.jse-job-bar.jse-indeterminate .jse-job-fill {
+  position: absolute;
+  width: 30%;
+  animation: jse-job-sweep 1.2s ease-in-out infinite;
+}
+
+@keyframes jse-job-sweep {
+  from {
+    left: -30%;
+  }
+  to {
+    left: 100%;
+  }
+}

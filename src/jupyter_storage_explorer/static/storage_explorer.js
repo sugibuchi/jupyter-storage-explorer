@@ -319,10 +319,14 @@ function render({ model, el }) {
   // Keep JupyterLab's notebook shortcuts (e.g. "dd" deletes a cell) from
   // firing while keys are pressed in the widget.
   el.dataset.lmSuppressShortcuts = "true";
+  // Jobs running in the kernel (moves, deletions, pastes, downloads), one row
+  // each, above the status bar; see "Jobs" below.
+  const jobsEl = h("div", { className: "jse-jobs", hidden: true });
   el.replaceChildren(
     h("div", { className: "jse-toolbar" }, fsSelect, upBtn, refreshBtn, pathEl, previewBtn),
     panesEl,
     previewEl,
+    jobsEl,
     statusBarEl,
     grip,
     dialogEl,
@@ -359,6 +363,104 @@ function render({ model, el }) {
     } finally {
       busyEnd();
     }
+  }
+
+  // --- Jobs: moves, deletions, pastes and downloads run in the kernel's
+  // background (jobs.py). A request starting one is answered {"job": id};
+  // the kernel then sends {"type": "job", id, state, counts...} as it runs,
+  // and its result when it ends. The widget stays usable meanwhile ---
+
+  // id -> {row, parts, waiters}; finished jobs' last messages are kept briefly
+  // in `ended`, in case one ends before its request's reply is handled.
+  const jobs = new Map();
+  const ended = new Map();
+  const FINAL_STATES = new Set(["done", "failed", "cancelled"]);
+
+  function jobRow(id) {
+    const title = h("span", { className: "jse-job-title" });
+    const cancel = h("button", { className: "jse-btn jse-job-cancel", textContent: "Cancel", title: "Stop after the file being worked on" });
+    cancel.addEventListener("click", () => {
+      cancel.disabled = true;
+      model.send({ type: "job_cancel", id });
+    });
+    const fill = h("div", { className: "jse-job-fill" });
+    const bar = h("div", { className: "jse-job-bar" }, fill);
+    const detail = h("span", { className: "jse-job-detail" });
+    const row = h("div", { className: "jse-job" }, h("div", { className: "jse-job-head" }, title, detail, cancel), bar);
+    return { row, parts: { title, detail, cancel, bar, fill }, waiters: [] };
+  }
+
+  // e.g. "12 / 340 files · 45 MB / 1.2 GB · a.csv"; "Counting files…".
+  function jobDetail(job) {
+    if (job.cancelling) return "Cancelling…";
+    if (job.state === "queued") return "Waiting…";
+    if (!job.files_total) return "Counting files…";
+    const parts = [`${job.files_done.toLocaleString()} / ${job.files_total.toLocaleString()} files`];
+    if (job.bytes_total) parts.push(`${formatSize(job.bytes_done)} / ${formatSize(job.bytes_total)}`);
+    if (job.current) parts.push(job.current);
+    return parts.join(" · ");
+  }
+
+  function onJob(job) {
+    let entry = jobs.get(job.id);
+    if (FINAL_STATES.has(job.state)) {
+      entry?.row.remove();
+      jobs.delete(job.id);
+      jobsEl.hidden = jobs.size === 0;
+      if (entry) entry.waiters.forEach((resolve) => resolve(job));
+      else {
+        ended.set(job.id, job);
+        setTimeout(() => ended.delete(job.id), 60_000);
+      }
+      return;
+    }
+    if (!entry) {
+      entry = jobRow(job.id);
+      jobs.set(job.id, entry);
+    }
+    if (!entry.row.isConnected) {
+      jobsEl.append(entry.row);
+      jobsEl.hidden = false;
+    }
+    const { title, detail, cancel, bar, fill } = entry.parts;
+    title.textContent = title.title = job.title;
+    detail.textContent = detail.title = jobDetail(job);
+    cancel.disabled = cancel.disabled || job.cancelling;
+    // By bytes when known, else by files; unknown yet: an indeterminate bar.
+    const fraction = job.bytes_total ? job.bytes_done / job.bytes_total : job.files_total ? job.files_done / job.files_total : null;
+    bar.classList.toggle("jse-indeterminate", fraction == null);
+    fill.style.width = fraction == null ? "" : `${Math.min(100, fraction * 100).toFixed(1)}%`;
+  }
+
+  // The result of a request that may have started a job: for {"job": id},
+  // waits for it to end and returns its result with "state" and "error";
+  // other replies (e.g. {"conflicts": [...]}) as they are.
+  function jobResult(reply) {
+    if (!reply.job) return Promise.resolve(reply);
+    const asResult = (job) => ({ ...(job.result ?? {}), state: job.state, error: job.error });
+    const done = ended.get(reply.job);
+    if (done) return Promise.resolve(asResult(done));
+    return new Promise((resolve) => {
+      let entry = jobs.get(reply.job);
+      if (!entry) {
+        // Its first message has not arrived yet.
+        entry = jobRow(reply.job);
+        jobs.set(reply.job, entry);
+      }
+      entry.waiters.push((job) => resolve(asResult(job)));
+    });
+  }
+
+  // The end of a job's message, after `parts` (e.g. ["Pasted a.csv"]): why it
+  // failed, or that it was cancelled ("Paste cancelled" with nothing done,
+  // what = "Paste") and the item it left incomplete (e.g. a folder partly
+  // copied).
+  function jobOutcome(result, parts, what) {
+    if (result.state === "failed") return [`Failed: ${result.error}`];
+    if (!(result.cancelled || result.state === "cancelled")) return [];
+    const out = [parts.length ? "cancelled" : `${what} cancelled`];
+    if (result.incomplete) out.push(`${result.incomplete} left incomplete`);
+    return out;
   }
 
   // --- "Unsafe mode": while on, risky operations are offered (today:
@@ -503,8 +605,8 @@ function render({ model, el }) {
     else if (msg.type === "edit_open") onEditOpen(msg);
     else if (msg.type === "edit_save") onEditSave(msg);
     else if (msg.type === "download") onDownload(msg, buffers);
-    else if (msg.type === "upload") onUpload(msg);
     else if (msg.type === "reply") onReply(msg);
+    else if (msg.type === "job") onJob(msg);
   }
 
   // "a.csv", "a.csv and b.csv", or "3 files: a.csv, b.csv, c.csv" (long lists shortened).
@@ -522,7 +624,6 @@ function render({ model, el }) {
   // the Jupyter server runs in.
   const CONTENTS_MIME = "application/x-jupyter-icontents";
   let dropHighlight = null;
-  let uploadRequest = null; // {root, paths, dest} awaiting the kernel's reply
 
   // Where JupyterLab's paths are relative to (the server's folder on disk),
   // from the configuration JupyterLab puts in every page.
@@ -612,17 +713,20 @@ function render({ model, el }) {
     );
   }
 
-  function uploadSummary(copied, skipped, errors) {
+  // `result`: a job's result, for its "cancelled" or failure (see jobOutcome).
+  function uploadSummary(copied, skipped, errors, result = {}) {
     const parts = [];
-    if (copied.length) parts.push(`Uploaded ${copied.length === 1 ? copied[0] : `${copied.length} files`}`);
+    if (copied.length) parts.push(`Uploaded ${copied.length === 1 ? copied[0] : `${copied.length} items`}`);
     if (skipped.length) parts.push(`skipped ${skipped.length} existing`);
     parts.push(...errors.map((e) => `Failed: ${e}`));
+    parts.push(...jobOutcome(result, parts, "Upload"));
     flash(parts.join("; ") || "Nothing uploaded");
   }
 
-  // From JupyterLab's file browser: the kernel copies the files itself.
+  // From JupyterLab's file browser: the kernel copies the files (and, in
+  // unsafe mode, folders) itself, as a job.
   async function confirmUpload(paths, dest) {
-    takeUnsafe(); // an operation, though not on folders
+    const folders = takeUnsafe();
     const root = serverRoot();
     if (root == null) {
       flash("Cannot upload: JupyterLab did not say where its files are");
@@ -630,28 +734,19 @@ function render({ model, el }) {
     }
     const names = paths.map((p) => p.slice(p.lastIndexOf("/") + 1));
     if (!(await askUpload(names, dest))) return;
-    uploadRequest = { root, paths, dest };
-    // Blocked until the kernel's "upload" message answers (onUpload).
-    busyStart(`Uploading ${describeFiles(names)}…`);
-    model.send({ type: "upload", ...uploadRequest, if_exists: "ask" });
-  }
-
-  async function onUpload(msg) {
-    if (uploadRequest?.dest !== msg.dest) return;
-    busyEnd();
-    if (msg.conflicts) {
-      const choice = await askConflicts(msg.conflicts, msg.dest);
+    const content = { type: "upload", root, paths, dest, unsafe: folders };
+    const text = `Uploading ${describeFiles(names)}…`;
+    let reply = await busy(text, () => request({ ...content, if_exists: "ask" }));
+    if (reply.conflicts) {
+      const choice = await askConflicts(reply.conflicts, dest);
       if (!choice) {
-        uploadRequest = null;
         flash("Upload cancelled");
         return;
       }
-      busyStart("Uploading…");
-      model.send({ type: "upload", ...uploadRequest, if_exists: choice });
-      return;
+      reply = await busy(text, () => request({ ...content, if_exists: choice }));
     }
-    uploadRequest = null;
-    uploadSummary(msg.copied ?? [], msg.skipped ?? [], msg.errors ?? []);
+    const result = await jobResult(reply);
+    uploadSummary(result.copied ?? [], result.skipped ?? [], result.errors ?? [], result);
   }
 
   // --- Upload from the computer (native drag and drop): the browser sends
@@ -723,6 +818,9 @@ function render({ model, el }) {
         }
       }
       // Blocked while the pieces are sent; the busy dialog shows the progress.
+      // After a file's last piece, the kernel copies it to the storage as a
+      // job, which goes on in the background once all pieces are sent.
+      const jobs = [];
       await busy("Uploading…", async () => {
         for (const [i, file] of toSend.entries()) {
           const id = `${Date.now()}-${i}`;
@@ -737,11 +835,16 @@ function render({ model, el }) {
               errors.push(reply.error);
               break;
             }
-            if (last) copied.push(file.name);
+            if (last) jobs.push(jobResult(reply));
           } while (offset < file.size);
         }
-        if (copied.length) await request({ type: "upload_done", dest });
       });
+      for (const result of await Promise.all(jobs)) {
+        copied.push(...(result.copied ?? []));
+        errors.push(...(result.errors ?? []));
+        if (result.state === "failed") errors.push(result.error);
+        else if (result.state === "cancelled") errors.push("cancelled");
+      }
     } finally {
       localUploadBusy = false;
     }
@@ -854,13 +957,17 @@ function render({ model, el }) {
       names,
       // `dest`: a folder relative to the Jupyter server's, as JupyterLab names
       // it. Resolves with the kernel's reply: {conflicts} if files exist there
-      // and `ifExists` is "ask", else {copied, skipped, errors} (file names).
+      // and `ifExists` is "ask", else, once the download (a job) has ended,
+      // {copied, skipped, errors} (file names; a cancel or failure is an error).
       async download(dest, ifExists = "ask") {
         const root = serverRoot();
         if (root == null) return { errors: ["JupyterLab did not say where its files are"] };
-        return busy(`Downloading ${describeFiles(names)} to JupyterLab…`, () =>
+        const reply = await busy(`Downloading ${describeFiles(names)} to JupyterLab…`, () =>
           request({ type: "download_to_server", paths, root, dest, if_exists: ifExists }),
         );
+        const result = await jobResult(reply);
+        const outcome = jobOutcome(result, result.copied ?? [], "Download");
+        return { ...result, errors: [...(result.errors ?? []), ...outcome] };
       },
     };
     // Replaced by the next drag; the extension only reads it on a drop of this type.
@@ -895,11 +1002,13 @@ function render({ model, el }) {
       }
       reply = await busy(text, () => request({ ...content, if_exists: choice }));
     }
-    const { moved = [], skipped = [], errors = [] } = reply;
+    const result = await jobResult(reply);
+    const { moved = [], skipped = [], errors = [] } = result;
     const parts = [];
     if (moved.length) parts.push(`Moved ${moved.length === 1 ? moved[0] : `${moved.length} items`}`);
     if (skipped.length) parts.push(`skipped ${skipped.length} existing`);
     parts.push(...errors.map((e) => `Failed: ${e}`));
+    parts.push(...jobOutcome(result, parts, "Move"));
     flash(parts.join("; ") || "Nothing moved");
   }
 
@@ -925,12 +1034,13 @@ function render({ model, el }) {
       ],
     );
     if (!ok) return;
-    const { deleted = [], errors = [] } = await busy(`Deleting ${describeFiles(names)}…`, () =>
-      request({ type: "delete", paths, unsafe: folders }),
-    );
+    const reply = await busy(`Deleting ${describeFiles(names)}…`, () => request({ type: "delete", paths, unsafe: folders }));
+    const result = await jobResult(reply);
+    const { deleted = [], errors = [] } = result;
     const parts = [];
     if (deleted.length) parts.push(`Deleted ${deleted.length === 1 ? deleted[0] : `${deleted.length} items`}`);
     parts.push(...errors.map((e) => `Failed: ${e}`));
+    parts.push(...jobOutcome(result, parts, "Delete"));
     flash(parts.join("; ") || "Nothing deleted");
   }
 
@@ -1013,11 +1123,13 @@ function render({ model, el }) {
       }
       reply = await busy(text, () => request({ ...content, if_exists: choice }));
     }
-    const { pasted = [], skipped = [], errors = [] } = reply;
+    const result = await jobResult(reply);
+    const { pasted = [], skipped = [], errors = [] } = result;
     const parts = [];
     if (pasted.length) parts.push(`Pasted ${pasted.length === 1 ? pasted[0] : `${pasted.length} items`}`);
     if (skipped.length) parts.push(`skipped ${skipped.length} existing`);
     parts.push(...errors.map((e) => `Failed: ${e}`));
+    parts.push(...jobOutcome(result, parts, "Paste"));
     flash(parts.join("; ") || "Nothing pasted");
   }
 
@@ -1149,11 +1261,13 @@ function render({ model, el }) {
       }
       reply = await busy(text, () => request({ type: "download_to_jupyterlab", paths, if_exists: choice }));
     }
-    const { copied = [], skipped = [], errors = [] } = reply;
+    const result = await jobResult(reply);
+    const { copied = [], skipped = [], errors = [] } = result;
     const parts = [];
     if (copied.length) parts.push(`Downloaded ${describeFiles(copied)} to ${dest}`);
     if (skipped.length) parts.push(`skipped ${skipped.length} existing`);
     parts.push(...errors.map((e) => `Failed: ${e}`));
+    parts.push(...jobOutcome(result, parts, "Download"));
     flash(parts.join("; ") || "Nothing downloaded");
   }
 

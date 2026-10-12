@@ -74,11 +74,30 @@ break sync.
 `abfs://container@account.dfs.core.windows.net/...` for Azure); subclasses can override `StorageExplorer._url`.
 
 **File operations.** `StorageExplorer`'s methods are grouped in sections (UI logic first, one section per operation),
-ending with a *File operations* block: the only methods that call fsspec on the filesystem shown (`self._fs`), e.g.
-`_ls`, `_info`, `_exists`, `_isdir`, `_read_bytes`, `_put_file`, `_makedirs`. Other methods go through them, never
-through fsspec directly. `_mv`, `_cp`, `_rm` and `_mkdir` are hooks subclasses may override (e.g. a trash folder).
-Operations that copy into storage go through a temporary file, so a failure leaves no partial file. Object stores (S3,
+ending with a *File operations* block: the only methods that call fsspec on the filesystem shown (`self._fs`) for
+listing, reading and writing, e.g. `_ls`, `_info`, `_exists`, `_isdir`, `_read_bytes`, `_put_file`. Other methods go
+through them, never through fsspec directly. Moving, copying, deleting, downloading and creating folders go through
+the operations objects instead (`operations.py`, the `operations=` argument): a chain of `FileSystemOperations`, each
+method tried in order until one does not raise `FileSystemOperations.NotSupported` (its own exception, so that a
+library's `NotImplementedError` is reported as an error). `OperationChain` adds nothing; the defaults are
+`StorageExplorer.default_operations()`: `AsyncFsspecOperations` (async filesystems such as s3fs: their coroutines, many
+files at a time; folder moves left to the next) then `FsspecOperations` (walking folders itself, to report progress
+file by file). Tests use fsspec's `AsyncFileSystemWrapper` around a memory filesystem as an
+async one. Copies into storage go through a temporary file, so a failure leaves no partial file. Object stores (S3,
 GCS) have no empty folders, which matters for creating folders.
+
+**Jobs.** Move, delete, paste, uploads (from JupyterLab's file browser, and the storage half of uploads from the
+computer) and both downloads to JupyterLab run in the background (`jobs.py`). Each is planned by a `FileTasks` method
+(`file_tasks.py`, no widget involved) on the main thread: checks, conflicts to ask about (returned as a dict), else a
+`Task` whose `work(progress)` runs in the `JobRunner`'s worker thread (one job at a time) and records what it changed
+(`moved`, `removed`, `changed` folders). `StorageExplorer` only answers requests (`_plan_request`, `_start`) and,
+once a job has ended, shows those changes (`_finish`, on the main thread). Work functions must not touch traits or
+`send`; they report to the `Progress` and stop when `progress.check()` raises `OperationCancelled`. A drop from
+JupyterLab's file browser is a copy from the kernel's local disk (`FileTasks.upload`); files from the computer arrive in
+pieces (`incoming.py`), and the last piece starts `FileTasks.upload_file`. Path helpers are in `_paths.py`. Requests answer `{"job": id}`; the kernel sends
+`{"type": "job", ...}` as the job runs and with its result when it ends, and the frontend's `jobResult()` waits for
+that. The main thread is reached through the kernel's asyncio loop (`call_soon_threadsafe`); without a running loop
+(tests), jobs run synchronously, so tests see the result at once.
 
 **Unsafe mode.** Folder operations (move, copy and paste, delete) are offered only while the "Unsafe mode" slider in
 the status bar is on (trait `_unsafe_mode`). In the frontend, every operation calls `takeUnsafe()` as it starts, which
@@ -87,7 +106,7 @@ folders without it (the methods' `folders=` parameter).
 
 **Between explorers and with JupyterLab.** Drag data can only be text, so the frontend shares objects page-wide under
 `Symbol.for(...)` keys on `globalThis`: `"jupyter-storage-explorer.clipboard"` (Copy, for Paste in any explorer:
-pasted within the same explorer and filesystem by path with `_cp`, otherwise from the URL) and
+pasted within the same explorer and filesystem by path, otherwise from the URL) and
 `"jupyter-storage-explorer.drag"` (the current file drag, with a `download` function, read by the launcher's
 `download.ts`).
 

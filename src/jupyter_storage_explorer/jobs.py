@@ -1,0 +1,173 @@
+"""Jobs: long file operations run in a worker thread, so the kernel stays free.
+
+A job's work (a function given a ``Progress``) runs in the ``JobRunner``'s
+thread; everything else about it runs on the kernel's main thread, where
+widget state may change: reporting its progress (``notify``) and finishing
+it (e.g. refreshing the file list). In a kernel, the main thread runs an
+asyncio loop, which worker threads hand functions to; without one (tests,
+scripts), jobs run synchronously instead.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import concurrent.futures
+import itertools
+import logging
+import threading
+import time
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any
+
+from jupyter_storage_explorer.operations import OperationCancelled, Progress
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+log = logging.getLogger(__name__)
+
+# How often a running job's progress is sent, at most (seconds).
+REPORT_INTERVAL = 0.2
+
+
+@dataclass(eq=False)
+class Job:
+    """One operation: "queued", then "running", then "done", "failed" or
+    "cancelled". ``result`` is what its work returned (e.g. {"moved": [...],
+    "errors": [...]}); ``error`` why it failed."""
+
+    id: str
+    kind: str
+    title: str
+    progress: Progress = field(default_factory=Progress)
+    state: str = "queued"
+    result: dict[str, Any] = field(default_factory=dict)
+    error: str = ""
+
+    @property
+    def finished(self) -> bool:
+        return self.state in ("done", "failed", "cancelled")
+
+    def snapshot(self) -> dict[str, Any]:
+        """The job as the frontend shows it."""
+        return {
+            "id": self.id,
+            "kind": self.kind,
+            "title": self.title,
+            "state": self.state,
+            "cancelling": self.progress.cancelled and not self.finished,
+            **self.progress.snapshot(),
+            "result": self.result if self.finished else None,
+            "error": self.error,
+        }
+
+
+class _Inline(concurrent.futures.Executor):
+    """Runs work at once, in the calling thread (no kernel loop to report to)."""
+
+    def submit(self, fn: Callable[..., Any], /, *args: Any, **kwargs: Any) -> Any:
+        future: concurrent.futures.Future[Any] = concurrent.futures.Future()
+        future.set_result(fn(*args, **kwargs))
+        return future
+
+
+class JobRunner:
+    """Runs jobs one at a time, in submission order.
+
+    ``notify(job)`` is called on the main thread whenever a job changes: at
+    most every ``REPORT_INTERVAL`` seconds while it runs, and when it starts
+    and ends.
+    """
+
+    def __init__(self, notify: Callable[[Job], None]) -> None:
+        self._notify = notify
+        self.jobs: dict[str, Job] = {}
+        self._ids = itertools.count(1)
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        if loop is not None:
+            self._main: Callable[[Callable[[], None]], Any] = loop.call_soon_threadsafe
+            self._executor: concurrent.futures.Executor = (
+                concurrent.futures.ThreadPoolExecutor(
+                    max_workers=1, thread_name_prefix="jse-job"
+                )
+            )
+        else:
+            self._main = lambda fn: fn()
+            self._executor = _Inline()
+
+    def submit(
+        self,
+        kind: str,
+        title: str,
+        work: Callable[[Progress], dict[str, Any]],
+        finish: Callable[[Job], None] | None = None,
+    ) -> Job:
+        """Queue ``work``; once it has ended (whatever the outcome), ``finish(job)``
+        runs on the main thread, before the final ``notify``."""
+        job = Job(id=f"job-{next(self._ids)}", kind=kind, title=title)
+        last = [0.0]
+        lock = threading.Lock()
+
+        def report() -> None:
+            # From the job's thread: send at most every REPORT_INTERVAL seconds.
+            now = time.monotonic()
+            with lock:
+                if now - last[0] < REPORT_INTERVAL:
+                    return
+                last[0] = now
+            self._main(lambda: self._notify_unless_finished(job))
+
+        job.progress = Progress(on_change=report)
+        self.jobs[job.id] = job
+        self._notify(job)
+        self._executor.submit(self._run, job, work, finish)
+        return job
+
+    def cancel(self, job_id: str) -> bool:
+        """Ask job ``job_id`` to stop; False if there is no such job (e.g. it has ended)."""
+        job = self.jobs.get(job_id)
+        if job is None:
+            return False
+        job.progress.cancel()
+        self._notify(job)
+        return True
+
+    def _notify_unless_finished(self, job: Job) -> None:
+        # A late progress report must not overwrite the final state.
+        if not job.finished:
+            self._notify(job)
+
+    def _run(
+        self,
+        job: Job,
+        work: Callable[[Progress], dict[str, Any]],
+        finish: Callable[[Job], None] | None,
+    ) -> None:
+        """In the job's thread: do the work, then finish on the main thread."""
+        if job.progress.cancelled:
+            job.state = "cancelled"  # cancelled while queued
+        else:
+            job.state = "running"
+            self._main(lambda: self._notify_unless_finished(job))
+            try:
+                job.result = work(job.progress) or {}
+                job.state = "cancelled" if job.result.get("cancelled") else "done"
+            except OperationCancelled:
+                job.state = "cancelled"
+            except Exception as exc:
+                log.exception("job %s (%s) failed", job.id, job.title)
+                job.state = "failed"
+                job.error = f"{type(exc).__name__}: {exc}"
+        self._main(lambda: self._end(job, finish))
+
+    def _end(self, job: Job, finish: Callable[[Job], None] | None) -> None:
+        if finish is not None:
+            try:
+                finish(job)
+            except Exception:
+                log.exception("finishing job %s (%s) failed", job.id, job.title)
+        self.jobs.pop(job.id, None)
+        self._notify(job)

@@ -8,9 +8,14 @@ import fsspec
 import polars as pl
 import pytest
 
-from jupyter_storage_explorer import StorageExplorer
+from jupyter_storage_explorer import StorageExplorer, _paths
+from jupyter_storage_explorer.incoming import format_size
+from jupyter_storage_explorer.operations import (
+    AsyncFsspecOperations,
+    FileSystemOperations,
+    FsspecOperations,
+)
 from jupyter_storage_explorer.query import QuerySettingsStore
-from jupyter_storage_explorer.storage_explorer import _format_size, _join, _safe_name
 
 
 class Explorer(StorageExplorer):
@@ -24,9 +29,27 @@ class Explorer(StorageExplorer):
         self._on_custom_msg(self, content, buffers)
 
     def request(self, content: dict[str, Any], buffers: Any = None) -> dict[str, Any]:
-        """Send a message as the frontend does; the last message sent back."""
+        """Send a message as the frontend does; the last message sent back.
+
+        For a request that started a job ({"job": id}), its result instead:
+        without a kernel loop, jobs run at once (see jobs.py), so the job has
+        ended by then.
+        """
         self.message(content, buffers)
-        return self.sent[-1][0]
+        reply = self.sent[-1][0]
+        if "job" in reply:
+            return {
+                **self.job(reply["job"])["result"],
+                "type": "reply",
+                "rid": reply.get("rid"),
+            }
+        return reply
+
+    def job(self, job_id: str) -> dict[str, Any]:
+        """The last message about job ``job_id``."""
+        return [
+            c for c, _ in self.sent if c.get("type") == "job" and c["id"] == job_id
+        ][-1]
 
 
 def make(*args: Any, **kwargs: Any) -> Explorer:
@@ -60,7 +83,7 @@ def entries(explorer: Explorer) -> list[dict[str, Any]]:
             "name": name,
             "path": listing["paths"][i]
             if listing["paths"] is not None
-            else _join(listing["dir"], name),
+            else _paths.join(listing["dir"], name),
             "type": "directory" if listing["is_dir"][i] else "file",
             "size": listing["sizes"][i],
             "mtime": listing["mtimes"][i],
@@ -788,6 +811,129 @@ class TestMove:
         assert self.move(mem_explorer, ["/other/b.txt"], "/other")["moved"] == []
 
 
+class TestJobs:
+    """Move, delete, paste and downloads run as jobs (see jobs.py); without a
+    kernel loop, at once."""
+
+    def test_job_messages(self, mem_explorer):
+        mem_explorer.message(
+            {"type": "move", "rid": 1, "paths": ["/data/a.csv"], "dest": "/other"}
+        )
+        reply = mem_explorer.sent[-1][0]
+        assert reply == {"type": "reply", "rid": 1, "job": reply["job"]}
+        states = [
+            c["state"] for c, _ in mem_explorer.sent if c.get("id") == reply["job"]
+        ]
+        assert states[0] == "queued" and states[-1] == "done"
+        final = mem_explorer.job(reply["job"])
+        assert final["title"] == "Moving a.csv to other"
+        assert final["result"] == {"moved": ["a.csv"], "skipped": [], "errors": []}
+        assert (final["files_total"], final["files_done"]) == (1, 1)
+
+    def test_nothing_to_do_needs_no_job(self, mem_explorer):
+        reply = mem_explorer.request(
+            {"type": "delete", "rid": 1, "paths": ["/data/table"]}
+        )
+        assert "job" not in reply
+        assert reply["deleted"] == []
+
+    def test_default_operations(self, memfs):
+        kinds = [type(o) for o in make("/", fs=memfs)._operations.operations]
+        assert kinds == [AsyncFsspecOperations, FsspecOperations]
+        # A list given is used as it is.
+        explorer = make("/", fs=memfs, operations=[FsspecOperations()])
+        assert [type(o) for o in explorer._operations.operations] == [FsspecOperations]
+
+    def test_operations_of_your_own(self, memfs):
+        """An operations object doing deletions its own way, fsspec the rest."""
+
+        class Trash(FileSystemOperations):
+            def delete(self, fs, path, progress):
+                fs.mv(path, "/trash/" + path.rsplit("/", 1)[-1])
+
+        memfs.pipe({"/d/a.txt": b"a", "/d/b.txt": b"b"})
+        explorer = make(
+            "/d", fs=memfs, operations=[Trash(), *StorageExplorer.default_operations()]
+        )
+        explorer.request({"type": "delete", "rid": 1, "paths": ["/d/a.txt"]})
+        assert memfs.cat_file("/trash/a.txt") == b"a"
+        explorer.request(
+            {"type": "move", "rid": 1, "paths": ["/d/b.txt"], "dest": "/trash"}
+        )
+        assert memfs.exists("/trash/b.txt")  # moved by FsspecOperations
+
+    def test_cancelled_midway(self, memfs):
+        """Cancelled after the first file: that one is pasted, the job says so."""
+
+        class CancelAfterOne(FileSystemOperations):
+            def copy(self, fs, source, target, progress):
+                fs.cp_file(source, target)
+                progress.cancel()
+
+        memfs.pipe({"/d/a.txt": b"a", "/d/b.txt": b"b", "/d/c.txt": b"c"})
+        explorer = make(
+            "/d",
+            fs=memfs,
+            operations=[CancelAfterOne(), *StorageExplorer.default_operations()],
+        )
+        explorer.message(
+            {
+                "type": "paste",
+                "rid": 1,
+                "explorer": explorer._explorer_id,
+                "filesystem": explorer._filesystem,
+                "files": [{"path": f"/d/{n}"} for n in ("a.txt", "b.txt", "c.txt")],
+                "dest": "/out",
+            }
+        )
+        final = explorer.job(explorer.sent[-1][0]["job"])
+        assert final["state"] == "cancelled"
+        assert final["result"] == {
+            "pasted": ["a.txt"],
+            "skipped": [],
+            "errors": [],
+            "cancelled": True,
+        }
+        assert memfs.find("/out") == ["/out/a.txt"]
+
+    def test_cancelled_inside_an_item(self, memfs):
+        """Cancelled while copying a folder: it is named as left incomplete."""
+
+        class CancelInside(FileSystemOperations):
+            def copy(self, fs, source, target, progress):
+                fs.makedirs(target, exist_ok=True)
+                progress.cancel()
+                progress.check()  # between two files of the folder
+
+        memfs.pipe({"/d/big/a.txt": b"a", "/d/big/b.txt": b"b"})
+        explorer = make(
+            "/d",
+            fs=memfs,
+            operations=[CancelInside(), *StorageExplorer.default_operations()],
+        )
+        reply = explorer.request(
+            {
+                "type": "paste",
+                "rid": 1,
+                "explorer": explorer._explorer_id,
+                "filesystem": explorer._filesystem,
+                "files": [{"path": "/d/big"}],
+                "dest": "/out",
+                "unsafe": True,
+            }
+        )
+        assert without_ids(reply) == {
+            "pasted": [],
+            "skipped": [],
+            "errors": [],
+            "cancelled": True,
+            "incomplete": "big",
+        }
+
+    def test_cancel_unknown_job(self, mem_explorer):
+        mem_explorer.message({"type": "job_cancel", "id": "job-99"})  # no error
+
+
 class TestUpload:
     def test_in_pieces(self, mem_explorer):
         check = mem_explorer.request(
@@ -809,7 +955,9 @@ class TestUpload:
         assert "error" not in mem_explorer.request(
             {**piece, "last": False}, [b"hello "]
         )
-        assert mem_explorer.request({**piece, "last": True}, [b"world"])["done"] is True
+        # The last piece starts a job copying the file to the storage.
+        last = mem_explorer.request({**piece, "last": True}, [b"world"])
+        assert last["copied"] == ["c.txt"]
         assert mem_explorer._fs.cat_file("/other/c.txt") == b"hello world"
 
     def test_too_large(self, memfs):
@@ -845,6 +993,7 @@ class TestUpload:
         (tmp_path / "sub").mkdir()
         content = {
             "type": "upload",
+            "rid": 1,
             "root": str(tmp_path),
             "paths": ["f.txt", "sub", "nope.txt"],
             "dest": "/other",
@@ -852,9 +1001,25 @@ class TestUpload:
         reply = mem_explorer.request(content)
         assert reply["copied"] == ["f.txt"]
         assert reply["errors"] == [
-            "sub: folders are not uploaded",
             "nope.txt: not found from the kernel",
+            "sub: folders are not uploaded (turn on unsafe mode first)",
         ]
+
+    def test_folders_from_jupyterlab_in_unsafe_mode(self, mem_explorer, tmp_path):
+        (tmp_path / "sub" / "deep").mkdir(parents=True)
+        (tmp_path / "sub" / "deep" / "g.txt").write_text("g", encoding="utf-8")
+        reply = mem_explorer.request(
+            {
+                "type": "upload",
+                "rid": 1,
+                "root": str(tmp_path),
+                "paths": ["sub"],
+                "dest": "/other",
+                "unsafe": True,
+            }
+        )
+        assert reply["copied"] == ["sub"]
+        assert mem_explorer._fs.cat_file("/other/sub/deep/g.txt") == b"g"
 
 
 class TestDownloadToServer:
@@ -930,14 +1095,14 @@ def test_vendor(mem_explorer):
 
 
 def test_safe_name():
-    assert _safe_name("a/b\\c.txt") == "c.txt"
+    assert _paths.safe_name("a/b\\c.txt") == "c.txt"
     with pytest.raises(ValueError):
-        _safe_name("..")
+        _paths.safe_name("..")
 
 
-def test_format_size():
-    assert _format_size(10 * 1024 * 1024) == "10 MB"
-    assert _format_size(1536) == "1.5 KB"
+def testformat_size():
+    assert format_size(10 * 1024 * 1024) == "10 MB"
+    assert format_size(1536) == "1.5 KB"
 
 
 def test_local_explorer_starts_in_the_folder(tmp_path):
