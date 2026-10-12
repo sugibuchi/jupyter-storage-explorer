@@ -134,85 +134,100 @@ def _section(preview: Preview) -> dict[str, Any]:
 class StorageExplorer(anywidget.AnyWidget):
     """Browse any fsspec-supported storage with a directory tree and a file list.
 
-    Double-clicking a file (or the Preview button, or Preview in the
-    right-click menu) opens a preview panel below the list. "Python code" in
-    the right-click menu shows how to load it in the notebook, "Edit"
-    opens text files in an editor that saves back to the storage, "Download
-    to local" saves the selected files (not folders) in the browser, and
-    "Download to JupyterLab" copies them into a folder of the Jupyter server.
-    "Copy" and "Paste" copy files into a folder, also between explorers (see
-    ``_paste_task``), and "Delete" deletes files. Files
-    dragged from JupyterLab's file browser or from the user's computer onto
-    the list or tree are uploaded after a confirmation, and files dragged
-    within the widget onto a folder are moved there. Folders
-    are moved, copied, pasted and deleted only in "Unsafe mode", turned on
-    in the status bar and off again by any operation.
+    Double-clicking a file (or Preview) opens a preview below the list;
+    tables open in a data browser ("Query data"). The right-click menu offers
+    "Python code" to load the data, "Edit" for text files, downloads, "Copy"
+    and "Paste" (also between explorers), "Delete" and "Create a folder".
+    Files dragged from JupyterLab's file browser or the user's computer are
+    uploaded; files dragged onto a folder are moved there. Folders are moved,
+    copied and deleted only in "Unsafe mode" (the slider in the status bar),
+    which any operation turns off again.
 
-    Moving, deleting, pasting and downloading to JupyterLab run in the
-    background, one at a time, with their progress shown and a button to
-    cancel them; the explorer stays usable meanwhile. They are done by
-    ``operations``, a list of ``FileSystemOperations`` objects (see
-    operations.py): the first that supports an operation for the filesystem
-    does it. By default ``default_operations()``: with fsspec, many files at
-    a time on asynchronous filesystems (e.g. s3fs). A list given replaces
-    it; put objects of your own before the defaults to do some operations
-    differently, e.g. server-side copies with a storage's own client, or
-    deleting into a trash folder::
+    Moving, deleting, pasting, uploading and downloading to JupyterLab run in
+    the background, one at a time, with their progress and a Cancel button;
+    the explorer stays usable meanwhile.
 
-        StorageExplorer(url, operations=[MyOps(), *StorageExplorer.default_operations()])
+    Parameters
+    ----------
+    path : str, optional
+        Where to start: a URL or path fsspec understands, e.g.
+        ``"s3://my-bucket/data"``; with ``fs``, a path within that filesystem.
+        Default: the current folder (or the top of ``fs``).
+    fs : AbstractFileSystem, optional
+        An existing fsspec filesystem to browse, instead of one made from
+        ``path`` and ``storage_options``.
+    filesystems : mapping of str to AbstractFileSystem or str, optional
+        Several storages, by name, chosen with a drop-down in the widget; each
+        remembers its folder while another is shown. Values are filesystems
+        (starting at their top level; wrap one in fsspec's ``DirFileSystem``
+        to start in a subfolder) or URLs (starting at that path). Cannot be
+        combined with ``path``, ``fs`` or storage options.
+    height : str, default "400px"
+        Height of the tree and the list (CSS); the preview panel adds its own.
+        ``"fill"``: as tall as the container, e.g. the launcher's tab (not a
+        notebook cell, which has no height of its own).
+    formats : sequence of DataFormat, optional
+        The formats files are previewed and queried as, replacing
+        ``default_formats()``. Cannot be combined with ``format_options``.
+    format_options : mapping, optional
+        Keyword arguments to create every default format with, each using
+        those it takes, e.g. ``{"polars_storage_options": {...}}`` (see the
+        README's "Format options").
+    preview_limits : PreviewLimits, optional
+        How much of a file previews read and show (bytes, rows).
+    max_upload_bytes : int or None, default 10 MB
+        Largest file uploaded from the user's computer; None for no limit.
+        Files dragged from JupyterLab's file browser are not limited.
+    allow_download_to_local : bool, default True
+        Whether "Download to local" (files saved by the browser) is offered;
+        if not, the kernel refuses it too.
+    download_to_jupyterlab_path : str or None, default "."
+        The folder "Download to JupyterLab" copies into, on the kernel's
+        machine, e.g. ``"~/Downloads"``; relative paths and "~" are resolved
+        when the explorer is created. None leaves the item out.
+    query_settings : QuerySettingsStore, optional
+        Where the data browser remembers its settings per dataset. Default:
+        one shared by the explorers in the kernel, in memory; give one with a
+        path to keep them across restarts.
+    max_browser_items : int or None, default 20_000
+        Folders with more items are filtered, sorted and paged by the kernel
+        (see ``listing.Listing``), one page at a time, instead of by the
+        browser from the whole listing; None for never.
+    operations : sequence of FileSystemOperations, optional
+        How files are moved, copied, deleted, uploaded and downloaded: for
+        each operation, the first object that supports it does it (see
+        operations.py). Default: ``default_operations()``. A list given
+        replaces it, e.g. ``[MyOps(), *StorageExplorer.default_operations()]``
+        for server-side copies of your own.
+    **storage_options
+        Passed to fsspec with ``path``, e.g. ``anon=True`` or
+        ``profile="analytics"``.
 
-    Examples:
-        StorageExplorer()                          # current local directory
-        StorageExplorer("s3://my-bucket/data", anon=True)
-        StorageExplorer("memory://")
-        StorageExplorer("data", fs=my_filesystem)  # an existing fsspec filesystem
-        StorageExplorer(filesystems={"Lake": s3, "Local": "file:///home/me/data"})
+    Raises
+    ------
+    TypeError
+        If ``filesystems`` is combined with ``path``, ``fs`` or storage
+        options, or storage options with ``fs``.
+    ValueError
+        If ``filesystems`` is empty.
 
-    Extra keyword arguments are passed to fsspec as storage options.
-    When ``fs`` is given, ``path`` is a path within that filesystem instead.
+    See Also
+    --------
+    DataExplorer : The data browser alone, for a dataframe.
 
-    ``filesystems`` maps names to several filesystems, chosen with a
-    drop-down in the widget; each
-    remembers its current folder while another is shown. Values are fsspec
-    filesystems (starting at their top level; wrap one in fsspec's
-    ``DirFileSystem`` to start in a subfolder) or URLs (starting at that path).
-    It cannot be combined with ``path``, ``fs`` or storage options.
+    Notes
+    -----
+    ``folder_url`` and ``selected_urls`` give the locations of the folder
+    shown and of the selected items. To change how paths become locations
+    ("Copy URL", these properties, "Python code", data read by polars),
+    override ``_url`` in a subclass.
 
-    ``height`` is the height of the tree and file list; the preview panel adds
-    to it. ``height="fill"`` makes the explorer as tall as its container
-    instead, e.g. the tab opened from JupyterLab's launcher (not a notebook
-    cell, which has no height of its own). ``formats`` replaces the formats
-    that can be previewed (default: ``default_formats()``). Or
-    ``format_options`` gives keyword arguments to create every default
-    format with, each using those it takes, e.g.
-    ``{"polars_storage_options": {...}, "polars_delta_use_pyarrow": True}``;
-    it cannot be combined with ``formats``. ``max_upload_bytes`` limits the
-    size of files uploaded from the user's computer (default 10 MB; None for
-    no limit).
-
-    ``allow_download_to_local=False`` leaves "Download to local" out of the menu
-    (and the kernel refuses it). ``download_to_jupyterlab_path`` is the folder
-    "Download to JupyterLab" copies into, on the kernel's machine: by default
-    ".", the folder the explorer is launched in; e.g. "~/Downloads". Relative
-    paths and "~" are resolved when the explorer is created. None leaves the
-    item out.
-
-    The file list is filtered, sorted and paged in the browser, from the whole
-    listing of the folder shown. Folders of more than ``max_browser_items``
-    items (default 20,000; None for no limit) are handled by the kernel
-    instead, which sends one page at a time (see ``listing.Listing``): less to
-    send, but each change of filter, sort or page waits for the kernel.
-
-    The public interface is ``folder_url``, the URL of the folder shown, and
-    ``selected_urls``, those of the selected items. To change how paths
-    become locations ("Copy URL", these properties, "Python code" snippets,
-    data read by polars), override ``_url`` in a subclass.
-
-    With polars installed, tabular data (Parquet, Delta Lake, CSV, ...) opens
-    in a data browser ("Query data") with paging, sorting, filters and column
-    selection. Its settings are remembered per dataset by ``query_settings``
-    (a ``QuerySettingsStore``; by default shared by the explorers in the
-    kernel, in memory; give one with a path to keep them across restarts).
+    Examples
+    --------
+    >>> StorageExplorer()  # the current folder
+    >>> StorageExplorer("s3://my-bucket/data", anon=True)
+    >>> StorageExplorer("data", fs=my_filesystem)
+    >>> StorageExplorer(filesystems={"Lake": s3, "Local": "file:///home/me/data"})
     """
 
     _esm = _static.esm("storage_explorer")
@@ -347,10 +362,15 @@ class StorageExplorer(anywidget.AnyWidget):
 
     @staticmethod
     def default_operations() -> list[FileSystemOperations]:
-        """The file operations used unless ``operations`` is given: on
-        asynchronous fsspec filesystems (s3fs, gcsfs, adlfs, ...) many files
-        at a time (``AsyncFsspecOperations``), and everything else with fsspec
-        (``FsspecOperations``). New objects each time."""
+        """The file operations used unless ``operations`` is given.
+
+        Returns
+        -------
+        list of FileSystemOperations
+            New objects each time: ``AsyncFsspecOperations`` (asynchronous
+            fsspec filesystems such as s3fs, gcsfs and adlfs, many files at a
+            time), then ``FsspecOperations`` (everything else, with fsspec).
+        """
         return [AsyncFsspecOperations(), FsspecOperations()]
 
     @traitlets.validate("_filesystem")
@@ -393,16 +413,25 @@ class StorageExplorer(anywidget.AnyWidget):
 
     @property
     def folder_url(self) -> str | None:
-        """Location of the folder shown in the list (see ``_url``), usable with
-        ``fsspec.open``, pandas, etc.; None if it has no URL."""
+        """The location of the folder shown in the list (see ``_url``).
+
+        Returns
+        -------
+        str or None
+            A URL (or a plain path for local files) usable with
+            ``fsspec.open``, polars, pandas, etc.; None if it has none.
+        """
         return self._url(self._current_dir)
 
     @property
     def selected_urls(self) -> list[str]:
-        """Locations of the selected items (see ``_url``), in the order selected.
+        """The locations of the selected items (see ``_url``).
 
-        Items without a URL are left out, so the list is empty when nothing
-        with a URL is selected.
+        Returns
+        -------
+        list of str
+            Their URLs, in the order selected. Items without one are left out,
+            so the list is empty when nothing with a URL is selected.
         """
         return [url for p in self._selected if (url := self._url(p)) is not None]
 
@@ -722,19 +751,29 @@ class StorageExplorer(anywidget.AnyWidget):
     # --- Locations: how paths become URLs (override _url to change them) ---
 
     def _url(self, path: str) -> str | None:
-        """Location of ``path`` on the filesystem shown (``self._fs``).
+        """The location of a path of the filesystem shown, for users and libraries.
 
         The one place paths become locations: "Copy URL", ``folder_url``,
         "Python code" snippets and previews that read by location all use it.
-        Gives a plain path for local files, which every library reads; for
-        Azure (adlfs), ``abfs://container@account.dfs.core.windows.net/key``,
-        which names the account; and ``protocol://path`` otherwise. Override
-        to e.g. resolve a ``DirFileSystem`` to its underlying location; with
-        several ``filesystems``, tell them apart by ``self._filesystem``.
+        Override it in a subclass, e.g. to resolve a ``DirFileSystem`` to its
+        underlying location; with several ``filesystems``, tell them apart by
+        ``self._filesystem``.
 
-        An override may return None for items without a URL. They can still be
-        browsed, uploaded to, downloaded and moved, but have no "Copy URL",
-        preview, "Query data", "Python code" or "Edit".
+        Parameters
+        ----------
+        path : str
+            A file or folder of the filesystem shown (``self._fs``), as fsspec
+            lists it.
+
+        Returns
+        -------
+        str or None
+            A plain path for local files, which every library reads;
+            ``abfs://container@account.dfs.core.windows.net/key`` for Azure
+            (adlfs), which names the account; ``protocol://path`` otherwise.
+            An override may return None for items without a URL: they can
+            still be browsed, uploaded to, downloaded and moved, but have no
+            "Copy URL", preview, "Query data", "Python code" or "Edit".
         """
         return default_url(self._fs, path)
 

@@ -39,18 +39,33 @@ class OperationCancelled(Exception):
 
 
 class Progress:
-    """How far an operation (a job) has got, reported by the methods doing it.
+    """How far an operation (a job) has got, and whether the user cancelled it.
 
-    Totals come first, from ``FileSystemOperations.measure`` for each item
-    (file or folder) the job works on; then the methods report files and
-    bytes done with ``advance`` (or a ``callback`` given to fsspec). Methods
-    need not report everything: when an item is finished (``end_item``), what
-    it did not report is counted as done, so a folder moved by a single rename
-    still counts all its files.
+    ``FileSystemOperations`` methods report to it: files and bytes done
+    (``advance``, or a ``callback()`` given to fsspec transfers), the file
+    being worked on (``working_on``), and they call ``check()`` between steps
+    so that a cancel takes effect soon. Reporting is optional: totals come
+    from ``FileSystemOperations.measure`` for each item (file or folder) of
+    the job, and when an item ends, what its method did not report is counted
+    as done, so a folder moved by a single rename still counts all its files.
 
-    Thread-safe: the job's thread reports, the kernel's main thread reads
-    (``snapshot``) and cancels. ``on_change`` is called (in the job's thread)
-    after each report.
+    Thread-safe: the job's worker thread reports; the kernel's main thread
+    reads (``snapshot``) and cancels.
+
+    Parameters
+    ----------
+    on_change : callable, optional
+        Called with no arguments after each report, in the reporting thread
+        (the job runner sends progress to the frontend from it).
+
+    Attributes
+    ----------
+    files_total, bytes_total : int
+        Files and bytes the job works on, as measured.
+    files_done, bytes_done : int
+        Files and bytes done so far.
+    current : str
+        The name of the file being worked on.
     """
 
     def __init__(self, on_change: Callable[[], None] | None = None) -> None:
@@ -65,9 +80,69 @@ class Progress:
         # Counts when the current item started, and its totals.
         self._item: tuple[int, int, int, int] | None = None
 
+    # --- Reported by FileSystemOperations methods ---
+
+    def advance(self, files: int = 0, bytes: int = 0) -> None:
+        """Report work done since the last report.
+
+        Parameters
+        ----------
+        files : int, default 0
+            Files done (e.g. 1 after copying a file of a folder).
+        bytes : int, default 0
+            Bytes done. Do not report bytes a ``callback()`` reports already.
+        """
+        with self._lock:
+            self.files_done += files
+            self.bytes_done += bytes
+        self._changed()
+
+    def working_on(self, name: str) -> None:
+        """Report the file now being worked on, shown to the user.
+
+        Parameters
+        ----------
+        name : str
+            Its name, e.g. "part-03.csv" (not a whole path).
+        """
+        with self._lock:
+            self.current = name
+        self._changed()
+
+    def check(self) -> None:
+        """Stop if the user has cancelled. Call it between steps, e.g. files.
+
+        Raises
+        ------
+        OperationCancelled
+            Once the user has cancelled the job. Let it propagate: the job
+            then reports what was done before.
+        """
+        if self._cancel.is_set():
+            raise OperationCancelled
+
+    def callback(self, count: bool = True) -> Callback:
+        """An fsspec callback for a transfer, e.g. ``fs.get_file(..., callback=...)``.
+
+        Parameters
+        ----------
+        count : bool, default True
+            Whether it reports the transfer's bytes; false e.g. for the
+            second half of a copy through a temporary file, whose bytes the
+            first half reported.
+
+        Returns
+        -------
+        fsspec.callbacks.Callback
+            Reports bytes as the transfer goes, and stops it (raising
+            ``OperationCancelled``) once the user has cancelled.
+        """
+        return _ProgressCallback(self, count)
+
     # --- Reported by the job ---
 
     def add_total(self, files: int = 0, bytes: int = 0) -> None:
+        """Add files and bytes to the totals (from ``measure``, before the work)."""
         with self._lock:
             self.files_total += files
             self.bytes_total += bytes
@@ -88,40 +163,15 @@ class Progress:
                 self._item = None
         self._changed()
 
-    # --- Reported by FileSystemOperations methods ---
-
-    def advance(self, files: int = 0, bytes: int = 0) -> None:
-        """``files`` more files and ``bytes`` more bytes done."""
-        with self._lock:
-            self.files_done += files
-            self.bytes_done += bytes
-        self._changed()
-
-    def working_on(self, name: str) -> None:
-        """The file now being worked on, shown to the user."""
-        with self._lock:
-            self.current = name
-        self._changed()
-
-    def check(self) -> None:
-        """Raise ``OperationCancelled`` if the user has cancelled. Call it
-        between steps, e.g. files, so a cancel takes effect soon."""
-        if self._cancel.is_set():
-            raise OperationCancelled
-
-    def callback(self, count: bool = True) -> Callback:
-        """An fsspec callback for a transfer (``get_file``, ``put_file``, ...):
-        reports its bytes (unless ``count`` is false, e.g. for the second half
-        of a copy through a temporary file) and stops it once cancelled."""
-        return _ProgressCallback(self, count)
-
     # --- Used by the job's owner ---
 
     def cancel(self) -> None:
+        """Ask the operation to stop (at its next ``check()``)."""
         self._cancel.set()
 
     @property
     def cancelled(self) -> bool:
+        """Whether the user has cancelled."""
         return self._cancel.is_set()
 
     def snapshot(self) -> dict[str, Any]:

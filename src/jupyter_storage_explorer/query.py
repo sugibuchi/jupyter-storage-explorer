@@ -324,25 +324,43 @@ def build_query(lf: nw.LazyFrame, schema: Any, settings: dict[str, Any]) -> Any:
 
 @dataclass
 class QuerySettings:
-    """The data browser's settings for one dataset, to write in a notebook:
-    filters, sort order, hidden columns and column widths. E.g.::
+    """The data browser's settings for one dataset, to write in a notebook.
 
-        QuerySettings(
-            filters={
-                "price": {"op": "range", "min": 10},  # price >= 10
-                "name": {"op": "contains", "value": "tea", "case_sensitive": False},
-                "comment": {"op": "not_null"},
-            },
-            sort="date",
-            descending=True,
-            hidden=["comment"],
-        )
-
-    Filter types ("op"): "not_null", "null", "not_empty", "empty",
-    "contains", "regex", "range" ("min" and/or "max", both included) and
-    "eq" (booleans), as offered for the column's type in the data browser.
     Settings that do not fit the data (unknown columns, filters for another
-    type) are left out when it opens.
+    type) are left out when it opens. To keep settings made in the widget,
+    print ``explorer.settings.to_json()`` and paste the text into your code
+    as ``QuerySettings.from_json(...)``.
+
+    Attributes
+    ----------
+    filters : dict of str to dict
+        Column name -> filter, e.g. ``{"op": "range", "min": 10}``. Filter
+        types ("op"), as offered for the column's type in the data browser:
+        "not_null", "null", "not_empty", "empty"; "contains" and "regex" with
+        a "value" (and ``"case_sensitive": False`` to ignore case); "range"
+        with "min" and/or "max" (both included; numbers, dates or text); "eq"
+        (booleans) with a "value".
+    sort : str or None
+        The column to sort by, or None for the data's order.
+    descending : bool
+        Whether ``sort`` is descending. Missing values always come last.
+    hidden : list of str
+        Columns not shown.
+    widths : dict of str to int
+        Column widths (px); columns not listed are sized automatically.
+
+    Examples
+    --------
+    >>> QuerySettings(
+    ...     filters={
+    ...         "price": {"op": "range", "min": 10},
+    ...         "name": {"op": "contains", "value": "tea", "case_sensitive": False},
+    ...         "comment": {"op": "not_null"},
+    ...     },
+    ...     sort="date",
+    ...     descending=True,
+    ...     hidden=["comment"],
+    ... )
     """
 
     filters: dict[str, dict[str, Any]] = field(default_factory=dict)
@@ -352,7 +370,14 @@ class QuerySettings:
     widths: dict[str, int] = field(default_factory=dict)  # px
 
     def to_dict(self) -> dict[str, Any]:
-        """As the data browser keeps settings (see the module docstring)."""
+        """The settings in the form the data browser keeps them.
+
+        Returns
+        -------
+        dict
+            {"filters", "sort": {"column", "descending"} or None, "hidden",
+            "widths"} (see the module docstring); copies, not the attributes.
+        """
         return {
             "filters": copy.deepcopy(self.filters),
             "sort": None
@@ -363,13 +388,42 @@ class QuerySettings:
         }
 
     def to_json(self, indent: int | None = 4) -> str:
-        """As JSON (see ``to_dict``), e.g. to copy settings made in the data
-        browser into a notebook cell, as ``QuerySettings.from_json(...)``."""
+        """The settings as JSON text, e.g. to paste into a notebook cell.
+
+        Parameters
+        ----------
+        indent : int or None, default 4
+            Indentation, as for ``json.dumps``; None for a single line.
+
+        Returns
+        -------
+        str
+            ``to_dict()`` as JSON; dates in filters become ISO text.
+
+        See Also
+        --------
+        from_json : The settings back from this text.
+        """
         return json.dumps(self.to_dict(), indent=indent, default=_as_text)
 
     @classmethod
     def from_json(cls, text: str) -> QuerySettings:
-        """From ``to_json``'s text."""
+        """Settings from JSON text, as ``to_json`` gives.
+
+        Parameters
+        ----------
+        text : str
+            A JSON object in the form of ``to_dict()``.
+
+        Returns
+        -------
+        QuerySettings
+
+        Raises
+        ------
+        ValueError
+            If ``text`` is not JSON, or not a JSON object.
+        """
         settings = json.loads(text)
         if not isinstance(settings, dict):
             raise ValueError("query settings must be a JSON object")
@@ -377,7 +431,17 @@ class QuerySettings:
 
     @classmethod
     def from_dict(cls, settings: dict[str, Any]) -> QuerySettings:
-        """From the data browser's form (see ``to_dict``)."""
+        """Settings from the form the data browser keeps them in.
+
+        Parameters
+        ----------
+        settings : dict
+            As ``to_dict()`` gives; missing parts are the defaults.
+
+        Returns
+        -------
+        QuerySettings
+        """
         sort = settings.get("sort") or {}
         return cls(
             filters=copy.deepcopy(settings.get("filters") or {}),
@@ -389,10 +453,18 @@ class QuerySettings:
 
 
 class QuerySettingsStore:
-    """Remembers the data browser's settings per dataset (keyed by its location).
+    """Remembers the data browser's settings per dataset, keyed by its location.
 
-    By default only while the kernel runs; with ``path``, also in that JSON
-    file, so they survive restarts.
+    ``StorageExplorer`` uses one (its ``query_settings`` argument), so that
+    reopening a file in the data browser restores its filters, sort order,
+    hidden columns and widths.
+
+    Parameters
+    ----------
+    path : str or Path, optional
+        A JSON file to keep the settings in, so that they survive kernel
+        restarts; read now if it exists, written at each change. Default:
+        only in memory, while the kernel runs.
     """
 
     def __init__(self, path: str | pathlib.Path | None = None) -> None:
@@ -402,10 +474,33 @@ class QuerySettingsStore:
             self._settings = json.loads(self.path.read_text(encoding="utf-8"))
 
     def get(self, key: str) -> dict[str, Any] | None:
+        """The settings remembered for a dataset.
+
+        Parameters
+        ----------
+        key : str
+            The dataset's key, e.g. its URL.
+
+        Returns
+        -------
+        dict or None
+            A copy, in the form of ``QuerySettings.to_dict()``; None if none
+            are remembered.
+        """
         settings = self._settings.get(key)
         return copy.deepcopy(settings) if settings is not None else None
 
     def set(self, key: str, settings: dict[str, Any]) -> None:
+        """Remember a dataset's settings (and write the file, if any).
+
+        Parameters
+        ----------
+        key : str
+            The dataset's key, e.g. its URL.
+        settings : dict
+            In the form of ``QuerySettings.to_dict()``. The defaults are
+            forgotten rather than remembered.
+        """
         if settings == DEFAULT_SETTINGS:
             self._settings.pop(key, None)  # nothing worth remembering
         else:

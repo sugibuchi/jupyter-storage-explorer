@@ -72,11 +72,13 @@ class PySpark(Requirement):
 
 
 class DeltaSpark(PySpark):
-    """Delta Lake for Spark: like ``PySpark``, but a session it creates has
-    Delta Lake set up. Installing it installs a matching pyspark too.
+    """Delta Lake for Spark: like ``PySpark``, with Delta Lake's package.
+    Installing it installs a matching pyspark too.
 
-    A notebook's existing ``spark`` session is used as is (on Databricks, it
-    has Delta Lake).
+    The session is only obtained (``getOrCreate``), not configured: how Spark
+    gets Delta Lake (jars, ``spark.sql.extensions``, the catalog) depends on
+    the environment, which must be set up in advance (on Databricks, it is).
+    A notebook's existing ``spark`` session is used as is.
     """
 
     package = "delta-spark"
@@ -84,17 +86,12 @@ class DeltaSpark(PySpark):
 
     @property
     def setup_command(self) -> str:
-        # As in Delta Lake's quickstart for pip installs.
         return (
-            "from delta import configure_spark_with_delta_pip\n"
+            "# Delta Lake needs the Spark environment configured in advance, see\n"
+            "# https://docs.delta.io/delta-batch/#configure-sparksession\n"
             "from pyspark.sql import SparkSession\n"
             "\n"
-            "builder = (\n"
-            "    SparkSession.builder\n"
-            '    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")\n'
-            '    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")\n'
-            ")\n"
-            "spark = configure_spark_with_delta_pip(builder).getOrCreate()"
+            "spark = SparkSession.builder.getOrCreate()"
         )
 
 
