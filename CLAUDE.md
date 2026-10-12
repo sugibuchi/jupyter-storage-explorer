@@ -20,7 +20,9 @@ uv run notebooks/make_samples.py     # regenerate the sample data the notebooks 
 
 Tests cover the Python side only. Fixtures in `tests/conftest.py`: `memfs` (a cleared fsspec memory filesystem) and
 `make_target` (writes a file there and returns its `Target`). Anything polars reads by URL (`scan`, polars previews,
-the data browser) needs real local files (`tmp_path`), as polars cannot read `memory://`. The widget tests subclass the
+the data browser) needs real local files (`tmp_path`), as polars cannot read `memory://`. The data browser's tests
+run each filter on polars, pandas, PyArrow, DuckDB and sqlframe (the PySpark API on DuckDB, which narwhals queries as
+it does Spark; real Spark needs Java, so it is not tested). The widget tests subclass the
 widget to capture `send()` and drive it through `_on_custom_msg`, as the frontend would.
 
 The JavaScript is not covered by tests or CI. Check its syntax by joining it as the kernel does and running
