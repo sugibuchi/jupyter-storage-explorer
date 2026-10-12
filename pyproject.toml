@@ -98,6 +98,9 @@ cache-keys = [{ file = "pyproject.toml" }, { git = { commit = true, tags = true 
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# The launcher's Python code, for tests/test_launcher.py: CI does not install
+# the launcher (its JupyterLab extension is not built there).
+pythonpath = ["launcher/src"]
 filterwarnings = [
     # Inside sqlframe (the stand-in for Spark in tests), from its DuckDB calls.
     "ignore:fetch_arrow_table\\(\\) is deprecated:DeprecationWarning:sqlframe",
