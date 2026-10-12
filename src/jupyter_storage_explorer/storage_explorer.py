@@ -485,6 +485,7 @@ class StorageExplorer(anywidget.AnyWidget):
             "query_check": lambda c, _: self._reply(c, self._query_request(c)),
             "query_save": lambda c, _: self._reply(c, self._query_request(c)),
             "query_reload": lambda c, _: self._reply(c, self._query_request(c)),
+            "query_mode": lambda c, _: self._reply(c, self._query_request(c)),
         }
 
     def _reply(self, content: dict[str, Any], result: dict[str, Any]) -> None:

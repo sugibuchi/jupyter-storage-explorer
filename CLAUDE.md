@@ -105,7 +105,9 @@ for code only, `query_requirements` for the data browser), and implements:
 - `preview(target, limits)`: a list of `Preview` dataclasses (`TablePreview`, `TextPreview`, `TreePreview`,
   `MediaPreview`, `InstallPreview`...) that the frontend renders by `kind`; returns `install_hint()` when no package set
   is installed.
-- `scan(url, is_dir)`: a polars LazyFrame for the data browser (`query.py`'s `DataQuery` does filters, sort, paging).
+- `scan(url, is_dir)`: a polars LazyFrame for the data browser. `query.py`'s `DataQuery` does filters, sort and paging
+  as narwhals expressions, so it takes any dataframe narwhals supports, either on the data itself ("live") or on rows
+  read into memory (queried with polars); behaviour such as regex syntax then follows the data's library.
 - `load_code(target, requirements)`: the "Python code" snippet for one package set; `recipes()` adds the `%pip install`,
   setup and import lines. Packages are referenced through `Requirement` classes (`requirements.py`), whose
   `code_name()` reuses the name the user already imported (e.g. `pl`).

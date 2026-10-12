@@ -60,6 +60,43 @@
   color: var(--jse-fg-muted);
 }
 
+/* "Live | In memory" at the right of the toolbar: two joined buttons, the
+   current mode filled in. */
+.jse-query-mode {
+  display: inline-flex;
+  flex: none;
+  margin-left: 6px;
+}
+
+.jse-query-mode .jse-query-mode-btn {
+  border-radius: 0;
+}
+
+.jse-query-mode .jse-query-mode-btn:first-child {
+  border-radius: 3px 0 0 3px;
+}
+
+.jse-query-mode .jse-query-mode-btn:last-child {
+  border-left: none;
+  border-radius: 0 3px 3px 0;
+}
+
+.jse-query-mode .jse-query-mode-btn.jse-on {
+  border-color: var(--jse-accent);
+  background: var(--jse-accent-bg);
+}
+
+/* Rows left out (e.g. "First 100,000 rows"): details in its tooltip. */
+.jse-query-mode-note {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: var(--jse-bg-alt);
+  color: var(--jse-fg-muted);
+  font-size: 0.9em;
+  cursor: help;
+}
+
 .jse-query .jse-table-wrap {
   flex: 1 1 auto;
   min-height: 0;

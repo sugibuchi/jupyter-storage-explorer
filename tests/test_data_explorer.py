@@ -37,6 +37,8 @@ def test_parquet_file(tmp_path):
         "dtypes": ["Int64"],
         "rows": [[3]],
         "more": False,
+        "limited": False,
+        "total": 3,  # 3 rows: kept in memory, where they are counted
         "settings": explorer.query["settings"],
     }
 

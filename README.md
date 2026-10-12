@@ -116,6 +116,9 @@ browser that reads 1,000 rows at a time:
 
 - ◀ ▶ to page, click a column name to sort, its funnel to filter (*Null / empty*, *Range*, *Contains*, *Regex*).
 - **Select columns** to hide columns, drag a header's edge to resize, **Reset** to clear filters, **⟳** to reload.
+- **Live** / **In memory** (top right): query the data itself, or read its first 100,000 rows into memory once and
+  query those (faster, but filters and sorting then apply to those rows only). Data of up to 1,000 rows is always
+  kept in memory.
 
 Filters, sorting, hidden columns and widths are remembered per table until the kernel restarts, or in a file with
 `query_settings=QuerySettingsStore("query-settings.json")` (from `jupyter_storage_explorer.query`). polars reads the

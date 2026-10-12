@@ -295,6 +295,114 @@ class TestDataQuery:
         assert self.query().handle({"type": "preview"}) is None
 
 
+BIG = pl.DataFrame({"n": list(range(50))})
+
+
+def mode_query(source=BIG.lazy, **kwargs) -> DataQuery:
+    kwargs.setdefault("max_live_rows", 10)
+    kwargs.setdefault("max_memory_rows", 20)
+    return DataQuery(source, "k", QuerySettingsStore(), **kwargs)
+
+
+def rows_of(query: DataQuery, **content) -> dict:
+    return query.handle({"type": "query_rows", "window": 1000, **content})
+
+
+class TestModes:
+    def test_auto_is_live_for_lazy_data(self):
+        query = mode_query()
+        assert query.mode_state() == {
+            "mode": "live",
+            "fixed": "",
+            "memory": None,
+            "live_limit": None,  # polars skips rows itself: no limit
+            "max_memory_rows": 20,
+        }
+        assert len(rows_of(query)["rows"]) == 50
+
+    def test_small_lazy_data_kept_in_memory(self):
+        query = mode_query(BIG.head(10).lazy, max_live_rows=10)
+        state = query.mode_state()
+        assert state["mode"] == "memory"
+        assert state["memory"] == {"rows": 10, "cut": False}
+        assert state["fixed"] == "All 10 rows are in memory."
+        assert query.handle({"type": "query_mode", "mode": "live"})["error"]
+
+    def test_explicit_live_on_small_data_too(self):
+        assert mode_query(BIG.head(5).lazy, mode="live").mode == "memory"
+
+    def test_memory_mode_reads_the_first_rows(self):
+        query = mode_query(mode="memory")
+        assert query.mode_state()["memory"] == {"rows": 20, "cut": True}
+        assert query.mode_state()["fixed"] == ""
+        reply = rows_of(query, settings={"sort": {"column": "n", "descending": True}})
+        # Sorting applies to the rows in memory only.
+        assert reply["rows"][0] == [19] and len(reply["rows"]) == 20
+
+    def test_eager_data_only_in_memory(self):
+        query = mode_query(BIG.to_pandas())
+        assert query.mode == "memory"
+        assert query.memory == {"rows": 50, "cut": False}  # all of it, not limited
+        assert query.fixed == "The data is a dataframe in memory."
+        with pytest.raises(ValueError, match="live mode needs lazy data"):
+            mode_query(BIG.to_pandas(), mode="live")
+
+    def test_unknown_mode(self):
+        with pytest.raises(ValueError, match="mode must be one of"):
+            mode_query(mode="online")
+
+    def test_switching(self):
+        query = mode_query()
+        reply = query.handle({"type": "query_mode", "mode": "memory", "settings": {}})
+        assert reply["mode"]["mode"] == "memory"
+        assert reply["mode"]["memory"] == {"rows": 20, "cut": True}
+        assert [c["name"] for c in reply["columns"]] == ["n"]
+        assert len(rows_of(query)["rows"]) == 20
+        reply = query.handle({"type": "query_mode", "mode": "live", "settings": {}})
+        assert reply["mode"]["mode"] == "live"
+        assert len(rows_of(query)["rows"]) == 50
+
+    def test_switching_back_from_complete_data_in_memory(self):
+        # Chosen by the user, memory mode stays switchable even with all rows.
+        query = mode_query(max_memory_rows=100)
+        reply = query.handle({"type": "query_mode", "mode": "memory"})
+        assert reply["mode"]["memory"] == {"rows": 50, "cut": False}
+        assert reply["mode"]["fixed"] == ""
+        assert (
+            query.handle({"type": "query_mode", "mode": "live"})["mode"]["mode"]
+            == "live"
+        )
+
+    def test_total_counted_in_memory_only(self):
+        at_least_40 = {"filters": {"n": {"op": "range", "min": "40", "max": ""}}}
+        live = mode_query()
+        assert rows_of(live, window=5)["total"] is None
+        memory = mode_query(mode="memory", max_memory_rows=100)
+        reply = rows_of(memory, window=5, settings=at_least_40)
+        assert (len(reply["rows"]), reply["total"]) == (5, 10)
+
+    def test_reload_keeps_the_mode_chosen(self):
+        query = mode_query()
+        query.handle({"type": "query_mode", "mode": "memory"})
+        assert query.handle({"type": "query_reload"})["mode"]["mode"] == "memory"
+
+    def test_live_limit_without_offsets(self, monkeypatch):
+        # As Spark: DuckDB, with has_offsets saying it cannot skip rows.
+        monkeypatch.setattr(query_module, "has_offsets", lambda lf: False)
+        query = mode_query(lambda: duckdb.from_arrow(BIG.to_arrow()))
+        assert query.mode_state()["live_limit"] == 10
+        first = rows_of(query, window=4)
+        assert first["rows"] == [[0], [1], [2], [3]] and first["more"] is True
+        last = rows_of(query, offset=8, window=4)
+        assert last["rows"] == [[8], [9]]
+        assert (last["more"], last["limited"]) == (False, True)
+        # A result within the limit is not limited.
+        small = rows_of(
+            query, settings={"filters": {"n": {"op": "range", "min": "45", "max": ""}}}
+        )
+        assert (len(small["rows"]), small["limited"]) == (5, False)
+
+
 class TestQuerySettingsStore:
     def test_persisted_in_file(self, tmp_path):
         path = tmp_path / "sub" / "settings.json"

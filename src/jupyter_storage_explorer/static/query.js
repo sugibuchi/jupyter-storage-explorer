@@ -1,7 +1,9 @@
-// --- Data browser ("Query data"): pages through a polars query in the kernel ---
+// --- Data browser ("Query data"): pages through a query in the kernel ---
 // The kernel applies the settings (filters, sort, hidden columns) and returns
 // QUERY_WINDOW rows at a time; pages of QUERY_PAGE rows are shown from that
-// window. The kernel also remembers the settings per dataset.
+// window. The kernel also remembers the settings per dataset, and runs
+// queries on the data itself ("Live") or on rows read into memory ("In
+// memory"; see DataQuery in query.py).
 
 const QUERY_WINDOW = 1000;
 const QUERY_PAGE = 100;
@@ -108,9 +110,16 @@ function createQueryPanel(host, path, data) {
   const view = {
     columns: data.columns, // {name, dtype, kind, input, ops}
     settings: data.settings, // remembered by the kernel
+    // Where queries run: {mode: "live" | "memory", fixed: why it cannot be
+    // switched (or ""), memory: {rows, cut} in memory mode, live_limit: the
+    // most rows a live query gives (or null), max_memory_rows}. See DataQuery.
+    mode: data.mode,
     start: 0, // first row of the fetched window
     rows: [],
     more: false,
+    limited: false, // the result has more rows than live_limit
+    total: null, // rows in the result, when the kernel counted them (in memory)
+    switching: false,
     page: 0, // page within the window
     loading: false,
     error: "",
@@ -126,11 +135,77 @@ function createQueryPanel(host, path, data) {
     view.loading = false;
     if (reply.settings) view.settings = reply.settings;
     if (reply.error) {
-      Object.assign(view, { error: reply.error, rows: [], more: false, start: 0, page: 0 });
+      Object.assign(view, { error: reply.error, rows: [], more: false, limited: false, total: null, start: 0, page: 0 });
     } else {
-      Object.assign(view, { error: "", start: reply.offset, rows: reply.rows, more: reply.more, page });
+      const { offset: start, rows, more, limited, total } = reply;
+      Object.assign(view, { error: "", start, rows, more, limited: Boolean(limited), total: total ?? null, page });
     }
     draw();
+  }
+
+  // "Live" | "In memory", at the right of the toolbar: greyed out while
+  // loading, or when the kernel says the mode is fixed (e.g. a pandas
+  // DataFrame, or data small enough to be all in memory).
+  function modeSwitch() {
+    const m = view.mode;
+    const fixed = Boolean(m.fixed);
+    const button = (mode, label, title) => {
+      const btn = h("button", {
+        className: "jse-btn jse-query-mode-btn" + (m.mode === mode ? " jse-on" : ""),
+        textContent: label,
+        title: fixed ? m.fixed : title,
+        disabled: view.loading || fixed,
+      });
+      btn.setAttribute("aria-pressed", String(m.mode === mode));
+      btn.addEventListener("click", () => m.mode !== mode && switchMode(mode));
+      return btn;
+    };
+    const max = m.max_memory_rows.toLocaleString();
+    return h(
+      "span",
+      { className: "jse-query-mode", role: "group", ariaLabel: "Where queries run" },
+      button("live", "Live", "Query the data itself: each change reads it again"),
+      button("memory", "In memory", `Read the first ${max} rows into memory once, and query them there (faster)`),
+    );
+  }
+
+  // A note on rows left out: in memory, only the first rows of the data; live,
+  // only the first rows of the result.
+  function modeNote() {
+    const m = view.mode;
+    if (m.mode === "memory" && m.memory?.cut) {
+      const n = m.memory.rows.toLocaleString();
+      return h("span", {
+        className: "jse-query-mode-note",
+        textContent: `First ${n} rows`,
+        title: `Only the first ${n} rows of the data are in memory: filters and sorting apply to them. Switch to Live to query all the data.`,
+      });
+    }
+    if (m.mode === "live" && view.limited) {
+      const n = m.live_limit.toLocaleString();
+      return h("span", {
+        className: "jse-query-mode-note",
+        textContent: `First ${n} rows of the result`,
+        title: `Live queries on this data give at most ${n} rows: narrow the result with filters, or switch to In memory.`,
+      });
+    }
+    return null;
+  }
+
+  async function switchMode(mode) {
+    view.loading = true;
+    view.switching = mode === "memory";
+    draw();
+    const reply = await host.request({ type: "query_mode", path, mode, settings: view.settings });
+    if (view.disposed) return;
+    view.switching = false;
+    if (reply.mode) Object.assign(view, { columns: reply.columns, settings: reply.settings, mode: reply.mode });
+    if (reply.error) {
+      Object.assign(view, { loading: false, error: reply.error });
+      draw();
+      return;
+    }
+    fetchRows(0, 0);
   }
 
   function draw() {
@@ -142,11 +217,18 @@ function createQueryPanel(host, path, data) {
     const resettable = Object.keys(s.filters).length > 0 || s.hidden.length > 0;
 
     let status;
-    if (view.loading) status = "Loading…";
+    if (view.switching) status = "Reading into memory…";
+    else if (view.loading) status = "Loading…";
     else if (!pageRows.length) status = "No rows";
     else {
-      const total = view.more ? "" : ` of ${(view.start + view.rows.length).toLocaleString()}`;
-      status = `Rows ${(first + 1).toLocaleString()}–${(first + pageRows.length).toLocaleString()}${total}`;
+      // In memory, the kernel counts the result. Live, the total is known once
+      // the last rows are read; until then, the rows read so far and "+".
+      const read = view.start + view.rows.length;
+      let total;
+      if (view.total != null) total = view.total.toLocaleString();
+      else if (view.more || view.limited) total = `${read.toLocaleString()}+`;
+      else total = read.toLocaleString();
+      status = `Rows ${(first + 1).toLocaleString()}–${(first + pageRows.length).toLocaleString()} / ${total}`;
     }
 
     const prev = queryButton("◀", prevPage, "Previous page");
@@ -167,6 +249,7 @@ function createQueryPanel(host, path, data) {
       prev,
       h("span", { className: "jse-query-status", textContent: status }),
       next,
+      ...[modeNote(), modeSwitch()].filter(Boolean),
     );
 
     const head = h("tr", {}, ...columns.map((c) => headerCell(c)));
@@ -310,7 +393,7 @@ function createQueryPanel(host, path, data) {
       draw();
       return;
     }
-    Object.assign(view, { columns: reply.columns, settings: reply.settings });
+    Object.assign(view, { columns: reply.columns, settings: reply.settings, mode: reply.mode });
     fetchRows(view.start, view.page);
   }
 
