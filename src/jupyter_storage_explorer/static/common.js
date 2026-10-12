@@ -86,6 +86,9 @@ function createConfirm() {
 // whether a name matches: everything matches while the field is empty, or
 // while its regular expression is invalid (marked in red). active() tells
 // whether it filters; clear() empties it. Esc in the field clears it too.
+// For filtering elsewhere (the kernel): query() gives {text, regex} while it
+// filters, else null, and invalid(message) marks the field as invalid until
+// it changes.
 function createFilter({ placeholder = "Filter", onChange = () => {} } = {}) {
   const input = h("input", { type: "text", className: "jse-filter-input", placeholder, spellcheck: false });
   const clearBtn = h("button", { type: "button", className: "jse-filter-clear", textContent: "✕", title: "Clear", hidden: true });
@@ -148,10 +151,17 @@ function createFilter({ placeholder = "Filter", onChange = () => {} } = {}) {
     regexBtn.setAttribute("aria-pressed", String(regex));
     update();
   });
+  function invalid(message) {
+    input.classList.add("jse-invalid");
+    input.title = message;
+  }
+
   return {
     el,
     test: (name) => test(name),
     active: () => active,
+    query: () => (active ? { text: input.value, regex } : null),
+    invalid,
     clear,
     focus: () => input.focus({ preventScroll: true }),
   };
