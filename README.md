@@ -13,7 +13,7 @@ loads the data into your notebook; and upload, download, move and edit files wit
 Two widgets:
 
 - **`StorageExplorer`**: the file explorer, with previews and the data browser.
-- **`DataExplorer`**: the data browser alone, for one table.
+- **`DataExplorer`**: the data browser alone, for a dataframe (pandas, polars, Spark, DuckDB, ...).
 
 ![StorageExplorer with a JSON Lines file open in the data browser](https://raw.githubusercontent.com/sugibuchi/jupyter-storage-explorer/main/figs/storage-explorer.png)
 
@@ -54,7 +54,7 @@ StorageExplorer("gs://my-bucket", token="google_default")  # Google Cloud
 
 Options after the address (like `profile` above) are passed to the storage package, for example to choose credentials.
 
-To open one table directly, see [DataExplorer](#dataexplorer-one-table). The `notebooks` folder has a demo of each
+To browse a dataframe, see [DataExplorer](#dataexplorer-browse-a-dataframe). The `notebooks` folder has a demo of each
 widget (`storage_explorer.ipynb`, `data_explorer.ipynb`) on sample data made by `make_samples.py`.
 
 ### From the JupyterLab launcher
@@ -138,7 +138,7 @@ data with the credentials in the environment, not the explorer's options.
 | Text, code, configuration (YAML, SQL, Python, …)             | `text`       | With syntax highlighting      |            | Python                                              |
 | Images (PNG, JPEG, GIF, SVG, …)                              | `image`      | Shown                         |            | Pillow                                              |
 
-The name identifies the format in `DataExplorer(..., format=...)` and in CSS (see
+The name identifies the format in CSS (see
 [Customizing icons](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/DEVELOPMENT.md#customizing-icons)).
 
 ### Format options
@@ -195,43 +195,59 @@ explorer.selected_urls  # the URLs of the selected items
 | `query_settings=...`                | Where the data browser keeps its settings; see [Query data](#query-data).                                                             |
 | `format_options={...}`              | Options for the formats (see [Format options](#format-options)).                                                                      |
 
-## DataExplorer: one table
+## DataExplorer: browse a dataframe
 
-`DataExplorer` opens the same data browser for a single table, without the file explorer around it:
+`DataExplorer` opens the same data browser for a dataframe in your notebook: pandas, polars, PyArrow, DuckDB, Spark,
+and the other libraries [narwhals](https://narwhals-dev.github.io/narwhals/) supports.
 
 ```python
-from jupyter_storage_explorer import DataExplorer
+import polars as pl
+from jupyter_storage_explorer import DataExplorer, QuerySettings
 
-DataExplorer(
-    "s3://my-bucket/lake/sales"
-)  # a Delta Lake table, Parquet, CSV, JSON Lines or Excel
-DataExplorer("data/orders.tsv", format="csv")  # choose the format by name
-DataExplorer(
-    "abfs://lake@myaccount.dfs.core.windows.net/raw/orders.parquet", height="600px"
-)
+DataExplorer(pl.scan_parquet("s3://my-bucket/lake/sales/*.parquet"))
+DataExplorer(spark.table("sales"), mode="memory")  # read the first rows into memory
+DataExplorer(orders_df, settings=QuerySettings(sort="date", descending=True))
 ```
 
 ![DataExplorer showing a Delta Lake table in a notebook](https://raw.githubusercontent.com/sugibuchi/jupyter-storage-explorer/main/figs/data-explorer.png)
 
-It remembers its settings like `StorageExplorer`'s data browser, and shares them with it. If polars (or e.g.
-`deltalake`) is missing, it raises an error with the `%pip install` command.
+Lazy data starts **Live**, eager data **In memory**. Pass a function (`lambda: pl.scan_parquet(url)`) for **⟳** to
+read the data again.
+
+`QuerySettings` sets the filters, sort order, hidden columns and widths to start with. To keep settings made in the
+widget, print them as text and paste them into your code:
+
+```python
+explorer = DataExplorer(orders_df)
+print(explorer.settings.to_json())  # after filtering and sorting in the widget
+
+DataExplorer(orders_df, settings=QuerySettings.from_json("""
+{
+    "filters": {"price": {"op": "range", "min": "10", "max": ""}},
+    "sort": {"column": "date", "descending": true},
+    "hidden": ["comment"],
+    "widths": {}
+}
+"""))
+```
 
 ### DataExplorer options
 
-| Option                                      | Meaning                                                                                                          |
-|---------------------------------------------|------------------------------------------------------------------------------------------------------------------|
-| `format="csv"`                              | The format to read the table as, by name (see [Supported formats](#supported-formats)); default: the best match. |
-| `height="400px"`                            | Height of the table area. `"fill"`: as tall as the container, e.g. a tab (not a notebook cell).                  |
-| `query_settings=...`                        | Where it keeps its settings, shared with `StorageExplorer`; see [Query data](#query-data).                       |
-| `format_options={...}`                      | Options for the formats; see [Format options](#format-options).                                                  |
-| Storage options, e.g. `profile="analytics"` | Passed to the storage package, as for `StorageExplorer`.                                                         |
-
+| Option                     | Meaning                                                                                                    |
+|----------------------------|------------------------------------------------------------------------------------------------------------|
+| `settings=QuerySettings()` | Filters, sort order, hidden columns and widths to start with (see above).                                  |
+| `mode="auto"`              | Where queries run first: `"auto"`, `"live"` (lazy data only) or `"memory"`; switch in the widget.          |
+| `max_live_rows=1000`       | Data up to this size is kept in memory; also the most rows a live query gives if the library cannot skip rows (e.g. Spark). |
+| `max_memory_rows=100_000`  | The most rows read into memory.                                                                            |
+| `title=...`                | Shown above the table (default: the dataframe's type).                                                     |
+| `height="400px"`           | Height of the table area. `"fill"`: as tall as the container, e.g. a tab (not a notebook cell).            |
 ## Requirements
 
 - Python 3.11 or later
 - JupyterLab 4. The widgets also show in other Jupyter frontends, but dragging files from JupyterLab's file browser
   works only in JupyterLab.
-- For Query data and `DataExplorer`: a recent polars (tested with polars 2.0).
+- For Query data: a recent polars (tested with polars 2.0). `DataExplorer` works with any dataframe narwhals supports;
+  with polars installed, data in memory is queried with polars, which is faster.
 
 ## Development
 

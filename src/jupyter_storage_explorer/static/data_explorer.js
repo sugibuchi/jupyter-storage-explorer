@@ -1,4 +1,4 @@
-// Data Explorer: the data browser ("Query data") for one dataset, on its own.
+// Data Explorer: the data browser ("Query data") for one dataframe, on its own.
 // Joined after common.js and query.js (see _static.py).
 
 function render({ model, el }) {
@@ -29,7 +29,7 @@ function render({ model, el }) {
 
   function renderHead() {
     title.textContent = title.title = model.get("title");
-    badge.textContent = model.get("format");
+    badge.textContent = model.get("library");
   }
 
   function renderPanel() {
@@ -54,7 +54,7 @@ function render({ model, el }) {
   const onCustomMsg = (msg) => msg.type === "reply" && onReply(msg);
   const handlers = {
     "change:title": renderHead,
-    "change:format": renderHead,
+    "change:library": renderHead,
     "change:query": renderPanel,
     "change:height": applyHeight,
     "msg:custom": onCustomMsg,
