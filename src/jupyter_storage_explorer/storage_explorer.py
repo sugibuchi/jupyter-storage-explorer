@@ -32,6 +32,7 @@ from jupyter_storage_explorer.formats import (
 )
 from jupyter_storage_explorer.formats import detect as detect_format
 from jupyter_storage_explorer.formats.base import jsonable
+from jupyter_storage_explorer.listing import Listing
 from jupyter_storage_explorer.query import DataQuery, QuerySettingsStore
 from jupyter_storage_explorer.query import default_store as default_query_settings
 
@@ -235,6 +236,12 @@ class StorageExplorer(anywidget.AnyWidget):
     paths and "~" are resolved when the explorer is created. None leaves the
     item out.
 
+    The file list is filtered, sorted and paged in the browser, from the whole
+    listing of the folder shown. Folders of more than ``max_browser_items``
+    items (default 20,000; None for no limit) are handled by the kernel
+    instead, which sends one page at a time (see ``listing.Listing``): less to
+    send, but each change of filter, sort or page waits for the kernel.
+
     The public interface is ``folder_url``, the URL of the folder shown, and
     ``selected_urls``, those of the selected items. To change how paths
     become locations ("Copy URL", these properties, "Python code" snippets,
@@ -256,9 +263,12 @@ class StorageExplorer(anywidget.AnyWidget):
     # not been listed yet has no key.
     _tree = traitlets.Dict().tag(sync=True)
     _current_dir = traitlets.Unicode().tag(sync=True)
-    # The items in the current directory, as columns (see _listing): large
+    # The items in the current directory, as columns (see _make_listing): large
     # folders are listed whole, and a list of objects repeating the keys, the
-    # folder's path and each URL was several times larger.
+    # folder's path and each URL was several times larger. For folders of more
+    # than max_browser_items, only {"dir", "query": true, "total", "version"}:
+    # the frontend asks for pages ("list"), filtered and sorted by the kernel;
+    # "version" changes when the listing does.
     _listing = traitlets.Dict().tag(sync=True)
     _selected = traitlets.List(traitlets.Unicode()).tag(sync=True)
     _error = traitlets.Unicode().tag(sync=True)
@@ -318,9 +328,14 @@ class StorageExplorer(anywidget.AnyWidget):
         allow_download_to_local: bool = True,
         download_to_jupyterlab_path: str | None = ".",
         query_settings: QuerySettingsStore | None = None,
+        max_browser_items: int | None = 20_000,
         **storage_options: Any,
     ) -> None:
         self._query_settings = query_settings or default_query_settings
+        self._max_browser_items = max_browser_items
+        # The current directory's items, kept for "list" requests (and paths).
+        self._full_listing = Listing(self._make_listing("", []))
+        self._listing_version = 0
         # Data browser: path -> the data being queried.
         self._queries: dict[str, DataQuery] = {}
         self._formats = explorer_formats(formats, format_options)
@@ -453,6 +468,7 @@ class StorageExplorer(anywidget.AnyWidget):
             "urls": lambda c, _: self._reply(
                 c, {"urls": [self._url(p) for p in c["paths"]]}
             ),
+            "list": lambda c, _: self._reply(c, self._list_page(c)),
             "move": lambda c, _: self._reply(c, self._move_request(c)),
             "download_to_server": lambda c, _: self._reply(
                 c, self._download_to_server_request(c)
@@ -498,14 +514,14 @@ class StorageExplorer(anywidget.AnyWidget):
             infos = self._ls(path)
         except Exception as exc:
             self._error = f"Cannot list {path}: {exc}"
-            self._listing = self._make_listing(path, [])
+            self._show_listing(self._make_listing(path, []))
             self._selected = []
             self._current_format = ""
             self._current_query = False
             return
         self._error = ""
         self._set_children(path, infos)
-        self._listing = self._make_listing(path, infos)
+        self._show_listing(self._make_listing(path, infos))
         self._selected = []
         fmt = self._directory_format(path, infos)
         self._current_format = fmt.name if fmt is not None else ""
@@ -586,12 +602,52 @@ class StorageExplorer(anywidget.AnyWidget):
             listing["paths"] = paths
         return listing
 
+    def _show_listing(self, columns: dict[str, Any]) -> None:
+        """Keep the current directory's ``columns`` (see _make_listing) and show them."""
+        self._full_listing = Listing(columns)
+        self._send_listing()
+
+    def _send_listing(self) -> None:
+        """Send the current directory's listing, or for a large folder only its
+        size, the frontend then asking for pages ("list")."""
+        listing = self._full_listing
+        self._listing_version += 1
+        limit = self._max_browser_items
+        if limit is not None and len(listing) > limit:
+            self._listing = {
+                "dir": listing.dir,
+                "query": True,
+                "total": len(listing),
+                "version": self._listing_version,
+            }
+        else:
+            self._listing = listing.columns
+
+    def _list_page(self, content: dict[str, Any]) -> dict[str, Any]:
+        """A page of a large folder's items: the "list" request (see Listing.query).
+
+        {"stale": true} if the folder shown has changed since the frontend asked.
+        """
+        listing = self._full_listing
+        if content.get("dir") != listing.dir or content.get("version") != (
+            self._listing.get("version")
+        ):
+            return {"stale": True}
+        return listing.query(
+            text=content.get("text") or "",
+            regex=bool(content.get("regex")),
+            sort=content.get("sort", "name"),
+            asc=content.get("asc", True),
+            page=int(content.get("page", 0)),
+            page_size=int(content.get("page_size", 100)),
+        )
+
     def _listed_paths(self) -> list[str]:
-        """Paths of the items in ``_listing``, in its order."""
-        listing = self._listing
-        if listing.get("paths") is not None:
-            return listing["paths"]
-        return [_join(listing["dir"], name) for name in listing.get("names", [])]
+        """Paths of the current directory's items, in listing order."""
+        columns = self._full_listing.columns
+        if columns["paths"] is not None:
+            return columns["paths"]
+        return [_join(columns["dir"], name) for name in columns["names"]]
 
     def _refresh(self) -> None:
         """Drop cached listings and reload the current directory."""
@@ -628,14 +684,10 @@ class StorageExplorer(anywidget.AnyWidget):
         """Refresh the size and modification time shown for ``path`` in the list."""
         paths = self._listed_paths()
         if path in paths:
-            i = paths.index(path)
             entry = _entry(self._info(path))
-            listing = self._listing
-            # New lists, so that the change is seen and sent.
-            sizes, mtimes = list(listing["sizes"]), list(listing["mtimes"])
-            sizes[i] = entry["size"]
-            mtimes[i] = None if entry["mtime"] is None else int(entry["mtime"])
-            self._listing = {**listing, "sizes": sizes, "mtimes": mtimes}
+            mtime = None if entry["mtime"] is None else int(entry["mtime"])
+            self._full_listing.update(paths.index(path), entry["size"], mtime)
+            self._send_listing()
 
     def _file_format(self, info: dict[str, Any]) -> str:
         """The format name of a listed file, e.g. "json-lines".

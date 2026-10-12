@@ -91,7 +91,10 @@ pasted within the same explorer and filesystem by path with `_cp`, otherwise fro
 **Lists.** The file list is filtered (by name), sorted and paged (100 per page) in the browser, from the full listing
 the kernel sends; selection survives filtering and paging. Folders can hold tens of thousands of items, so the listing
 (`_listing`, see `_make_listing`) is sent as columns, without paths or URLs: the frontend joins paths and asks for URLs
-(`"urls"`) when copying. It sorts once per listing, not per keystroke. Filters (tree, list, *Select columns*) use `createFilter`
+(`"urls"`) when copying. It sorts once per listing, not per keystroke. Folders of more than `max_browser_items` are
+handled by the kernel instead (`listing.py`): `_listing` then only gives their size and a version, and the frontend
+asks for pages (`"list"`), filtering the rows shown while it waits; sorting and filters there follow the browser's as
+closely as Python allows (natural order ignoring case and accents; Python's `re`). Filters (tree, list, *Select columns*) use `createFilter`
 in `common.js`: text or a regular expression, always case-insensitive.
 
 **Formats** (`formats/`). Each `DataFormat` subclass (`base.py`) declares `name`, `label`, `priority`, `extensions` and

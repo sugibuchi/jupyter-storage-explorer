@@ -188,6 +188,7 @@ explorer.selected_urls  # the URLs of the selected items
 | `allow_download_to_local=True`      | "Download to local" in the right-click menu (`False`: left out, and refused by the kernel).                                           |
 | `download_to_jupyterlab_path="."`   | Folder "Download to JupyterLab" copies into, e.g. `"~/Downloads"`; default: where it runs. `None`: left out.                          |
 | `filesystems={...}`                 | Several named storages, as shown above.                                                                                               |
+| `max_browser_items=20_000`          | Folders with more items are filtered, sorted and paged by the kernel, one page at a time, instead of the browser (`None`: never).     |
 | `query_settings=...`                | Where the data browser keeps its settings; see [Query data](#query-data).                                                             |
 | `format_options={...}`              | Options for the formats (see [Format options](#format-options)).                                                                      |
 

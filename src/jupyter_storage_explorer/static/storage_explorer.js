@@ -226,10 +226,14 @@ function render({ model, el }) {
   const PAGE_SIZE = 100;
   let listPage = 0;
   const treeFilter = createFilter({ placeholder: "Filter folders", onChange: () => renderTree() });
+  // Set while typing in the list's filter: in large folders, the kernel is
+  // then asked once typing pauses (see renderList).
+  let filterTyped = false;
   const listFilter = createFilter({
     placeholder: "Filter by name",
     onChange() {
       listPage = 0;
+      filterTyped = true;
       renderList();
     },
   });
@@ -785,15 +789,14 @@ function render({ model, el }) {
     if (!allowed(entry)) return [];
     const selected = model.get("_selected");
     if (!selected.includes(entry.path)) return [entry];
-    return listedEntries().filter((e) => selected.includes(e.path) && allowed(e));
+    return entriesAt(selected).filter(allowed);
   }
 
   // A list row's drag: a move within the explorer, and for files a download
   // onto JupyterLab's file browser. Starting a drag is an operation (see takeUnsafe).
   function startDrag(ev, entry) {
     const folders = takeUnsafe();
-    const items = draggedItems(entry, folders);
-    if (!items.length) {
+    const items = draggedItems(entry, folders);    if (!items.length) {
       ev.preventDefault(); // a folder, locked
       flash("Turn on unsafe mode to move folders");
       return;
@@ -1424,27 +1427,113 @@ function render({ model, el }) {
     return sort.asc ? r : -r;
   }
 
-  // The current directory's items, {name, path, type, size, mtime, format,
-  // no_url}, from the kernel's columns (_listing; see _make_listing), decoded
-  // once per listing.
+  // Items, {name, path, type, size, mtime, format, no_url}, from the kernel's
+  // columns (see _make_listing).
+  function decodeColumns(l) {
+    const noUrl = new Set(l.no_url ?? []);
+    return (l.names ?? []).map((name, i) => ({
+      name,
+      path: l.paths ? l.paths[i] : join(l.dir, name),
+      type: l.is_dir[i] ? "directory" : "file",
+      size: l.sizes[i],
+      mtime: l.mtimes[i],
+      format: l.formats[l.format[i]],
+      no_url: noUrl.has(i),
+    }));
+  }
+
+  // The current directory's items (_listing), decoded once per listing. None
+  // for a large folder, paged by the kernel (see kernelPage).
   let decoded = { listing: null, entries: [] };
 
   function listedEntries() {
     const l = model.get("_listing");
-    if (decoded.listing !== l) {
-      const noUrl = new Set(l.no_url ?? []);
-      const entries = (l.names ?? []).map((name, i) => ({
-        name,
-        path: l.paths ? l.paths[i] : join(l.dir, name),
-        type: l.is_dir[i] ? "directory" : "file",
-        size: l.sizes[i],
-        mtime: l.mtimes[i],
-        format: l.formats[l.format[i]],
-        no_url: noUrl.has(i),
-      }));
-      decoded = { listing: l, entries };
-    }
+    if (decoded.listing !== l) decoded = { listing: l, entries: decodeColumns(l) };
     return decoded.entries;
+  }
+
+  // The listed items with these paths (e.g. the selection). In a large folder,
+  // from the pages received: items are only selected by clicking them on one.
+  function entriesAt(paths) {
+    const wanted = new Set(paths);
+    const entries = kernelMode() ? kernelState().seen.values() : listedEntries();
+    return [...entries].filter((e) => wanted.has(e.path));
+  }
+
+  // --- Large folders: filtered, sorted and paged by the kernel ---
+  // For folders of more than the explorer's max_browser_items, the kernel only
+  // sends their size (_listing.query) and pages come from "list" requests.
+  // Replies are kept until the listing changes, and the next page is fetched
+  // ahead. While an answer for a new filter is awaited, the rows shown are
+  // filtered here, so typing shows its effect at once.
+  const kernelMode = () => Boolean(model.get("_listing").query);
+  // listing: the _listing these are for; pages: query key -> reply (null
+  // while asked); seen: path -> item, of the pages received; shown: the
+  // reply last shown, in this folder.
+  let kernelPages = { listing: null, pages: new Map(), seen: new Map(), shown: null };
+  let filterTimer = null;
+
+  function kernelState() {
+    const l = model.get("_listing");
+    if (kernelPages.listing !== l) {
+      // A new version of the same folder: keep showing its last page until the new one arrives.
+      const shown = kernelPages.listing?.dir === l.dir ? kernelPages.shown : null;
+      kernelPages = { listing: l, pages: new Map(), seen: new Map(), shown };
+    }
+    return kernelPages;
+  }
+
+  function kernelQuery(page = listPage) {
+    const l = model.get("_listing");
+    const filter = listFilter.query();
+    return {
+      dir: l.dir,
+      version: l.version,
+      text: filter?.text ?? "",
+      regex: filter?.regex ?? false,
+      sort: sort.key,
+      asc: sort.asc,
+      page,
+      page_size: PAGE_SIZE,
+    };
+  }
+
+  // Asks for a page, unless already asked; shows it if it is still the one wanted.
+  async function fetchPage(query) {
+    const state = kernelState();
+    const key = JSON.stringify(query);
+    if (state.pages.has(key)) return;
+    state.pages.set(key, null);
+    const reply = await request({ type: "list", ...query });
+    if (reply.stale || kernelPages !== state) return; // the listing has changed since
+    const entries = decodeColumns(reply.listing);
+    for (const e of entries) state.seen.set(e.path, e);
+    state.pages.set(key, { ...reply, entries });
+    if (key === JSON.stringify(kernelQuery())) renderList();
+  }
+
+  // The page to show of a large folder: {entries, matching, page, loading}.
+  // Asks the kernel when needed, once typing in the filter pauses.
+  function kernelPage() {
+    const state = kernelState();
+    const query = kernelQuery();
+    const reply = state.pages.get(JSON.stringify(query));
+    clearTimeout(filterTimer);
+    if (reply) {
+      state.shown = reply;
+      if (reply.filter_error) listFilter.invalid(reply.filter_error);
+      if ((reply.page + 1) * PAGE_SIZE < reply.matching) fetchPage(kernelQuery(reply.page + 1));
+      return { entries: reply.entries, matching: reply.matching, page: reply.page, loading: false };
+    }
+    if (filterTyped) filterTimer = setTimeout(() => fetchPage(kernelQuery()), 200);
+    else fetchPage(query);
+    const shown = state.shown;
+    return {
+      entries: shown ? shown.entries.filter((e) => listFilter.test(e.name)) : [],
+      matching: shown?.matching ?? 0,
+      page: listPage,
+      loading: true,
+    };
   }
 
   // The listing sorted, kept until the listing or the sort order changes, so
@@ -1472,7 +1561,7 @@ function render({ model, el }) {
     // While the preview panel is open, it follows a single selected file.
     // Folders are not previewed on click (use Preview for e.g. a Delta table).
     if (!previewEl.hidden && next.length === 1 && next[0] !== model.get("_preview").path) {
-      const entry = listedEntries().find((e) => e.path === next[0]);
+      const [entry] = entriesAt(next);
       if (entry && entry.type !== "directory" && hasUrl(entry)) openPreview(next[0]);
     }
   }
@@ -1493,16 +1582,29 @@ function render({ model, el }) {
     );
 
     const selected = new Set(model.get("_selected"));
-    const entries = sortedEntries();
     // Filtered by name, then cut into pages. The selection keeps items filtered
     // out or on other pages, and right-click actions apply to them too.
-    const matching = listFilter.active() ? entries.filter((e) => listFilter.test(e.name)) : entries;
-    const pages = Math.max(1, Math.ceil(matching.length / PAGE_SIZE));
-    listPage = Math.min(listPage, pages - 1);
+    let page, matching, total, loading;
+    if (kernelMode()) {
+      const shown = kernelPage();
+      ({ entries: page, matching, loading } = shown);
+      listPage = shown.page;
+      total = model.get("_listing").total;
+    } else {
+      const entries = sortedEntries();
+      const filtered = listFilter.active() ? entries.filter((e) => listFilter.test(e.name)) : entries;
+      matching = filtered.length;
+      total = entries.length;
+      listPage = Math.min(listPage, Math.max(1, Math.ceil(matching / PAGE_SIZE)) - 1);
+      page = filtered.slice(listPage * PAGE_SIZE, (listPage + 1) * PAGE_SIZE);
+      loading = false;
+    }
+    filterTyped = false;
+    const pages = Math.max(1, Math.ceil(matching / PAGE_SIZE));
     const first = listPage * PAGE_SIZE;
-    const page = matching.slice(first, first + PAGE_SIZE);
     pagerEl.hidden = pages < 2;
-    pageLabel.textContent = `${(first + 1).toLocaleString()}–${(first + page.length).toLocaleString()} of ${matching.length.toLocaleString()}`;
+    pageLabel.textContent = `${(first + 1).toLocaleString()}–${(first + page.length).toLocaleString()} of ${matching.toLocaleString()}`;
+    pageLabel.title = kernelMode() ? "A large folder: filtered, sorted and paged by the kernel" : "";
     prevPageBtn.disabled = listPage === 0;
     nextPageBtn.disabled = listPage >= pages - 1;
     tbody.replaceChildren(
@@ -1546,13 +1648,14 @@ function render({ model, el }) {
             select(entry.path, false);
             paths = [entry.path];
           }
-          showMenu(ev, itemMenu(entries.filter((e) => paths.includes(e.path))));
+          showMenu(ev, itemMenu(entriesAt(paths)));
         });
         return tr;
       }),
     );
-    if (!page.length && entries.length) {
-      tbody.append(h("tr", {}, h("td", { className: "jse-placeholder", colSpan: columns.length, textContent: "No items match the filter" })));
+    if (!page.length && total) {
+      const text = loading ? "Loading…" : "No items match the filter";
+      tbody.append(h("tr", {}, h("td", { className: "jse-placeholder", colSpan: columns.length, textContent: text })));
     }
     updatePreviewBtn();
     renderStatus();
@@ -1608,10 +1711,19 @@ function render({ model, el }) {
       statusEl.textContent = error;
       return;
     }
-    const entries = listedEntries();
-    const count = `${entries.length} item${entries.length === 1 ? "" : "s"}`;
+    let total, matches;
+    if (kernelMode()) {
+      // Of the last page received: while a new filter's is awaited, the previous filter's.
+      total = model.get("_listing").total;
+      matches = () => kernelState().shown?.matching ?? total;
+    } else {
+      const entries = listedEntries();
+      total = entries.length;
+      matches = () => entries.filter((e) => listFilter.test(e.name)).length;
+    }
+    const count = `${total.toLocaleString()} item${total === 1 ? "" : "s"}`;
     const sel = model.get("_selected").length;
-    const matching = listFilter.active() ? `${entries.filter((e) => listFilter.test(e.name)).length} of ${count} match` : count;
+    const matching = listFilter.active() ? `${matches().toLocaleString()} of ${count} match` : count;
     statusEl.textContent = matching + (sel ? `, ${sel} selected` : "");
   }
 

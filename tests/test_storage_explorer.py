@@ -139,6 +139,78 @@ class TestListing:
         assert mem_explorer._listing["paths"] is not None
         assert path_of(mem_explorer, "a.csv") == "/elsewhere/a.csv"
 
+    def test_large_folders_are_paged_by_the_kernel(self, memfs):
+        memfs.pipe({"/data/a.csv": b"x", "/data/b.csv": b"xy", "/data/c.txt": b"z"})
+        explorer = make("/", fs=memfs, max_browser_items=2)
+        explorer._current_dir = "/data"
+        listing = explorer._listing
+        assert listing == {
+            "dir": "/data",
+            "query": True,
+            "total": 3,
+            "version": listing["version"],
+        }
+        reply = explorer.request(
+            {
+                "type": "list",
+                "rid": 7,
+                "dir": "/data",
+                "version": listing["version"],
+                "text": "csv",
+                "sort": "size",
+                "asc": False,
+                "page": 0,
+                "page_size": 100,
+            }
+        )
+        assert reply["rid"] == 7
+        assert reply["listing"]["names"] == ["b.csv", "a.csv"]
+        assert (reply["matching"], reply["total"], reply["page"]) == (2, 3, 0)
+
+    def test_stale_page_requests(self, memfs):
+        memfs.pipe({"/data/a.csv": b"x", "/data/b.csv": b"x", "/data/c.txt": b"x"})
+        explorer = make("/", fs=memfs, max_browser_items=2)
+        explorer._current_dir = "/data"
+        version = explorer._listing["version"]
+        explorer._refresh()  # listed again: a new version
+        for dir_, ver in (("/data", version), ("/", explorer._listing["version"])):
+            reply = explorer.request(
+                {"type": "list", "rid": 1, "dir": dir_, "version": ver}
+            )
+            assert reply["stale"] is True
+
+    def test_saving_changes_the_version_of_a_large_listing(self, memfs):
+        memfs.pipe({"/data/a.md": b"x", "/data/b.md": b"x", "/data/c.md": b"x"})
+        explorer = make("/", fs=memfs, max_browser_items=2)
+        explorer._current_dir = "/data"
+        version = explorer._listing["version"]
+        opened = explorer.request({"type": "edit_open", "path": "/data/a.md"})
+        explorer.request(
+            {
+                "type": "edit_save",
+                "path": "/data/a.md",
+                "text": "longer",
+                "version": opened["version"],
+            }
+        )
+        assert explorer._listing["version"] != version
+        page = explorer.request(
+            {
+                "type": "list",
+                "rid": 1,
+                "dir": "/data",
+                "version": explorer._listing["version"],
+                "text": "a.md",
+            }
+        )
+        assert page["listing"]["sizes"] == [6]
+
+    def test_no_limit(self, memfs):
+        memfs.pipe({f"/data/{i}.txt": b"x" for i in range(5)})
+        explorer = make("/", fs=memfs, max_browser_items=None)
+        explorer._current_dir = "/data"
+        assert len(entries(explorer)) == 5
+
     def test_current_directory_format(self, mem_explorer):
         mem_explorer._current_dir = "/data/table"
         assert mem_explorer._current_format == "delta"
