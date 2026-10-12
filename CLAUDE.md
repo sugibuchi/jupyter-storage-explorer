@@ -79,9 +79,10 @@ listing, reading and writing, e.g. `_ls`, `_info`, `_exists`, `_isdir`, `_read_b
 through them, never through fsspec directly. Moving, copying, deleting, downloading and creating folders go through
 the operations objects instead (`operations.py`, the `operations=` argument): a chain of `FileSystemOperations`, each
 method tried in order until one does not raise `FileSystemOperations.NotSupported` (its own exception, so that a
-library's `NotImplementedError` is reported as an error), ending with `AsyncFsspecOperations` (async filesystems such
-as s3fs: their coroutines, many files at a time; folder moves left to the next) and `FsspecOperations` (walking folders
-itself, to report progress file by file). Tests use fsspec's `AsyncFileSystemWrapper` around a memory filesystem as an
+library's `NotImplementedError` is reported as an error). `OperationChain` adds nothing; the defaults are
+`StorageExplorer.default_operations()`: `AsyncFsspecOperations` (async filesystems such as s3fs: their coroutines, many
+files at a time; folder moves left to the next) then `FsspecOperations` (walking folders itself, to report progress
+file by file). Tests use fsspec's `AsyncFileSystemWrapper` around a memory filesystem as an
 async one. Copies into storage go through a temporary file, so a failure leaves no partial file. Object stores (S3,
 GCS) have no empty folders, which matters for creating folders.
 

@@ -9,7 +9,11 @@ import polars as pl
 import pytest
 
 from jupyter_storage_explorer import StorageExplorer
-from jupyter_storage_explorer.operations import FileSystemOperations
+from jupyter_storage_explorer.operations import (
+    AsyncFsspecOperations,
+    FileSystemOperations,
+    FsspecOperations,
+)
 from jupyter_storage_explorer.query import QuerySettingsStore
 from jupyter_storage_explorer.storage_explorer import _format_size, _join, _safe_name
 
@@ -833,6 +837,13 @@ class TestJobs:
         assert "job" not in reply
         assert reply["deleted"] == []
 
+    def test_default_operations(self, memfs):
+        kinds = [type(o) for o in make("/", fs=memfs)._operations.operations]
+        assert kinds == [AsyncFsspecOperations, FsspecOperations]
+        # A list given is used as it is.
+        explorer = make("/", fs=memfs, operations=[FsspecOperations()])
+        assert [type(o) for o in explorer._operations.operations] == [FsspecOperations]
+
     def test_operations_of_your_own(self, memfs):
         """An operations object doing deletions its own way, fsspec the rest."""
 
@@ -841,7 +852,9 @@ class TestJobs:
                 fs.mv(path, "/trash/" + path.rsplit("/", 1)[-1])
 
         memfs.pipe({"/d/a.txt": b"a", "/d/b.txt": b"b"})
-        explorer = make("/d", fs=memfs, operations=[Trash()])
+        explorer = make(
+            "/d", fs=memfs, operations=[Trash(), *StorageExplorer.default_operations()]
+        )
         explorer.request({"type": "delete", "rid": 1, "paths": ["/d/a.txt"]})
         assert memfs.cat_file("/trash/a.txt") == b"a"
         explorer.request(
@@ -858,7 +871,11 @@ class TestJobs:
                 progress.cancel()
 
         memfs.pipe({"/d/a.txt": b"a", "/d/b.txt": b"b", "/d/c.txt": b"c"})
-        explorer = make("/d", fs=memfs, operations=[CancelAfterOne()])
+        explorer = make(
+            "/d",
+            fs=memfs,
+            operations=[CancelAfterOne(), *StorageExplorer.default_operations()],
+        )
         explorer.message(
             {
                 "type": "paste",
@@ -889,7 +906,11 @@ class TestJobs:
                 progress.check()  # between two files of the folder
 
         memfs.pipe({"/d/big/a.txt": b"a", "/d/big/b.txt": b"b"})
-        explorer = make("/d", fs=memfs, operations=[CancelInside()])
+        explorer = make(
+            "/d",
+            fs=memfs,
+            operations=[CancelInside(), *StorageExplorer.default_operations()],
+        )
         reply = explorer.request(
             {
                 "type": "paste",

@@ -209,12 +209,8 @@ class TestAsyncFsspecOperations:
 
 
 class TestOperationChain:
-    def test_defaults(self, tree, async_tree):
-        chain = OperationChain()
-        assert [type(o) for o in chain.operations] == [
-            AsyncFsspecOperations,
-            FsspecOperations,
-        ]
+    def test_in_the_order_given(self, tree, async_tree):
+        chain = OperationChain([AsyncFsspecOperations(), FsspecOperations()])
         # A folder move on an async filesystem falls through to FsspecOperations.
         chain.move(async_tree, "/src", "/moved", Progress())
         assert tree.cat_file("/moved/sub/c.txt") == b"c"
@@ -222,7 +218,7 @@ class TestOperationChain:
         chain.copy(tree, "/moved", "/again", Progress())
         assert tree.exists("/again/a.txt")
 
-    def test_first_implementation_wins_and_fsspec_is_last(self, tree):
+    def test_first_that_supports_it_wins(self, tree):
         calls = []
 
         class Trash(FileSystemOperations):
@@ -234,18 +230,23 @@ class TestOperationChain:
                 calls.append(path)
                 fs.mv(path, "/trash/" + path.rsplit("/", 1)[-1], recursive=True)
 
-        chain = OperationChain([Trash()])
-        assert isinstance(chain.operations[-1], FsspecOperations)
+        chain = OperationChain([Trash(), FsspecOperations()])
         chain.delete(tree, "/src/a.txt", Progress())
         assert calls == ["/src/a.txt"]
         assert tree.exists("/trash/a.txt")
-        # Not implemented by Trash: fsspec's.
+        # Not supported by Trash: the next one's.
         chain.copy(tree, "/src/b.txt", "/b2.txt", Progress())
         assert tree.cat_file("/b2.txt") == b"bb"
 
+    def test_no_defaults_added(self):
+        chain = OperationChain([FileSystemOperations()])
+        assert [type(o) for o in chain.operations] == [FileSystemOperations]
+        with pytest.raises(ValueError, match="no operations objects"):
+            OperationChain([])
+
     def test_unknown_operation(self):
         with pytest.raises(AttributeError):
-            _ = OperationChain().rename
+            _ = OperationChain([FsspecOperations()]).rename
 
     def test_other_not_implemented_errors_are_errors(self, tree):
         """A NotImplementedError raised for another reason (e.g. by a library)
@@ -255,18 +256,13 @@ class TestOperationChain:
             def copy(self, fs, source, target, progress):
                 raise NotImplementedError("this filesystem cannot copy")
 
-        chain = OperationChain([Library()])
+        chain = OperationChain([Library(), FsspecOperations()])
         with pytest.raises(NotImplementedError, match="cannot copy"):
             chain.copy(tree, "/src/a.txt", "/a2.txt", Progress())
         assert not tree.exists("/a2.txt")
 
     def test_nobody_supports_it(self, tree):
-        class Nothing(FileSystemOperations):
-            pass
-
-        # A chain of objects none of which supports it (no fsspec defaults).
-        chain = OperationChain([Nothing(), FsspecOperations()])
-        chain.operations = chain.operations[:1]
+        chain = OperationChain([FileSystemOperations(), FileSystemOperations()])
         with pytest.raises(FileSystemOperations.NotSupported, match="no operations"):
             chain.copy(tree, "/a", "/b", Progress())
 

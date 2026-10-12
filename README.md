@@ -194,7 +194,7 @@ explorer.selected_urls  # the URLs of the selected items
 | `download_to_jupyterlab_path="."`   | Folder "Download to JupyterLab" copies into, e.g. `"~/Downloads"`; default: where it runs. `None`: left out.                          |
 | `filesystems={...}`                 | Several named storages, as shown above.                                                                                               |
 | `max_browser_items=20_000`          | Folders with more items are filtered, sorted and paged by the kernel, one page at a time, instead of the browser (`None`: never).     |
-| `operations=[...]`                  | Objects doing some file operations their own way, e.g. server-side copies (see [operations.py](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/src/jupyter_storage_explorer/operations.py)). |
+| `operations=[...]`                  | How files are moved, copied, deleted and downloaded, replacing `StorageExplorer.default_operations()`: e.g. `[MyOps(), *StorageExplorer.default_operations()]` for server-side copies of your own (see [operations.py](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/src/jupyter_storage_explorer/operations.py)). |
 | `query_settings=...`                | Where the data browser keeps its settings; see [Query data](#query-data).                                                             |
 | `format_options={...}`              | Options for the formats (see [Format options](#format-options)).                                                                      |
 

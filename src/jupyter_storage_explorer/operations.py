@@ -3,12 +3,12 @@
 ``StorageExplorer`` moves, copies, deletes and downloads files through a list
 of ``FileSystemOperations`` objects (its ``operations`` argument): for each
 operation it calls the first object's method, and the next object's if that
-raises ``FileSystemOperations.NotSupported``, ending with the defaults:
-``AsyncFsspecOperations`` for asynchronous filesystems (s3fs, gcsfs, adlfs,
-...), many files at a time, then ``FsspecOperations``, which does everything
-with fsspec. So an object can do some operations its own way for some
-storage (e.g. server-side copies with the storage's own client) and leave
-the rest to the next ones.
+raises ``FileSystemOperations.NotSupported`` (see ``OperationChain``). Its
+default list is ``AsyncFsspecOperations``, for asynchronous filesystems
+(s3fs, gcsfs, adlfs, ...), many files at a time, then ``FsspecOperations``,
+which does everything with fsspec. So an object put before them can do some
+operations its own way for some storage (e.g. server-side copies with the
+storage's own client) and leave the rest to them.
 
 Each method does its work synchronously (``StorageExplorer`` runs it in a
 worker thread, see jobs.py) and reports to a ``Progress``: bytes and files
@@ -702,15 +702,15 @@ async def _copy_through_temp_async(
 
 
 class OperationChain:
-    """Calls an operation on the first of ``operations`` that implements it
-    (see the module docstring). Unless ``operations`` has an
-    ``FsspecOperations``, ``AsyncFsspecOperations`` and ``FsspecOperations``
-    come last, in that order."""
+    """Calls an operation on the first of ``operations`` that supports it
+    (see the module docstring), in the order given: which objects there are,
+    defaults included, is up to the caller (e.g.
+    ``StorageExplorer.default_operations``)."""
 
-    def __init__(self, operations: Sequence[FileSystemOperations] = ()) -> None:
+    def __init__(self, operations: Sequence[FileSystemOperations]) -> None:
+        if not operations:
+            raise ValueError("no operations objects given")
         self.operations = list(operations)
-        if not any(type(o) is FsspecOperations for o in self.operations):
-            self.operations += [AsyncFsspecOperations(), FsspecOperations()]
 
     def __getattr__(self, name: str) -> Callable[..., Any]:
         if name.startswith("_") or not hasattr(FileSystemOperations, name):

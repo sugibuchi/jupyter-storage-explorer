@@ -35,6 +35,8 @@ from jupyter_storage_explorer.formats.base import jsonable
 from jupyter_storage_explorer.jobs import JobRunner
 from jupyter_storage_explorer.listing import Listing
 from jupyter_storage_explorer.operations import (
+    AsyncFsspecOperations,
+    FsspecOperations,
     OperationCancelled,
     OperationChain,
     Progress,
@@ -294,11 +296,14 @@ class StorageExplorer(anywidget.AnyWidget):
     background, one at a time, with their progress shown and a button to
     cancel them; the explorer stays usable meanwhile. They are done by
     ``operations``, a list of ``FileSystemOperations`` objects (see
-    operations.py): the first that implements an operation for the
-    filesystem does it, and ``FsspecOperations`` (with fsspec) does the
-    rest. Give objects of your own to do some operations differently, e.g.
-    server-side copies with a storage's own client, or deleting into a trash
-    folder.
+    operations.py): the first that supports an operation for the filesystem
+    does it. By default ``default_operations()``: with fsspec, many files at
+    a time on asynchronous filesystems (e.g. s3fs). A list given replaces
+    it; put objects of your own before the defaults to do some operations
+    differently, e.g. server-side copies with a storage's own client, or
+    deleting into a trash folder::
+
+        StorageExplorer(url, operations=[MyOps(), *StorageExplorer.default_operations()])
 
     Examples:
         StorageExplorer()                          # current local directory
@@ -429,14 +434,16 @@ class StorageExplorer(anywidget.AnyWidget):
         download_to_jupyterlab_path: str | None = ".",
         query_settings: QuerySettingsStore | None = None,
         max_browser_items: int | None = 20_000,
-        operations: Sequence[FileSystemOperations] = (),
+        operations: Sequence[FileSystemOperations] | None = None,
         **storage_options: Any,
     ) -> None:
         self._query_settings = query_settings or default_query_settings
         self._max_browser_items = max_browser_items
         # How files are moved, copied, deleted and downloaded (see operations.py),
         # and the jobs doing it in the background (see jobs.py).
-        self._operations = OperationChain(operations)
+        self._operations = OperationChain(
+            self.default_operations() if operations is None else operations
+        )
         self._jobs = JobRunner(self._send_job)
         # The current directory's items, kept for "list" requests (and paths).
         self._full_listing = Listing(self._make_listing("", []))
@@ -481,6 +488,14 @@ class StorageExplorer(anywidget.AnyWidget):
         )
         self.on_msg(self._on_custom_msg)
         self._filesystem = name  # shows its top level (see _on_filesystem)
+
+    @staticmethod
+    def default_operations() -> list[FileSystemOperations]:
+        """The file operations used unless ``operations`` is given: on
+        asynchronous fsspec filesystems (s3fs, gcsfs, adlfs, ...) many files
+        at a time (``AsyncFsspecOperations``), and everything else with fsspec
+        (``FsspecOperations``). New objects each time."""
+        return [AsyncFsspecOperations(), FsspecOperations()]
 
     @traitlets.validate("_filesystem")
     def _validate_filesystem(self, proposal: dict[str, Any]) -> str:
