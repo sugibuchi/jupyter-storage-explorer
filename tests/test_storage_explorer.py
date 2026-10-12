@@ -9,6 +9,7 @@ import polars as pl
 import pytest
 
 from jupyter_storage_explorer import StorageExplorer
+from jupyter_storage_explorer.operations import FileSystemOperations
 from jupyter_storage_explorer.query import QuerySettingsStore
 from jupyter_storage_explorer.storage_explorer import _format_size, _join, _safe_name
 
@@ -24,9 +25,27 @@ class Explorer(StorageExplorer):
         self._on_custom_msg(self, content, buffers)
 
     def request(self, content: dict[str, Any], buffers: Any = None) -> dict[str, Any]:
-        """Send a message as the frontend does; the last message sent back."""
+        """Send a message as the frontend does; the last message sent back.
+
+        For a request that started a job ({"job": id}), its result instead:
+        without a kernel loop, jobs run at once (see jobs.py), so the job has
+        ended by then.
+        """
         self.message(content, buffers)
-        return self.sent[-1][0]
+        reply = self.sent[-1][0]
+        if "job" in reply:
+            return {
+                **self.job(reply["job"])["result"],
+                "type": "reply",
+                "rid": reply.get("rid"),
+            }
+        return reply
+
+    def job(self, job_id: str) -> dict[str, Any]:
+        """The last message about job ``job_id``."""
+        return [
+            c for c, _ in self.sent if c.get("type") == "job" and c["id"] == job_id
+        ][-1]
 
 
 def make(*args: Any, **kwargs: Any) -> Explorer:
@@ -786,6 +805,112 @@ class TestMove:
 
     def test_already_there(self, mem_explorer):
         assert self.move(mem_explorer, ["/other/b.txt"], "/other")["moved"] == []
+
+
+class TestJobs:
+    """Move, delete, paste and downloads run as jobs (see jobs.py); without a
+    kernel loop, at once."""
+
+    def test_job_messages(self, mem_explorer):
+        mem_explorer.message(
+            {"type": "move", "rid": 1, "paths": ["/data/a.csv"], "dest": "/other"}
+        )
+        reply = mem_explorer.sent[-1][0]
+        assert reply == {"type": "reply", "rid": 1, "job": reply["job"]}
+        states = [
+            c["state"] for c, _ in mem_explorer.sent if c.get("id") == reply["job"]
+        ]
+        assert states[0] == "queued" and states[-1] == "done"
+        final = mem_explorer.job(reply["job"])
+        assert final["title"] == "Moving a.csv to other"
+        assert final["result"] == {"moved": ["a.csv"], "skipped": [], "errors": []}
+        assert (final["files_total"], final["files_done"]) == (1, 1)
+
+    def test_nothing_to_do_needs_no_job(self, mem_explorer):
+        reply = mem_explorer.request(
+            {"type": "delete", "rid": 1, "paths": ["/data/table"]}
+        )
+        assert "job" not in reply
+        assert reply["deleted"] == []
+
+    def test_operations_of_your_own(self, memfs):
+        """An operations object doing deletions its own way, fsspec the rest."""
+
+        class Trash(FileSystemOperations):
+            def delete(self, fs, path, progress):
+                fs.mv(path, "/trash/" + path.rsplit("/", 1)[-1])
+
+        memfs.pipe({"/d/a.txt": b"a", "/d/b.txt": b"b"})
+        explorer = make("/d", fs=memfs, operations=[Trash()])
+        explorer.request({"type": "delete", "rid": 1, "paths": ["/d/a.txt"]})
+        assert memfs.cat_file("/trash/a.txt") == b"a"
+        explorer.request(
+            {"type": "move", "rid": 1, "paths": ["/d/b.txt"], "dest": "/trash"}
+        )
+        assert memfs.exists("/trash/b.txt")  # moved by FsspecOperations
+
+    def test_cancelled_midway(self, memfs):
+        """Cancelled after the first file: that one is pasted, the job says so."""
+
+        class CancelAfterOne(FileSystemOperations):
+            def copy(self, fs, source, target, progress):
+                fs.cp_file(source, target)
+                progress.cancel()
+
+        memfs.pipe({"/d/a.txt": b"a", "/d/b.txt": b"b", "/d/c.txt": b"c"})
+        explorer = make("/d", fs=memfs, operations=[CancelAfterOne()])
+        explorer.message(
+            {
+                "type": "paste",
+                "rid": 1,
+                "explorer": explorer._explorer_id,
+                "filesystem": explorer._filesystem,
+                "files": [{"path": f"/d/{n}"} for n in ("a.txt", "b.txt", "c.txt")],
+                "dest": "/out",
+            }
+        )
+        final = explorer.job(explorer.sent[-1][0]["job"])
+        assert final["state"] == "cancelled"
+        assert final["result"] == {
+            "pasted": ["a.txt"],
+            "skipped": [],
+            "errors": [],
+            "cancelled": True,
+        }
+        assert memfs.find("/out") == ["/out/a.txt"]
+
+    def test_cancelled_inside_an_item(self, memfs):
+        """Cancelled while copying a folder: it is named as left incomplete."""
+
+        class CancelInside(FileSystemOperations):
+            def copy(self, fs, source, target, progress):
+                fs.makedirs(target, exist_ok=True)
+                progress.cancel()
+                progress.check()  # between two files of the folder
+
+        memfs.pipe({"/d/big/a.txt": b"a", "/d/big/b.txt": b"b"})
+        explorer = make("/d", fs=memfs, operations=[CancelInside()])
+        reply = explorer.request(
+            {
+                "type": "paste",
+                "rid": 1,
+                "explorer": explorer._explorer_id,
+                "filesystem": explorer._filesystem,
+                "files": [{"path": "/d/big"}],
+                "dest": "/out",
+                "unsafe": True,
+            }
+        )
+        assert without_ids(reply) == {
+            "pasted": [],
+            "skipped": [],
+            "errors": [],
+            "cancelled": True,
+            "incomplete": "big",
+        }
+
+    def test_cancel_unknown_job(self, mem_explorer):
+        mem_explorer.message({"type": "job_cancel", "id": "job-99"})  # no error
 
 
 class TestUpload:
