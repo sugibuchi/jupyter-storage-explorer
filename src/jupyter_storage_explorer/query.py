@@ -1,4 +1,9 @@
-"""The data browser's query: filters, sort order and hidden columns over a polars LazyFrame.
+"""The data browser's query: filters, sort order and hidden columns over a dataframe.
+
+The data can be any dataframe narwhals supports, lazy (polars LazyFrame,
+DuckDB, Spark, ...) or eager (pandas, polars, PyArrow, ...); queries are
+narwhals expressions, run by the data's own library. So some details follow
+that library, e.g. the syntax of regular expressions.
 
 Settings are plain JSON-like dicts, shared with the frontend and remembered
 per dataset by a ``QuerySettingsStore``::
@@ -22,6 +27,8 @@ import datetime as dt
 import json
 import pathlib
 from typing import TYPE_CHECKING, Any
+
+import narwhals as nw
 
 from jupyter_storage_explorer.formats.base import jsonable
 from jupyter_storage_explorer.formats.requirements import Polars
@@ -53,21 +60,15 @@ DEFAULT_SETTINGS: dict[str, Any] = {
 _MIN_WIDTH, _MAX_WIDTH = 40, 2000
 
 
-def _polars() -> Any:
-    """polars, imported only when the data browser is used (it is optional)."""
-    return Polars().load()
-
-
 def column_kind(dtype: Any) -> str:
-    """Which filters a polars column type gets: "text", "numeric", "temporal", "boolean" or "other"."""
-    pl = _polars()
+    """Which filters a (narwhals) column type gets: "text", "numeric", "temporal", "boolean" or "other"."""
     if dtype.is_numeric():
         return "numeric"
-    if dtype.is_temporal() and dtype != pl.Duration:
+    if dtype.is_temporal() and dtype != nw.Duration:
         return "temporal"
-    if dtype == pl.Boolean:
+    if dtype == nw.Boolean:
         return "boolean"
-    if dtype in (pl.String, pl.Categorical) or isinstance(dtype, pl.Enum):
+    if dtype in (nw.String, nw.Categorical, nw.Enum):
         return "text"
     return "other"
 
@@ -75,15 +76,14 @@ def column_kind(dtype: Any) -> str:
 def value_input(dtype: Any, kind: str) -> str:
     """The field the filter dialog shows for a value: "text", "number", "date",
     "datetime", "time" or "boolean"."""
-    pl = _polars()
     if kind == "numeric":
         return "number"
     if kind == "boolean":
         return "boolean"
     if kind == "temporal":
-        if dtype == pl.Date:
+        if dtype == nw.Date:
             return "date"
-        return "time" if dtype == pl.Time else "datetime"
+        return "time" if dtype == nw.Time else "datetime"
     return "text"
 
 
@@ -151,8 +151,7 @@ def _normalize_filter(f: dict[str, Any], kind: str) -> dict[str, Any] | None:
 
 
 def _parse_value(value: str, dtype: Any, kind: str) -> Any:
-    """The filter value as a polars literal of the column's type."""
-    pl = _polars()
+    """The filter value as a literal of the column's type."""
     text = value.strip()
     if kind == "numeric":
         try:
@@ -160,55 +159,54 @@ def _parse_value(value: str, dtype: Any, kind: str) -> Any:
         except ValueError:
             # e.g. "1.5" for an integer column; raises if not a number at all
             number = float(text)
-        return pl.lit(number)
+        return nw.lit(number)
     if kind == "temporal":
         return _temporal_literal(text, dtype)
     if kind == "boolean":
         if text.lower() in ("true", "1", "yes"):
-            return pl.lit(True)
+            return nw.lit(True)
         if text.lower() in ("false", "0", "no"):
-            return pl.lit(False)
+            return nw.lit(False)
         raise ValueError(f"{value!r} is not true or false")
-    return pl.lit(value)  # text: as typed, spaces included
+    return nw.lit(value)  # text: as typed, spaces included
 
 
 def _temporal_literal(text: str, dtype: Any) -> Any:
     """ISO text (e.g. "2025-01-31", "2025-01-31 12:00") as a literal of a date,
     datetime or time column's type.
 
-    Parsed with Python, as polars 2 no longer casts text to dates.
+    Parsed with Python, as libraries differ in casting text to dates (polars 2
+    no longer does).
     """
-    pl = _polars()
-    if dtype == pl.Date:
-        return pl.lit(dt.date.fromisoformat(text))
-    if dtype == pl.Time:
-        return pl.lit(dt.time.fromisoformat(text))
+    if dtype == nw.Date:
+        return nw.lit(dt.date.fromisoformat(text), nw.Date)
+    if dtype == nw.Time:
+        return nw.lit(dt.time.fromisoformat(text), nw.Time)
     value = dt.datetime.fromisoformat(text)  # a date alone means midnight
-    literal = pl.lit(value).cast(pl.Datetime(dtype.time_unit))
+    time_unit = getattr(dtype, "time_unit", "us")
     time_zone = getattr(dtype, "time_zone", None)
     if time_zone:
         # Text with an offset is converted; plain text is read in the column's zone.
         if value.tzinfo is not None:
-            return pl.lit(value).dt.convert_time_zone(time_zone)
-        return literal.dt.replace_time_zone(time_zone)
-    return literal
+            return nw.lit(value).dt.convert_time_zone(time_zone)
+        return nw.lit(value, nw.Datetime(time_unit)).dt.replace_time_zone(time_zone)
+    return nw.lit(value, nw.Datetime(time_unit))
 
 
 def filter_expression(column: str, dtype: Any, f: dict[str, Any]) -> Any:
-    """The polars expression keeping rows that match one column's filter ``f``
-    (as normalized by ``normalize_settings``).
+    """The expression keeping rows that match one column's filter ``f`` (as
+    normalized by ``normalize_settings``).
 
     "range" keeps values between "min" and "max", both included; an empty
     bound is open. ``f["case_sensitive"]`` (default True) applies to text
     "contains", "regex" and "range".
     """
-    pl = _polars()
-    col = pl.col(column)
+    col = nw.col(column)
     kind = column_kind(dtype)
     op = f["op"]
     case_sensitive = f.get("case_sensitive", True)
-    if kind == "text" and dtype != pl.String:
-        col = col.cast(pl.String)  # categorical/enum values compared as text
+    if kind == "text" and dtype != nw.String:
+        col = col.cast(nw.String)  # categorical/enum values compared as text
     if op == "null":
         return col.is_null()
     if op == "not_null":
@@ -256,13 +254,20 @@ def _range_expression(
     return conditions[0] if len(conditions) == 1 else conditions[0] & conditions[1]
 
 
-def check_filter(column: str, dtype: Any, f: dict[str, Any]) -> None:
+def check_filter(
+    column: str,
+    dtype: Any,
+    f: dict[str, Any],
+    implementation: nw.Implementation = nw.Implementation.POLARS,
+) -> None:
     """Raise ValueError with a readable message if a filter cannot run.
 
     Catches values that do not fit the column (e.g. "abc" for a number) and
-    regular expressions polars cannot compile, before the filter is applied.
+    regular expressions the data's library (``implementation``) cannot
+    compile, before the filter is applied. Libraries that need more than a
+    one-row table to try a pattern on (e.g. Spark, which needs a session)
+    report bad patterns only when the rows are read.
     """
-    pl = _polars()
     case_sensitive = f.get("case_sensitive", True)
     try:
         filter_expression(column, dtype, f)
@@ -271,15 +276,19 @@ def check_filter(column: str, dtype: Any, f: dict[str, Any]) -> None:
     if f["op"] == "regex":
         pattern = f["value"] if case_sensitive else f"(?i){f['value']}"
         try:
-            # polars compiles the pattern when the expression runs.
-            pl.select(pl.lit("").str.contains(pattern))
+            probe = nw.from_dict({"v": [""]}, backend=implementation)
+        except Exception:
+            return
+        try:
+            # Libraries compile the pattern when the expression runs.
+            probe.select(nw.col("v").str.contains(pattern))
         except Exception as exc:
-            # Keep polars' explanation; drop its query-plan context.
+            # Keep the library's explanation; drop polars' query-plan context.
             message = str(exc).split("\n\nThis error occurred")[0]
             raise ValueError(message.split("\n\nResolved plan")[0]) from exc
 
 
-def build_query(lf: Any, schema: Any, settings: dict[str, Any]) -> Any:
+def build_query(lf: nw.LazyFrame, schema: Any, settings: dict[str, Any]) -> Any:
     """``lf`` filtered, sorted and with hidden columns left out, per ``settings``.
 
     Raises ValueError for a filter value that does not fit its column.
@@ -331,20 +340,49 @@ class QuerySettingsStore:
 default_store = QuerySettingsStore()
 
 
+def as_lazy(frame: Any) -> nw.LazyFrame:
+    """A dataframe of any library narwhals supports, as a narwhals LazyFrame.
+
+    Eager dataframes (pandas, PyArrow, ...) are queried with polars when it is
+    installed, as it is faster and the same for all of them; otherwise with
+    their own library.
+    """
+    data = nw.from_native(frame)
+    if isinstance(data, nw.DataFrame):
+        return data.lazy("polars" if Polars().is_installed() else None)
+    return data
+
+
+def fetch_rows(lf: nw.LazyFrame, offset: int, length: int) -> nw.DataFrame:
+    """Rows ``offset`` to ``offset + length`` of ``lf``, read.
+
+    polars and DuckDB skip the rows before ``offset`` themselves; other
+    libraries (e.g. Spark) have no portable way to, so all rows up to
+    ``offset + length`` are read and the first ones dropped here.
+    """
+    native = lf.to_native()
+    if lf.implementation.is_polars():
+        return nw.from_native(native.slice(offset, length).collect())
+    if lf.implementation.is_duckdb():
+        return nw.from_native(native.limit(length, offset)).collect()
+    df = lf.head(offset + length).collect()
+    return df.tail(max(0, len(df) - offset))
+
+
 class DataQuery:
     """One dataset open in the data browser, answering its frontend's requests.
 
-    ``scan()`` returns the data as a polars LazyFrame; it is called again to
-    reload the data. Settings are remembered in ``store`` under ``key`` (the
-    data's URL). The frontend's requests are "query_rows", "query_check",
-    "query_save" and "query_reload" (see static/query.js).
+    ``source`` is the data, any dataframe narwhals supports (see ``as_lazy``),
+    or a function returning it, called again to reload the data (e.g. a polars
+    ``scan_*``, to read a file again). Settings are remembered in ``store``
+    under ``key`` (e.g. the data's URL). The frontend's requests are
+    "query_rows", "query_check", "query_save" and "query_reload" (see
+    static/query.js).
     """
 
-    def __init__(
-        self, scan: Callable[[], Any], key: str, store: QuerySettingsStore
-    ) -> None:
-        self.scan = scan
-        self.lf = scan()
+    def __init__(self, source: Any, key: str, store: QuerySettingsStore) -> None:
+        self.scan: Callable[[], Any] = source if callable(source) else lambda: source
+        self.lf = as_lazy(self.scan())
         self.schema = self.lf.collect_schema()
         self.key = key
         self.store = store
@@ -353,7 +391,7 @@ class DataQuery:
         """Scan the data again, e.g. after it changed on storage: its columns, and
         the frontend's settings fitted to them (columns may have changed)."""
         try:
-            lf = self.scan()
+            lf = as_lazy(self.scan())
             schema = lf.collect_schema()
         except Exception as exc:
             return {"error": f"{type(exc).__name__}: {exc}"}
@@ -379,19 +417,16 @@ class DataQuery:
         window = max(1, int(content.get("window", 1000)))
         try:
             # One extra row tells whether there are more.
-            df = (
-                build_query(self.lf, self.schema, settings)
-                .slice(offset, window + 1)
-                .collect()
-            )
+            query = build_query(self.lf, self.schema, settings)
+            df = fetch_rows(query, offset, window + 1)
         except Exception as exc:
             return {"error": f"{type(exc).__name__}: {exc}", "settings": settings}
-        more = df.height > window
+        more = len(df) > window
         df = df.head(window)
         return {
             "offset": offset,
             "columns": df.columns,
-            "dtypes": [str(t) for t in df.dtypes],
+            "dtypes": [str(t) for t in df.schema.values()],
             "rows": [[jsonable(v) for v in row] for row in df.rows()],
             "more": more,
             "settings": settings,
@@ -409,7 +444,12 @@ class DataQuery:
                 return {"error": "enter a minimum, a maximum or both"}
             return {"error": f"this filter is not available for {column!r}"}
         try:
-            check_filter(column, self.schema[column], settings["filters"][column])
+            check_filter(
+                column,
+                self.schema[column],
+                settings["filters"][column],
+                self.lf.implementation,
+            )
         except ValueError as exc:
             return {"error": str(exc)}
         return {}

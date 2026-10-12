@@ -133,6 +133,9 @@ def jsonable(value: Any) -> Any:
     """A cell value the frontend can receive: dates, decimals, numpy scalars etc. become JSON types."""
     if value is None or isinstance(value, (bool, int, str)):
         return value
+    # pandas' missing values (pd.NA, pd.NaT), without importing pandas.
+    if type(value).__name__ in ("NAType", "NaTType"):
+        return None
     if isinstance(value, float):
         return value if math.isfinite(value) else str(value)
     if isinstance(value, (list, tuple)):

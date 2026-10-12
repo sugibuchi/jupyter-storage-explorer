@@ -40,6 +40,7 @@ requires-python = ">=3.11"
 dependencies = [
     "anywidget>=0.9",
     "fsspec>=2023.1.0",
+    "narwhals>=2.27.1",
     "pygments>=2.12",
     "traitlets>=5.4",
 ]
@@ -67,6 +68,7 @@ exclude = ["launcher", ".github"]
 [dependency-groups]
 dev = [
     "deltalake>=1.6.6",
+    "duckdb>=1.5.6",
     "fastexcel>=0.21.0",
     "jupyter-storage-explorer-launcher",
     "jupyterlab>=4.6.4",
