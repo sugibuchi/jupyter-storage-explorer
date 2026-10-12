@@ -8,6 +8,7 @@ from typing import Any
 import duckdb
 import polars as pl
 import pytest
+from sqlframe.duckdb import DuckDBSession
 
 from jupyter_storage_explorer import DataExplorer, QuerySettings
 
@@ -67,6 +68,15 @@ def test_duckdb_with_options():
     assert explorer.query["mode"]["mode"] == "live"
     reply = explorer.request({"type": "query_mode", "mode": "memory"})
     assert reply["mode"]["memory"] == {"rows": 20, "cut": True}
+
+
+def test_spark_like_dataframe():
+    # sqlframe stands in for Spark (which needs Java); narwhals treats both alike.
+    data = DuckDBSession().createDataFrame([(i,) for i in range(30)], schema="n bigint")
+    explorer = Explorer(data, max_live_rows=10)
+    assert (explorer.title, explorer.library) == ("DuckDBDataFrame", "SQLFrame")
+    assert explorer.query["mode"]["mode"] == "live"
+    assert explorer.query["mode"]["live_limit"] == 10
 
 
 def test_function_called_again_on_reload():

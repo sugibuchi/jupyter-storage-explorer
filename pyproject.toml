@@ -79,6 +79,7 @@ dev = [
     "pyarrow>=26.0.0",
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",
+    "sqlframe>=4.4.0",
 ]
 
 # Two packages, released together: jupyter-storage-explorer (this folder: the
@@ -97,6 +98,10 @@ cache-keys = [{ file = "pyproject.toml" }, { git = { commit = true, tags = true 
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+filterwarnings = [
+    # Inside sqlframe (the stand-in for Spark in tests), from its DuckDB calls.
+    "ignore:fetch_arrow_table\\(\\) is deprecated:DeprecationWarning:sqlframe",
+]
 
 # Coverage of the widgets' package (the launcher has no tests), for Codecov.
 [tool.coverage.run]

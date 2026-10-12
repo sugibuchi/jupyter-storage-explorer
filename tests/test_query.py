@@ -10,6 +10,7 @@ import duckdb
 import narwhals as nw
 import polars as pl
 import pytest
+from sqlframe.duckdb import DuckDBSession
 
 from jupyter_storage_explorer import query as query_module
 from jupyter_storage_explorer.formats.base import jsonable
@@ -33,6 +34,23 @@ DF = pl.DataFrame(
 )
 SCHEMA = nw.from_native(DF).schema
 
+
+def spark_like(df: pl.DataFrame) -> Any:
+    """``df`` as a PySpark-style DataFrame (sqlframe, on DuckDB), which narwhals
+    queries as it does Spark: in SQL, without skipping rows (see has_offsets).
+    Stands in for Spark, which needs Java."""
+    spark_types = {
+        pl.Int64: "bigint",
+        pl.String: "string",
+        pl.Date: "date",
+        pl.Boolean: "boolean",
+    }
+    schema = ", ".join(
+        f"{name} {spark_types[dtype]}" for name, dtype in df.schema.items()
+    )
+    return DuckDBSession().createDataFrame(df.rows(), schema=schema)
+
+
 # The libraries queries run in, each with the data as its own dataframe.
 NATIVE = {
     "polars": DF.lazy,
@@ -41,6 +59,7 @@ NATIVE = {
     "pandas": lambda: DF.to_pandas(use_pyarrow_extension_array=True),
     "pyarrow": DF.to_arrow,
     "duckdb": lambda: duckdb.from_arrow(DF.to_arrow()),
+    "spark-like": lambda: spark_like(DF),
 }
 
 
@@ -401,6 +420,52 @@ class TestModes:
             query, settings={"filters": {"n": {"op": "range", "min": "45", "max": ""}}}
         )
         assert (len(small["rows"]), small["limited"]) == (5, False)
+
+
+class TestSparkLike:
+    """What differs for Spark (here sqlframe, see ``spark_like``): no offsets,
+    so live queries give at most ``max_live_rows`` rows."""
+
+    def query(self, rows: int = 50, **kwargs) -> DataQuery:
+        return mode_query(spark_like(BIG.head(rows)), **kwargs)
+
+    def test_live_with_a_limit(self):
+        query = self.query()
+        assert query.lf.implementation.is_spark_like()
+        assert query.mode_state()["live_limit"] == 10
+        desc = {"sort": {"column": "n", "descending": True}}
+        first = rows_of(query, window=4, settings=desc)
+        assert first["rows"] == [[49], [48], [47], [46]]
+        assert (first["more"], first["limited"], first["total"]) == (True, False, None)
+        last = rows_of(query, offset=8, window=4, settings=desc)
+        assert last["rows"] == [[41], [40]]
+        assert (last["more"], last["limited"]) == (False, True)
+
+    def test_filtered_result_within_the_limit(self):
+        f = {"filters": {"n": {"op": "range", "min": "45", "max": ""}}}
+        reply = rows_of(self.query(), settings=f)
+        assert reply["rows"] == [[45], [46], [47], [48], [49]]
+        assert (reply["more"], reply["limited"]) == (False, False)
+
+    def test_in_memory_with_polars(self):
+        query = self.query()
+        reply = query.handle({"type": "query_mode", "mode": "memory"})
+        assert reply["mode"]["memory"] == {"rows": 20, "cut": True}
+        assert query.lf.implementation.is_polars()
+        assert rows_of(query, window=5)["total"] == 20
+
+    def test_small_data_kept_in_memory(self):
+        query = self.query(rows=8)
+        assert query.mode == "memory"
+        assert query.fixed == "All 8 rows are in memory."
+
+    def test_bad_regex_reported_with_the_rows(self):
+        f = {"op": "regex", "value": "("}
+        query = mode_query(spark_like(DF), max_live_rows=2)  # 4 rows: live
+        # No one-row table to try the pattern on beforehand...
+        assert query.check({"column": "name", "filter": f}) == {}
+        # ...so the error comes with the rows.
+        assert "error" in rows_of(query, settings={"filters": {"name": f}})
 
 
 class TestQuerySettingsStore:
