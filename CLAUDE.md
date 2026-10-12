@@ -146,6 +146,10 @@ storage options (`spark_url()` rewrites `abfs`/`s3` to `abfss`/`s3a`).
 ## Conventions
 
 - Comments and docstrings are written in full sentences explaining *why*; keep that density and tone.
+- Docstrings of the public API, what users construct, call, subclass or override (`StorageExplorer`, `DataExplorer`,
+  `QuerySettings`, `QuerySettingsStore`, `FileSystemOperations` and its subclasses, `Progress`, `DataFormat`,
+  `StorageExplorer._url`), are in numpy style: `Parameters`, `Returns`, `Raises`, `Attributes`, `See Also`, `Examples`.
+  Internal ones (underscore names, `DataQuery`, `FileTasks`, `JobRunner`, ...) stay prose.
 - `from __future__ import annotations` everywhere, with type-only imports under `TYPE_CHECKING` (ruff `TC` rules).
 - The README documents user-facing options and formats; update "Using the explorer" (and its "Unsafe operations"),
   "Supported formats", "Format options" and "StorageExplorer options" when operations, formats or options change. Keep

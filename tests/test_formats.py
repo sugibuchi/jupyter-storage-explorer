@@ -29,7 +29,7 @@ from jupyter_storage_explorer.formats import (
     TextPreview,
     TreePreview,
 )
-from jupyter_storage_explorer.formats.requirements import Pillow
+from jupyter_storage_explorer.formats.requirements import DeltaSpark, Pillow
 
 
 def parquet_bytes(df: pl.DataFrame) -> bytes:
@@ -202,6 +202,17 @@ class TestRecipes:
         assert (
             last_line(code["delta-spark"])
             == "df = spark.read.format(\"delta\").load('s3a://b/t')"
+        )
+
+    def test_delta_spark_session_only_obtained(self):
+        # Spark must be set up for Delta Lake beforehand: the setup only gets
+        # the session, and says where to read how.
+        assert DeltaSpark().setup_command == (
+            "# Delta Lake needs the Spark environment configured in advance, see\n"
+            "# https://docs.delta.io/delta-batch/#configure-sparksession\n"
+            "from pyspark.sql import SparkSession\n"
+            "\n"
+            "spark = SparkSession.builder.getOrCreate()"
         )
 
     def test_json(self, make_target):

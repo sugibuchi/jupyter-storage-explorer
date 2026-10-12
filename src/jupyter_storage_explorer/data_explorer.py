@@ -32,30 +32,58 @@ class DataExplorer(anywidget.AnyWidget):
     """The data browser for one dataframe: page through it, sort, filter and
     choose columns, as "Query data" does in ``StorageExplorer``.
 
-    ``data`` is any dataframe narwhals supports, lazy (polars LazyFrame,
-    DuckDB, Spark, Dask, Ibis, ...) or eager (pandas, polars DataFrame,
-    PyArrow, ...), or a function returning one, called again by the reload
-    button (e.g. ``lambda: pl.scan_parquet(url)``, to read a file again).
-    E.g.::
+    Queries run on the data itself ("Live") or on its first rows read into
+    memory ("In memory", queried with polars when installed), switched at the
+    top right of the widget (see ``DataQuery``). ``settings`` gives the
+    current filters, sort order, hidden columns and widths, and ``result()``
+    the data with them applied.
 
-        DataExplorer(pl.scan_parquet("s3://bucket/sales/*.parquet"))
-        DataExplorer(spark.table("sales"), mode="memory")
-        DataExplorer(pandas_df, settings=QuerySettings(sort="date", descending=True))
+    Parameters
+    ----------
+    data : dataframe or callable
+        Any dataframe narwhals supports: lazy (polars LazyFrame, DuckDB,
+        Spark, Dask, Ibis, ...) or eager (pandas, polars DataFrame, PyArrow,
+        ...). Or a function returning one, called again by the reload button,
+        e.g. ``lambda: pl.scan_parquet(url)`` to read a file again.
+    settings : QuerySettings, optional
+        The filters, sort order, hidden columns and widths to start with.
+        Settings that do not fit the data (unknown columns, filters for
+        another type) are left out.
+    mode : {"auto", "live", "memory"}, default "auto"
+        Where queries run first: "auto" is live for lazy data, unless it has
+        at most ``max_live_rows`` rows (kept in memory then), and in memory
+        for eager data; "live" is for lazy data only.
+    max_live_rows : int, default 1000
+        Data up to this size is kept in memory. Also the most rows a live
+        query gives when the data's library cannot skip rows (e.g. Spark).
+    max_memory_rows : int, default 100_000
+        The most rows read into memory; filters and sorting then apply to
+        those only.
+    title : str, optional
+        Shown above the table. Default: the dataframe's type, e.g.
+        "LazyFrame".
+    height : str, default "400px"
+        Height of the table area (CSS). ``"fill"``: as tall as the container,
+        e.g. a tab (not a notebook cell).
 
-    Queries run on the data itself ("live") or on its first rows read into
-    memory (see ``DataQuery``), switched in the widget. ``mode`` is the mode to
-    start in: "auto" (live for lazy data, unless it has at most
-    ``max_live_rows`` rows), "live" (for lazy data only) or "memory".
-    ``max_live_rows`` is also the most rows a live query gives when the
-    data's library cannot skip rows (e.g. Spark); ``max_memory_rows`` the most
-    rows read into memory.
+    Raises
+    ------
+    TypeError
+        If ``data`` is not a dataframe narwhals supports, e.g. a file location
+        (read it first, or browse it with ``StorageExplorer``).
+    ValueError
+        If ``mode`` is unknown, or "live" for eager data.
 
-    ``settings`` (a ``QuerySettings``) are the filters, sort order, hidden
-    columns and widths to start with; ``settings`` (the property) gives those
-    of the widget, as changed by the user. ``title`` is shown above the table
-    (default: the dataframe's type). ``height`` is the height of the table
-    area; ``"fill"`` makes the widget as tall as its container (e.g. a tab,
-    not a notebook cell).
+    See Also
+    --------
+    StorageExplorer : The file explorer, whose "Query data" is the same browser.
+    QuerySettings : Settings written in code.
+
+    Examples
+    --------
+    >>> DataExplorer(pl.scan_parquet("s3://bucket/sales/*.parquet"))
+    >>> DataExplorer(spark.table("sales"), mode="memory")
+    >>> DataExplorer(df, settings=QuerySettings(sort="date", descending=True))
     """
 
     _esm = _static.esm("data_explorer")
@@ -117,18 +145,38 @@ class DataExplorer(anywidget.AnyWidget):
         self.on_msg(self._on_custom_msg)
 
     def result(self) -> Any:
-        """The data with the widget's filters, sort order and hidden columns
-        applied, as a dataframe of its own library: lazy data stays lazy (e.g.
-        a polars LazyFrame, a Spark DataFrame), eager data (e.g. pandas) is
-        computed. It covers all the data, also after In memory mode, where
-        the widget showed its first rows only. See ``DataQuery.result``.
+        """The data with the widget's filters, sort order and hidden columns applied.
+
+        Built on the data itself, so it covers all of it, also after In memory
+        mode, where the widget showed the first rows only. Filters run in the
+        data's library: details such as regex syntax may differ from what In
+        memory mode (polars) showed.
+
+        Returns
+        -------
+        dataframe
+            Of the data's own library: lazy data stays lazy (e.g. a polars
+            LazyFrame or a Spark DataFrame, not yet executed); eager data
+            (e.g. pandas) is computed.
+
+        Examples
+        --------
+        >>> explorer = DataExplorer(pl.scan_parquet("sales/*.parquet"))
+        >>> # ... filter and sort in the widget ...
+        >>> explorer.result().group_by("region").agg(pl.col("amount").sum()).collect()
         """
         return self._data.result()
 
     @property
     def settings(self) -> QuerySettings:
-        """The filters, sort order, hidden columns and widths in use, e.g. to
-        open other data with them."""
+        """The filters, sort order, hidden columns and widths in use.
+
+        Returns
+        -------
+        QuerySettings
+            A copy, as changed by the user in the widget, e.g. to open other
+            data with them, or to keep them in code with ``to_json()``.
+        """
         settings = normalize_settings(self._store.get(_KEY), self._data.schema)
         return QuerySettings.from_dict(settings)
 
