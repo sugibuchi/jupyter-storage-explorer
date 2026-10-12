@@ -1393,14 +1393,29 @@ function render({ model, el }) {
     upBtn.disabled = chain.length < 2;
   }
 
+  // Names with numbers in order ("2" before "10"), ignoring case and accents.
+  // One collator for all comparisons: localeCompare with options sets one up
+  // for each call, which made sorting a large folder by name slow.
+  const nameOrder = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+
   function compare(a, b) {
     const aDir = a.type === "directory";
     if (aDir !== (b.type === "directory")) return aDir ? -1 : 1;
-    const r =
-      sort.key === "name"
-        ? a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" })
-        : (a[sort.key] ?? -Infinity) - (b[sort.key] ?? -Infinity);
+    const r = sort.key === "name" ? nameOrder.compare(a.name, b.name) : (a[sort.key] ?? -Infinity) - (b[sort.key] ?? -Infinity);
     return sort.asc ? r : -r;
+  }
+
+  // The listing sorted, kept until the listing or the sort order changes, so
+  // that filtering and paging (each keystroke, each page) only filter and
+  // slice it.
+  let sorted = { entries: null, key: null, asc: null, list: [] };
+
+  function sortedEntries() {
+    const entries = model.get("_entries");
+    if (sorted.entries !== entries || sorted.key !== sort.key || sorted.asc !== sort.asc) {
+      sorted = { entries, key: sort.key, asc: sort.asc, list: [...entries].sort(compare) };
+    }
+    return sorted.list;
   }
 
   function select(path, additive) {
@@ -1436,7 +1451,7 @@ function render({ model, el }) {
     );
 
     const selected = new Set(model.get("_selected"));
-    const entries = [...model.get("_entries")].sort(compare);
+    const entries = sortedEntries();
     // Filtered by name, then cut into pages. The selection keeps items filtered
     // out or on other pages, and right-click actions apply to them too.
     const matching = listFilter.active() ? entries.filter((e) => listFilter.test(e.name)) : entries;
