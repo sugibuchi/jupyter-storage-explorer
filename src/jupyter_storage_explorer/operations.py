@@ -3,10 +3,12 @@
 ``StorageExplorer`` moves, copies, deletes and downloads files through a list
 of ``FileSystemOperations`` objects (its ``operations`` argument): for each
 operation it calls the first object's method, and the next object's if that
-raises ``NotImplementedError``, ending with ``FsspecOperations``, which does
-everything with fsspec. So an object can do some operations its own way for
-some storage (e.g. server-side copies with the storage's own client) and
-leave the rest to the next ones.
+raises ``NotImplementedError``, ending with the defaults:
+``AsyncFsspecOperations`` for asynchronous filesystems (s3fs, gcsfs, adlfs,
+...), many files at a time, then ``FsspecOperations``, which does everything
+with fsspec. So an object can do some operations its own way for some
+storage (e.g. server-side copies with the storage's own client) and leave
+the rest to the next ones.
 
 Each method does its work synchronously (``StorageExplorer`` runs it in a
 worker thread, see jobs.py) and reports to a ``Progress``: bytes and files
@@ -16,16 +18,18 @@ user cancelled, which raises ``OperationCancelled``.
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import os
 import tempfile
 import threading
 from typing import TYPE_CHECKING, Any
 
+from fsspec.asyn import AsyncFileSystem, sync
 from fsspec.callbacks import Callback
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Sequence
+    from collections.abc import Awaitable, Callable, Sequence
 
     from fsspec import AbstractFileSystem
 
@@ -498,14 +502,203 @@ class FsspecOperations(FileSystemOperations):
         fs.makedirs(path, exist_ok=False)
 
 
+class AsyncFsspecOperations(FileSystemOperations):
+    """Every operation on asynchronous fsspec filesystems (s3fs, gcsfs, adlfs,
+    HTTP, ...), many files at a time: their coroutine methods (``_cp_file``,
+    ``_rm``, ``_get_file``, ...) run on the filesystem's event loop with
+    ``fsspec.asyn.sync``, in batches of ``concurrency`` files. Object stores
+    take about as long for a small file as for none, so copying and deleting
+    folders of many files is much faster than one file at a time.
+
+    Other filesystems (and async ones made for use within a running event
+    loop, ``asynchronous=True``) raise ``NotImplementedError``, for
+    ``FsspecOperations`` to do them. So do folder moves: some storages rename
+    a folder in one step (e.g. Azure Data Lake Gen2), which the filesystem's
+    own ``mv`` does.
+
+    A cancel takes effect between batches, and within a batch for files not
+    yet started and transfers under way.
+
+    Parameters
+    ----------
+    concurrency : int
+        Files copied (or downloaded) at a time.
+    delete_batch : int
+        Files deleted per ``_rm`` call: object stores delete many in one
+        request (S3: up to 1,000).
+    """
+
+    def __init__(self, concurrency: int = 32, delete_batch: int = 1000) -> None:
+        self.concurrency = concurrency
+        self.delete_batch = delete_batch
+
+    def measure(self, fs: AbstractFileSystem, path: str) -> tuple[int, int]:
+        loop = _loop_of(fs)
+        info = sync(loop, fs._info, path)
+        if info.get("type") != "directory":
+            return 1, info.get("size") or 0
+        files = sync(loop, fs._find, path, detail=True)
+        return len(files), sum(i.get("size") or 0 for i in files.values())
+
+    def move(
+        self, fs: AbstractFileSystem, source: str, target: str, progress: Progress
+    ) -> None:
+        loop = _loop_of(fs)
+        if sync(loop, fs._isdir, source):
+            raise NotImplementedError  # the filesystem's own mv (see above)
+        progress.working_on(_name(source))
+        sync(loop, fs._mv_file, source, target)
+
+    def copy(
+        self, fs: AbstractFileSystem, source: str, target: str, progress: Progress
+    ) -> None:
+        loop = _loop_of(fs)
+        if not sync(loop, fs._isdir, source):
+            progress.working_on(_name(source))
+            sync(loop, fs._cp_file, source, target)
+            return
+
+        async def copy_one(item: tuple[str, str, int]) -> None:
+            path, dest, size = item
+            progress.check()
+            progress.working_on(_name(path))
+            await fs._cp_file(path, dest)
+            progress.advance(files=1, bytes=size)
+
+        files = _tree(fs, source, target, fs)
+        self._each(loop, progress, files, copy_one, self.concurrency)
+
+    def copy_between(
+        self,
+        source_fs: AbstractFileSystem,
+        source: str,
+        fs: AbstractFileSystem,
+        target: str,
+        progress: Progress,
+    ) -> None:
+        loop = _loop_of(fs)
+        if _loop_of(source_fs) is not loop:
+            raise NotImplementedError  # run on different event loops
+        if not sync(loop, source_fs._isdir, source):
+            progress.working_on(_name(source))
+            sync(
+                loop, _copy_through_temp_async, source_fs, source, fs, target, progress
+            )
+            return
+
+        async def copy_one(item: tuple[str, str, int]) -> None:
+            path, dest, _size = item
+            progress.check()
+            progress.working_on(_name(path))
+            await _copy_through_temp_async(source_fs, path, fs, dest, progress)
+            progress.advance(files=1)
+
+        files = _tree(source_fs, source, target, fs)
+        self._each(loop, progress, files, copy_one, self.concurrency)
+
+    def delete(self, fs: AbstractFileSystem, path: str, progress: Progress) -> None:
+        loop = _loop_of(fs)
+        if not sync(loop, fs._isdir, path):
+            progress.working_on(_name(path))
+            sync(loop, fs._rm_file, path)
+            return
+        files = sync(loop, fs._find, path, detail=True)
+        names = list(files)
+        for start in range(0, len(names), self.delete_batch):
+            progress.check()
+            batch = names[start : start + self.delete_batch]
+            progress.working_on(_name(batch[-1]))
+            sync(loop, fs._rm, batch)
+            progress.advance(
+                files=len(batch), bytes=sum(files[n].get("size") or 0 for n in batch)
+            )
+        # The folders left, e.g. on filesystems with real folders.
+        if sync(loop, fs._exists, path):
+            sync(loop, fs._rm, path, recursive=True)
+
+    def download(
+        self, fs: AbstractFileSystem, path: str, local_path: str, progress: Progress
+    ) -> None:
+        loop = _loop_of(fs)
+        progress.working_on(_name(path))
+        sync(loop, fs._get_file, path, local_path, callback=progress.callback())
+
+    def upload(
+        self, local_path: str, fs: AbstractFileSystem, path: str, progress: Progress
+    ) -> None:
+        loop = _loop_of(fs)
+        progress.working_on(_name(path))
+        sync(loop, fs._put_file, local_path, path, callback=progress.callback())
+
+    def mkdir(self, fs: AbstractFileSystem, path: str) -> None:
+        sync(_loop_of(fs), fs._makedirs, path, exist_ok=False)
+
+    @staticmethod
+    def _each(
+        loop: asyncio.AbstractEventLoop,
+        progress: Progress,
+        items: Sequence[Any],
+        act: Callable[[Any], Awaitable[None]],
+        batch: int,
+    ) -> None:
+        """Run ``act(item)`` for all ``items``, ``batch`` at a time, on ``loop``.
+
+        Each batch is awaited whole, so nothing runs on after a cancel or a
+        failure, which are then raised (a cancel first).
+        """
+        for start in range(0, len(items), batch):
+            progress.check()
+            coros = [act(item) for item in items[start : start + batch]]
+            results = sync(loop, _gather, coros)
+            failures = [r for r in results if isinstance(r, BaseException)]
+            for failure in failures:
+                if isinstance(failure, OperationCancelled):
+                    raise failure
+            if failures:
+                raise failures[0]
+
+
+async def _gather(coros: list[Awaitable[None]]) -> list[Any]:
+    return await asyncio.gather(*coros, return_exceptions=True)
+
+
+def _loop_of(fs: AbstractFileSystem) -> asyncio.AbstractEventLoop:
+    """The event loop to run ``fs``'s coroutines on; ``NotImplementedError``
+    if it is not an async filesystem usable from another thread."""
+    if not isinstance(fs, AsyncFileSystem) or fs.asynchronous:
+        raise NotImplementedError
+    return fs.loop
+
+
+async def _copy_through_temp_async(
+    source_fs: AsyncFileSystem,
+    path: str,
+    fs: AsyncFileSystem,
+    target: str,
+    progress: Progress,
+) -> None:
+    """``_copy_through_temp``, with the filesystems' coroutines."""
+    handle, temp_path = tempfile.mkstemp(prefix="jse-copy-")
+    os.close(handle)
+    try:
+        await source_fs._get_file(path, temp_path, callback=progress.callback())
+        progress.check()
+        await fs._put_file(temp_path, target, callback=progress.callback(count=False))
+    finally:
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(temp_path)
+
+
 class OperationChain:
     """Calls an operation on the first of ``operations`` that implements it
-    (see the module docstring), with ``FsspecOperations`` last."""
+    (see the module docstring). Unless ``operations`` has an
+    ``FsspecOperations``, ``AsyncFsspecOperations`` and ``FsspecOperations``
+    come last, in that order."""
 
     def __init__(self, operations: Sequence[FileSystemOperations] = ()) -> None:
         self.operations = list(operations)
         if not any(type(o) is FsspecOperations for o in self.operations):
-            self.operations.append(FsspecOperations())
+            self.operations += [AsyncFsspecOperations(), FsspecOperations()]
 
     def __getattr__(self, name: str) -> Callable[..., Any]:
         if name.startswith("_") or not hasattr(FileSystemOperations, name):

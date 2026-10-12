@@ -78,9 +78,11 @@ ending with a *File operations* block: the only methods that call fsspec on the 
 listing, reading and writing, e.g. `_ls`, `_info`, `_exists`, `_isdir`, `_read_bytes`, `_put_file`. Other methods go
 through them, never through fsspec directly. Moving, copying, deleting, downloading and creating folders go through
 the operations objects instead (`operations.py`, the `operations=` argument): a chain of `FileSystemOperations`, each
-method tried in order until one does not raise `NotImplementedError`, with `FsspecOperations` last (it walks folders
-itself, to report progress file by file). Copies into storage go through a temporary file, so a failure leaves no
-partial file. Object stores (S3, GCS) have no empty folders, which matters for creating folders.
+method tried in order until one does not raise `NotImplementedError`, ending with `AsyncFsspecOperations` (async
+filesystems such as s3fs: their coroutines, many files at a time; folder moves left to the next) and `FsspecOperations`
+(walking folders itself, to report progress file by file). Tests use fsspec's `AsyncFileSystemWrapper` around a memory
+filesystem as an async one. Copies into storage go through a temporary file, so a failure leaves no partial file.
+Object stores (S3, GCS) have no empty folders, which matters for creating folders.
 
 **Jobs.** Move, delete, paste and both downloads to JupyterLab run in the background (`jobs.py`). Each operation is a
 `*_task` method: it plans on the main thread (checks, conflicts to ask about, returned as a dict), and returns a

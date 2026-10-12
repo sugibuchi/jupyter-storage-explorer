@@ -8,9 +8,11 @@ from typing import Any
 
 import fsspec
 import pytest
+from fsspec.implementations.asyn_wrapper import AsyncFileSystemWrapper
 
 from jupyter_storage_explorer.jobs import JobRunner
 from jupyter_storage_explorer.operations import (
+    AsyncFsspecOperations,
     FileSystemOperations,
     FsspecOperations,
     OperationCancelled,
@@ -128,7 +130,98 @@ class TestFsspecOperations:
         assert progress.bytes_done >= 4
 
 
+@pytest.fixture
+def async_tree(tree):
+    """``tree`` as an asynchronous filesystem, as s3fs, gcsfs or adlfs are."""
+    return AsyncFileSystemWrapper(tree)
+
+
+class TestAsyncFsspecOperations:
+    ops = AsyncFsspecOperations(concurrency=2, delete_batch=2)
+
+    def test_measure(self, async_tree):
+        assert self.ops.measure(async_tree, "/src") == (3, 7)
+        assert self.ops.measure(async_tree, "/src/a.txt") == (1, 4)
+
+    def test_copy_folder_concurrently(self, tree, async_tree):
+        progress = Recorder()
+        self.ops.copy(async_tree, "/src", "/dst", progress)
+        assert tree.cat_file("/dst/sub/c.txt") == b"c"
+        assert sorted(progress.names) == ["a.txt", "b.txt", "c.txt"]
+        assert (progress.files_done, progress.bytes_done) == (3, 7)
+
+    def test_copy_cancelled_in_a_batch(self, tree, async_tree, monkeypatch):
+        ops = AsyncFsspecOperations(concurrency=1)
+        progress = Progress()
+        original = async_tree._cp_file
+
+        async def cp_then_cancel(*args: Any, **kwargs: Any) -> None:
+            await original(*args, **kwargs)
+            progress.cancel()
+
+        monkeypatch.setattr(async_tree, "_cp_file", cp_then_cancel)
+        with pytest.raises(OperationCancelled):
+            ops.copy(async_tree, "/src", "/dst", progress)
+        assert len(tree.find("/dst")) == 1
+
+    def test_failure_raised(self, async_tree, monkeypatch):
+        async def failing(*args: Any, **kwargs: Any) -> None:
+            raise OSError("denied")
+
+        monkeypatch.setattr(async_tree, "_cp_file", failing)
+        with pytest.raises(OSError, match="denied"):
+            self.ops.copy(async_tree, "/src", "/dst", Progress())
+
+    def test_copy_between_filesystems(self, async_tree, tmp_path):
+        local = AsyncFileSystemWrapper(fsspec.filesystem("file"))
+        progress = Progress()
+        target = (tmp_path / "copy").as_posix()
+        self.ops.copy_between(async_tree, "/src", local, target, progress)
+        assert (tmp_path / "copy" / "sub" / "c.txt").read_bytes() == b"c"
+        assert (progress.files_done, progress.bytes_done) == (3, 7)
+
+    def test_delete_folder_in_batches(self, tree, async_tree):
+        progress = Progress()
+        self.ops.delete(async_tree, "/src", progress)
+        assert not tree.exists("/src")
+        assert progress.files_done == 3
+
+    def test_move_files_only(self, tree, async_tree):
+        self.ops.move(async_tree, "/src/a.txt", "/a.txt", Progress())
+        assert tree.cat_file("/a.txt") == b"aaaa"
+        # Folders: the filesystem's own mv (FsspecOperations).
+        with pytest.raises(NotImplementedError):
+            self.ops.move(async_tree, "/src", "/moved", Progress())
+
+    def test_download_upload_mkdir(self, tree, async_tree, tmp_path):
+        progress = Progress()
+        local = str(tmp_path / "b.txt")
+        self.ops.download(async_tree, "/src/b.txt", local, progress)
+        self.ops.upload(local, async_tree, "/up.txt", progress)
+        assert tree.cat_file("/up.txt") == b"bb"
+        assert progress.bytes_done >= 2
+        self.ops.mkdir(async_tree, "/new")
+        assert tree.isdir("/new")
+
+    def test_other_filesystems_left_to_the_next(self, tree):
+        with pytest.raises(NotImplementedError):
+            self.ops.copy(tree, "/src", "/dst", Progress())
+
+
 class TestOperationChain:
+    def test_defaults(self, tree, async_tree):
+        chain = OperationChain()
+        assert [type(o) for o in chain.operations] == [
+            AsyncFsspecOperations,
+            FsspecOperations,
+        ]
+        # A folder move on an async filesystem falls through to FsspecOperations.
+        chain.move(async_tree, "/src", "/moved", Progress())
+        assert tree.cat_file("/moved/sub/c.txt") == b"c"
+        # A synchronous filesystem: FsspecOperations.
+        chain.copy(tree, "/moved", "/again", Progress())
+        assert tree.exists("/again/a.txt")
+
     def test_first_implementation_wins_and_fsspec_is_last(self, tree):
         calls = []
 
