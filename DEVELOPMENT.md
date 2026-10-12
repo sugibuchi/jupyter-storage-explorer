@@ -14,7 +14,7 @@ together with the same version (from the git tags):
 |----------------------------------------------------------------|------------------------------------------------------------------------------|
 | `src/jupyter_storage_explorer/`                                | The widgets, formats and the data browser.                                   |
 | `src/jupyter_storage_explorer/static/`                         | The widgets' JavaScript and CSS, loaded at run time (no build step).         |
-| `launcher/src/jupyter_storage_explorer_launcher/`              | `launch()`, which reads the user's `storage-explorer/launcher.py`.           |
+| `launcher/src/jupyter_storage_explorer_launcher/`              | `launch()`, which merges the `storage-explorer/launcher.py` files (layers).   |
 | `launcher/labextension/`                                       | The JupyterLab extension (TypeScript).                                       |
 | `launcher/src/jupyter_storage_explorer_launcher/labextension/` | The extension built from `launcher/labextension/` (git-ignored).             |
 | `notebooks/`                                                   | Demo notebooks and `make_samples.py`, which writes the sample data they use. |

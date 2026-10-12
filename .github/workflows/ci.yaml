@@ -41,8 +41,8 @@ jobs:
         with:
           python-version: "3.14"
 
-      # The launcher is left out: its JupyterLab extension is not built here,
-      # and the tests do not use it.
+      # The launcher is left out: its JupyterLab extension is not built here.
+      # Its tests import its Python code from launcher/src (pytest's pythonpath).
       - name: Install the project
         run: uv sync --no-install-package jupyter-storage-explorer-launcher
 

@@ -69,7 +69,8 @@ pip install jupyter-storage-explorer-launcher
 
 ![The Storage Explorer item in JupyterLab's launcher](https://raw.githubusercontent.com/sugibuchi/jupyter-storage-explorer/main/launcher/figs/launcher.png)
 
-What the tab shows can be configured with a `launcher.py` file; see the [launcher's README](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/launcher/README.md).
+What the tab shows is configured with `launcher.py` files, for the whole system and for each user; see the
+[launcher's README](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/launcher/README.md).
 
 ### Several storages in one explorer
 
