@@ -190,7 +190,7 @@ class TestAsyncFsspecOperations:
         self.ops.move(async_tree, "/src/a.txt", "/a.txt", Progress())
         assert tree.cat_file("/a.txt") == b"aaaa"
         # Folders: the filesystem's own mv (FsspecOperations).
-        with pytest.raises(NotImplementedError):
+        with pytest.raises(FileSystemOperations.NotSupported):
             self.ops.move(async_tree, "/src", "/moved", Progress())
 
     def test_download_upload_mkdir(self, tree, async_tree, tmp_path):
@@ -204,7 +204,7 @@ class TestAsyncFsspecOperations:
         assert tree.isdir("/new")
 
     def test_other_filesystems_left_to_the_next(self, tree):
-        with pytest.raises(NotImplementedError):
+        with pytest.raises(FileSystemOperations.NotSupported):
             self.ops.copy(tree, "/src", "/dst", Progress())
 
 
@@ -230,7 +230,7 @@ class TestOperationChain:
 
             def delete(self, fs, path, progress):
                 if fs.protocol != "memory" and "memory" not in fs.protocol:
-                    raise NotImplementedError
+                    raise self.NotSupported
                 calls.append(path)
                 fs.mv(path, "/trash/" + path.rsplit("/", 1)[-1], recursive=True)
 
@@ -246,6 +246,29 @@ class TestOperationChain:
     def test_unknown_operation(self):
         with pytest.raises(AttributeError):
             _ = OperationChain().rename
+
+    def test_other_not_implemented_errors_are_errors(self, tree):
+        """A NotImplementedError raised for another reason (e.g. by a library)
+        is reported, not taken as "not supported" by the next object."""
+
+        class Library(FileSystemOperations):
+            def copy(self, fs, source, target, progress):
+                raise NotImplementedError("this filesystem cannot copy")
+
+        chain = OperationChain([Library()])
+        with pytest.raises(NotImplementedError, match="cannot copy"):
+            chain.copy(tree, "/src/a.txt", "/a2.txt", Progress())
+        assert not tree.exists("/a2.txt")
+
+    def test_nobody_supports_it(self, tree):
+        class Nothing(FileSystemOperations):
+            pass
+
+        # A chain of objects none of which supports it (no fsspec defaults).
+        chain = OperationChain([Nothing(), FsspecOperations()])
+        chain.operations = chain.operations[:1]
+        with pytest.raises(FileSystemOperations.NotSupported, match="no operations"):
+            chain.copy(tree, "/a", "/b", Progress())
 
 
 class TestJobRunner:

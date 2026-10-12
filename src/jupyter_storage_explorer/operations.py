@@ -3,7 +3,7 @@
 ``StorageExplorer`` moves, copies, deletes and downloads files through a list
 of ``FileSystemOperations`` objects (its ``operations`` argument): for each
 operation it calls the first object's method, and the next object's if that
-raises ``NotImplementedError``, ending with the defaults:
+raises ``FileSystemOperations.NotSupported``, ending with the defaults:
 ``AsyncFsspecOperations`` for asynchronous filesystems (s3fs, gcsfs, adlfs,
 ...), many files at a time, then ``FsspecOperations``, which does everything
 with fsspec. So an object can do some operations its own way for some
@@ -161,10 +161,12 @@ class FileSystemOperations:
     """File operations for ``StorageExplorer``, to do some of them in a way of
     your own (see the module docstring).
 
-    Every method raises ``NotImplementedError``. Override those you implement,
-    and raise ``NotImplementedError`` in them too for filesystems you do not
-    handle: each method is given the filesystem, and the next operations
-    object (in the end ``FsspecOperations``) then does it.
+    Every method raises ``NotSupported``. Override those you implement, and
+    raise ``self.NotSupported`` in them too for filesystems (or cases) you do
+    not handle: each method is given the filesystem, and the next operations
+    object (in the end ``FsspecOperations``) then does it. Any other exception
+    is an error of the operation, reported to the user, including
+    ``NotImplementedError`` raised by a library.
 
     One object serves every explorer it is given to and runs in their jobs'
     threads, so it may hold state, e.g. a client for the storage, as long as
@@ -190,6 +192,15 @@ class FileSystemOperations:
     overwriting), and their parent folders do.
     """
 
+    class NotSupported(Exception):
+        """Raised by a method for an operation this object does not do (e.g.
+        on another filesystem), for the next operations object to do it.
+
+        Its own exception, so that a ``NotImplementedError`` raised for other
+        reasons (e.g. by a filesystem lacking a method) is reported as an
+        error, not taken to mean "not supported".
+        """
+
     def measure(self, fs: AbstractFileSystem, path: str) -> tuple[int, int]:
         """Count the files at a path and their size, for the progress bar.
 
@@ -211,10 +222,10 @@ class FileSystemOperations:
 
         Raises
         ------
-        NotImplementedError
+        FileSystemOperations.NotSupported
             If this object does not handle ``fs``.
         """
-        raise NotImplementedError
+        raise self.NotSupported
 
     def move(
         self, fs: AbstractFileSystem, source: str, target: str, progress: Progress
@@ -236,12 +247,12 @@ class FileSystemOperations:
 
         Raises
         ------
-        NotImplementedError
+        FileSystemOperations.NotSupported
             If this object does not handle ``fs``.
         OperationCancelled
             From ``progress.check()``, once the user has cancelled.
         """
-        raise NotImplementedError
+        raise self.NotSupported
 
     def copy(
         self, fs: AbstractFileSystem, source: str, target: str, progress: Progress
@@ -264,12 +275,12 @@ class FileSystemOperations:
 
         Raises
         ------
-        NotImplementedError
+        FileSystemOperations.NotSupported
             If this object does not handle ``fs``.
         OperationCancelled
             From ``progress.check()``, once the user has cancelled.
         """
-        raise NotImplementedError
+        raise self.NotSupported
 
     def copy_between(
         self,
@@ -303,12 +314,12 @@ class FileSystemOperations:
 
         Raises
         ------
-        NotImplementedError
+        FileSystemOperations.NotSupported
             If this object does not handle these filesystems.
         OperationCancelled
             From ``progress.check()``, once the user has cancelled.
         """
-        raise NotImplementedError
+        raise self.NotSupported
 
     def delete(self, fs: AbstractFileSystem, path: str, progress: Progress) -> None:
         """Delete a file or folder (with everything in it).
@@ -325,12 +336,12 @@ class FileSystemOperations:
 
         Raises
         ------
-        NotImplementedError
+        FileSystemOperations.NotSupported
             If this object does not handle ``fs``.
         OperationCancelled
             From ``progress.check()``, once the user has cancelled.
         """
-        raise NotImplementedError
+        raise self.NotSupported
 
     def download(
         self, fs: AbstractFileSystem, path: str, local_path: str, progress: Progress
@@ -352,12 +363,12 @@ class FileSystemOperations:
 
         Raises
         ------
-        NotImplementedError
+        FileSystemOperations.NotSupported
             If this object does not handle ``fs``.
         OperationCancelled
             From ``progress.check()``, once the user has cancelled.
         """
-        raise NotImplementedError
+        raise self.NotSupported
 
     def upload(
         self, local_path: str, fs: AbstractFileSystem, path: str, progress: Progress
@@ -379,12 +390,12 @@ class FileSystemOperations:
 
         Raises
         ------
-        NotImplementedError
+        FileSystemOperations.NotSupported
             If this object does not handle ``fs``.
         OperationCancelled
             From ``progress.check()``, once the user has cancelled.
         """
-        raise NotImplementedError
+        raise self.NotSupported
 
     def mkdir(self, fs: AbstractFileSystem, path: str) -> None:
         """Create a new, empty folder ("Create a folder" in the explorer).
@@ -403,10 +414,10 @@ class FileSystemOperations:
 
         Raises
         ------
-        NotImplementedError
+        FileSystemOperations.NotSupported
             If this object does not handle ``fs``.
         """
-        raise NotImplementedError
+        raise self.NotSupported
 
 
 class FsspecOperations(FileSystemOperations):
@@ -511,7 +522,7 @@ class AsyncFsspecOperations(FileSystemOperations):
     folders of many files is much faster than one file at a time.
 
     Other filesystems (and async ones made for use within a running event
-    loop, ``asynchronous=True``) raise ``NotImplementedError``, for
+    loop, ``asynchronous=True``) raise ``FileSystemOperations.NotSupported``, for
     ``FsspecOperations`` to do them. So do folder moves: some storages rename
     a folder in one step (e.g. Azure Data Lake Gen2), which the filesystem's
     own ``mv`` does.
@@ -545,7 +556,7 @@ class AsyncFsspecOperations(FileSystemOperations):
     ) -> None:
         loop = _loop_of(fs)
         if sync(loop, fs._isdir, source):
-            raise NotImplementedError  # the filesystem's own mv (see above)
+            raise self.NotSupported  # the filesystem's own mv (see above)
         progress.working_on(_name(source))
         sync(loop, fs._mv_file, source, target)
 
@@ -578,7 +589,7 @@ class AsyncFsspecOperations(FileSystemOperations):
     ) -> None:
         loop = _loop_of(fs)
         if _loop_of(source_fs) is not loop:
-            raise NotImplementedError  # run on different event loops
+            raise self.NotSupported  # run on different event loops
         if not sync(loop, source_fs._isdir, source):
             progress.working_on(_name(source))
             sync(
@@ -663,10 +674,11 @@ async def _gather(coros: list[Awaitable[None]]) -> list[Any]:
 
 
 def _loop_of(fs: AbstractFileSystem) -> asyncio.AbstractEventLoop:
-    """The event loop to run ``fs``'s coroutines on; ``NotImplementedError``
-    if it is not an async filesystem usable from another thread."""
+    """The event loop to run ``fs``'s coroutines on. Raises
+    ``FileSystemOperations.NotSupported`` if it is not an async filesystem
+    usable from another thread."""
     if not isinstance(fs, AsyncFileSystem) or fs.asynchronous:
-        raise NotImplementedError
+        raise FileSystemOperations.NotSupported
     return fs.loop
 
 
@@ -708,9 +720,11 @@ class OperationChain:
             for operations in self.operations:
                 try:
                     return getattr(operations, name)(*args, **kwargs)
-                except NotImplementedError:
+                except FileSystemOperations.NotSupported:
                     continue
-            raise NotImplementedError(f"no operations object implements {name}")
+            raise FileSystemOperations.NotSupported(
+                f"no operations object does {name} on this filesystem"
+            )
 
         return call
 
