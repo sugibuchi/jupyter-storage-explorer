@@ -251,11 +251,15 @@ class StorageExplorer(anywidget.AnyWidget):
     _css = _static.css("storage_explorer")
 
     _root = traitlets.Unicode().tag(sync=True)
-    # Directory path -> list of {"name", "path"} of its subdirectories.
-    # A directory that has not been listed yet has no key.
+    # Directory path -> list of {"name", "path"} of its subdirectories, with
+    # "no_url": true for those without a URL (see _url). A directory that has
+    # not been listed yet has no key.
     _tree = traitlets.Dict().tag(sync=True)
     _current_dir = traitlets.Unicode().tag(sync=True)
-    _entries = traitlets.List().tag(sync=True)
+    # The items in the current directory, as columns (see _listing): large
+    # folders are listed whole, and a list of objects repeating the keys, the
+    # folder's path and each URL was several times larger.
+    _listing = traitlets.Dict().tag(sync=True)
     _selected = traitlets.List(traitlets.Unicode()).tag(sync=True)
     _error = traitlets.Unicode().tag(sync=True)
     # Height of the tree and file list (CSS). The preview panel adds its own
@@ -445,6 +449,10 @@ class StorageExplorer(anywidget.AnyWidget):
             "upload_chunk": lambda c, b: self._reply(c, self._upload_chunk(c, b)),
             "upload_done": lambda c, _: self._reply(c, self._upload_done(c["dest"])),
             "vendor": lambda c, _: self._reply(c, self._vendor_source(c["name"])),
+            # The listing has no URLs (see _make_listing): asked for when copying.
+            "urls": lambda c, _: self._reply(
+                c, {"urls": [self._url(p) for p in c["paths"]]}
+            ),
             "move": lambda c, _: self._reply(c, self._move_request(c)),
             "download_to_server": lambda c, _: self._reply(
                 c, self._download_to_server_request(c)
@@ -490,21 +498,14 @@ class StorageExplorer(anywidget.AnyWidget):
             infos = self._ls(path)
         except Exception as exc:
             self._error = f"Cannot list {path}: {exc}"
-            self._entries = []
+            self._listing = self._make_listing(path, [])
             self._selected = []
             self._current_format = ""
             self._current_query = False
             return
         self._error = ""
         self._set_children(path, infos)
-        self._entries = [
-            {
-                **(e := _entry(i)),
-                "url": self._url(e["path"]),
-                "format": self._file_format(i),
-            }
-            for i in infos
-        ]
+        self._listing = self._make_listing(path, infos)
         self._selected = []
         fmt = self._directory_format(path, infos)
         self._current_format = fmt.name if fmt is not None else ""
@@ -529,19 +530,68 @@ class StorageExplorer(anywidget.AnyWidget):
         self._set_children(path, infos)
 
     def _set_children(self, path: str, infos: list[dict[str, Any]]) -> None:
-        dirs = sorted(
-            (
-                {
-                    "name": _basename(i["name"]),
-                    "path": _norm(i["name"]),
-                    "url": self._url(_norm(i["name"])),
-                }
-                for i in infos
-                if i.get("type") == "directory"
-            ),
-            key=lambda d: d["name"].lower(),
-        )
+        dirs = []
+        for info in infos:
+            if info.get("type") == "directory":
+                child = _norm(info["name"])
+                dirs.append({"name": _basename(child), "path": child})
+                if self._url(child) is None:
+                    dirs[-1]["no_url"] = True
+        dirs.sort(key=lambda d: d["name"].lower())
         self._tree = {**self._tree, path: dirs}
+
+    def _make_listing(self, path: str, infos: list[dict[str, Any]]) -> dict[str, Any]:
+        """The listing of directory ``path`` (its ``infos`` from ``_ls``) for ``_listing``.
+
+        One list per column, an item per entry: "names", "is_dir" (0 or 1),
+        "sizes" (None for folders), "mtimes" (whole seconds, or None), and
+        "format", an index into "formats", whose first name is "" (none; all
+        folders). Paths are not sent: an entry's is "dir" joined with its name,
+        unless "paths" (otherwise None) gives them all, for a filesystem that
+        names them differently. URLs are not sent either, as most are never
+        used: the frontend asks for them ("urls") when copying; "no_url" lists
+        the indexes of the entries without one (see _url).
+        """
+        listing: dict[str, Any] = {
+            "dir": path,
+            "names": [],
+            "is_dir": [],
+            "sizes": [],
+            "mtimes": [],
+            "formats": [""],
+            "format": [],
+            "paths": None,
+            "no_url": [],
+        }
+        format_index = {"": 0}
+        paths = []
+        for i, info in enumerate(infos):
+            entry = _entry(info)
+            fmt = self._file_format(info)
+            if fmt not in format_index:
+                format_index[fmt] = len(listing["formats"])
+                listing["formats"].append(fmt)
+            listing["names"].append(entry["name"])
+            listing["is_dir"].append(int(entry["type"] == "directory"))
+            listing["sizes"].append(entry["size"])
+            mtime = entry["mtime"]
+            listing["mtimes"].append(None if mtime is None else int(mtime))
+            listing["format"].append(format_index[fmt])
+            paths.append(entry["path"])
+            if self._url(entry["path"]) is None:
+                listing["no_url"].append(i)
+        if any(
+            p != _join(path, n) for p, n in zip(paths, listing["names"], strict=True)
+        ):
+            listing["paths"] = paths
+        return listing
+
+    def _listed_paths(self) -> list[str]:
+        """Paths of the items in ``_listing``, in its order."""
+        listing = self._listing
+        if listing.get("paths") is not None:
+            return listing["paths"]
+        return [_join(listing["dir"], name) for name in listing.get("names", [])]
 
     def _refresh(self) -> None:
         """Drop cached listings and reload the current directory."""
@@ -576,9 +626,16 @@ class StorageExplorer(anywidget.AnyWidget):
 
     def _update_entry(self, path: str) -> None:
         """Refresh the size and modification time shown for ``path`` in the list."""
-        if any(e["path"] == path for e in self._entries):
-            new = {**_entry(self._info(path)), "url": self._url(path)}
-            self._entries = [new if e["path"] == path else e for e in self._entries]
+        paths = self._listed_paths()
+        if path in paths:
+            i = paths.index(path)
+            entry = _entry(self._info(path))
+            listing = self._listing
+            # New lists, so that the change is seen and sent.
+            sizes, mtimes = list(listing["sizes"]), list(listing["mtimes"])
+            sizes[i] = entry["size"]
+            mtimes[i] = None if entry["mtime"] is None else int(entry["mtime"])
+            self._listing = {**listing, "sizes": sizes, "mtimes": mtimes}
 
     def _file_format(self, info: dict[str, Any]) -> str:
         """The format name of a listed file, e.g. "json-lines".
