@@ -155,35 +155,116 @@ class _ProgressCallback(Callback):
 
 class FileSystemOperations:
     """File operations for ``StorageExplorer``, to do some of them in a way of
-    your own (see the module docstring). Every method raises
-    ``NotImplementedError``; override those you implement, and raise it too
-    for filesystems you do not handle (each method is given the filesystem).
+    your own (see the module docstring).
+
+    Every method raises ``NotImplementedError``. Override those you implement,
+    and raise ``NotImplementedError`` in them too for filesystems you do not
+    handle: each method is given the filesystem, and the next operations
+    object (in the end ``FsspecOperations``) then does it.
 
     One object serves every explorer it is given to and runs in their jobs'
     threads, so it may hold state, e.g. a client for the storage, as long as
     it is thread-safe.
 
-    Paths are fsspec paths of the filesystem given, as ``StorageExplorer``
-    lists them. Targets do not exist (an existing file is deleted first when
+    Paths are not URLs: they are fsspec paths of the filesystem passed with
+    them, as that filesystem lists them (without its protocol), e.g.
+
+    ======================  ===========================================
+    Filesystem              Path
+    ======================  ===========================================
+    ``LocalFileSystem``     ``"/home/me/raw/sales.csv"``
+    ``S3FileSystem``        ``"my-bucket/raw/sales.csv"``
+    ``AzureBlobFileSystem`` ``"container/raw/sales.csv"`` (the account
+                            is the filesystem's ``account_name``)
+    ``MemoryFileSystem``    ``"/raw/sales.csv"``
+    ======================  ===========================================
+
+    ``fs.unstrip_protocol(path)`` gives a path's URL, if an implementation
+    needs one. Local paths (``local_path``) are paths on the kernel's machine.
+
+    Targets do not exist (an existing file is deleted first when
     overwriting), and their parent folders do.
     """
 
     def measure(self, fs: AbstractFileSystem, path: str) -> tuple[int, int]:
-        """The number of files at ``path`` (1 for a file) and their total size,
-        for progress bars."""
+        """Count the files at a path and their size, for the progress bar.
+
+        Called for each item of a job before it starts; it should be quick
+        compared with the operation itself (e.g. one listing).
+
+        Parameters
+        ----------
+        fs : AbstractFileSystem
+            The filesystem ``path`` is on.
+        path : str
+            A file or folder on ``fs`` (an fsspec path of ``fs``).
+
+        Returns
+        -------
+        tuple of (int, int)
+            The number of files (1 for a file; for a folder, those in it and
+            its subfolders) and their total size in bytes.
+
+        Raises
+        ------
+        NotImplementedError
+            If this object does not handle ``fs``.
+        """
         raise NotImplementedError
 
     def move(
         self, fs: AbstractFileSystem, source: str, target: str, progress: Progress
     ) -> None:
-        """Move file or folder ``source`` (with everything in it) to ``target``."""
+        """Move a file or folder (with everything in it) within a filesystem.
+
+        Parameters
+        ----------
+        fs : AbstractFileSystem
+            The filesystem both paths are on.
+        source : str
+            The file or folder to move (an fsspec path of ``fs``).
+        target : str
+            The path it gets (an fsspec path of ``fs``), which does not exist;
+            its parent folder does.
+        progress : Progress
+            Where to report progress (optional) and check for a cancel
+            (``progress.check()``, between steps).
+
+        Raises
+        ------
+        NotImplementedError
+            If this object does not handle ``fs``.
+        OperationCancelled
+            From ``progress.check()``, once the user has cancelled.
+        """
         raise NotImplementedError
 
     def copy(
         self, fs: AbstractFileSystem, source: str, target: str, progress: Progress
     ) -> None:
-        """Copy file or folder ``source`` (with everything in it) to ``target``,
-        within ``fs``."""
+        """Copy a file or folder (with everything in it) within a filesystem.
+
+        Parameters
+        ----------
+        fs : AbstractFileSystem
+            The filesystem both paths are on.
+        source : str
+            The file or folder to copy (an fsspec path of ``fs``).
+        target : str
+            The path of the copy (an fsspec path of ``fs``), which does not
+            exist, except a file being overwritten; its parent folder does.
+        progress : Progress
+            Where to report files and bytes copied (``advance``, or
+            ``callback()`` for transfers) and check for a cancel
+            (``progress.check()``, e.g. between files).
+
+        Raises
+        ------
+        NotImplementedError
+            If this object does not handle ``fs``.
+        OperationCancelled
+            From ``progress.check()``, once the user has cancelled.
+        """
         raise NotImplementedError
 
     def copy_between(
@@ -194,32 +275,132 @@ class FileSystemOperations:
         target: str,
         progress: Progress,
     ) -> None:
-        """Copy file or folder ``source`` of another filesystem, ``source_fs``,
-        to ``target`` of ``fs``. A file that fails must not be left partly
-        written."""
+        """Copy a file or folder (with everything in it) from another filesystem.
+
+        A file that fails or is cancelled must not be left partly written at
+        ``target`` (e.g. copy through a temporary file).
+
+        Parameters
+        ----------
+        source_fs : AbstractFileSystem
+            The filesystem ``source`` is on (e.g. another storage, read with
+            the environment's credentials).
+        source : str
+            The file or folder to copy (an fsspec path of ``source_fs``).
+        fs : AbstractFileSystem
+            The filesystem ``target`` is on: the one the explorer shows.
+        target : str
+            The path of the copy (an fsspec path of ``fs``), which does not
+            exist, except a file being overwritten; its parent folder does.
+        progress : Progress
+            Where to report files and bytes copied (``advance``, or
+            ``callback()`` for transfers) and check for a cancel
+            (``progress.check()``, e.g. between files).
+
+        Raises
+        ------
+        NotImplementedError
+            If this object does not handle these filesystems.
+        OperationCancelled
+            From ``progress.check()``, once the user has cancelled.
+        """
         raise NotImplementedError
 
     def delete(self, fs: AbstractFileSystem, path: str, progress: Progress) -> None:
-        """Delete file or folder ``path`` (with everything in it)."""
+        """Delete a file or folder (with everything in it).
+
+        Parameters
+        ----------
+        fs : AbstractFileSystem
+            The filesystem ``path`` is on.
+        path : str
+            The file or folder to delete (an fsspec path of ``fs``).
+        progress : Progress
+            Where to report files deleted (``advance``) and check for a
+            cancel (``progress.check()``, e.g. between batches of files).
+
+        Raises
+        ------
+        NotImplementedError
+            If this object does not handle ``fs``.
+        OperationCancelled
+            From ``progress.check()``, once the user has cancelled.
+        """
         raise NotImplementedError
 
     def download(
         self, fs: AbstractFileSystem, path: str, local_path: str, progress: Progress
     ) -> None:
-        """Copy file ``path`` to ``local_path`` on the kernel's machine."""
+        """Copy a file of a filesystem to the kernel's machine.
+
+        Parameters
+        ----------
+        fs : AbstractFileSystem
+            The filesystem ``path`` is on.
+        path : str
+            The file to copy (an fsspec path of ``fs``; never a folder).
+        local_path : str
+            Where to write it on the kernel's machine: a temporary file, moved
+            into place by the caller once complete.
+        progress : Progress
+            Where to report bytes copied (e.g. ``callback()``, given to
+            fsspec's ``get_file``) and check for a cancel.
+
+        Raises
+        ------
+        NotImplementedError
+            If this object does not handle ``fs``.
+        OperationCancelled
+            From ``progress.check()``, once the user has cancelled.
+        """
         raise NotImplementedError
 
     def upload(
         self, local_path: str, fs: AbstractFileSystem, path: str, progress: Progress
     ) -> None:
-        """Copy the local file ``local_path`` to ``path``."""
+        """Copy a file of the kernel's machine to a filesystem.
+
+        Parameters
+        ----------
+        local_path : str
+            The file to copy, on the kernel's machine.
+        fs : AbstractFileSystem
+            The filesystem ``path`` is on.
+        path : str
+            Where to write it (an fsspec path of ``fs``); its parent folder
+            exists.
+        progress : Progress
+            Where to report bytes copied (e.g. ``callback()``, given to
+            fsspec's ``put_file``) and check for a cancel.
+
+        Raises
+        ------
+        NotImplementedError
+            If this object does not handle ``fs``.
+        OperationCancelled
+            From ``progress.check()``, once the user has cancelled.
+        """
         raise NotImplementedError
 
     def mkdir(self, fs: AbstractFileSystem, path: str) -> None:
-        """Create the new folder ``path`` ("Create a folder"); its parent exists.
+        """Create a new, empty folder ("Create a folder" in the explorer).
 
-        E.g. put a placeholder file in it on an object store, where empty
-        folders do not exist.
+        Quick, so not run as a job: no progress. On object stores, where
+        empty folders do not exist, an implementation may e.g. put a
+        placeholder file in it.
+
+        Parameters
+        ----------
+        fs : AbstractFileSystem
+            The filesystem ``path`` is on.
+        path : str
+            The folder to create (an fsspec path of ``fs``), which does not
+            exist; its parent folder does.
+
+        Raises
+        ------
+        NotImplementedError
+            If this object does not handle ``fs``.
         """
         raise NotImplementedError
 
