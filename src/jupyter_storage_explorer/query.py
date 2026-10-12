@@ -340,17 +340,30 @@ class QuerySettingsStore:
 default_store = QuerySettingsStore()
 
 
+MODES = ("auto", "live", "memory")
+
+
+def _memory_backend() -> str | None:
+    """The library data in memory is queried with: polars when it is installed,
+    as it is faster and the same for all data; otherwise the data's own."""
+    return "polars" if Polars().is_installed() else None
+
+
 def as_lazy(frame: Any) -> nw.LazyFrame:
     """A dataframe of any library narwhals supports, as a narwhals LazyFrame.
 
-    Eager dataframes (pandas, PyArrow, ...) are queried with polars when it is
-    installed, as it is faster and the same for all of them; otherwise with
-    their own library.
+    Eager dataframes (pandas, PyArrow, ...) are queried in memory (see
+    ``_memory_backend``).
     """
     data = nw.from_native(frame)
     if isinstance(data, nw.DataFrame):
-        return data.lazy("polars" if Polars().is_installed() else None)
+        return data.lazy(_memory_backend())
     return data
+
+
+def has_offsets(lf: nw.LazyFrame) -> bool:
+    """Whether ``lf``'s library can skip rows itself (see ``fetch_rows``)."""
+    return lf.implementation.is_polars() or lf.implementation.is_duckdb()
 
 
 def fetch_rows(lf: nw.LazyFrame, offset: int, length: int) -> nw.DataFrame:
@@ -372,63 +385,204 @@ def fetch_rows(lf: nw.LazyFrame, offset: int, length: int) -> nw.DataFrame:
 class DataQuery:
     """One dataset open in the data browser, answering its frontend's requests.
 
-    ``source`` is the data, any dataframe narwhals supports (see ``as_lazy``),
-    or a function returning it, called again to reload the data (e.g. a polars
-    ``scan_*``, to read a file again). Settings are remembered in ``store``
-    under ``key`` (e.g. the data's URL). The frontend's requests are
-    "query_rows", "query_check", "query_save" and "query_reload" (see
+    ``source`` is the data, any dataframe narwhals supports, or a function
+    returning it, called again to reload the data (e.g. a polars ``scan_*``,
+    to read a file again). Settings are remembered in ``store`` under ``key``
+    (e.g. the data's URL). The frontend's requests are "query_rows",
+    "query_check", "query_save", "query_reload" and "query_mode" (see
     static/query.js).
+
+    Queries run in one of two modes, switched between in the data browser:
+
+    - "live": on the source itself, e.g. a polars LazyFrame or a Spark
+      DataFrame, each query reading the data again. Libraries that cannot
+      skip rows (see ``has_offsets``, e.g. Spark) give only the first
+      ``max_live_rows`` rows of each result.
+    - "memory": on rows read into memory once, at most ``max_memory_rows``
+      (the first ones; filters and sorting then apply to those only), queried
+      with polars when installed (see ``_memory_backend``).
+
+    ``mode`` chooses the mode to start in. "auto" (the default) is "live" for
+    lazy data, unless it has at most ``max_live_rows`` rows: the first query
+    reads them all anyway, so they are kept in memory. Eager data (pandas,
+    PyArrow, polars DataFrames, ...) is always queried in memory, so "live"
+    raises ValueError for it. When all the data is in memory, the mode cannot
+    be switched.
     """
 
-    def __init__(self, source: Any, key: str, store: QuerySettingsStore) -> None:
+    def __init__(
+        self,
+        source: Any,
+        key: str,
+        store: QuerySettingsStore,
+        *,
+        mode: str = "auto",
+        max_live_rows: int = 1000,
+        max_memory_rows: int = 100_000,
+    ) -> None:
+        if mode not in MODES:
+            raise ValueError(f"mode must be one of {MODES}, not {mode!r}")
         self.scan: Callable[[], Any] = source if callable(source) else lambda: source
-        self.lf = as_lazy(self.scan())
-        self.schema = self.lf.collect_schema()
         self.key = key
         self.store = store
+        self.max_live_rows = max_live_rows
+        self.max_memory_rows = max_memory_rows
+        # The mode asked for, by the caller or the user: reloading starts in it.
+        self.requested = mode
+        self._open(mode)
 
-    def reload(self, content: dict[str, Any]) -> dict[str, Any]:
-        """Scan the data again, e.g. after it changed on storage: its columns, and
-        the frontend's settings fitted to them (columns may have changed)."""
-        try:
-            lf = as_lazy(self.scan())
-            schema = lf.collect_schema()
-        except Exception as exc:
-            return {"error": f"{type(exc).__name__}: {exc}"}
-        self.lf, self.schema = lf, schema
+    # --- Modes ---
+
+    def _open(self, mode: str) -> None:
+        """Read the data (again) and set up queries in ``mode`` ("auto", "live" or "memory").
+
+        Sets ``source`` (the lazy data, or None for eager data), ``mode``,
+        ``lf`` (what queries run on), ``schema``, ``memory`` ({"rows",
+        "cut"}: rows held and whether there are more, or None in live mode)
+        and ``fixed`` (why the mode cannot be switched, or "").
+        """
+        data = nw.from_native(self.scan())
+        if isinstance(data, nw.DataFrame):
+            if mode == "live":
+                raise ValueError(
+                    f"live mode needs lazy data (e.g. a polars LazyFrame, DuckDB "
+                    f"or Spark); {data.implementation} dataframes are queried in "
+                    f"memory"
+                )
+            self.source = None
+            self._hold(data, cut=False)
+            self.fixed = "The data is a dataframe in memory."
+            return
+        self.source = data
+        if mode == "memory":
+            self._load_memory()
+        elif not self._fits_live_rows():
+            self._go_live()
+
+    def _fits_live_rows(self) -> bool:
+        """Keep the data in memory if it has at most ``max_live_rows`` rows."""
+        head = self.source.head(self.max_live_rows + 1).collect(_memory_backend())
+        if len(head) > self.max_live_rows:
+            return False
+        self._hold(head, cut=False)
+        # Live queries would read the same rows again: nothing to switch to.
+        self.fixed = f"All {len(head):,} rows are in memory."
+        return True
+
+    def _load_memory(self) -> None:
+        """Read the first ``max_memory_rows`` rows into memory, to query them there."""
+        rows = self.source.head(self.max_memory_rows + 1).collect(_memory_backend())
+        cut = len(rows) > self.max_memory_rows
+        self._hold(rows.head(self.max_memory_rows), cut=cut)
+
+    def _hold(self, df: nw.DataFrame, *, cut: bool) -> None:
+        """Query ``df`` in memory; ``cut``: the data has more rows."""
+        self.mode = "memory"
+        self.lf = df.lazy(_memory_backend())
+        self.schema = self.lf.collect_schema()
+        self.memory = {"rows": len(df), "cut": cut}
+        self.fixed = ""
+
+    def _go_live(self) -> None:
+        self.mode = "live"
+        self.lf = self.source
+        self.schema = self.lf.collect_schema()
+        self.memory = None
+        self.fixed = ""
+
+    @property
+    def live_limit(self) -> int | None:
+        """The most rows a query gives (live mode without offsets), or None for no limit."""
+        if self.mode == "live" and not has_offsets(self.lf):
+            return self.max_live_rows
+        return None
+
+    def mode_state(self) -> dict[str, Any]:
+        """The mode for the frontend: {"mode", "fixed", "memory", "live_limit",
+        "max_memory_rows"} (see ``_open``)."""
         return {
-            "columns": columns_info(schema),
-            "settings": normalize_settings(content.get("settings"), schema),
+            "mode": self.mode,
+            "fixed": self.fixed,
+            "memory": self.memory,
+            "live_limit": self.live_limit,
+            "max_memory_rows": self.max_memory_rows,
         }
 
-    def opening(self) -> dict[str, Any]:
-        """What the frontend needs to show the data: its columns and remembered settings."""
+    def switch_mode(self, content: dict[str, Any]) -> dict[str, Any]:
+        """Switch to ``content["mode"]`` ("live" or "memory"): the new mode, the
+        columns (reading into memory may change their types) and the
+        frontend's settings fitted to them."""
+        mode = content.get("mode")
+        if mode not in ("live", "memory"):
+            return {"error": f"unknown mode {mode!r}"}
+        if self.fixed and mode != self.mode:
+            return {"error": self.fixed}
+        try:
+            if mode == "memory" and self.mode != "memory":
+                self._load_memory()
+            elif mode == "live" and self.mode != "live":
+                self._go_live()
+        except Exception as exc:
+            return {"error": f"{type(exc).__name__}: {exc}", **self._view(content)}
+        self.requested = mode
+        return self._view(content)
+
+    def _view(self, content: dict[str, Any]) -> dict[str, Any]:
+        """The columns, the frontend's settings fitted to them, and the mode."""
         return {
             "columns": columns_info(self.schema),
-            "settings": normalize_settings(self.store.get(self.key), self.schema),
+            "settings": normalize_settings(content.get("settings"), self.schema),
+            "mode": self.mode_state(),
         }
+
+    # --- Requests ---
+
+    def reload(self, content: dict[str, Any]) -> dict[str, Any]:
+        """Read the data again, e.g. after it changed on storage, in the mode
+        last chosen: its columns, the frontend's settings fitted to them
+        (columns may have changed), and the mode."""
+        try:
+            self._open(self.requested)
+        except Exception as exc:
+            return {"error": f"{type(exc).__name__}: {exc}"}
+        return self._view(content)
+
+    def opening(self) -> dict[str, Any]:
+        """What the frontend needs to show the data: its columns, remembered
+        settings and the mode."""
+        return self._view({"settings": self.store.get(self.key)})
 
     def rows(self, content: dict[str, Any]) -> dict[str, Any]:
         """Rows ``offset`` to ``offset + window`` of the data, with the frontend's
-        settings applied; also remembers those settings."""
+        settings applied; also remembers those settings.
+
+        "limited": the result has more rows than the live mode gives (see
+        ``live_limit``).
+        """
         settings = normalize_settings(content.get("settings"), self.schema)
         self.store.set(self.key, settings)
         offset = max(0, int(content.get("offset", 0)))
         window = max(1, int(content.get("window", 1000)))
+        limit = self.live_limit
+        if limit is not None:
+            offset = min(offset, limit)
+            window = max(0, min(window, limit - offset))
         try:
             # One extra row tells whether there are more.
             query = build_query(self.lf, self.schema, settings)
             df = fetch_rows(query, offset, window + 1)
         except Exception as exc:
             return {"error": f"{type(exc).__name__}: {exc}", "settings": settings}
-        more = len(df) > window
+        beyond = len(df) > window
+        limited = beyond and limit is not None and offset + window >= limit
         df = df.head(window)
         return {
             "offset": offset,
             "columns": df.columns,
             "dtypes": [str(t) for t in df.schema.values()],
             "rows": [[jsonable(v) for v in row] for row in df.rows()],
-            "more": more,
+            "more": beyond and not limited,
+            "limited": limited,
             "settings": settings,
         }
 
@@ -467,5 +621,6 @@ class DataQuery:
             "query_check": self.check,
             "query_save": self.save,
             "query_reload": self.reload,
+            "query_mode": self.switch_mode,
         }.get(content.get("type"))
         return handler(content) if handler is not None else None

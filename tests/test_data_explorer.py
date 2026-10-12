@@ -37,6 +37,7 @@ def test_parquet_file(tmp_path):
         "dtypes": ["Int64"],
         "rows": [[3]],
         "more": False,
+        "limited": False,
         "settings": explorer.query["settings"],
     }
 
