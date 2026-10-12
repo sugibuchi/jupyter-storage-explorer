@@ -214,32 +214,33 @@ DataExplorer(orders_df, settings=QuerySettings(sort="date", descending=True))
 Lazy data starts **Live**, eager data **In memory**. Pass a function (`lambda: pl.scan_parquet(url)`) for **⟳** to
 read the data again.
 
-`QuerySettings` sets the filters, sort order, hidden columns and widths to start with. `explorer.settings.to_json()`
-gives the current ones as text, to paste into your code as `QuerySettings.from_json("""...""")`:
+`QuerySettings` sets the filters, sort order, hidden columns and widths to start with. To keep settings made in the
+widget, print them as text and paste them into your code:
 
 ```python
-QuerySettings(
-    filters={"price": {"op": "range", "min": 10}, "name": {"op": "contains", "value": "tea"}},
-    sort="date",
-    descending=True,
-    hidden=["comment"],
-)
-```
+explorer = DataExplorer(orders_df)
+print(explorer.settings.to_json())  # after filtering and sorting in the widget
 
-Filter types: `not_null`, `null`, `not_empty`, `empty`, `contains` and `regex` (with `"value"`, and
-`"case_sensitive": False` to ignore case), `range` (`"min"` and/or `"max"`, both included) and `eq` (booleans). Regular
-expressions follow the dataframe's library.
+DataExplorer(orders_df, settings=QuerySettings.from_json("""
+{
+    "filters": {"price": {"op": "range", "min": "10", "max": ""}},
+    "sort": {"column": "date", "descending": true},
+    "hidden": ["comment"],
+    "widths": {}
+}
+"""))
+```
 
 ### DataExplorer options
 
-| Option                    | Meaning                                                                                                     |
-|---------------------------|-------------------------------------------------------------------------------------------------------------|
-| `settings=QuerySettings()` | Filters, sort order, hidden columns and widths to start with (see above).                                   |
-| `mode="auto"`             | Where queries run first: `"auto"`, `"live"` (lazy data only) or `"memory"`; switch in the widget.           |
-| `max_live_rows=1000`      | Data up to this size is kept in memory. Also the most rows a live query gives when the library cannot skip rows (e.g. Spark). |
-| `max_memory_rows=100_000` | The most rows read into memory.                                                                             |
-| `title=...`               | Shown above the table (default: the dataframe's type).                                                      |
-| `height="400px"`          | Height of the table area. `"fill"`: as tall as the container, e.g. a tab (not a notebook cell).             |
+| Option                     | Meaning                                                                                                    |
+|----------------------------|------------------------------------------------------------------------------------------------------------|
+| `settings=QuerySettings()` | Filters, sort order, hidden columns and widths to start with (see above).                                  |
+| `mode="auto"`              | Where queries run first: `"auto"`, `"live"` (lazy data only) or `"memory"`; switch in the widget.          |
+| `max_live_rows=1000`       | Data up to this size is kept in memory; also the most rows a live query gives if the library cannot skip rows (e.g. Spark). |
+| `max_memory_rows=100_000`  | The most rows read into memory.                                                                            |
+| `title=...`                | Shown above the table (default: the dataframe's type).                                                     |
+| `height="400px"`           | Height of the table area. `"fill"`: as tall as the container, e.g. a tab (not a notebook cell).            |
 ## Requirements
 
 - Python 3.11 or later
