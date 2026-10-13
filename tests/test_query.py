@@ -17,12 +17,12 @@ from jupyter_storage_explorer.formats.base import jsonable
 from jupyter_storage_explorer.query import (
     DEFAULT_SETTINGS,
     DataQuery,
-    QuerySettingsStore,
     build_query,
     check_filter,
     columns_info,
     normalize_settings,
 )
+from jupyter_storage_explorer.states import ExplorerStates
 
 DF = pl.DataFrame(
     {
@@ -223,7 +223,7 @@ class TestFilters:
 
 class TestDataQuery:
     def query(self, store=None) -> DataQuery:
-        return DataQuery(DF.lazy, "memory://data", store or QuerySettingsStore())
+        return DataQuery(DF.lazy, "memory://data", store or ExplorerStates())
 
     @pytest.mark.parametrize(
         "source",
@@ -235,7 +235,7 @@ class TestDataQuery:
         ],
     )
     def test_paging(self, source):
-        query = DataQuery(source, "k", QuerySettingsStore())
+        query = DataQuery(source, "k", ExplorerStates())
         reply = query.handle({"type": "query_rows", "offset": 1, "window": 2})
         assert [row[:2] for row in reply["rows"]] == [["coffee", 5], ["Water", 1]]
         assert reply["more"] is True
@@ -247,7 +247,7 @@ class TestDataQuery:
         # pandas, without polars to query it with: rows are read up to the
         # window's end and the first ones dropped.
         monkeypatch.setattr(query_module.Polars, "is_installed", lambda self: False)
-        query = DataQuery(DF.to_pandas(), "k", QuerySettingsStore())
+        query = DataQuery(DF.to_pandas(), "k", ExplorerStates())
         assert query.lf.implementation.is_pandas()
         reply = query.handle({"type": "query_rows", "offset": 1, "window": 2})
         assert [row[0] for row in reply["rows"]] == ["coffee", "Water"]
@@ -256,12 +256,12 @@ class TestDataQuery:
     def test_missing_values_from_pandas(self, monkeypatch):
         monkeypatch.setattr(query_module.Polars, "is_installed", lambda self: False)
         data = DF.to_pandas(use_pyarrow_extension_array=True)
-        query = DataQuery(data, "k", QuerySettingsStore())
+        query = DataQuery(data, "k", ExplorerStates())
         reply = query.handle({"type": "query_rows", "offset": 3, "window": 1})
         assert reply["rows"] == [[None, 2, "2025-01-04", None]]
 
     def test_eager_data_queried_with_polars(self):
-        query = DataQuery(DF.to_pandas(), "k", QuerySettingsStore())
+        query = DataQuery(DF.to_pandas(), "k", ExplorerStates())
         assert query.lf.implementation.is_polars()
 
     def test_rows_as_json(self):
@@ -293,17 +293,26 @@ class TestDataQuery:
         )
 
     def test_settings_remembered(self):
-        store = QuerySettingsStore()
+        states = ExplorerStates()
         settings = {"sort": {"column": "price", "descending": False}}
-        self.query(store).rows({"settings": settings})
-        assert self.query(store).opening()["settings"]["sort"] == {
+        self.query(states).rows({"settings": settings})
+        assert self.query(states).opening()["settings"]["sort"] == {
             "column": "price",
             "descending": False,
         }
+        assert states.query("memory://data").mode == "auto"
+
+    def test_mode_chosen_remembered(self):
+        states = ExplorerStates()
+        query = DataQuery(BIG.lazy, "k", states, max_live_rows=10)
+        assert query.mode == "live"
+        query.handle({"type": "query_mode", "mode": "memory", "settings": {}})
+        # Remembered even with the default settings: the mode is not "auto".
+        assert states.query("k").mode == "memory"
 
     def test_reload_fits_settings_to_new_columns(self):
         frames = iter([DF.lazy(), DF.drop("price").lazy()])
-        query = DataQuery(lambda: next(frames), "k", QuerySettingsStore())
+        query = DataQuery(lambda: next(frames), "k", ExplorerStates())
         reply = query.handle(
             {"type": "query_reload", "settings": {"hidden": ["price", "ok"]}}
         )
@@ -320,7 +329,7 @@ BIG = pl.DataFrame({"n": list(range(50))})
 def mode_query(source=BIG.lazy, **kwargs) -> DataQuery:
     kwargs.setdefault("max_live_rows", 10)
     kwargs.setdefault("max_memory_rows", 20)
-    return DataQuery(source, "k", QuerySettingsStore(), **kwargs)
+    return DataQuery(source, "k", ExplorerStates(), **kwargs)
 
 
 def rows_of(query: DataQuery, **content) -> dict:
@@ -466,23 +475,3 @@ class TestSparkLike:
         assert query.check({"column": "name", "filter": f}) == {}
         # ...so the error comes with the rows.
         assert "error" in rows_of(query, settings={"filters": {"name": f}})
-
-
-class TestQuerySettingsStore:
-    def test_persisted_in_file(self, tmp_path):
-        path = tmp_path / "sub" / "settings.json"
-        settings = {**DEFAULT_SETTINGS, "hidden": ["a"]}
-        QuerySettingsStore(path).set("k", settings)
-        assert QuerySettingsStore(path).get("k") == settings
-
-    def test_defaults_forgotten(self):
-        store = QuerySettingsStore()
-        store.set("k", {**DEFAULT_SETTINGS, "hidden": ["a"]})
-        store.set("k", DEFAULT_SETTINGS)
-        assert store.get("k") is None
-
-    def test_returns_copies(self):
-        store = QuerySettingsStore()
-        store.set("k", {**DEFAULT_SETTINGS, "hidden": ["a"]})
-        store.get("k")["hidden"].append("b")
-        assert store.get("k")["hidden"] == ["a"]

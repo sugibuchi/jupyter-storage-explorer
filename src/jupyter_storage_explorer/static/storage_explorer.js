@@ -195,6 +195,8 @@ function render({ model, el }) {
   const previewBtn = h("button", { className: "jse-btn", textContent: "Preview" });
   // Filesystem chooser; hidden when there is only one.
   const fsSelect = h("select", { className: "jse-fs-select", title: "Filesystem" });
+  // Opens the bookmarks menu; filled (★) while the folder shown is bookmarked.
+  const bookmarkBtn = h("button", { className: "jse-btn jse-bookmark-btn", title: "Bookmarks", textContent: "☆" });
   const pathEl = h("div", { className: "jse-path" });
   const treeEl = h("div", { className: "jse-tree" });
   const headRow = h("tr");
@@ -323,7 +325,7 @@ function render({ model, el }) {
   // each, above the status bar; see "Jobs" below.
   const jobsEl = h("div", { className: "jse-jobs", hidden: true });
   el.replaceChildren(
-    h("div", { className: "jse-toolbar" }, fsSelect, upBtn, refreshBtn, pathEl, previewBtn),
+    h("div", { className: "jse-toolbar" }, fsSelect, bookmarkBtn, upBtn, refreshBtn, pathEl, previewBtn),
     panesEl,
     previewEl,
     jobsEl,
@@ -517,8 +519,13 @@ function render({ model, el }) {
     }
   }
 
+  // The button that opened the menu, if one did: pressing it again is left
+  // to its click handler, which closes the menu, rather than closing it here
+  // for the click to open it again.
+  let menuOwner = null;
+
   function onOutsidePointer(ev) {
-    if (!menuEl.contains(ev.target)) hideMenu();
+    if (!menuEl.contains(ev.target) && !menuOwner?.contains(ev.target)) hideMenu();
   }
 
   function onMenuKey(ev) {
@@ -537,15 +544,18 @@ function render({ model, el }) {
   // items: {label, action, disabled}, {label, submenu, disabled} or "-" for a
   // separator. `submenu(el)` fills the submenu element, possibly later.
   // `hidden` rows can be shown later through the element passed to `ref(row)`.
+  // `title`: the row's tooltip. `menu()`: the items of the menu right-clicking
+  // the row opens in place of this one.
   function menuRows(items) {
     return items.map((item) => {
       if (item === "-") return h("div", { className: "jse-menu-sep" });
       const row = h(
         "div",
-        { className: "jse-menu-item" + (item.disabled ? " jse-disabled" : ""), hidden: Boolean(item.hidden) },
+        { className: "jse-menu-item" + (item.disabled ? " jse-disabled" : ""), hidden: Boolean(item.hidden), title: item.title ?? "" },
         h("span", { textContent: item.label }),
       );
       item.ref?.(row);
+      if (item.menu) row.addEventListener("contextmenu", (ev) => showMenu(ev, item.menu()));
       if (item.disabled) return row;
       if (item.submenu) {
         const sub = h("div", { className: "jse-menu jse-submenu" });
@@ -570,6 +580,7 @@ function render({ model, el }) {
     ev.stopPropagation(); // keep JupyterLab's own context menu from opening
     menuEl.replaceChildren(...menuRows(items));
     menuEl.hidden = false;
+    menuOwner = null;
     menuAt = { x: ev.clientX, y: ev.clientY };
     placeMenu();
     document.addEventListener("pointerdown", onOutsidePointer, true);
@@ -1301,6 +1312,89 @@ function render({ model, el }) {
     flash(parts.join("; ") || "Nothing downloaded");
   }
 
+  // --- Bookmarks: folders, kept by the kernel (its ExplorerStates, shared
+  // with other explorers); the list is asked for each time the menu opens ---
+
+  // [{filesystem, path, url, label}] as last received: for the button's star
+  // and the folders' "Add/Remove bookmark".
+  let bookmarks = [];
+
+  function setBookmarks(reply) {
+    if (reply.error) {
+      flash(reply.error);
+      return;
+    }
+    bookmarks = reply.bookmarks;
+    renderBookmarkBtn();
+  }
+
+  async function fetchBookmarks() {
+    setBookmarks(await request({ type: "bookmarks" }));
+  }
+
+  function isBookmarked(path, filesystem = model.get("_filesystem")) {
+    return bookmarks.some((b) => b.filesystem === filesystem && b.path === path);
+  }
+
+  function renderBookmarkBtn() {
+    const marked = isBookmarked(model.get("_current_dir"));
+    bookmarkBtn.textContent = marked ? "★" : "☆";
+    bookmarkBtn.classList.toggle("jse-on", marked);
+  }
+
+  async function addBookmark(path) {
+    setBookmarks(await request({ type: "bookmark_add", path }));
+  }
+
+  async function removeBookmark(bookmark) {
+    setBookmarks(await request({ type: "bookmark_remove", filesystem: bookmark.filesystem, path: bookmark.path }));
+  }
+
+  async function openBookmark(bookmark) {
+    const reply = await request({ type: "bookmark_open", filesystem: bookmark.filesystem, path: bookmark.path });
+    if (reply.error) flash(`Cannot open the bookmark: ${reply.error}`);
+  }
+
+  // Add or remove the bookmark of folder `path` of the storage shown.
+  function bookmarkItem(path) {
+    const filesystem = model.get("_filesystem");
+    return isBookmarked(path)
+      ? { label: "Remove bookmark", action: () => removeBookmark({ filesystem, path }) }
+      : { label: "Add bookmark", action: () => addBookmark(path) };
+  }
+
+  // The bookmarks menu, below the button: bookmarking the folder shown, then
+  // the bookmarks ("[storage] path", in the kernel's order); right-click one
+  // for "Copy URL" and "Delete bookmark".
+  async function showBookmarks() {
+    await fetchBookmarks();
+    const current = model.get("_current_dir");
+    const label = isBookmarked(current) ? "Remove this folder's bookmark" : "Bookmark this folder";
+    const items = [{ ...bookmarkItem(current), label }, "-"];
+    if (!bookmarks.length) items.push({ label: "No bookmarks", disabled: true });
+    for (const b of bookmarks) {
+      items.push({
+        label: b.label,
+        title: b.url ?? b.path,
+        action: () => openBookmark(b),
+        menu: () => [
+          { label: "Copy URL", disabled: !b.url, action: () => copy([b.url], "URL") },
+          { label: "Delete bookmark", action: () => removeBookmark(b) },
+        ],
+      });
+    }
+    const box = bookmarkBtn.getBoundingClientRect();
+    const at = { clientX: box.left, clientY: box.bottom, preventDefault() {}, stopPropagation() {} };
+    showMenu(at, items);
+    menuOwner = bookmarkBtn;
+  }
+
+  // The button closes its menu if open (see onOutsidePointer).
+  bookmarkBtn.addEventListener("click", () => {
+    if (!menuEl.hidden && menuOwner === bookmarkBtn) hideMenu();
+    else void showBookmarks();
+  });
+
   // The kernel identifies formats by name (e.g. "delta"); users see their label.
   function formatLabel(name) {
     return model.get("_format_labels")[name] ?? name;
@@ -1409,6 +1503,7 @@ function render({ model, el }) {
       const paste = pasteItem(single.path);
       if (paste) items.push(paste);
       items.push({ label: "Create a folder", action: () => createFolder(single.path) });
+      items.push(bookmarkItem(single.path));
     }
     if (allowed) {
       items.push("-", { label: count ? `Delete ${count}${what}` : "Delete", action: () => confirmDelete(targets) });
@@ -2099,6 +2194,7 @@ function render({ model, el }) {
       listPage = 0;
       renderList();
     }
+    renderBookmarkBtn();
     reportView();
   }
 
@@ -2143,6 +2239,7 @@ function render({ model, el }) {
     shownFs = name;
     pending.clear();
     fsSelect.value = name;
+    renderBookmarkBtn(); // the folder's path may be the same as on the storage left
   }
 
   fsSelect.addEventListener("change", () => {
@@ -2197,6 +2294,7 @@ function render({ model, el }) {
   onDirChange();
   renderList();
   renderPreview();
+  void fetchBookmarks(); // for the star
 
   return () => {
     for (const [event, handler] of Object.entries(handlers)) model.off(event, handler);

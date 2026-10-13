@@ -6,7 +6,7 @@ narwhals expressions, run by the data's own library. So some details follow
 that library, e.g. the syntax of regular expressions.
 
 Settings are plain JSON-like dicts, shared with the frontend and remembered
-per dataset by a ``QuerySettingsStore``::
+per dataset, with the mode, by ``ExplorerStates`` (states.py)::
 
     {
         "filters": {
@@ -25,7 +25,6 @@ from __future__ import annotations
 import copy
 import datetime as dt
 import json
-import pathlib
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -36,6 +35,8 @@ from jupyter_storage_explorer.formats.requirements import Polars
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+    from jupyter_storage_explorer.states import ExplorerStates
 
 # Filter types ("op") by kind of column. Ops in _NO_VALUE take no value;
 # "range" takes "min" and "max" (inclusive; either may be empty); the others
@@ -452,69 +453,6 @@ class QuerySettings:
         )
 
 
-class QuerySettingsStore:
-    """Remembers the data browser's settings per dataset, keyed by its location.
-
-    ``StorageExplorer`` uses one (its ``query_settings`` argument), so that
-    reopening a file in the data browser restores its filters, sort order,
-    hidden columns and widths.
-
-    Parameters
-    ----------
-    path : str or Path, optional
-        A JSON file to keep the settings in, so that they survive kernel
-        restarts; read now if it exists, written at each change. Default:
-        only in memory, while the kernel runs.
-    """
-
-    def __init__(self, path: str | pathlib.Path | None = None) -> None:
-        self.path = pathlib.Path(path) if path is not None else None
-        self._settings: dict[str, dict[str, Any]] = {}
-        if self.path is not None and self.path.exists():
-            self._settings = json.loads(self.path.read_text(encoding="utf-8"))
-
-    def get(self, key: str) -> dict[str, Any] | None:
-        """The settings remembered for a dataset.
-
-        Parameters
-        ----------
-        key : str
-            The dataset's key, e.g. its URL.
-
-        Returns
-        -------
-        dict or None
-            A copy, in the form of ``QuerySettings.to_dict()``; None if none
-            are remembered.
-        """
-        settings = self._settings.get(key)
-        return copy.deepcopy(settings) if settings is not None else None
-
-    def set(self, key: str, settings: dict[str, Any]) -> None:
-        """Remember a dataset's settings (and write the file, if any).
-
-        Parameters
-        ----------
-        key : str
-            The dataset's key, e.g. its URL.
-        settings : dict
-            In the form of ``QuerySettings.to_dict()``. The defaults are
-            forgotten rather than remembered.
-        """
-        if settings == DEFAULT_SETTINGS:
-            self._settings.pop(key, None)  # nothing worth remembering
-        else:
-            self._settings[key] = copy.deepcopy(settings)
-        if self.path is not None:
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            self.path.write_text(json.dumps(self._settings, indent=2), encoding="utf-8")
-
-
-# Shared by all explorers in the kernel, so reopening data in a new explorer
-# restores its settings too.
-default_store = QuerySettingsStore()
-
-
 MODES = ("auto", "live", "memory")
 
 
@@ -562,8 +500,10 @@ class DataQuery:
 
     ``source`` is the data, any dataframe narwhals supports, or a function
     returning it, called again to reload the data (e.g. a polars ``scan_*``,
-    to read a file again). Settings are remembered in ``store`` under ``key``
-    (e.g. the data's URL). The frontend's requests are "query_rows",
+    to read a file again). Settings, and the mode the user chose, are
+    remembered in ``states`` under ``key`` (e.g. the data's URL), at each
+    change: they are those of the most recently used datasets (see
+    ``ExplorerStates``). The frontend's requests are "query_rows",
     "query_check", "query_save", "query_reload" and "query_mode" (see
     static/query.js).
 
@@ -589,7 +529,7 @@ class DataQuery:
         self,
         source: Any,
         key: str,
-        store: QuerySettingsStore,
+        states: ExplorerStates,
         *,
         mode: str = "auto",
         max_live_rows: int = 1000,
@@ -599,7 +539,7 @@ class DataQuery:
             raise ValueError(f"mode must be one of {MODES}, not {mode!r}")
         self.scan: Callable[[], Any] = source if callable(source) else lambda: source
         self.key = key
-        self.store = store
+        self.states = states
         self.max_live_rows = max_live_rows
         self.max_memory_rows = max_memory_rows
         # The mode asked for, by the caller or the user: reloading starts in it.
@@ -708,7 +648,21 @@ class DataQuery:
         except Exception as exc:
             return {"error": f"{type(exc).__name__}: {exc}", **self._view(content)}
         self.requested = mode
-        return self._view(content)
+        view = self._view(content)
+        self._remember(view["settings"])
+        return view
+
+    def _remembered(self) -> dict[str, Any] | None:
+        """The settings remembered for the data, or None."""
+        state = self.states.query(self.key)
+        return state.settings.to_dict() if state is not None else None
+
+    def _remember(self, settings: dict[str, Any]) -> None:
+        """Remember ``settings`` and the mode asked for (not "auto"'s choice,
+        which may differ when the data has grown or shrunk)."""
+        self.states.remember_query(
+            self.key, QuerySettings.from_dict(settings), self.requested
+        )
 
     def _view(self, content: dict[str, Any]) -> dict[str, Any]:
         """The columns, the frontend's settings fitted to them, and the mode."""
@@ -743,13 +697,13 @@ class DataQuery:
         """
         data = nw.from_native(self.native)
         schema = data.collect_schema()
-        settings = normalize_settings(self.store.get(self.key), schema)
+        settings = normalize_settings(self._remembered(), schema)
         return build_query(data, schema, settings).to_native()
 
     def opening(self) -> dict[str, Any]:
         """What the frontend needs to show the data: its columns, remembered
         settings and the mode."""
-        return self._view({"settings": self.store.get(self.key)})
+        return self._view({"settings": self._remembered()})
 
     def rows(self, content: dict[str, Any]) -> dict[str, Any]:
         """Rows ``offset`` to ``offset + window`` of the data, with the frontend's
@@ -761,7 +715,7 @@ class DataQuery:
         Spark job), else None.
         """
         settings = normalize_settings(content.get("settings"), self.schema)
-        self.store.set(self.key, settings)
+        self._remember(settings)
         offset = max(0, int(content.get("offset", 0)))
         window = max(1, int(content.get("window", 1000)))
         limit = self.live_limit
@@ -816,7 +770,7 @@ class DataQuery:
     def save(self, content: dict[str, Any]) -> dict[str, Any]:
         """Remember settings changed without fetching rows (e.g. column widths)."""
         settings = normalize_settings(content.get("settings"), self.schema)
-        self.store.set(self.key, settings)
+        self._remember(settings)
         return {}
 
     def handle(self, content: dict[str, Any]) -> dict[str, Any] | None:

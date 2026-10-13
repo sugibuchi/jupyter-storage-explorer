@@ -23,6 +23,11 @@
   display: none;
 }
 
+/* Filled star: the folder shown is bookmarked. */
+.jse-bookmark-btn.jse-on {
+  color: var(--jse-accent);
+}
+
 .jse-path {
   flex: 1;
   min-width: 0;

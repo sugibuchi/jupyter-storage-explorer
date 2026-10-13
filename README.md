@@ -100,7 +100,9 @@ StorageExplorer(
 - **Preview**: double-click a file, or **Preview** (with nothing selected: the current folder, e.g. a Delta Lake table).
   Tables open in the [data browser](#query-data).
 - **Right-click**: Preview as, Edit, Python code to load the data, Copy, Cut, Paste, Delete, Create a folder, Download
-  to local or to JupyterLab (see [Options](#storageexplorer-options)), Copy URL.
+  to local or to JupyterLab (see [Options](#storageexplorer-options)), Copy URL, Add bookmark.
+- **Bookmarks**: ☆ (★ when the folder shown is bookmarked) lists them; click one to open it, right-click it for Copy
+  URL and Delete bookmark. Explorers in the kernel share them (see [Remembered states](#remembered-states)).
 - **Copy, cut and paste** work between storages and between explorers, also in other notebooks: **Cut**, then
   **Move here**, moves files to another storage.
 - **Drag and drop**: drop files from JupyterLab's file browser or your computer to upload them; drag files onto a folder
@@ -129,9 +131,28 @@ browser that reads 1,000 rows at a time:
   query those (faster, but filters and sorting then apply to those rows only). Data of up to 1,000 rows is always
   kept in memory.
 
-Filters, sorting, hidden columns and widths are remembered per table until the kernel restarts, or in a file with
-`query_settings=QuerySettingsStore("query-settings.json")` (from `jupyter_storage_explorer.query`). polars reads the
-data with the credentials in the environment, not the explorer's options.
+Filters, sorting, hidden columns, widths and the mode chosen are remembered for the 20 tables queried last (see
+[Remembered states](#remembered-states)). polars reads the data with the credentials in the environment, not the
+explorer's options.
+
+### Remembered states
+
+Bookmarks and the data browser's settings are kept in an `ExplorerStates`, shared by the explorers in the kernel, until
+it restarts. To keep them in a JSON file, also shared with other kernels (read again when an explorer is created and
+before each change), give its path, or an `ExplorerStates` for other options:
+
+```python
+from jupyter_storage_explorer import ExplorerStates, StorageExplorer
+
+StorageExplorer("s3://my-bucket/data", states="~/.jupyter/storage-explorer/states.json")
+StorageExplorer("s3://my-bucket/data", states=ExplorerStates("states.json", max_queries=50))
+```
+
+Explorers in [the launcher](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/launcher/README.md)'s tabs
+use `~/.jupyter/storage-explorer/states.json`, so the first example shares their bookmarks.
+
+A bookmark names a storage of the explorer (its name in `filesystems`, or `"default"`) and a folder; explorers list
+those of their own storages.
 
 ## Supported formats
 
@@ -202,7 +223,7 @@ explorer.selected_urls  # the URLs of the selected items
 | `filesystems={...}`                 | Several named storages, as shown above.                                                                                               |
 | `max_browser_items=20_000`          | Folders with more items are filtered, sorted and paged by the kernel, one page at a time, instead of the browser (`None`: never).     |
 | `operations=[...]`                  | How files are moved, copied, deleted and downloaded, replacing `StorageExplorer.default_operations()`: e.g. `[MyOps(), *StorageExplorer.default_operations()]` for server-side copies of your own (see [operations.py](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/src/jupyter_storage_explorer/operations.py), and [filesystems](https://github.com/sugibuchi/jupyter-storage-explorer/tree/main/src/jupyter_storage_explorer/filesystems) for the defaults). |
-| `query_settings=...`                | Where the data browser keeps its settings; see [Query data](#query-data).                                                             |
+| `states="states.json"`              | Where bookmarks and the data browser's settings are kept (a path or an `ExplorerStates`); see [Remembered states](#remembered-states). |
 | `format_options={...}`              | Options for the formats (see [Format options](#format-options)).                                                                      |
 
 ## DataExplorer: browse a dataframe
