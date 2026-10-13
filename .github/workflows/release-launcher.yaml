@@ -69,9 +69,13 @@ jobs:
           ]
           if files != expected:
               sys.exit(f"expected {expected} for tag {version}")
-          wheel = zipfile.ZipFile(f"dist/{expected[0]}").namelist()
-          if not any("labextensions/jupyter-storage-explorer-launcher/static/" in n for n in wheel):
+          wheel = zipfile.ZipFile(f"dist/{expected[0]}")
+          if not any("labextensions/jupyter-storage-explorer-launcher/static/" in n for n in wheel.namelist()):
               sys.exit("the wheel has no JupyterLab extension")
+          # The explorer of the same version (launcher/hatch_build.py).
+          metadata = wheel.read(f"jupyter_storage_explorer_launcher-{version}.dist-info/METADATA").decode()
+          if f"Requires-Dist: jupyter-storage-explorer=={version}" not in metadata.splitlines():
+              sys.exit(f"the wheel does not require jupyter-storage-explorer=={version}")
           EOF
 
       - uses: actions/upload-artifact@v7
