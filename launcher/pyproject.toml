@@ -1,6 +1,6 @@
 [project]
 name = "jupyter-storage-explorer-launcher"
-dynamic = ["version"]
+dynamic = ["version", "dependencies"]
 description = "Adds Jupyter Storage Explorer to the JupyterLab launcher, opening it in a tab"
 readme = "README.md"
 license = "MIT"
@@ -38,10 +38,6 @@ classifiers = [
     "Topic :: System :: Filesystems",
 ]
 requires-python = ">=3.11"
-dependencies = [
-    "jupyter-core>=5",
-    "jupyter-storage-explorer",
-]
 
 [project.urls]
 Homepage = "https://github.com/sugibuchi/jupyter-storage-explorer/tree/main/launcher"
@@ -57,6 +53,10 @@ build-backend = "hatchling.build"
 [tool.hatch.version]
 source = "vcs"
 raw-options = { root = "..", version_scheme = "post-release" }
+
+# The dependencies, set by hatch_build.py: jupyter-core, and
+# jupyter-storage-explorer at the launcher's own version.
+[tool.hatch.metadata.hooks.custom]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/jupyter_storage_explorer_launcher"]
@@ -79,6 +79,7 @@ artifacts = ["src/jupyter_storage_explorer_launcher/labextension"]
 # package; the version comes from git, hence the git keys.
 cache-keys = [
     { file = "pyproject.toml" },
+    { file = "hatch_build.py" },
     { file = "src/jupyter_storage_explorer_launcher/labextension/package.json" },
     { git = { commit = true, tags = true } },
 ]

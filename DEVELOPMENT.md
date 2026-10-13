@@ -3,7 +3,8 @@
 ## Layout
 
 The repository is a [uv workspace](https://docs.astral.sh/uv/concepts/projects/workspaces/) with two packages, released
-together with the same version (from the git tags):
+together with the same version (from the git tags). The launcher requires the explorer of exactly its version
+(`launcher/hatch_build.py`, which sets its dependencies), as it uses the explorer's internals:
 
 | Package                             | Folder      | Contents                                                                 |
 |-------------------------------------|-------------|--------------------------------------------------------------------------|
@@ -74,7 +75,7 @@ git push origin vX.Y.Z
    them on GitHub afterwards if needed), and publishes it to PyPI.
 2. **Release launcher** (`.github/workflows/release-launcher.yaml`), run when the first has succeeded (so the package
    the launcher depends on is on PyPI), builds the JupyterLab extension and `jupyter-storage-explorer-launcher` for the
-   same tag, checks them (version X.Y.Z, the wheel has the extension), adds them to the GitHub release and publishes
+   same tag, checks them (version X.Y.Z, the wheel has the extension and requires `jupyter-storage-explorer==X.Y.Z`), adds them to the GitHub release and publishes
    them to PyPI. To retry it, run it by hand for the tag: *Actions ▸ Release launcher ▸ Run workflow*.
 
 ### One-time setup for PyPI

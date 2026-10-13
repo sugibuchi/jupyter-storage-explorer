@@ -45,7 +45,8 @@ major-version tags.
 
 ## Layout
 
-A uv workspace of two packages released together (version from git tags via hatch-vcs):
+A uv workspace of two packages released together (version from git tags via hatch-vcs); the launcher requires the
+explorer of exactly its own version (`launcher/hatch_build.py` sets its dependencies; add new ones there):
 
 - `jupyter-storage-explorer` (root, `src/jupyter_storage_explorer/`): the anywidget widgets `StorageExplorer` (files)
   and `DataExplorer` (a dataframe given by the user, any library narwhals supports, with `QuerySettings`). Runtime
