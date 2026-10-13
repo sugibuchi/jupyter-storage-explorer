@@ -21,11 +21,14 @@ import os
 import tempfile
 from typing import TYPE_CHECKING, Any, TypeVar
 
-from fsspec.core import url_to_fs
 from fsspec.implementations.local import LocalFileSystem
 
 from jupyter_storage_explorer import _paths
-from jupyter_storage_explorer.operations import OperationCancelled, Progress
+from jupyter_storage_explorer.operations import (
+    OperationCancelled,
+    Progress,
+    same_filesystem,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Sequence
@@ -44,9 +47,11 @@ class Task:
     with "cancelled": True and "incomplete": a name if the user cancelled.
     Meanwhile it records what changed on ``fs``, the filesystem it changes:
     ``moved`` (source, target) pairs, ``removed`` paths, and ``changed``
-    folders, whose listings are to be shown again. ``cleanup()``, if any, runs
-    once the job has ended, whatever the outcome (e.g. to delete a temporary
-    file even if the job was cancelled before starting).
+    folders, whose listings are to be shown again; and in ``moved_away``,
+    (filesystem, path) of files and folders moved from other filesystems
+    (cut and pasted). ``cleanup()``, if any, runs once the job has ended,
+    whatever the outcome (e.g. to delete a temporary file even if the job
+    was cancelled before starting).
     """
 
     kind: str  # "move", "delete", "paste", "upload" or "download"
@@ -57,6 +62,9 @@ class Task:
     moved: list[tuple[str, str]] = dataclasses.field(default_factory=list)
     removed: list[str] = dataclasses.field(default_factory=list)
     changed: set[str] = dataclasses.field(default_factory=set)
+    moved_away: list[tuple[AbstractFileSystem, str]] = dataclasses.field(
+        default_factory=list
+    )
 
 
 # What planning returns: a task to run, or a reply as it is (e.g. conflicts).
@@ -66,6 +74,7 @@ Plan = Task | dict[str, Any]
 # verb in messages, and the title's.
 _COPY_WORDS = {
     "paste": ("pasted", "pasted", "Pasting"),
+    "move": ("moved", "moved", "Moving"),  # cut and pasted
     "upload": ("copied", "uploaded", "Uploading"),
 }
 
@@ -139,7 +148,7 @@ class FileTasks:
                 if target in existing:
                     # Renaming onto an existing file fails on some systems.
                     ops.delete(fs, target, progress)
-                ops.move(fs, source, target, progress)
+                ops.move(fs, source, fs, target, progress)
                 task.moved.append((source, target))
                 task.changed.update({dest, _paths.parent(source, fs)})
 
@@ -229,34 +238,28 @@ class FileTasks:
 
     def paste(
         self,
-        files: Sequence[dict[str, Any]],
+        sources: Sequence[tuple[AbstractFileSystem, str]],
         dest: str,
         if_exists: str = "ask",
-        same_filesystem: bool = False,
+        *,
         folders: bool = False,
+        cut: bool = False,
+        errors: Sequence[str] = (),
     ) -> Plan:
-        """Copy files copied in an explorer into folder ``dest``.
+        """Copy (or with ``cut``, move) files copied in an explorer into folder
+        ``dest``, with the operations' ``copy`` (``move``).
 
-        ``files`` are {"path", "url"} as copied. With ``same_filesystem``
-        (copied in this explorer, from ``fs``) they are copied within it, with
-        the operations' ``copy`` and the explorer's own credentials; otherwise
-        read from their URLs (any storage fsspec reads, with the environment's
-        credentials), with ``copy_between``. Nothing is pasted into the folder
-        it is in. Result: {"pasted", "skipped", "errors"}.
+        ``sources`` are (filesystem, path): ``fs`` itself, another storage of
+        the explorer, another explorer's, or one opened from a URL (see
+        ``StorageExplorer._paste_sources``). ``errors`` are those found
+        finding them. Nothing is pasted into the folder it is in. Result:
+        {"pasted" (or "moved"), "skipped", "errors"}.
         """
-        copies, errors = [], []
-        for file in files:
-            path, url = file.get("path"), file.get("url")
-            name = _paths.basename(path if same_filesystem else url)
-            try:
-                if same_filesystem:
-                    source_fs, source = self.fs, path
-                else:
-                    source_fs, source = url_to_fs(url)
-            except Exception as exc:
-                errors.append(f"{name}: {exc}")
-                continue
-            if same_filesystem and _paths.parent(path, self.fs) == _paths.norm(dest):
+        copies, errors = [], list(errors)
+        for source_fs, source in sources:
+            name = _paths.basename(source)
+            same = same_filesystem(source_fs, self.fs)
+            if same and _paths.parent(source, self.fs) == _paths.norm(dest):
                 errors.append(f"{name}: already in that folder")
                 continue
             copies.append((source_fs, source, name))
@@ -266,7 +269,7 @@ class FileTasks:
             if_exists=if_exists,
             folders=folders,
             errors=errors,
-            kind="paste",
+            kind="move" if cut else "paste",
         )
 
     def upload(
@@ -308,9 +311,9 @@ class FileTasks:
         errors: list[str],
         kind: str,
     ) -> Plan:
-        """Copy (filesystem, path, name) items into folder ``dest`` of ``fs``:
-        with ``copy`` from ``fs`` itself, else with ``copy_between``. ``kind``:
-        "paste" or "upload" (see ``_COPY_WORDS``)."""
+        """Copy (filesystem, path, name) items into folder ``dest`` of ``fs``,
+        with the operations' ``copy``; or ``move`` them, for ``kind`` "move".
+        ``kind``: "paste", "move" or "upload" (see ``_COPY_WORDS``)."""
         key, verb, doing = _COPY_WORDS[kind]
         plans = self._plan_copies(copies, dest, folders, verb, errors)
         existing = {p.target for p in plans if self.fs.exists(p.target)}
@@ -330,10 +333,18 @@ class FileTasks:
                 if plan.target in existing and if_exists == "skip":
                     skipped.append(_paths.basename(plan.target))
                     return
-                if plan.fs is fs:
-                    ops.copy(fs, plan.source, plan.target, progress)
+                if kind != "move":
+                    ops.copy(plan.fs, plan.source, fs, plan.target, progress)
                 else:
-                    ops.copy_between(plan.fs, plan.source, fs, plan.target, progress)
+                    if plan.target in existing:
+                        # Renaming onto an existing file fails on some systems.
+                        ops.delete(fs, plan.target, progress)
+                    ops.move(plan.fs, plan.source, fs, plan.target, progress)
+                    if same_filesystem(plan.fs, fs):
+                        task.moved.append((plan.source, plan.target))
+                        task.changed.add(_paths.parent(plan.source, fs))
+                    else:
+                        task.moved_away.append((plan.fs, plan.source))
                 done.append(_paths.basename(plan.target))
                 task.changed.add(dest)
 
@@ -364,7 +375,11 @@ class FileTasks:
                 errors.append(
                     f"{name}: folders are not {verb} (turn on unsafe mode first)"
                 )
-            elif is_folder and source_fs is self.fs and _paths.inside(dest, source):
+            elif (
+                is_folder
+                and same_filesystem(source_fs, self.fs)
+                and _paths.inside(dest, source)
+            ):
                 errors.append(f"{name}: a folder cannot be {verb} into itself")
             elif is_folder and self.fs.exists(target):
                 # Folders are never merged into, or replace, what is there.

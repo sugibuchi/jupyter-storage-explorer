@@ -7,14 +7,16 @@ from typing import Any
 import fsspec
 import polars as pl
 import pytest
+from fsspec.implementations.dirfs import DirFileSystem
 
 from jupyter_storage_explorer import StorageExplorer, _paths
-from jupyter_storage_explorer.incoming import format_size
-from jupyter_storage_explorer.operations import (
+from jupyter_storage_explorer.filesystems import (
     AsyncFsspecOperations,
-    FileSystemOperations,
+    AtomicMoveOperation,
     FsspecOperations,
 )
+from jupyter_storage_explorer.incoming import format_size
+from jupyter_storage_explorer.operations import FileSystemOperations
 from jupyter_storage_explorer.query import QuerySettingsStore
 
 
@@ -570,12 +572,34 @@ class TestPaste:
         reply = self.paste(mem_explorer, ["/other/b.txt"], "/other")
         assert reply["errors"] == ["b.txt: already in that folder"]
 
-    def test_from_another_explorer_by_url(self, mem_explorer, tmp_path):
+    def test_from_another_explorer(self, mem_explorer, tmp_path):
         local = make(str(tmp_path))
         reply = self.paste(local, ["/data/a.csv"], local._root, source=mem_explorer)
         assert reply["pasted"] == ["a.csv"]
         assert (tmp_path / "a.csv").read_bytes() == b"x,y\n1,2\n"
         assert "a.csv" in [e["name"] for e in entries(local)]
+
+    def test_from_an_explorer_in_this_kernel_by_its_filesystem(self, memfs, tmp_path):
+        """A DirFileSystem's URLs do not say where it starts: an explorer of
+        this kernel lends its filesystem; from another kernel, it fails."""
+        memfs.pipe_file("/base/x.txt", b"x")
+        source = make(fs=DirFileSystem("/base", memfs))
+        local = make(str(tmp_path))
+        path = path_of(source, "x.txt")
+        assert self.paste(local, [path], local._root, source=source)["pasted"] == [
+            "x.txt"
+        ]
+        assert (tmp_path / "x.txt").read_bytes() == b"x"
+        source._explorer_id = "in-another-kernel"
+        reply = self.paste(local, [path], local._root, source=source)
+        assert "unknown" in reply["errors"][0]
+
+    def test_by_url_from_another_kernel(self, mem_explorer, tmp_path):
+        mem_explorer._explorer_id = "in-another-kernel"
+        local = make(str(tmp_path))
+        reply = self.paste(local, ["/data/a.csv"], local._root, source=mem_explorer)
+        assert reply["pasted"] == ["a.csv"]
+        assert (tmp_path / "a.csv").read_bytes() == b"x,y\n1,2\n"
 
     def test_folder_by_url_is_not_pasted(self, mem_explorer, tmp_path):
         local = make(str(tmp_path))
@@ -600,6 +624,87 @@ class TestPaste:
         assert reply["pasted"] == []
         assert reply["errors"][0].startswith("x.csv:")
         assert list(tmp_path.iterdir()) == []
+
+
+class TestCut:
+    """ "Cut" then "Paste": a move, within a storage or to another."""
+
+    def paste(self, explorer, files, dest, *, source, **content):
+        return without_ids(
+            explorer.request(
+                {
+                    "type": "paste",
+                    "rid": 1,
+                    "explorer": source._explorer_id,
+                    "filesystem": source._filesystem,
+                    "files": [{"path": p, "url": source._url(p)} for p in files],
+                    "dest": dest,
+                    "cut": True,
+                    **content,
+                }
+            )
+        )
+
+    def test_between_explorers(self, mem_explorer, tmp_path):
+        mem_explorer._current_dir = "/data"
+        local = make(str(tmp_path))
+        reply = self.paste(local, ["/data/a.csv"], local._root, source=mem_explorer)
+        assert reply == {"moved": ["a.csv"], "skipped": [], "errors": []}
+        assert (tmp_path / "a.csv").read_bytes() == b"x,y\n1,2\n"
+        assert not mem_explorer._fs.exists("/data/a.csv")
+        assert "a.csv" in [e["name"] for e in entries(local)]
+        # The source explorer follows once its frontend is told (a page-wide event).
+        assert "a.csv" in [e["name"] for e in entries(mem_explorer)]
+        mem_explorer.message(
+            {"type": "changed", "filesystem": "default", "paths": ["/data/a.csv"]}
+        )
+        assert "a.csv" not in [e["name"] for e in entries(mem_explorer)]
+
+    def test_within_an_explorer(self, mem_explorer):
+        mem_explorer._current_dir = "/data"
+        reply = self.paste(mem_explorer, ["/data/a.csv"], "/other", source=mem_explorer)
+        assert reply["moved"] == ["a.csv"]
+        assert mem_explorer._fs.exists("/other/a.csv")
+        assert "a.csv" not in [e["name"] for e in entries(mem_explorer)]
+
+    def test_between_the_storages_of_an_explorer(self, memfs, tmp_path):
+        memfs.pipe_file("/m/a.txt", b"a")
+        explorer = make(filesystems={"mem": "memory:///m", "local": str(tmp_path)})
+        files = [{"path": "/m/a.txt", "url": "memory:///m/a.txt"}]
+        explorer._filesystem = "local"
+        reply = without_ids(
+            explorer.request(
+                {
+                    "type": "paste",
+                    "rid": 1,
+                    "explorer": explorer._explorer_id,
+                    "filesystem": "mem",
+                    "files": files,
+                    "dest": explorer._root,
+                    "cut": True,
+                }
+            )
+        )
+        assert reply["moved"] == ["a.txt"]
+        assert (tmp_path / "a.txt").read_bytes() == b"a"
+        assert "a.txt" in [e["name"] for e in entries(explorer)]
+        explorer._filesystem = "mem"
+        assert entries(explorer) == []
+
+    def test_the_top_folder_is_not_moved(self, mem_explorer, tmp_path):
+        local = make(str(tmp_path))
+        reply = self.paste(local, ["/"], local._root, source=mem_explorer, unsafe=True)
+        assert reply["errors"] == ["/: the top folder is not moved"]
+        assert mem_explorer._fs.exists("/data/a.csv")
+
+    def test_folders(self, mem_explorer, tmp_path):
+        local = make(str(tmp_path))
+        reply = self.paste(
+            local, ["/data/table"], local._root, source=mem_explorer, unsafe=True
+        )
+        assert reply["moved"] == ["table"]
+        assert (tmp_path / "table" / "_delta_log" / "0.json").read_bytes() == b"{}"
+        assert not mem_explorer._fs.exists("/data/table")
 
 
 class TestFolderOperations:
@@ -839,7 +944,7 @@ class TestJobs:
 
     def test_default_operations(self, memfs):
         kinds = [type(o) for o in make("/", fs=memfs)._operations.operations]
-        assert kinds == [AsyncFsspecOperations, FsspecOperations]
+        assert kinds == [AtomicMoveOperation, AsyncFsspecOperations, FsspecOperations]
         # A list given is used as it is.
         explorer = make("/", fs=memfs, operations=[FsspecOperations()])
         assert [type(o) for o in explorer._operations.operations] == [FsspecOperations]
@@ -860,13 +965,13 @@ class TestJobs:
         explorer.request(
             {"type": "move", "rid": 1, "paths": ["/d/b.txt"], "dest": "/trash"}
         )
-        assert memfs.exists("/trash/b.txt")  # moved by FsspecOperations
+        assert memfs.exists("/trash/b.txt")  # moved by AtomicMoveOperation
 
     def test_cancelled_midway(self, memfs):
         """Cancelled after the first file: that one is pasted, the job says so."""
 
         class CancelAfterOne(FileSystemOperations):
-            def copy(self, fs, source, target, progress):
+            def copy(self, fs, source, target_fs, target, progress):
                 fs.cp_file(source, target)
                 progress.cancel()
 
@@ -900,7 +1005,7 @@ class TestJobs:
         """Cancelled while copying a folder: it is named as left incomplete."""
 
         class CancelInside(FileSystemOperations):
-            def copy(self, fs, source, target, progress):
+            def copy(self, fs, source, target_fs, target, progress):
                 fs.makedirs(target, exist_ok=True)
                 progress.cancel()
                 progress.check()  # between two files of the folder

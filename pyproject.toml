@@ -40,7 +40,7 @@ requires-python = ">=3.11"
 dependencies = [
     "anywidget>=0.9",
     "fsspec>=2023.1.0",
-    "narwhals>=2.27.1",
+    "narwhals>=2.20",
     "pygments>=2.12",
     "traitlets>=5.4",
 ]
@@ -50,6 +50,12 @@ Homepage = "https://github.com/sugibuchi/jupyter-storage-explorer"
 Source = "https://github.com/sugibuchi/jupyter-storage-explorer"
 Issues = "https://github.com/sugibuchi/jupyter-storage-explorer/issues"
 Changelog = "https://github.com/sugibuchi/jupyter-storage-explorer/releases"
+
+[project.optional-dependencies]
+abfs = [
+    "adlfs>=2022.2.0",
+    "azure-storage-file-datalake>=12.0.0",
+]
 
 [build-system]
 requires = ["hatchling", "hatch-vcs"]
@@ -67,6 +73,8 @@ exclude = ["launcher", ".github"]
 
 [dependency-groups]
 dev = [
+    "adlfs>=2022.2.0",
+    "azure-storage-file-datalake>=12.0.0",
     "deltalake>=1.6.6",
     "duckdb>=1.5.6",
     "fastexcel>=0.21.0",

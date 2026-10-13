@@ -11,8 +11,9 @@ from jupyter_storage_explorer_launcher import launcher
 from jupyter_storage_explorer_launcher.launcher import LauncherError, load_settings
 
 from jupyter_storage_explorer import StorageExplorer
+from jupyter_storage_explorer.filesystems import FsspecOperations
 from jupyter_storage_explorer.formats import default_formats
-from jupyter_storage_explorer.operations import FileSystemOperations, FsspecOperations
+from jupyter_storage_explorer.operations import FileSystemOperations
 
 if TYPE_CHECKING:
     import pathlib
@@ -93,7 +94,7 @@ class TestMerging:
             tmp_path,
             "system",
             """
-            from jupyter_storage_explorer.operations import FsspecOperations
+            from jupyter_storage_explorer.filesystems import FsspecOperations
             from jupyter_storage_explorer.formats import Csv
 
             def formats():

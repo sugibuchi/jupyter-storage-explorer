@@ -32,6 +32,10 @@ Install the package for your storage too:
 | Google Cloud Storage           | `gcsfs`    | `gs://bucket/path`                                   |
 | Local disk, in-memory          | (included) | `/path`, `memory://`                                 |
 
+On Azure Data Lake Storage Gen2, `pip install "jupyter-storage-explorer[abfs]"` and
+`operations=[AzureDataLakeGen2Operation(), *StorageExplorer.default_operations()]` (from
+`jupyter_storage_explorer.filesystems.abfs`) move folders in one step and create empty folders.
+
 Previewing and querying data files needs a data library, e.g. `pip install polars deltalake`. If one is missing, the
 preview tells you what to install.
 
@@ -95,8 +99,10 @@ StorageExplorer(
   only names containing the text, or matching a regular expression with **.\***. Case is ignored; ✕ or Esc clears.
 - **Preview**: double-click a file, or **Preview** (with nothing selected: the current folder, e.g. a Delta Lake table).
   Tables open in the [data browser](#query-data).
-- **Right-click**: Preview as, Edit, Python code to load the data, Copy, Paste, Delete, Create a folder, Download to
-  local or to JupyterLab (see [Options](#storageexplorer-options)), Copy URL.
+- **Right-click**: Preview as, Edit, Python code to load the data, Copy, Cut, Paste, Delete, Create a folder, Download
+  to local or to JupyterLab (see [Options](#storageexplorer-options)), Copy URL.
+- **Copy, cut and paste** work between storages and between explorers, also in other notebooks: **Cut**, then
+  **Move here**, moves files to another storage.
 - **Drag and drop**: drop files from JupyterLab's file browser or your computer to upload them; drag files onto a folder
   to move them, or onto JupyterLab's file browser to download them (needs [the launcher](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/launcher/README.md)).
 - **In the background**: moving, deleting, pasting and downloading to JupyterLab run while you keep browsing, with
@@ -108,9 +114,9 @@ Folder operations need **Unsafe mode**, turned on with the slider in the status 
 
 | Operation              | How                                                 |
 |------------------------|-----------------------------------------------------|
-| Move folders           | Drag a folder onto another folder.                  |
-| Copy and paste folders | Right-click → **Copy**, then **Paste** on a folder. |
-| Delete folders         | Right-click → **Delete** (with everything in it).   |
+| Move folders           | Drag a folder onto another folder, or right-click → **Cut**, then **Move here** on a folder. |
+| Copy and paste folders | Right-click → **Copy**, then **Paste** on a folder.                                          |
+| Delete folders         | Right-click → **Delete** (with everything in it).                                            |
 
 ## Query data
 
@@ -195,7 +201,7 @@ explorer.selected_urls  # the URLs of the selected items
 | `download_to_jupyterlab_path="."`   | Folder "Download to JupyterLab" copies into, e.g. `"~/Downloads"`; default: where it runs. `None`: left out.                          |
 | `filesystems={...}`                 | Several named storages, as shown above.                                                                                               |
 | `max_browser_items=20_000`          | Folders with more items are filtered, sorted and paged by the kernel, one page at a time, instead of the browser (`None`: never).     |
-| `operations=[...]`                  | How files are moved, copied, deleted and downloaded, replacing `StorageExplorer.default_operations()`: e.g. `[MyOps(), *StorageExplorer.default_operations()]` for server-side copies of your own (see [operations.py](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/src/jupyter_storage_explorer/operations.py)). |
+| `operations=[...]`                  | How files are moved, copied, deleted and downloaded, replacing `StorageExplorer.default_operations()`: e.g. `[MyOps(), *StorageExplorer.default_operations()]` for server-side copies of your own (see [operations.py](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/src/jupyter_storage_explorer/operations.py), and [filesystems](https://github.com/sugibuchi/jupyter-storage-explorer/tree/main/src/jupyter_storage_explorer/filesystems) for the defaults). |
 | `query_settings=...`                | Where the data browser keeps its settings; see [Query data](#query-data).                                                             |
 | `format_options={...}`              | Options for the formats (see [Format options](#format-options)).                                                                      |
 

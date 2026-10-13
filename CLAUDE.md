@@ -50,7 +50,8 @@ A uv workspace of two packages released together (version from git tags via hatc
 - `jupyter-storage-explorer` (root, `src/jupyter_storage_explorer/`): the anywidget widgets `StorageExplorer` (files)
   and `DataExplorer` (a dataframe given by the user, any library narwhals supports, with `QuerySettings`). Runtime
   dependencies are only anywidget, fsspec, narwhals, pygments, traitlets; polars, pandas, pyarrow, deltalake,
-  fastexcel, openpyxl, Pillow, PySpark are all optional and probed at run time.
+  fastexcel, openpyxl, Pillow, PySpark are all optional and probed at run time. The "abfs" extra adds adlfs and the
+  Data Lake SDK, for `filesystems/abfs.py`.
 - `jupyter-storage-explorer-launcher` (`launcher/`): a JupyterLab launcher item opening a tab whose kernel runs
   `launch()`. It merges every `storage-explorer/launcher.py` in Jupyter's config paths as layers, system to user (their
   `filesystems()`, `formats()`, `format_options()`, `operations()`, `parameters()`, `style()` functions; `final()`
@@ -73,7 +74,10 @@ break sync.
 
 **Storage.** Everything is an fsspec filesystem; `StorageExplorer` can hold several named ones (`filesystems=`).
 `_urls.default_url` turns paths into the URLs shown to users and passed to libraries (plain paths for local files,
-`abfs://container@account.dfs.core.windows.net/...` for Azure); subclasses can override `StorageExplorer._url`.
+`abfs://container@account.dfs.core.windows.net/...` for Azure); subclasses can override `StorageExplorer._url`, and
+with it `_locate` (`_urls.default_location`), the reverse, used only to paste files copied in another kernel: the
+explorer's own filesystem with the URL's protocol (Azure: its account), else one fsspec opens; URLs that do not tell
+the storage (`abfs://container/...`, `dir://`) are refused, not guessed.
 
 **File operations.** `StorageExplorer`'s methods are grouped in sections (UI logic first, one section per operation),
 ending with a *File operations* block: the only methods that call fsspec on the filesystem shown (`self._fs`) for
@@ -82,17 +86,27 @@ through them, never through fsspec directly. Moving, copying, deleting, download
 the operations objects instead (`operations.py`, the `operations=` argument): a chain of `FileSystemOperations`, each
 method tried in order until one does not raise `FileSystemOperations.NotSupported` (its own exception, so that a
 library's `NotImplementedError` is reported as an error). `OperationChain` adds nothing; the defaults are
-`StorageExplorer.default_operations()`: `AsyncFsspecOperations` (async filesystems such as s3fs: their coroutines, many
-files at a time; folder moves left to the next) then `FsspecOperations` (walking folders itself, to report progress
-file by file). Tests use fsspec's `AsyncFileSystemWrapper` around a memory filesystem as an
-async one. Copies into storage go through a temporary file, so a failure leaves no partial file. Object stores (S3,
-GCS) have no empty folders, which matters for creating folders.
+`StorageExplorer.default_operations()`, from the `filesystems/` package: `AtomicMoveOperation` (only moves within a
+filesystem whose `mv` renames a folder in one step: local, memory, or a `DirFileSystem` over them), then
+`AsyncFsspecOperations` (`async_fsspec.py`: async filesystems such as s3fs, their coroutines, many files at a time),
+then `FsspecOperations` (`fsspec.py`). Both of the latter walk folders themselves, moves included, to report progress
+file by file (helpers in `filesystems/_common.py`). Opt-in, not a default: `AzureDataLakeGen2Operation` (`abfs.py`,
+the "abfs" extra: adlfs and `azure-storage-file-datalake`), moves (renames) and creates folders on accounts with a
+hierarchical namespace with the async Data Lake SDK, connected from the adlfs filesystem's settings and run on its
+loop with `fsspec.asyn.sync`; tested with a fake client (`tests/test_abfs.py`). `filesystems/__init__.py` does not
+import it, as its packages are optional. `move` and `copy` take a source and a target filesystem, the same
+one or not (`same_filesystem`: fsspec instances compare by their arguments). Between filesystems, single files go
+through `FileSystemOperations._copy_file` and `_move_file` (`_copy_file_async`/`_move_file_async` in the async class),
+overridable: by default through a temporary file, so a failure leaves no partial file, and a move copies then deletes
+each file, so a cancel leaves each file in one place. Tests use fsspec's `AsyncFileSystemWrapper` around a memory
+filesystem as an async one. Object stores (S3, GCS) have no empty folders, which matters for creating folders.
 
 **Jobs.** Move, delete, paste, uploads (from JupyterLab's file browser, and the storage half of uploads from the
 computer) and both downloads to JupyterLab run in the background (`jobs.py`). Each is planned by a `FileTasks` method
 (`file_tasks.py`, no widget involved) on the main thread: checks, conflicts to ask about (returned as a dict), else a
 `Task` whose `work(progress)` runs in the `JobRunner`'s worker thread (one job at a time) and records what it changed
-(`moved`, `removed`, `changed` folders). `StorageExplorer` only answers requests (`_plan_request`, `_start`) and,
+(`moved`, `removed`, `changed` folders; `moved_away` from other filesystems). `StorageExplorer` only answers requests
+(`_plan_request`, `_start`) and,
 once a job has ended, shows those changes (`_finish`, on the main thread). Work functions must not touch traits or
 `send`; they report to the `Progress` and stop when `progress.check()` raises `OperationCancelled`. A drop from
 JupyterLab's file browser is a copy from the kernel's local disk (`FileTasks.upload`); files from the computer arrive in
@@ -101,16 +115,19 @@ pieces (`incoming.py`), and the last piece starts `FileTasks.upload_file`. Path 
 that. The main thread is reached through the kernel's asyncio loop (`call_soon_threadsafe`); without a running loop
 (tests), jobs run synchronously, so tests see the result at once.
 
-**Unsafe mode.** Folder operations (move, copy and paste, delete) are offered only while the "Unsafe mode" slider in
+**Unsafe mode.** Folder operations (move, copy or cut and paste, delete) are offered only while the "Unsafe mode" slider in
 the status bar is on (trait `_unsafe_mode`). In the frontend, every operation calls `takeUnsafe()` as it starts, which
 turns it off (one operation at a time), and sends whether it was on with its request (`"unsafe"`); the kernel refuses
 folders without it (the methods' `folders=` parameter).
 
 **Between explorers and with JupyterLab.** Drag data can only be text, so the frontend shares objects page-wide under
-`Symbol.for(...)` keys on `globalThis`: `"jupyter-storage-explorer.clipboard"` (Copy, for Paste in any explorer:
-pasted within the same explorer and filesystem by path, otherwise from the URL) and
-`"jupyter-storage-explorer.drag"` (the current file drag, with a `download` function, read by the launcher's
-`download.ts`).
+`Symbol.for(...)` keys on `globalThis`: `"jupyter-storage-explorer.clipboard"` (Copy or Cut, for Paste in any explorer)
+and `"jupyter-storage-explorer.drag"` (the current file drag, with a `download` function, read by the launcher's
+`download.ts`). Explorers on a page may be in different kernels (notebooks). The clipboard names the explorer and
+storage copied from: an explorer of the same kernel is found in `_explorers` (by `_explorer_id`) and its filesystem
+object used as it is (`_paste_sources`); otherwise the files' URLs are read back with `_locate`. After pasting files
+cut in another explorer, the frontend dispatches a `"jupyter-storage-explorer:changed"` event on `globalThis`, so that
+explorer asks its kernel to show what is left (`"changed"`, `_sources_changed`).
 
 **Lists.** The file list is filtered (by name), sorted and paged (100 per page) in the browser, from the full listing
 the kernel sends; selection survives filtering and paging. Folders can hold tens of thousands of items, so the listing
@@ -149,8 +166,8 @@ storage options (`spark_url()` rewrites `abfs`/`s3` to `abfss`/`s3a`).
 
 - Comments and docstrings are written in full sentences explaining *why*; keep that density and tone.
 - Docstrings of the public API, what users construct, call, subclass or override (`StorageExplorer`, `DataExplorer`,
-  `QuerySettings`, `QuerySettingsStore`, `FileSystemOperations` and its subclasses, `Progress`, `DataFormat`,
-  `StorageExplorer._url`), are in numpy style: `Parameters`, `Returns`, `Raises`, `Attributes`, `See Also`, `Examples`.
+  `QuerySettings`, `QuerySettingsStore`, `FileSystemOperations` and its subclasses (with `_copy_file`, `_move_file`), `Progress`, `DataFormat`,
+  `StorageExplorer._url` and `_locate`, `same_filesystem`), are in numpy style: `Parameters`, `Returns`, `Raises`, `Attributes`, `See Also`, `Examples`.
   Internal ones (underscore names, `DataQuery`, `FileTasks`, `JobRunner`, ...) stay prose.
 - `from __future__ import annotations` everywhere, with type-only imports under `TYPE_CHECKING` (ruff `TC` rules).
 - The README documents user-facing options and formats; update "Using the explorer" (and its "Unsafe operations"),
