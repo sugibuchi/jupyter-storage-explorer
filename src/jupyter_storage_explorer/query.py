@@ -684,9 +684,10 @@ class DataQuery:
             return {"error": f"{type(exc).__name__}: {exc}"}
         return self._view(content)
 
-    def result(self) -> Any:
+    def result(self, *, all_columns: bool = False) -> Any:
         """The data with the remembered settings applied (filters, sort order,
-        hidden columns left out), as a dataframe of the data's own library.
+        hidden columns left out, unless ``all_columns``), as a dataframe of
+        the data's own library.
 
         Built on the data itself, not on rows held in memory: it covers all of
         it, and stays lazy if the data is (e.g. a polars LazyFrame or a Spark
@@ -698,6 +699,8 @@ class DataQuery:
         data = nw.from_native(self.native)
         schema = data.collect_schema()
         settings = normalize_settings(self._remembered(), schema)
+        if all_columns:
+            settings = {**settings, "hidden": []}
         return build_query(data, schema, settings).to_native()
 
     def opening(self) -> dict[str, Any]:

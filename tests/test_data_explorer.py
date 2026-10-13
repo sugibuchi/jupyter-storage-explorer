@@ -160,6 +160,11 @@ class TestResult:
         # The widget showed rows 0-9 only; the result covers all 100.
         assert explorer.result().collect()["a"].to_list()[:3] == [99, 98, 97]
 
+    def test_all_columns(self):
+        """The widget's filters and sort order, with the columns it hides."""
+        result = self.explorer(DF.lazy()).result(all_columns=True).collect()
+        assert result.to_dict(as_series=False) == {"a": [3, 2], "b": ["x", None]}
+
     def test_without_changes(self):
         assert Explorer(DF).result().equals(DF)
 

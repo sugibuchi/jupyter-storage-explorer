@@ -267,7 +267,8 @@ Lazy data starts **Live**, eager data **In memory**. Pass a function (`lambda: p
 read the data again.
 
 `explorer.result()` gives the data with the widget's filters, sort order and hidden columns applied, as a dataframe of
-the same library (lazy data stays lazy), to continue your analysis in code:
+the same library (lazy data stays lazy), to continue your analysis in code; `result(all_columns=True)` keeps the
+hidden columns:
 
 ```python
 explorer = DataExplorer(pl.scan_parquet("sales/*.parquet"))
