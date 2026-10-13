@@ -120,6 +120,23 @@ Folder operations need **Unsafe mode**, turned on with the slider in the status 
 | Copy and paste folders | Right-click → **Copy**, then **Paste** on a folder.                                          |
 | Delete folders         | Right-click → **Delete** (with everything in it).                                            |
 
+### Transfer policy
+
+`policy=[...]` limits the directions files may be copied and moved in (copy, cut and paste, moves, uploads and
+downloads, with JupyterLab's file browser too). It is a list of rules, tried in order; the first whose `src` and
+`dest` regular expressions both match the whole URLs decides, and without one, files go:
+
+```python
+StorageExplorer(filesystems={...}, policy=[
+    {"rule": "allow", "src": r"abfs://lake@acct\.dfs\.core\.windows\.net/public/.*", "dest": ".*"},
+    {"rule": "deny", "src": r"abfs://lake@.*", "dest": ".*"},  # nothing else leaves the lake
+])
+```
+
+URLs are those of "Copy URL" (local files: their path; the destination: the item's new location). Files on your
+computer are `browser:///<name>`. A pattern left out matches any URL. Items refused are reported, the others done.
+This keeps files from going the wrong way by mistake; it is not a security boundary.
+
 ## Query data
 
 With [polars](https://pola.rs) installed (plus `deltalake` for Delta Lake, `fastexcel` for Excel), tables open in a data
@@ -223,6 +240,7 @@ explorer.selected_urls  # the URLs of the selected items
 | `filesystems={...}`                 | Several named storages, as shown above.                                                                                               |
 | `max_browser_items=20_000`          | Folders with more items are filtered, sorted and paged by the kernel, one page at a time, instead of the browser (`None`: never).     |
 | `operations=[...]`                  | How files are moved, copied, deleted and downloaded, replacing `StorageExplorer.default_operations()`: e.g. `[MyOps(), *StorageExplorer.default_operations()]` for server-side copies of your own (see [operations.py](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/src/jupyter_storage_explorer/operations.py), and [filesystems](https://github.com/sugibuchi/jupyter-storage-explorer/tree/main/src/jupyter_storage_explorer/filesystems) for the defaults). |
+| `policy=[...]`                      | Rules for the directions files may be copied and moved in; see [Transfer policy](#transfer-policy).                                    |
 | `states="states.json"`              | Where bookmarks and the data browser's settings are kept (a path or an `ExplorerStates`); see [Remembered states](#remembered-states). |
 | `format_options={...}`              | Options for the formats (see [Format options](#format-options)).                                                                      |
 

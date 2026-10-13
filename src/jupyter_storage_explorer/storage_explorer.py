@@ -47,6 +47,7 @@ from jupyter_storage_explorer.operations import (
     Progress,
     same_filesystem,
 )
+from jupyter_storage_explorer.policy import TransferPolicy, computer_url
 from jupyter_storage_explorer.query import DataQuery
 from jupyter_storage_explorer.states import ExplorerStates, explorer_states
 
@@ -244,6 +245,16 @@ class StorageExplorer(anywidget.AnyWidget):
         operations.py). Default: ``default_operations()``. A list given
         replaces it, e.g. ``[MyOps(), *StorageExplorer.default_operations()]``
         for server-side copies of your own.
+    policy : list of dict, optional
+        Rules for the directions files may be copied and moved in, each
+        ``{"rule": "allow" or "deny", "src": regex, "dest": regex}``, for
+        copy, cut and paste, moves, and transfers with JupyterLab's file
+        browser and the user's computer (``browser:///<name>``). The first
+        rule whose patterns both match the whole source and destination URLs
+        (``re.fullmatch``; a pattern left out matches any) decides; without
+        one, files go. Items refused are reported, the others done. Not a
+        security boundary: it only keeps files from going where they are not
+        meant to by mistake (see policy.py).
     **storage_options
         Passed to fsspec with ``path``, e.g. ``anon=True`` or
         ``profile="analytics"``.
@@ -254,7 +265,8 @@ class StorageExplorer(anywidget.AnyWidget):
         If ``filesystems`` is combined with ``path``, ``fs`` or storage
         options, or storage options with ``fs``.
     ValueError
-        If ``filesystems`` is empty.
+        If ``filesystems`` is empty, or ``policy`` has a rule that is not
+        of that form.
 
     See Also
     --------
@@ -351,8 +363,10 @@ class StorageExplorer(anywidget.AnyWidget):
         states: ExplorerStates | str | os.PathLike[str] | None = None,
         max_browser_items: int | None = 20_000,
         operations: Sequence[FileSystemOperations] | None = None,
+        policy: Sequence[Mapping[str, str]] | None = None,
         **storage_options: Any,
     ) -> None:
+        self._policy = TransferPolicy(policy)
         self._states = explorer_states(states)
         # Its file may have been changed by another kernel since it was read.
         try:
@@ -1144,6 +1158,12 @@ class StorageExplorer(anywidget.AnyWidget):
             try:
                 if not self._allow_download_to_local:
                     raise PermissionError("downloading to local is not allowed")
+                refused = self._policy.error(
+                    self._location(self._fs, path),
+                    computer_url(_paths.basename(path)),
+                )
+                if refused is not None:
+                    raise PermissionError(refused)
                 info = self._info(path)
                 if info.get("type") == "directory":
                     raise ValueError("folders cannot be downloaded")
@@ -1165,9 +1185,41 @@ class StorageExplorer(anywidget.AnyWidget):
     # shows what it has changed so far as it runs, and _finish all it changed
     # once it has ended ---
 
-    def _tasks(self) -> FileTasks:
-        """Plans operations on the filesystem shown."""
-        return FileTasks(self._fs, self._root, self._operations)
+    def _tasks(self, urls: Mapping[tuple[int, str], str] | None = None) -> FileTasks:
+        """Plans operations on the filesystem shown, within the policy.
+
+        ``urls``: the URLs of files pasted, as copied, by (id of their
+        filesystem, normalized path), for the policy (see ``_transfer_error``).
+        """
+        return FileTasks(
+            self._fs,
+            self._root,
+            self._operations,
+            check=functools.partial(self._transfer_error, urls=urls or {}),
+        )
+
+    def _transfer_error(
+        self,
+        source_fs: AbstractFileSystem,
+        source: str,
+        target_fs: AbstractFileSystem,
+        target: str,
+        urls: Mapping[tuple[int, str], str],
+    ) -> str | None:
+        """Why the policy refuses copying or moving ``source`` to ``target``, or None."""
+        if not self._policy.rules:
+            return None
+        source_url = urls.get((id(source_fs), _paths.norm(source)))
+        if source_url is None:
+            source_url = self._location(source_fs, source)
+        return self._policy.error(source_url, self._location(target_fs, target))
+
+    def _location(self, fs: AbstractFileSystem, path: str) -> str:
+        """``path``'s URL for the policy: ``_url``'s on the filesystem shown,
+        else (another storage, files without a URL) ``default_url``'s."""
+        if same_filesystem(fs, self._fs) and (url := self._url(path)) is not None:
+            return url
+        return default_url(fs, path)
 
     def _start(self, plan: Plan) -> dict[str, Any]:
         """Run ``plan`` as a job: {"job": its id}; or the reply as it is if
@@ -1425,8 +1477,8 @@ class StorageExplorer(anywidget.AnyWidget):
     ) -> Plan:
         """Plan pasting ``files`` ({"path", "url"}, as copied) into ``dest``
         (see ``FileTasks.paste``)."""
-        sources, errors = self._paste_sources(files, explorer, filesystem, cut)
-        return self._tasks().paste(
+        sources, errors, urls = self._paste_sources(files, explorer, filesystem, cut)
+        return self._tasks(urls).paste(
             sources, dest, if_exists, folders=folders, cut=cut, errors=errors
         )
 
@@ -1436,9 +1488,13 @@ class StorageExplorer(anywidget.AnyWidget):
         explorer: str | None,
         filesystem: str | None,
         cut: bool = False,
-    ) -> tuple[list[tuple[AbstractFileSystem, str]], list[str]]:
+    ) -> tuple[
+        list[tuple[AbstractFileSystem, str]], list[str], dict[tuple[int, str], str]
+    ]:
         """The (filesystem, path) of files copied in explorer ``explorer``, from
-        its storage ``filesystem``, and errors for those not found.
+        its storage ``filesystem``, errors for those not found, and their URLs
+        as copied (by their explorer's ``_url``), for the policy (see
+        ``_tasks``).
 
         If that explorer is in this kernel, its filesystem object is used, as
         it is (credentials included). Otherwise it is in another kernel and
@@ -1446,7 +1502,7 @@ class StorageExplorer(anywidget.AnyWidget):
         """
         source = _explorers.get(explorer or "")
         entry = None if source is None else source._filesystems.get(filesystem or "")
-        sources, errors = [], []
+        sources, errors, urls = [], [], {}
         for file in files:
             path, url = file.get("path"), file.get("url")
             try:
@@ -1462,7 +1518,9 @@ class StorageExplorer(anywidget.AnyWidget):
                 errors.append(f"{_paths.basename(path or url or '')}: {exc}")
                 continue
             sources.append((fs, path))
-        return sources, errors
+            if url is not None:
+                urls[id(fs), _paths.norm(path)] = url
+        return sources, errors, urls
 
     # --- Upload: files (and, in unsafe mode, folders) dragged in from
     # JupyterLab's file browser, which the kernel copies itself ---
@@ -1509,7 +1567,13 @@ class StorageExplorer(anywidget.AnyWidget):
         an error ({"error": ...})."""
         upload_id = content["id"]
         try:
-            target = _paths.join(content["dest"], _paths.safe_name(content["name"]))
+            name = _paths.safe_name(content["name"])
+            target = _paths.join(content["dest"], name)
+            refused = self._policy.error(
+                computer_url(name), self._location(self._fs, target)
+            )
+            if refused is not None:
+                raise PermissionError(refused)
             piece = bytes(buffers[0]) if buffers else None
             self._incoming.add(upload_id, piece, target, self._fs)
             if not content["last"]:

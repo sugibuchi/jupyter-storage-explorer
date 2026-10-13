@@ -80,4 +80,16 @@ def style():
     """
 ```
 
+A [transfer policy](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/README.md#transfer-policy) is a
+parameter too, e.g. in the system's file:
+
+```python
+def parameters():
+    return {"policy": [{"rule": "deny", "src": r"abfs://lake@.*", "dest": "browser:///.*"}]}
+
+
+def final():
+    return ["policy"]  # no downloads from the lake to users' computers
+```
+
 An error in a file (a function that fails, an unknown parameter) is shown in the tab, with the file's path.

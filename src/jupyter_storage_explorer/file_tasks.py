@@ -158,14 +158,36 @@ class FileTasks:
     moved, copied and deleted only with ``folders`` (the widget's unsafe mode
     was on), never the top folder, never into themselves, and never onto
     anything that exists.
+
+    ``check(source_fs, source, target_fs, target)``, if given, tells why an
+    item may not be moved or copied (the explorer's policy, see policy.py),
+    or returns None: those it refuses are left out, with that error.
     """
 
     def __init__(
-        self, fs: AbstractFileSystem, root: str, operations: OperationChain
+        self,
+        fs: AbstractFileSystem,
+        root: str,
+        operations: OperationChain,
+        check: Callable[[AbstractFileSystem, str, AbstractFileSystem, str], str | None]
+        | None = None,
     ) -> None:
         self.fs = fs
         self.root = root
         self.ops = operations
+        self.check = check
+
+    def _refused(
+        self,
+        source_fs: AbstractFileSystem,
+        source: str,
+        target_fs: AbstractFileSystem,
+        target: str,
+    ) -> str | None:
+        """Why ``check`` refuses an item, or None."""
+        if self.check is None:
+            return None
+        return self.check(source_fs, source, target_fs, target)
 
     def measure(self, fs: AbstractFileSystem, path: str) -> tuple[int, int]:
         """Files and bytes at ``path``, for the progress bar; (1, 0) if unknown."""
@@ -231,7 +253,9 @@ class FileTasks:
             target = _paths.join(dest, name)
             if _paths.norm(path) == _paths.norm(target):
                 continue  # already in that folder
-            if not self.fs.isdir(path):
+            if (refused := self._refused(self.fs, path, self.fs, target)) is not None:
+                errors.append(f"{name}: {refused}")
+            elif not self.fs.isdir(path):
                 moves.append((path, target, False))
             elif not folders:
                 errors.append(
@@ -434,7 +458,10 @@ class FileTasks:
             except Exception as exc:
                 errors.append(f"{name}: {exc}")
                 continue
-            if is_folder and not folders:
+            refused = self._refused(source_fs, source, self.fs, target)
+            if refused is not None:
+                errors.append(f"{name}: {refused}")
+            elif is_folder and not folders:
                 errors.append(
                     f"{name}: folders are not {verb} (turn on unsafe mode first)"
                 )
@@ -492,12 +519,17 @@ class FileTasks:
             # e.g. the kernel runs elsewhere than the Jupyter server (a remote kernel).
             raise ValueError(f"{dest}: folder not found from the kernel")
         files, errors = [], []
+        local = LocalFileSystem()
         for path in paths:
             name = _paths.safe_name(_paths.basename(path))
-            if self.fs.isdir(path):
+            target = os.path.join(dest, name)
+            refused = self._refused(self.fs, path, local, local._strip_protocol(target))
+            if refused is not None:
+                errors.append(f"{name}: {refused}")
+            elif self.fs.isdir(path):
                 errors.append(f"{name}: folders are not downloaded")
             else:
-                files.append((path, os.path.join(dest, name)))
+                files.append((path, target))
         existing = {target for _, target in files if os.path.exists(target)}
         if if_exists == "ask" and existing:
             return {"conflicts": sorted(os.path.basename(t) for t in existing)}
