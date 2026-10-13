@@ -95,8 +95,10 @@ StorageExplorer(
   only names containing the text, or matching a regular expression with **.\***. Case is ignored; ✕ or Esc clears.
 - **Preview**: double-click a file, or **Preview** (with nothing selected: the current folder, e.g. a Delta Lake table).
   Tables open in the [data browser](#query-data).
-- **Right-click**: Preview as, Edit, Python code to load the data, Copy, Paste, Delete, Create a folder, Download to
-  local or to JupyterLab (see [Options](#storageexplorer-options)), Copy URL.
+- **Right-click**: Preview as, Edit, Python code to load the data, Copy, Cut, Paste, Delete, Create a folder, Download
+  to local or to JupyterLab (see [Options](#storageexplorer-options)), Copy URL.
+- **Copy, cut and paste** work between storages and between explorers, also in other notebooks: **Cut**, then
+  **Move here**, moves files to another storage.
 - **Drag and drop**: drop files from JupyterLab's file browser or your computer to upload them; drag files onto a folder
   to move them, or onto JupyterLab's file browser to download them (needs [the launcher](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/launcher/README.md)).
 - **In the background**: moving, deleting, pasting and downloading to JupyterLab run while you keep browsing, with
@@ -108,9 +110,9 @@ Folder operations need **Unsafe mode**, turned on with the slider in the status 
 
 | Operation              | How                                                 |
 |------------------------|-----------------------------------------------------|
-| Move folders           | Drag a folder onto another folder.                  |
-| Copy and paste folders | Right-click → **Copy**, then **Paste** on a folder. |
-| Delete folders         | Right-click → **Delete** (with everything in it).   |
+| Move folders           | Drag a folder onto another folder, or right-click → **Cut**, then **Move here** on a folder. |
+| Copy and paste folders | Right-click → **Copy**, then **Paste** on a folder.                                          |
+| Delete folders         | Right-click → **Delete** (with everything in it).                                            |
 
 ## Query data
 

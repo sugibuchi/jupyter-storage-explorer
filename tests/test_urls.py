@@ -1,11 +1,12 @@
-"""_urls.default_url: the locations shown to users and given to libraries."""
+"""_urls: the locations shown to users and given to libraries, and back."""
 
 from __future__ import annotations
 
 import fsspec
 import pytest
+from fsspec.implementations.dirfs import DirFileSystem
 
-from jupyter_storage_explorer._urls import default_url
+from jupyter_storage_explorer._urls import default_location, default_url
 
 
 class FakeAzure:
@@ -47,3 +48,39 @@ def test_azure_other_cloud_keeps_its_domain():
 )
 def test_azure_without_known_host(account_url):
     assert default_url(FakeAzure(account_url), "c/k") == "abfs://c/k"
+
+
+class TestDefaultLocation:
+    """default_location: the reverse of default_url."""
+
+    def test_round_trip(self, memfs, tmp_path):
+        local = fsspec.filesystem("file")
+        for fs, path in [
+            (memfs, "/a/b.csv"),
+            (local, local._strip_protocol(str(tmp_path))),
+        ]:
+            assert default_location(default_url(fs, path), [fs]) == (fs, path)
+
+    def test_the_first_with_the_protocol(self, memfs):
+        other = DirFileSystem("/sub", memfs)
+        local = fsspec.filesystem("file")
+        assert default_location("memory:///x", [local, other, memfs]) == (memfs, "/x")
+
+    def test_else_opened_by_fsspec(self, memfs):
+        fs, path = default_location("memory:///x", [])
+        assert fs is memfs and path == "/x"
+
+    def test_azure_by_account(self):
+        lake = FakeAzure("https://lake.blob.core.windows.net")
+        other = FakeAzure("https://other.blob.core.windows.net")
+        url = "abfs://data@lake.dfs.core.windows.net/raw/x.csv"
+        assert default_location(url, [other, lake]) == (lake, "data/raw/x.csv")
+        assert default_url(lake, "data/raw/x.csv") == url
+
+    @pytest.mark.parametrize(
+        "url", ["abfs://data/raw/x.csv", "abfs://", "dir:///sub/x.csv"]
+    )
+    def test_unknown_storage_refused(self, url):
+        lake = FakeAzure("https://lake.blob.core.windows.net")
+        with pytest.raises(ValueError, match="unknown"):
+            default_location(url, [lake])

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 
+import fsspec
 import pytest
 
 from jupyter_storage_explorer.file_tasks import FileTasks, Task
@@ -36,9 +37,39 @@ class TestFileTasks:
 
     def test_conflicts_asked_first(self, tasks):
         assert tasks.move(["/d/b.txt"], "/e") == {"conflicts": ["b.txt"]}
-        assert tasks.paste([{"path": "/d/b.txt"}], "/e", same_filesystem=True) == {
-            "conflicts": ["b.txt"]
-        }
+        assert tasks.paste([(tasks.fs, "/d/b.txt")], "/e") == {"conflicts": ["b.txt"]}
+
+    def test_cut_within_the_filesystem_is_a_move(self, tasks):
+        task = tasks.paste([(tasks.fs, "/d/a.txt")], "/e", cut=True)
+        assert task.title == "Moving a.txt into e"
+        assert run(task) == {"moved": ["a.txt"], "skipped": [], "errors": []}
+        assert task.moved == [("/d/a.txt", "/e/a.txt")]
+        assert task.changed == {"/d", "/e"}
+
+    def test_cut_from_another_filesystem(self, tasks, tmp_path):
+        (tmp_path / "f.txt").write_bytes(b"f")
+        local = fsspec.filesystem("file")
+        source = local._strip_protocol(str(tmp_path / "f.txt"))
+        task = tasks.paste([(local, source)], "/e", cut=True)
+        assert run(task)["moved"] == ["f.txt"]
+        assert tasks.fs.cat_file("/e/f.txt") == b"f"
+        assert not (tmp_path / "f.txt").exists()
+        # The source is on another filesystem: recorded apart, for the explorer.
+        assert task.moved == [] and task.moved_away == [(local, source)]
+        assert task.changed == {"/e"}
+
+    def test_cut_over_an_existing_file(self, tasks):
+        task = tasks.paste([(tasks.fs, "/d/b.txt")], "/e", "overwrite", cut=True)
+        run(task)
+        assert tasks.fs.cat_file("/e/b.txt") == b"b"
+        assert not tasks.fs.exists("/d/b.txt")
+
+    def test_cut_folders_need_unsafe_mode(self, tasks):
+        tasks.fs.pipe_file("/d/sub/x.txt", b"x")
+        reply = run(tasks.paste([(tasks.fs, "/d/sub")], "/e", cut=True))
+        assert reply["errors"] == [
+            "sub: folders are not moved (turn on unsafe mode first)"
+        ]
 
     def test_delete_records_removed(self, tasks):
         task = tasks.delete(["/d/a.txt"])

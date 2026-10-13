@@ -238,6 +238,9 @@ class FileSystemOperations:
     ``fs.unstrip_protocol(path)`` gives a path's URL, if an implementation
     needs one. Local paths (``local_path``) are paths on the kernel's machine.
 
+    ``move`` and ``copy`` are given two filesystems, which may be the same
+    one (``same_filesystem`` tells): e.g. a file pasted from another storage.
+
     Targets do not exist (an existing file is deleted first when
     overwriting), and their parent folders do.
     """
@@ -278,85 +281,75 @@ class FileSystemOperations:
         raise self.NotSupported
 
     def move(
-        self, fs: AbstractFileSystem, source: str, target: str, progress: Progress
+        self,
+        source_fs: AbstractFileSystem,
+        source: str,
+        target_fs: AbstractFileSystem,
+        target: str,
+        progress: Progress,
     ) -> None:
-        """Move a file or folder (with everything in it) within a filesystem.
+        """Move a file or folder (with everything in it), within a filesystem
+        or to another one.
+
+        Between filesystems (see ``same_filesystem``), a move is a copy then a
+        delete: a file that fails or is cancelled must not be left partly
+        written at ``target``, nor deleted from ``source`` before its copy is
+        complete.
 
         Parameters
         ----------
-        fs : AbstractFileSystem
-            The filesystem both paths are on.
+        source_fs : AbstractFileSystem
+            The filesystem ``source`` is on.
         source : str
-            The file or folder to move (an fsspec path of ``fs``).
+            The file or folder to move (an fsspec path of ``source_fs``).
+        target_fs : AbstractFileSystem
+            The filesystem ``target`` is on: ``source_fs``, or another one.
         target : str
-            The path it gets (an fsspec path of ``fs``), which does not exist;
-            its parent folder does.
+            The path it gets (an fsspec path of ``target_fs``), which does not
+            exist; its parent folder does.
         progress : Progress
-            Where to report progress (optional) and check for a cancel
-            (``progress.check()``, between steps).
+            Where to report files and bytes moved (optional within a
+            filesystem, where a move is often a rename) and check for a
+            cancel (``progress.check()``, between steps).
 
         Raises
         ------
         FileSystemOperations.NotSupported
-            If this object does not handle ``fs``.
+            If this object does not handle these filesystems.
         OperationCancelled
             From ``progress.check()``, once the user has cancelled.
         """
         raise self.NotSupported
 
     def copy(
-        self, fs: AbstractFileSystem, source: str, target: str, progress: Progress
-    ) -> None:
-        """Copy a file or folder (with everything in it) within a filesystem.
-
-        Parameters
-        ----------
-        fs : AbstractFileSystem
-            The filesystem both paths are on.
-        source : str
-            The file or folder to copy (an fsspec path of ``fs``).
-        target : str
-            The path of the copy (an fsspec path of ``fs``), which does not
-            exist, except a file being overwritten; its parent folder does.
-        progress : Progress
-            Where to report files and bytes copied (``advance``, or
-            ``callback()`` for transfers) and check for a cancel
-            (``progress.check()``, e.g. between files).
-
-        Raises
-        ------
-        FileSystemOperations.NotSupported
-            If this object does not handle ``fs``.
-        OperationCancelled
-            From ``progress.check()``, once the user has cancelled.
-        """
-        raise self.NotSupported
-
-    def copy_between(
         self,
         source_fs: AbstractFileSystem,
         source: str,
-        fs: AbstractFileSystem,
+        target_fs: AbstractFileSystem,
         target: str,
         progress: Progress,
     ) -> None:
-        """Copy a file or folder (with everything in it) from another filesystem.
+        """Copy a file or folder (with everything in it), within a filesystem
+        or to another one.
 
-        A file that fails or is cancelled must not be left partly written at
-        ``target`` (e.g. copy through a temporary file).
+        Between filesystems (see ``same_filesystem``), a file that fails or is
+        cancelled must not be left partly written at ``target`` (e.g. copy
+        through a temporary file).
 
         Parameters
         ----------
         source_fs : AbstractFileSystem
-            The filesystem ``source`` is on (e.g. another storage, read with
-            the environment's credentials).
+            The filesystem ``source`` is on: ``target_fs``, another storage
+            of the explorer, or one read from a URL with the environment's
+            credentials.
         source : str
             The file or folder to copy (an fsspec path of ``source_fs``).
-        fs : AbstractFileSystem
-            The filesystem ``target`` is on: the one the explorer shows.
+        target_fs : AbstractFileSystem
+            The filesystem ``target`` is on.
         target : str
-            The path of the copy (an fsspec path of ``fs``), which does not
-            exist, except a file being overwritten; its parent folder does.
+            The path of the copy (an fsspec path of ``target_fs``), which
+            does not exist, except a file being overwritten; its parent folder
+            does.
         progress : Progress
             Where to report files and bytes copied (``advance``, or
             ``callback()`` for transfers) and check for a cancel
@@ -475,7 +468,8 @@ class FsspecOperations(FileSystemOperations):
 
     Folders are copied and deleted file by file (deletions in batches), so
     progress shows and a cancel takes effect between files. Copies between
-    filesystems go through local temporary files.
+    filesystems go through local temporary files; moves between them copy
+    and delete file by file, so a cancel leaves each file in one place.
     """
 
     # Files deleted per request when deleting a folder: object stores delete
@@ -489,44 +483,56 @@ class FsspecOperations(FileSystemOperations):
         return len(files), sum(i.get("size") or 0 for i in files.values())
 
     def move(
-        self, fs: AbstractFileSystem, source: str, target: str, progress: Progress
-    ) -> None:
-        progress.working_on(_name(source))
-        if fs.isdir(source):
-            fs.mv(source, target, recursive=True)
-        else:
-            fs.mv(source, target)
-
-    def copy(
-        self, fs: AbstractFileSystem, source: str, target: str, progress: Progress
-    ) -> None:
-        if not fs.isdir(source):
-            progress.working_on(_name(source))
-            fs.cp_file(source, target)
-            return
-        for path, dest, size in _tree(fs, source, target, fs):
-            progress.check()
-            progress.working_on(_name(path))
-            fs.cp_file(path, dest)
-            progress.advance(files=1, bytes=size)
-
-    def copy_between(
         self,
         source_fs: AbstractFileSystem,
         source: str,
-        fs: AbstractFileSystem,
+        target_fs: AbstractFileSystem,
         target: str,
         progress: Progress,
     ) -> None:
+        if same_filesystem(source_fs, target_fs):
+            progress.working_on(_name(source))
+            if source_fs.isdir(source):
+                source_fs.mv(source, target, recursive=True)
+            else:
+                source_fs.mv(source, target)
+            return
         if not source_fs.isdir(source):
             progress.working_on(_name(source))
-            _copy_through_temp(source_fs, source, fs, target, progress)
+            _move_through_temp(source_fs, source, target_fs, target, progress)
             return
-        for path, dest, _size in _tree(source_fs, source, target, fs):
+        for path, dest, _size in _tree(source_fs, source, target_fs, target):
             progress.check()
             progress.working_on(_name(path))
-            _copy_through_temp(source_fs, path, fs, dest, progress)
+            _move_through_temp(source_fs, path, target_fs, dest, progress)
             progress.advance(files=1)
+        _remove_folder(source_fs, source)
+
+    def copy(
+        self,
+        source_fs: AbstractFileSystem,
+        source: str,
+        target_fs: AbstractFileSystem,
+        target: str,
+        progress: Progress,
+    ) -> None:
+        same = same_filesystem(source_fs, target_fs)
+        if not source_fs.isdir(source):
+            progress.working_on(_name(source))
+            if same:
+                source_fs.cp_file(source, target)
+            else:
+                _copy_through_temp(source_fs, source, target_fs, target, progress)
+            return
+        for path, dest, size in _tree(source_fs, source, target_fs, target):
+            progress.check()
+            progress.working_on(_name(path))
+            if same:
+                source_fs.cp_file(path, dest)
+                progress.advance(files=1, bytes=size)
+            else:
+                _copy_through_temp(source_fs, path, target_fs, dest, progress)
+                progress.advance(files=1)
 
     def delete(self, fs: AbstractFileSystem, path: str, progress: Progress) -> None:
         if not fs.isdir(path):
@@ -573,9 +579,10 @@ class AsyncFsspecOperations(FileSystemOperations):
 
     Other filesystems (and async ones made for use within a running event
     loop, ``asynchronous=True``) raise ``FileSystemOperations.NotSupported``, for
-    ``FsspecOperations`` to do them. So do folder moves: some storages rename
-    a folder in one step (e.g. Azure Data Lake Gen2), which the filesystem's
-    own ``mv`` does.
+    ``FsspecOperations`` to do them, as do copies and moves between
+    filesystems run on different event loops. So do folder moves within a
+    filesystem: some storages rename a folder in one step (e.g. Azure Data
+    Lake Gen2), which the filesystem's own ``mv`` does.
 
     A cancel takes effect between batches, and within a batch for files not
     yet started and transfers under way.
@@ -602,59 +609,76 @@ class AsyncFsspecOperations(FileSystemOperations):
         return len(files), sum(i.get("size") or 0 for i in files.values())
 
     def move(
-        self, fs: AbstractFileSystem, source: str, target: str, progress: Progress
+        self,
+        source_fs: AbstractFileSystem,
+        source: str,
+        target_fs: AbstractFileSystem,
+        target: str,
+        progress: Progress,
     ) -> None:
-        loop = _loop_of(fs)
-        if sync(loop, fs._isdir, source):
+        loop = self._loop_of(source_fs, target_fs)
+        if not sync(loop, source_fs._isdir, source):
+            progress.working_on(_name(source))
+            if same_filesystem(source_fs, target_fs):
+                sync(loop, source_fs._mv_file, source, target)
+            else:
+                sync(
+                    loop,
+                    _move_through_temp_async,
+                    source_fs,
+                    source,
+                    target_fs,
+                    target,
+                    progress,
+                )
+            return
+        if same_filesystem(source_fs, target_fs):
             raise self.NotSupported  # the filesystem's own mv (see above)
-        progress.working_on(_name(source))
-        sync(loop, fs._mv_file, source, target)
+
+        async def move_one(item: tuple[str, str, int]) -> None:
+            path, dest, _size = item
+            progress.check()
+            progress.working_on(_name(path))
+            await _move_through_temp_async(source_fs, path, target_fs, dest, progress)
+            progress.advance(files=1)
+
+        files = _tree(source_fs, source, target_fs, target)
+        self._each(loop, progress, files, move_one, self.concurrency)
+        _remove_folder(source_fs, source)
 
     def copy(
-        self, fs: AbstractFileSystem, source: str, target: str, progress: Progress
+        self,
+        source_fs: AbstractFileSystem,
+        source: str,
+        target_fs: AbstractFileSystem,
+        target: str,
+        progress: Progress,
     ) -> None:
-        loop = _loop_of(fs)
-        if not sync(loop, fs._isdir, source):
+        loop = self._loop_of(source_fs, target_fs)
+        same = same_filesystem(source_fs, target_fs)
+
+        async def copy_file(path: str, dest: str) -> None:
+            if same:
+                await source_fs._cp_file(path, dest)
+            else:
+                await _copy_through_temp_async(
+                    source_fs, path, target_fs, dest, progress
+                )
+
+        if not sync(loop, source_fs._isdir, source):
             progress.working_on(_name(source))
-            sync(loop, fs._cp_file, source, target)
+            sync(loop, copy_file, source, target)
             return
 
         async def copy_one(item: tuple[str, str, int]) -> None:
             path, dest, size = item
             progress.check()
             progress.working_on(_name(path))
-            await fs._cp_file(path, dest)
-            progress.advance(files=1, bytes=size)
+            await copy_file(path, dest)
+            # Transfers between filesystems report their bytes as they go.
+            progress.advance(files=1, bytes=size if same else 0)
 
-        files = _tree(fs, source, target, fs)
-        self._each(loop, progress, files, copy_one, self.concurrency)
-
-    def copy_between(
-        self,
-        source_fs: AbstractFileSystem,
-        source: str,
-        fs: AbstractFileSystem,
-        target: str,
-        progress: Progress,
-    ) -> None:
-        loop = _loop_of(fs)
-        if _loop_of(source_fs) is not loop:
-            raise self.NotSupported  # run on different event loops
-        if not sync(loop, source_fs._isdir, source):
-            progress.working_on(_name(source))
-            sync(
-                loop, _copy_through_temp_async, source_fs, source, fs, target, progress
-            )
-            return
-
-        async def copy_one(item: tuple[str, str, int]) -> None:
-            path, dest, _size = item
-            progress.check()
-            progress.working_on(_name(path))
-            await _copy_through_temp_async(source_fs, path, fs, dest, progress)
-            progress.advance(files=1)
-
-        files = _tree(source_fs, source, target, fs)
+        files = _tree(source_fs, source, target_fs, target)
         self._each(loop, progress, files, copy_one, self.concurrency)
 
     def delete(self, fs: AbstractFileSystem, path: str, progress: Progress) -> None:
@@ -693,6 +717,17 @@ class AsyncFsspecOperations(FileSystemOperations):
 
     def mkdir(self, fs: AbstractFileSystem, path: str) -> None:
         sync(_loop_of(fs), fs._makedirs, path, exist_ok=False)
+
+    @staticmethod
+    def _loop_of(
+        source_fs: AbstractFileSystem, target_fs: AbstractFileSystem
+    ) -> asyncio.AbstractEventLoop:
+        """The event loop both filesystems run on; NotSupported if they are
+        not both async, or run on different loops."""
+        loop = _loop_of(target_fs)
+        if _loop_of(source_fs) is not loop:
+            raise FileSystemOperations.NotSupported
+        return loop
 
     @staticmethod
     def _each(
@@ -751,6 +786,21 @@ async def _copy_through_temp_async(
             os.unlink(temp_path)
 
 
+async def _move_through_temp_async(
+    source_fs: AsyncFileSystem,
+    path: str,
+    fs: AsyncFileSystem,
+    target: str,
+    progress: Progress,
+) -> None:
+    """``_move_through_temp``, with the filesystems' coroutines."""
+    await _copy_through_temp_async(source_fs, path, fs, target, progress)
+    try:
+        await source_fs._rm_file(path)
+    except Exception as exc:
+        raise _not_removed(path, exc) from exc
+
+
 class OperationChain:
     """Calls an operation on the first of ``operations`` that supports it
     (see the module docstring), in the order given: which objects there are,
@@ -779,6 +829,26 @@ class OperationChain:
         return call
 
 
+def same_filesystem(a: AbstractFileSystem, b: AbstractFileSystem) -> bool:
+    """Whether two filesystem objects reach the same storage.
+
+    fsspec caches its filesystems by class and arguments, and compares them by
+    those (``fs1 == fs2``), so two objects made with the same arguments count
+    as one, e.g. an explorer's storage and the one a URL opens.
+
+    Parameters
+    ----------
+    a, b : AbstractFileSystem
+        The filesystems to compare.
+
+    Returns
+    -------
+    bool
+        True if a path of one is the same file on the other.
+    """
+    return a is b or a == b
+
+
 def _name(path: str) -> str:
     return path.rstrip("/").rsplit("/", 1)[-1]
 
@@ -786,12 +856,12 @@ def _name(path: str) -> str:
 def _tree(
     source_fs: AbstractFileSystem,
     source: str,
-    target: str,
     fs: AbstractFileSystem,
+    target: str,
 ) -> list[tuple[str, str, int]]:
     """(file, its target, size) for each file in folder ``source``, creating
-    the target folders as needed (empty folders are not copied, as object
-    stores have none)."""
+    the target folders on ``fs`` as needed (empty folders are not copied, as
+    object stores have none)."""
     fs.makedirs(target, exist_ok=True)
     made = {target.rstrip("/")}
     out = []
@@ -825,3 +895,34 @@ def _copy_through_temp(
     finally:
         with contextlib.suppress(FileNotFoundError):
             os.unlink(temp_path)
+
+
+def _move_through_temp(
+    source_fs: AbstractFileSystem,
+    path: str,
+    fs: AbstractFileSystem,
+    target: str,
+    progress: Progress,
+) -> None:
+    """Move one file between filesystems: copied (see ``_copy_through_temp``),
+    then deleted from ``source_fs`` once the copy is complete."""
+    _copy_through_temp(source_fs, path, fs, target, progress)
+    try:
+        source_fs.rm_file(path)
+    except Exception as exc:
+        raise _not_removed(path, exc) from exc
+
+
+def _not_removed(path: str, exc: Exception) -> OSError:
+    """The error of a file copied by a move but left at its source: it is
+    then in both places, which the user should know."""
+    return OSError(f"{_name(path)} was copied, but not deleted from its source: {exc}")
+
+
+def _remove_folder(fs: AbstractFileSystem, path: str) -> None:
+    """Delete folder ``path`` once its files have been moved away (the empty
+    folders left, on filesystems that have them), unless files remain, e.g.
+    added meanwhile."""
+    fs.invalidate_cache(path)
+    if fs.exists(path) and not fs.find(path):
+        fs.rm(path, recursive=True)

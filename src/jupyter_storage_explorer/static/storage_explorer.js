@@ -1044,11 +1044,16 @@ function render({ model, el }) {
     flash(parts.join("; ") || "Nothing deleted");
   }
 
-  // --- Copy and paste: "Copy" puts files (and, in unsafe mode, folders) on a
-  // clipboard shared by the explorers on the page (and their URLs on the
-  // system clipboard); "Paste" copies them into a folder ---
+  // --- Copy, cut and paste: "Copy" (or "Cut") puts files (and, in unsafe
+  // mode, folders) on a clipboard shared by the explorers on the page (and
+  // their URLs on the system clipboard); "Paste" copies (or moves) them into a
+  // folder, of any explorer and storage ---
 
   const CLIPBOARD = Symbol.for("jupyter-storage-explorer.clipboard");
+  // Dispatched on globalThis once files cut in an explorer were pasted in
+  // another, which may be in another kernel: {explorer, filesystem, paths} of
+  // the files cut; that explorer then asks its kernel to show what is left.
+  const CHANGED_EVENT = "jupyter-storage-explorer:changed";
 
   // Whether an item of the list or the tree has a URL (see _url in the kernel).
   const hasUrl = (item) => !item.no_url;
@@ -1059,18 +1064,21 @@ function render({ model, el }) {
     return urls;
   }
 
-  // targets: [{path, type}] of the filesystem shown, all with URLs.
-  async function copyFiles(targets) {
+  // targets: [{path, type}] of the filesystem shown, all with URLs. `cut`:
+  // pasting moves them.
+  async function copyFiles(targets, cut = false) {
     const hasFolders = targets.some(isFolder);
     if (!takeUnsafe() && hasFolders) {
-      flash("Turn on unsafe mode to copy folders");
+      flash(`Turn on unsafe mode to ${cut ? "cut" : "copy"} folders`);
       return;
     }
     const urls = await urlsOf(targets);
     globalThis[CLIPBOARD] = {
-      // Pasted in this explorer, on this filesystem, they are copied within it.
+      // Pasted in an explorer of the same kernel, they are read with this
+      // explorer's filesystem; otherwise from their URLs.
       explorer: model.get("_explorer_id"),
       filesystem: model.get("_filesystem"),
+      cut,
       // Pasting folders needs unsafe mode again.
       folders: hasFolders,
       files: targets.map(({ path }, i) => {
@@ -1078,60 +1086,82 @@ function render({ model, el }) {
         return { path, url, name: url.slice(url.replace(/\/$/, "").lastIndexOf("/") + 1) };
       }),
     };
-    const what = targets.length === 1 ? globalThis[CLIPBOARD].files[0].name : `${targets.length} items`;
+    const what = `${cut ? "Cut" : "Copied"} ${targets.length === 1 ? globalThis[CLIPBOARD].files[0].name : `${targets.length} items`}`;
     try {
       await navigator.clipboard.writeText(urls.join("\n"));
-      flash(`Copied ${what}`);
+      flash(what);
     } catch {
       // Paste still works; only the URLs are not on the system clipboard.
-      flash(`Copied ${what} (the browser denied clipboard access for the URLs)`);
+      flash(`${what} (the browser denied clipboard access for the URLs)`);
     }
   }
 
-  // The "Paste" item for folder `dest`: greyed out when nothing was copied,
-  // and null (left out) when folders were copied and unsafe mode is off.
+  // The "Paste" item for folder `dest` ("Move here" after "Cut"): greyed out
+  // when nothing was copied, and null (left out) when folders were copied and
+  // unsafe mode is off.
   function pasteItem(dest) {
     const clip = globalThis[CLIPBOARD];
     if (!clip?.files.length) return { label: "Paste", disabled: true };
     if (clip.folders && !unsafe()) return null;
-    const label = clip.files.length === 1 ? `Paste ${clip.files[0].name}` : `Paste ${clip.files.length} items`;
-    return { label, action: () => confirmPaste(clip, dest) };
+    const what = clip.files.length === 1 ? clip.files[0].name : `${clip.files.length} items`;
+    return { label: clip.cut ? `Move ${what} here` : `Paste ${what}`, action: () => confirmPaste(clip, dest) };
   }
 
   async function confirmPaste(clip, dest) {
     const folders = takeUnsafe();
+    const [Verb, verb, noun] = clip.cut ? ["Move", "move", "Move"] : ["Paste", "paste", "Paste"];
     if (clip.folders && !folders) {
-      flash("Turn on unsafe mode to paste folders");
+      flash(`Turn on unsafe mode to ${verb} folders`);
       return;
     }
+    const names = clip.files.map((f) => f.name);
     const ok = await ask(
-      [h("div", { textContent: `Paste ${describeFiles(clip.files.map((f) => f.name))}?` }), h("div", { className: "jse-note", textContent: `Into ${dest}` })],
+      [h("div", { textContent: `${Verb} ${describeFiles(names)}?` }), h("div", { className: "jse-note", textContent: `Into ${dest}` })],
       [
         { label: "Cancel", value: null },
-        { label: "Paste", value: true, primary: true },
+        { label: Verb, value: true, primary: true },
       ],
     );
     if (!ok) return;
-    const content = { type: "paste", explorer: clip.explorer, filesystem: clip.filesystem, files: clip.files, dest, unsafe: folders };
-    const text = `Pasting ${describeFiles(clip.files.map((f) => f.name))}…`;
+    const content = { type: "paste", explorer: clip.explorer, filesystem: clip.filesystem, files: clip.files, dest, unsafe: folders, cut: clip.cut };
+    const text = `${clip.cut ? "Moving" : "Pasting"} ${describeFiles(names)}…`;
     let reply = await busy(text, () => request({ ...content, if_exists: "ask" }));
     if (reply.conflicts) {
       const choice = await askConflicts(reply.conflicts, dest);
       if (!choice) {
-        flash("Paste cancelled");
+        flash(`${noun} cancelled`);
         return;
       }
       reply = await busy(text, () => request({ ...content, if_exists: choice }));
     }
     const result = await jobResult(reply);
-    const { pasted = [], skipped = [], errors = [] } = result;
+    if (clip.cut) cutPasted(clip, result);
+    const { skipped = [], errors = [] } = result;
+    const done = (clip.cut ? result.moved : result.pasted) ?? [];
     const parts = [];
-    if (pasted.length) parts.push(`Pasted ${pasted.length === 1 ? pasted[0] : `${pasted.length} items`}`);
+    if (done.length) parts.push(`${clip.cut ? "Moved" : "Pasted"} ${done.length === 1 ? done[0] : `${done.length} items`}`);
     if (skipped.length) parts.push(`skipped ${skipped.length} existing`);
     parts.push(...errors.map((e) => `Failed: ${e}`));
-    parts.push(...jobOutcome(result, parts, "Paste"));
-    flash(parts.join("; ") || "Nothing pasted");
+    parts.push(...jobOutcome(result, parts, noun));
+    flash(parts.join("; ") || `Nothing ${clip.cut ? "moved" : "pasted"}`);
   }
+
+  // After pasting files cut: they are no longer where they were cut, so the
+  // clipboard is emptied once some have moved; and the explorer they were cut
+  // in is told (this one's kernel has already shown its own changes).
+  function cutPasted(clip, result) {
+    if (result.moved?.length && globalThis[CLIPBOARD] === clip) globalThis[CLIPBOARD] = null;
+    if (clip.explorer === model.get("_explorer_id")) return;
+    const detail = { explorer: clip.explorer, filesystem: clip.filesystem, paths: clip.files.map((f) => f.path) };
+    globalThis.dispatchEvent(new CustomEvent(CHANGED_EVENT, { detail }));
+  }
+
+  // Files cut in this explorer were pasted in another: show what is left.
+  function onChanged(ev) {
+    const { explorer, filesystem, paths } = ev.detail ?? {};
+    if (explorer === model.get("_explorer_id")) model.send({ type: "changed", filesystem, paths });
+  }
+  globalThis.addEventListener(CHANGED_EVENT, onChanged);
 
   // --- Create a folder: "Create a folder" in the right-click menu ---
 
@@ -1355,14 +1385,19 @@ function render({ model, el }) {
     }
     // Locations are copied only as URLs: fsspec's paths can differ from the
     // storage's own notion of a path (e.g. abfs's "container/key"). "Copy"
-    // copies for "Paste" too (and puts the URLs on the clipboard); folders
-    // only in unsafe mode, otherwise "Copy URL".
+    // and "Cut" copy for "Paste" too (and put the URLs on the clipboard);
+    // folders only in unsafe mode, otherwise "Copy URL".
     const files = !targets.some(isFolder);
     // Folder operations are dangerous: offered only in unsafe mode.
     const allowed = files || unsafe();
     const what = files ? "files" : "items";
     if (targets.every(hasUrl)) {
-      if (allowed) items.push({ label: count ? `Copy ${count}${what}` : "Copy", action: () => copyFiles(targets) });
+      if (allowed) {
+        items.push({ label: count ? `Copy ${count}${what}` : "Copy", action: () => copyFiles(targets) });
+        if (!targets.some((t) => t.path === model.get("_root"))) {
+          items.push({ label: count ? `Cut ${count}${what}` : "Cut", action: () => copyFiles(targets, true) });
+        }
+      }
       if (!files) {
         items.push({
           label: `Copy ${count}URL${count ? "s" : ""}`,
@@ -2156,6 +2191,7 @@ function render({ model, el }) {
 
   return () => {
     for (const [event, handler] of Object.entries(handlers)) model.off(event, handler);
+    globalThis.removeEventListener(CHANGED_EVENT, onChanged);
     hideMenu();
     clearTimeout(flashTimer);
     queryPanel?.dispose();

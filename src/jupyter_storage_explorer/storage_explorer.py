@@ -9,6 +9,7 @@ import functools
 import hashlib
 import os
 import uuid
+import weakref
 from typing import TYPE_CHECKING, Any
 
 import anywidget
@@ -16,7 +17,7 @@ import traitlets
 from fsspec.core import url_to_fs
 
 from jupyter_storage_explorer import _paths, _static
-from jupyter_storage_explorer._urls import default_url
+from jupyter_storage_explorer._urls import default_location, default_url
 from jupyter_storage_explorer.file_tasks import FileTasks, Plan, Task
 from jupyter_storage_explorer.formats import (
     DataFormat,
@@ -39,6 +40,7 @@ from jupyter_storage_explorer.operations import (
     FsspecOperations,
     OperationChain,
     Progress,
+    same_filesystem,
 )
 from jupyter_storage_explorer.query import DataQuery, QuerySettingsStore
 from jupyter_storage_explorer.query import default_store as default_query_settings
@@ -71,6 +73,13 @@ _MAX_EDIT_BYTES = 1024 * 1024
 # Largest file that can be downloaded: it passes through kernel memory and the
 # notebook's connection in one message.
 _MAX_DOWNLOAD_BYTES = 100 * 1024 * 1024
+
+# The explorers in this kernel, by _explorer_id: files copied in one of them
+# are pasted from its own filesystem object (with its credentials), not
+# found again from their URLs. Explorers in other kernels are not here.
+_explorers: weakref.WeakValueDictionary[str, StorageExplorer] = (
+    weakref.WeakValueDictionary()
+)
 
 
 def _open(
@@ -136,8 +145,9 @@ class StorageExplorer(anywidget.AnyWidget):
 
     Double-clicking a file (or Preview) opens a preview below the list;
     tables open in a data browser ("Query data"). The right-click menu offers
-    "Python code" to load the data, "Edit" for text files, downloads, "Copy"
-    and "Paste" (also between explorers), "Delete" and "Create a folder".
+    "Python code" to load the data, "Edit" for text files, downloads, "Copy",
+    "Cut" and "Paste" (also between storages and explorers, in this notebook
+    or others), "Delete" and "Create a folder".
     Files dragged from JupyterLab's file browser or the user's computer are
     uploaded; files dragged onto a folder are moved there. Folders are moved,
     copied and deleted only in "Unsafe mode" (the slider in the status bar),
@@ -281,8 +291,8 @@ class StorageExplorer(anywidget.AnyWidget):
     # frontend turns it off when any operation starts, and sends with each
     # request whether it was on ("unsafe").
     _unsafe_mode = traitlets.Bool(False).tag(sync=True)
-    # Identifies this explorer to "Paste": files copied in it, from the
-    # filesystem shown, are copied within that filesystem.
+    # Identifies this explorer to "Paste" (see _paste_sources), and to the
+    # page-wide "changed" events after its files were cut and pasted elsewhere.
     _explorer_id = traitlets.Unicode().tag(sync=True)
     # Whether "Download to local" (files saved by the browser) is offered.
     _allow_download_to_local = traitlets.Bool(True).tag(sync=True)
@@ -358,6 +368,7 @@ class StorageExplorer(anywidget.AnyWidget):
             else os.path.abspath(os.path.expanduser(download_to_jupyterlab_path)),
         )
         self.on_msg(self._on_custom_msg)
+        _explorers[self._explorer_id] = self
         self._filesystem = name  # shows its top level (see _on_filesystem)
 
     @staticmethod
@@ -478,6 +489,8 @@ class StorageExplorer(anywidget.AnyWidget):
             ),
             "delete": lambda c, _: self._reply(c, self._delete_request(c)),
             "paste": lambda c, _: self._reply(c, self._paste_request(c)),
+            # Files cut here were pasted in another explorer (told by its frontend).
+            "changed": lambda c, _: self._sources_changed(c["filesystem"], c["paths"]),
             "create_folder": lambda c, _: self._reply(
                 c, self._create_folder_request(c)
             ),
@@ -748,7 +761,8 @@ class StorageExplorer(anywidget.AnyWidget):
             "query": bool(formats) and formats[0].can_query(),
         }
 
-    # --- Locations: how paths become URLs (override _url to change them) ---
+    # --- Locations: how paths become URLs and back (override _url and
+    # _locate to change them) ---
 
     def _url(self, path: str) -> str | None:
         """The location of a path of the filesystem shown, for users and libraries.
@@ -774,8 +788,42 @@ class StorageExplorer(anywidget.AnyWidget):
             An override may return None for items without a URL: they can
             still be browsed, uploaded to, downloaded and moved, but have no
             "Copy URL", preview, "Query data", "Python code" or "Edit".
+
+        See Also
+        --------
+        _locate : The reverse, override it along with this method.
         """
         return default_url(self._fs, path)
+
+    def _locate(self, url: str) -> tuple[AbstractFileSystem, str]:
+        """The filesystem and path of a location: the reverse of ``_url``.
+
+        Used to paste files copied in an explorer of another kernel (another
+        notebook), which only says where they are by their URLs; those copied
+        in this kernel are read from their explorer's filesystem directly.
+        Override it with ``_url``, so that what one makes the other reads.
+
+        Parameters
+        ----------
+        url : str
+            A location made by ``_url``, in this explorer or another one.
+
+        Returns
+        -------
+        tuple of (AbstractFileSystem, str)
+            The filesystem and its fsspec path. One of this explorer's
+            filesystems if one has the URL's protocol (the one shown first;
+            for Azure, one of the URL's account), so with its credentials;
+            else one fsspec opens from the URL, with the environment's.
+
+        Raises
+        ------
+        ValueError
+            If the URL does not tell which storage it is on, e.g.
+            ``abfs://container/key`` (without the account).
+        """
+        others = [fs for fs, _ in self._filesystems.values() if fs is not self._fs]
+        return default_location(url, [self._fs, *others])
 
     # --- Preview, data browser ("Query data") and the right-click menu ---
 
@@ -998,7 +1046,9 @@ class StorageExplorer(anywidget.AnyWidget):
         removed, and show the folders it changed."""
         if task.cleanup is not None:
             task.cleanup()
-        if task.fs is not self._fs:
+        for fs, path in task.moved_away:
+            self._moved_away(fs, path)
+        if not same_filesystem(task.fs, self._fs):
             task.fs.invalidate_cache()  # the user has switched filesystems
             return
         for source, target in task.moved:
@@ -1007,6 +1057,40 @@ class StorageExplorer(anywidget.AnyWidget):
             self._forget(path)
         for folder in task.changed:
             self._refresh_dir(folder)
+
+    def _moved_away(self, fs: AbstractFileSystem, path: str) -> None:
+        """Follow ``path`` of ``fs``, cut and pasted into another filesystem.
+
+        If ``fs`` is shown, as if deleted; else (another of this explorer's
+        storages, or another explorer's, whose frontend tells it: see
+        ``_sources_changed``) its cached listing is dropped.
+        """
+        parent = _paths.parent(path, fs)
+        if not same_filesystem(fs, self._fs):
+            fs.invalidate_cache(parent)
+            return
+        self._forget(path)
+        self._refresh_dir(parent)
+
+    def _sources_changed(self, filesystem: str, paths: Sequence[str]) -> None:
+        """Answer "changed": files of storage ``filesystem`` were cut here and
+        pasted in another explorer, which may have moved some (or all) away."""
+        entry = self._filesystems.get(filesystem)
+        if entry is None:
+            return
+        fs = entry[0]
+        parents = {_paths.parent(p, fs) for p in paths}
+        if fs is not self._fs:
+            for parent in parents:
+                fs.invalidate_cache(parent)
+            return
+        for parent in parents:
+            self._invalidate_cache(parent)
+        for path in paths:
+            if not self._exists(path):
+                self._forget(path)
+        for parent in parents:
+            self._refresh_dir(parent)
 
     def _send_job(self, job: Job) -> None:
         """Tell the frontend how ``job`` is doing (see Job.snapshot)."""
@@ -1056,23 +1140,21 @@ class StorageExplorer(anywidget.AnyWidget):
         """Delete files, now (see ``FileTasks.delete``)."""
         return self._run_now(self._tasks().delete(paths, folders))
 
-    # --- Paste: files (and, in unsafe mode, folders) copied with "Copy" (in any
-    # explorer), into a folder ---
+    # --- Paste: files (and, in unsafe mode, folders) copied with "Copy" or
+    # "Cut" (in any explorer, any storage), into a folder ---
 
     def _paste_request(self, content: dict[str, Any]) -> dict[str, Any]:
-        """Answer "paste": files copied in the explorer ``content["explorer"]``,
-        from its filesystem ``content["filesystem"]``."""
-        same = (
-            content.get("explorer") == self._explorer_id
-            and content.get("filesystem") == self._filesystem
-        )
+        """Answer "paste": files copied (or with "cut", cut) in the explorer
+        ``content["explorer"]``, from its storage ``content["filesystem"]``."""
         return self._plan_request(
-            lambda: self._tasks().paste(
+            lambda: self._paste_plan(
                 content["files"],
                 content["dest"],
                 content.get("if_exists", "ask"),
-                same_filesystem=same,
+                explorer=content.get("explorer"),
+                filesystem=content.get("filesystem"),
                 folders=bool(content.get("unsafe")),
+                cut=bool(content.get("cut")),
             )
         )
 
@@ -1081,13 +1163,76 @@ class StorageExplorer(anywidget.AnyWidget):
         files: Sequence[dict[str, Any]],
         dest: str,
         if_exists: str = "ask",
-        same_filesystem: bool = False,
+        *,
+        explorer: str | None = None,
+        filesystem: str | None = None,
         folders: bool = False,
+        cut: bool = False,
     ) -> dict[str, Any]:
-        """Copy files into folder ``dest``, now (see ``FileTasks.paste``)."""
+        """Paste files into folder ``dest``, now (see ``_paste_plan``)."""
         return self._run_now(
-            self._tasks().paste(files, dest, if_exists, same_filesystem, folders)
+            self._paste_plan(
+                files,
+                dest,
+                if_exists,
+                explorer=explorer,
+                filesystem=filesystem,
+                folders=folders,
+                cut=cut,
+            )
         )
+
+    def _paste_plan(
+        self,
+        files: Sequence[dict[str, Any]],
+        dest: str,
+        if_exists: str,
+        *,
+        explorer: str | None,
+        filesystem: str | None,
+        folders: bool,
+        cut: bool,
+    ) -> Plan:
+        """Plan pasting ``files`` ({"path", "url"}, as copied) into ``dest``
+        (see ``FileTasks.paste``)."""
+        sources, errors = self._paste_sources(files, explorer, filesystem, cut)
+        return self._tasks().paste(
+            sources, dest, if_exists, folders=folders, cut=cut, errors=errors
+        )
+
+    def _paste_sources(
+        self,
+        files: Sequence[dict[str, Any]],
+        explorer: str | None,
+        filesystem: str | None,
+        cut: bool = False,
+    ) -> tuple[list[tuple[AbstractFileSystem, str]], list[str]]:
+        """The (filesystem, path) of files copied in explorer ``explorer``, from
+        its storage ``filesystem``, and errors for those not found.
+
+        If that explorer is in this kernel, its filesystem object is used, as
+        it is (credentials included). Otherwise it is in another kernel and
+        only the files' URLs tell where they are (see ``_locate``).
+        """
+        source = _explorers.get(explorer or "")
+        entry = None if source is None else source._filesystems.get(filesystem or "")
+        sources, errors = [], []
+        for file in files:
+            path, url = file.get("path"), file.get("url")
+            try:
+                if entry is not None:
+                    fs, root = entry
+                    if cut and _paths.norm(path) == _paths.norm(root):
+                        raise ValueError("the top folder is not moved")
+                elif url is None:
+                    raise ValueError("its location is unknown")
+                else:
+                    fs, path = self._locate(url)
+            except Exception as exc:
+                errors.append(f"{_paths.basename(path or url or '')}: {exc}")
+                continue
+            sources.append((fs, path))
+        return sources, errors
 
     # --- Upload: files (and, in unsafe mode, folders) dragged in from
     # JupyterLab's file browser, which the kernel copies itself ---
