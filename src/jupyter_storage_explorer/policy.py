@@ -30,12 +30,27 @@ if TYPE_CHECKING:
 # it and "Download to local", e.g. "browser:///report.csv".
 COMPUTER_URL = "browser:///"
 
+# The location of files on the Jupyter server's disk as JupyterLab's file
+# browser shows them: "Download to JupyterLab", files dropped on JupyterLab's
+# file browser and files dragged from it, e.g.
+# "jupyterlab:///home/jovyan/work/report.csv". Not plain paths, so that rules
+# tell these apart from an explorer's own local storage.
+JUPYTERLAB_URL = "jupyterlab://"
+
 _KEYS = frozenset({"rule", "src", "dest"})
 
 
 def computer_url(name: str) -> str:
     """The URL rules see for file ``name`` on the user's computer."""
     return COMPUTER_URL + name
+
+
+def jupyterlab_url(path: str) -> str:
+    """The URL rules see for file ``path`` (absolute, local) of the Jupyter
+    server's disk, through JupyterLab's file browser: e.g.
+    "jupyterlab:///home/jovyan/x.csv", "jupyterlab:///C:/Users/me/x.csv"."""
+    path = path.replace("\\", "/")
+    return JUPYTERLAB_URL + (path if path.startswith("/") else "/" + path)
 
 
 @dataclass(frozen=True)
@@ -50,9 +65,10 @@ class TransferPolicy:
 
     URLs are those the explorer shows (``StorageExplorer._url``, e.g. plain
     paths for local files), files copied in another explorer keeping the URL
-    they were copied with; files on the Jupyter server's disk (JupyterLab's
-    file browser) have their local path, and files on the user's computer
-    ``browser:///<name>``. The destination is the item's new location (its
+    they were copied with; files on the Jupyter server's disk through
+    JupyterLab's file browser ("Download to JupyterLab", and drag and drop
+    with it) ``jupyterlab://<absolute path>``, and files on the user's
+    computer ``browser:///<name>``. The destination is the item's new location (its
     folder joined with its name). A folder is checked as one item, by its own
     URL, not file by file.
 

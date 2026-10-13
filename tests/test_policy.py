@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import pytest
 
-from jupyter_storage_explorer.policy import TransferPolicy, computer_url
+from jupyter_storage_explorer.policy import (
+    TransferPolicy,
+    computer_url,
+    jupyterlab_url,
+)
 
 
 class TestAllows:
@@ -47,6 +51,18 @@ class TestAllows:
             "not allowed by the policy (s3://a/x → /tmp/x)"
         )
         assert TransferPolicy().error("s3://a/x", "/tmp/x") is None
+
+
+@pytest.mark.parametrize(
+    ("path", "url"),
+    [
+        ("/home/jovyan/x.csv", "jupyterlab:///home/jovyan/x.csv"),
+        ("C:/Users/me/x.csv", "jupyterlab:///C:/Users/me/x.csv"),
+        ("C:\\Users\\me\\x.csv", "jupyterlab:///C:/Users/me/x.csv"),
+    ],
+)
+def test_jupyterlab_url(path, url):
+    assert jupyterlab_url(path) == url
 
 
 @pytest.mark.parametrize(

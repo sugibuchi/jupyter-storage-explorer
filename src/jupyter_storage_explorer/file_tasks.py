@@ -161,7 +161,9 @@ class FileTasks:
 
     ``check(source_fs, source, target_fs, target)``, if given, tells why an
     item may not be moved or copied (the explorer's policy, see policy.py),
-    or returns None: those it refuses are left out, with that error.
+    or returns None: those it refuses are left out, with that error. A
+    filesystem None is the Jupyter server's disk as JupyterLab's file
+    browser shows it (uploads from it, downloads to it), with a local path.
     """
 
     def __init__(
@@ -169,7 +171,10 @@ class FileTasks:
         fs: AbstractFileSystem,
         root: str,
         operations: OperationChain,
-        check: Callable[[AbstractFileSystem, str, AbstractFileSystem, str], str | None]
+        check: Callable[
+            [AbstractFileSystem | None, str, AbstractFileSystem | None, str],
+            str | None,
+        ]
         | None = None,
     ) -> None:
         self.fs = fs
@@ -179,9 +184,9 @@ class FileTasks:
 
     def _refused(
         self,
-        source_fs: AbstractFileSystem,
+        source_fs: AbstractFileSystem | None,
         source: str,
-        target_fs: AbstractFileSystem,
+        target_fs: AbstractFileSystem | None,
         target: str,
     ) -> str | None:
         """Why ``check`` refuses an item, or None."""
@@ -400,7 +405,9 @@ class FileTasks:
         with the operations' ``copy``; or ``move`` them, for ``kind`` "move".
         ``kind``: "paste", "move" or "upload" (see ``_COPY_WORDS``)."""
         key, verb, doing = _COPY_WORDS[kind]
-        plans = self._plan_copies(copies, dest, folders, verb, errors)
+        plans = self._plan_copies(
+            copies, dest, folders, verb, errors, from_jupyterlab=kind == "upload"
+        )
         existing = {p.target for p in plans if self.fs.exists(p.target)}
         if if_exists == "ask" and existing:
             return _conflicts(existing)
@@ -448,8 +455,12 @@ class FileTasks:
         folders: bool,
         verb: str,
         errors: list[str],
+        *,
+        from_jupyterlab: bool = False,
     ) -> list[_Copy]:
-        """What to copy into ``dest`` (see ``_copy_into``); adds to ``errors`` for the rest."""
+        """What to copy into ``dest`` (see ``_copy_into``); adds to ``errors``
+        for the rest. ``from_jupyterlab``: the sources are on the Jupyter
+        server's disk, dragged from JupyterLab's file browser (for ``check``)."""
         plans = []
         for source_fs, source, name in copies:
             try:
@@ -458,7 +469,9 @@ class FileTasks:
             except Exception as exc:
                 errors.append(f"{name}: {exc}")
                 continue
-            refused = self._refused(source_fs, source, self.fs, target)
+            refused = self._refused(
+                None if from_jupyterlab else source_fs, source, self.fs, target
+            )
             if refused is not None:
                 errors.append(f"{name}: {refused}")
             elif is_folder and not folders:
@@ -523,7 +536,7 @@ class FileTasks:
         for path in paths:
             name = _paths.safe_name(_paths.basename(path))
             target = os.path.join(dest, name)
-            refused = self._refused(self.fs, path, local, local._strip_protocol(target))
+            refused = self._refused(self.fs, path, None, local._strip_protocol(target))
             if refused is not None:
                 errors.append(f"{name}: {refused}")
             elif self.fs.isdir(path):

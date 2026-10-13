@@ -85,11 +85,17 @@ parameter too, e.g. in the system's file:
 
 ```python
 def parameters():
-    return {"policy": [{"rule": "deny", "src": r"abfs://lake@.*", "dest": "browser:///.*"}]}
+    # No downloads from the lake to users' computers or to the Jupyter server.
+    return {
+        "policy": [
+            {"rule": "deny", "src": r"abfs://lake@.*", "dest": "browser:///.*"},
+            {"rule": "deny", "src": r"abfs://lake@.*", "dest": "jupyterlab://.*"},
+        ]
+    }
 
 
 def final():
-    return ["policy"]  # no downloads from the lake to users' computers
+    return ["policy"]
 ```
 
 An error in a file (a function that fails, an unknown parameter) is shown in the tab, with the file's path.

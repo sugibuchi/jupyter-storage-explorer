@@ -133,8 +133,10 @@ StorageExplorer(filesystems={...}, policy=[
 ])
 ```
 
-URLs are those of "Copy URL" (local files: their path; the destination: the item's new location). Files on your
-computer are `browser:///<name>`. A pattern left out matches any URL. Items refused are reported, the others done.
+URLs are those of "Copy URL" (local files: their path; the destination: the item's new location). Files on the
+Jupyter server through JupyterLab's file browser ("Download to JupyterLab", drag and drop with it) are
+`jupyterlab://<absolute path>`, e.g. `jupyterlab:///home/jovyan/x.csv`, and files on your computer
+`browser:///<name>`. A pattern left out matches any URL. Items refused are reported, the others done.
 This keeps files from going the wrong way by mistake; it is not a security boundary.
 
 ## Query data

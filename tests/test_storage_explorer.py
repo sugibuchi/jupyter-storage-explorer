@@ -1668,6 +1668,56 @@ class TestPolicy:
         assert not files.exists("/d/sub/c.txt")
         assert explorer.request({**piece, "dest": "/d"}, [b"c"])["copied"] == ["c.txt"]
 
+    def test_jupyterlab_side_is_jupyterlab_urls(self, files, tmp_path):
+        """Transfers with JupyterLab's file browser are told apart from the
+        explorer's own local storage, on the same disk."""
+        (tmp_path / "f.txt").write_text("f")
+        (tmp_path / "down").mkdir()
+        policy = [
+            {"rule": "deny", "src": "jupyterlab://.*"},
+            {"rule": "deny", "dest": "jupyterlab://.*"},
+        ]
+        local = fsspec.filesystem("file")._strip_protocol(str(tmp_path))
+        explorer = make(
+            filesystems={"mem": files, "local": str(tmp_path)},
+            policy=policy,
+            download_to_jupyterlab_path=str(tmp_path / "down"),
+        )
+        # Dragged from JupyterLab's file browser.
+        upload = {"type": "upload", "rid": 1, "root": str(tmp_path), "paths": ["f.txt"]}
+        reply = explorer.request({**upload, "dest": "/d"})
+        assert (
+            f"(jupyterlab://{'' if local.startswith('/') else '/'}{local}/f.txt"
+            in (reply["errors"][0])
+        )
+        # "Download to JupyterLab", and dropped on its file browser.
+        down = {"rid": 1, "paths": ["/d/ok.txt"]}
+        reply = explorer.request({**down, "type": "download_to_jupyterlab"})
+        assert "→ jupyterlab://" in reply["errors"][0]
+        reply = explorer.request(
+            {
+                **down,
+                "type": "download_to_server",
+                "root": str(tmp_path),
+                "dest": "down",
+            }
+        )
+        assert "→ jupyterlab://" in reply["errors"][0]
+        assert not (tmp_path / "down" / "ok.txt").exists()
+        # Pasted into the explorer's local storage: plain paths, allowed.
+        explorer._filesystem = "local"
+        reply = explorer.request(
+            {
+                "type": "paste",
+                "rid": 1,
+                "explorer": explorer._explorer_id,
+                "filesystem": "mem",
+                "files": [{"path": "/d/ok.txt"}],
+                "dest": local,
+            }
+        )
+        assert reply["pasted"] == ["ok.txt"]
+
     def test_invalid_policy(self, files):
         with pytest.raises(ValueError, match="policy rule 0"):
             make("/", fs=files, policy=[{"rule": "block"}])
