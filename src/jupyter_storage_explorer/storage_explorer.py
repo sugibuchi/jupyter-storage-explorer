@@ -45,8 +45,8 @@ from jupyter_storage_explorer.operations import (
     Progress,
     same_filesystem,
 )
-from jupyter_storage_explorer.query import DataQuery, QuerySettingsStore
-from jupyter_storage_explorer.query import default_store as default_query_settings
+from jupyter_storage_explorer.query import DataQuery
+from jupyter_storage_explorer.states import ExplorerStates, default_states
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
@@ -206,10 +206,11 @@ class StorageExplorer(anywidget.AnyWidget):
         The folder "Download to JupyterLab" copies into, on the kernel's
         machine, e.g. ``"~/Downloads"``; relative paths and "~" are resolved
         when the explorer is created. None leaves the item out.
-    query_settings : QuerySettingsStore, optional
-        Where the data browser remembers its settings per dataset. Default:
-        one shared by the explorers in the kernel, in memory; give one with a
-        path to keep them across restarts.
+    states : ExplorerStates, optional
+        Where the bookmarks and the data browser's recent queries are kept.
+        Default: one shared by the explorers in the kernel, in memory; give
+        one with a path to keep them across restarts (its file is read again
+        when the explorer is created).
     max_browser_items : int or None, default 20_000
         Folders with more items are filtered, sorted and paged by the kernel
         (see ``listing.Listing``), one page at a time, instead of by the
@@ -324,12 +325,18 @@ class StorageExplorer(anywidget.AnyWidget):
         max_upload_bytes: int | None = 10 * 1024 * 1024,
         allow_download_to_local: bool = True,
         download_to_jupyterlab_path: str | None = ".",
-        query_settings: QuerySettingsStore | None = None,
+        states: ExplorerStates | None = None,
         max_browser_items: int | None = 20_000,
         operations: Sequence[FileSystemOperations] | None = None,
         **storage_options: Any,
     ) -> None:
-        self._query_settings = query_settings or default_query_settings
+        self._states = default_states if states is None else states
+        # Its file may have been changed by another kernel since it was read.
+        try:
+            self._states.reload()
+            states_error = ""
+        except (OSError, ValueError) as exc:
+            states_error = f"Bookmarks and queries not read again: {exc}"
         self._max_browser_items = max_browser_items
         # How files are moved, copied, deleted and downloaded (see operations.py),
         # and the jobs doing it in the background (see jobs.py).
@@ -381,6 +388,8 @@ class StorageExplorer(anywidget.AnyWidget):
         self.on_msg(self._on_custom_msg)
         _explorers[self._explorer_id] = self
         self._filesystem = name  # shows its top level (see _on_filesystem)
+        if states_error:
+            self._error = states_error
 
     @staticmethod
     def default_operations() -> list[FileSystemOperations]:
@@ -552,6 +561,14 @@ class StorageExplorer(anywidget.AnyWidget):
             "query_save": lambda c, _: self._reply(c, self._query_request(c)),
             "query_reload": lambda c, _: self._reply(c, self._query_request(c)),
             "query_mode": lambda c, _: self._reply(c, self._query_request(c)),
+            "bookmarks": lambda c, _: self._reply(c, self._bookmark_list()),
+            "bookmark_add": lambda c, _: self._reply(c, self._add_bookmark(c["path"])),
+            "bookmark_remove": lambda c, _: self._reply(
+                c, self._remove_bookmark(c["filesystem"], c["path"])
+            ),
+            "bookmark_open": lambda c, _: self._reply(
+                c, self._open_bookmark(c["filesystem"], c["path"])
+            ),
         }
 
     def _reply(self, content: dict[str, Any], result: dict[str, Any]) -> None:
@@ -935,12 +952,18 @@ class StorageExplorer(anywidget.AnyWidget):
 
         The frontend then asks for rows with "query_rows".
         """
-        # Settings are remembered by URL, so they follow the data across explorers.
-        data = DataQuery(
-            functools.partial(fmt.scan, target.url, target.is_dir),
-            target.url,
-            self._query_settings,
-        )
+        # Settings are remembered by URL, so they follow the data across
+        # explorers, with the mode last chosen for it.
+        scan = functools.partial(fmt.scan, target.url, target.is_dir)
+        state = self._states.query(target.url)
+        mode = state.mode if state is not None else "auto"
+        try:
+            data = DataQuery(scan, target.url, self._states, mode=mode)
+        except ValueError:
+            if mode != "live":
+                raise
+            # "live" chosen when the format scanned lazily, and no longer does.
+            data = DataQuery(scan, target.url, self._states)
         self._queries[path] = data
         return data.opening()
 
@@ -982,6 +1005,61 @@ class StorageExplorer(anywidget.AnyWidget):
         except Exception as exc:
             reply["error"] = f"{type(exc).__name__}: {exc}"
         self.send(reply)
+
+    # --- Bookmarks: folders, kept in the explorer states (states.py), so
+    # shared with the explorers using the same states ---
+
+    def _bookmark_list(self) -> dict[str, Any]:
+        """{"bookmarks": [{"filesystem", "path", "url", "label"}]}: those of this
+        explorer's storages, within their top folders. "label" is the path
+        from the top folder (the top folder's own path for itself)."""
+        bookmarks = []
+        for b in self._states.bookmarks:
+            storage = self._filesystems.get(b.filesystem)
+            if storage is None or not _within_top(b.path, storage[1]):
+                continue
+            root = storage[1]
+            relative = (
+                b.path[len(root) :] if root and b.path.startswith(root) else b.path
+            )
+            bookmarks.append(
+                {
+                    "filesystem": b.filesystem,
+                    "path": b.path,
+                    "url": b.url,
+                    "label": relative.strip("/") or root or "/",
+                }
+            )
+        return {"bookmarks": bookmarks}
+
+    def _add_bookmark(self, path: str) -> dict[str, Any]:
+        """Bookmark folder ``path`` of the storage shown; the bookmarks, or {"error"}."""
+        if not _within_top(path, self._root) or not self._exists_folder(path):
+            return {"error": f"{path} is not a folder of this storage"}
+        self._states.add_bookmark(self._filesystem, path, self._url(path))
+        return self._bookmark_list()
+
+    def _remove_bookmark(self, filesystem: str, path: str) -> dict[str, Any]:
+        self._states.remove_bookmark(filesystem, path)
+        return self._bookmark_list()
+
+    def _open_bookmark(self, filesystem: str, path: str) -> dict[str, Any]:
+        """Show bookmarked folder ``path`` of storage ``filesystem``: {} or {"error"}."""
+        storage = self._filesystems.get(filesystem)
+        if storage is None or not _within_top(path, storage[1]):
+            return {"error": f"{path} is not in this explorer's storages"}
+        try:
+            exists = self._isdir(path, storage[0])
+        except Exception as exc:
+            return {"error": f"{type(exc).__name__}: {exc}"}
+        if not exists:
+            return {"error": f"{path} no longer exists"}
+        if filesystem == self._filesystem:
+            self._current_dir = path
+        else:
+            self._remembered[filesystem] = path
+            self._filesystem = filesystem  # shows the folder remembered
+        return {}
 
     # --- Text editor ---
 

@@ -8,14 +8,10 @@ import anywidget
 import traitlets
 
 from jupyter_storage_explorer import _static
-from jupyter_storage_explorer.query import (
-    DataQuery,
-    QuerySettings,
-    QuerySettingsStore,
-    normalize_settings,
-)
+from jupyter_storage_explorer.query import DataQuery, QuerySettings, normalize_settings
+from jupyter_storage_explorer.states import ExplorerStates
 
-# The key DataExplorer's settings are kept under, in its own store.
+# The key DataExplorer's settings are kept under, in its own states.
 _KEY = "data"
 
 # Names shown for libraries whose narwhals name is not the usual one.
@@ -115,14 +111,14 @@ class DataExplorer(anywidget.AnyWidget):
             )
         # Settings live in this explorer only: a dataframe has no location to
         # remember them by, unlike files in StorageExplorer.
-        self._store = QuerySettingsStore()
+        self._states = ExplorerStates()
         if settings is not None:
-            self._store.set(_KEY, settings.to_dict())
+            self._states.remember_query(_KEY, settings)
         try:
             self._data = DataQuery(
                 data,
                 _KEY,
-                self._store,
+                self._states,
                 mode=mode,
                 max_live_rows=max_live_rows,
                 max_memory_rows=max_memory_rows,
@@ -177,8 +173,11 @@ class DataExplorer(anywidget.AnyWidget):
             A copy, as changed by the user in the widget, e.g. to open other
             data with them, or to keep them in code with ``to_json()``.
         """
-        settings = normalize_settings(self._store.get(_KEY), self._data.schema)
-        return QuerySettings.from_dict(settings)
+        state = self._states.query(_KEY)
+        remembered = state.settings.to_dict() if state is not None else None
+        return QuerySettings.from_dict(
+            normalize_settings(remembered, self._data.schema)
+        )
 
     def _on_custom_msg(
         self, _widget: Any, content: dict[str, Any], _buffers: Any
