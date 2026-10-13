@@ -9,8 +9,8 @@ Adds **Storage Explorer** to JupyterLab's launcher (section *Other*) and command
 
 The tab opens on the launcher's folder: the one JupyterLab's file browser showed when the launcher was opened (like the
 launcher's Notebook and Console items; open a new launcher after changing folder). From the command palette, it opens
-on the folder the file browser shows. When the page is reloaded, JupyterLab restores the tab and the explorer is shown
-again, from the settings read again in the same kernel.
+on the folder the file browser shows. The tab reopens on the storage and folders it showed (kept with JupyterLab's
+workspace) when the page is reloaded, and when the Jupyter server or the tab's kernel restarts, with a new kernel.
 
 It also lets you drag files from any Storage Explorer, in its tab or in a notebook, onto JupyterLab's file browser: after
 asking, the explorer's kernel downloads them into the folder dropped on, or the one the file browser shows. This needs

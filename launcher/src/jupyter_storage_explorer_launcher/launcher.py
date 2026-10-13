@@ -2,8 +2,9 @@
 
 The "Storage Explorer" item in the launcher opens a new tab with a fresh
 kernel, started in the launcher's folder (the one JupyterLab's file browser
-showed), which runs ``launch()``; it runs again in the same kernel when the
-page is reloaded.
+showed), which runs ``launch()``; it runs again when the page is reloaded,
+and in the new kernel the tab gets after a server or kernel restart, with
+the storage and folders it showed.
 
 What the tab shows is configured by files ``storage-explorer/launcher.py`` in
 Jupyter's configuration directories (``jupyter --paths``, config section:
@@ -60,9 +61,11 @@ and ``~/.jupyter/storage-explorer/launcher.py``::
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import importlib.util
 import inspect
+import json
 import pathlib
 import sys
 from typing import TYPE_CHECKING, Any
@@ -304,9 +307,15 @@ def create_widget() -> Any:
     return load_settings().create_widget()
 
 
-def launch() -> None:
+def launch(view: str | None = None) -> None:
     """Run by the launcher's tab: apply the layers' ``style()``, show their
-    warnings, and show the explorer."""
+    warnings, and show the explorer.
+
+    ``view``: the tab's view when it was last open, as JSON ({"filesystem":
+    name, "folders": {name: folder}}), saved by the tab (see the extension's
+    index.ts): the explorer reopens there. A view that cannot be used is
+    ignored.
+    """
     from IPython.display import HTML, display  # noqa: PLC0415
 
     settings = load_settings()
@@ -316,4 +325,15 @@ def launch() -> None:
         display(HTML(f"<style>{settings.style}</style>"))
     for warning in settings.warnings:
         print(warning, file=sys.stderr)
-    display(settings.create_widget())
+    display(_create_explorer(settings, view))
+
+
+def _create_explorer(settings: Settings, view: str | None) -> Any:
+    """The explorer ``settings`` describe, showing ``view`` (see ``launch``)."""
+    explorer = settings.create_widget()
+    if view:
+        # Else (e.g. a storage unreachable now) the explorer as it starts.
+        with contextlib.suppress(Exception):
+            saved = json.loads(view)
+            explorer._restore_view(saved.get("filesystem"), saved.get("folders"))
+    return explorer

@@ -35,6 +35,7 @@
     "@jupyterlab/console": "^4.0.0",
     "@jupyterlab/filebrowser": "^4.0.0",
     "@jupyterlab/launcher": "^4.0.0",
+    "@jupyterlab/statedb": "^4.0.0",
     "@jupyterlab/ui-components": "^4.0.0"
   },
   "devDependencies": {
@@ -68,6 +69,11 @@
         "requiredVersion": "^4.0.0"
       },
       "@jupyterlab/launcher": {
+        "bundled": false,
+        "singleton": true,
+        "requiredVersion": "^4.0.0"
+      },
+      "@jupyterlab/statedb": {
         "bundled": false,
         "singleton": true,
         "requiredVersion": "^4.0.0"

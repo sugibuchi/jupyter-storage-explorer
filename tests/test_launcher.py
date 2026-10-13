@@ -242,6 +242,26 @@ def test_old_launch_function_is_reported(tmp_path):
     assert settings.explorer_arguments() == ((".",), {"height": "fill"})
 
 
+@pytest.mark.parametrize(
+    ("view", "folder"),
+    [
+        ('{"filesystem": "Lake", "folders": {"Lake": "/lake/raw"}}', "/lake/raw"),
+        ('{"filesystem": "Lake", "folders": {"Lake": "/lake/gone"}}', "/lake"),
+        ("not json", "/lake"),
+        ("[1, 2]", "/lake"),
+        (None, "/lake"),
+    ],
+)
+def test_reopens_the_tabs_view(tmp_path, memfs, view, folder):
+    """The view saved by the tab, as JSON; one that cannot be used is ignored."""
+    memfs.pipe_file("/lake/raw/a.csv", b"")
+    path = layer(
+        tmp_path, "user", "def filesystems():\n    return {'Lake': 'memory:///lake'}"
+    )
+    explorer = launcher._create_explorer(load_settings([path]), view)
+    assert explorer._current_dir == folder
+
+
 def test_files_found_in_jupyters_order(tmp_path, monkeypatch):
     user = layer(tmp_path, "user", "")
     system = layer(tmp_path, "system", "")

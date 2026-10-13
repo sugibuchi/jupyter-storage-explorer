@@ -2099,6 +2099,15 @@ function render({ model, el }) {
       listPage = 0;
       renderList();
     }
+    reportView();
+  }
+
+  // Tells whoever contains the explorer which storage and folder it shows:
+  // the launcher's tab keeps them, to reopen there (its index.ts). Elsewhere,
+  // e.g. in a notebook, nobody listens.
+  function reportView() {
+    const detail = { filesystem: model.get("_filesystem"), folder: model.get("_current_dir") };
+    el.dispatchEvent(new CustomEvent("jupyter-storage-explorer:view", { bubbles: true, detail }));
   }
 
   // "fill": the widget fills its container (see "jse-fill" in the CSS);
