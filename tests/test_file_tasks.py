@@ -8,12 +8,9 @@ import fsspec
 import pytest
 
 from jupyter_storage_explorer.file_tasks import FileTasks, Task
+from jupyter_storage_explorer.filesystems import FsspecOperations
 from jupyter_storage_explorer.incoming import IncomingFiles
-from jupyter_storage_explorer.operations import (
-    FsspecOperations,
-    OperationChain,
-    Progress,
-)
+from jupyter_storage_explorer.operations import OperationChain, Progress
 
 
 @pytest.fixture

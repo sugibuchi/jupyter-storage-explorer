@@ -10,12 +10,13 @@ import pytest
 from fsspec.implementations.dirfs import DirFileSystem
 
 from jupyter_storage_explorer import StorageExplorer, _paths
-from jupyter_storage_explorer.incoming import format_size
-from jupyter_storage_explorer.operations import (
+from jupyter_storage_explorer.filesystems import (
     AsyncFsspecOperations,
-    FileSystemOperations,
+    AtomicMoveOperation,
     FsspecOperations,
 )
+from jupyter_storage_explorer.incoming import format_size
+from jupyter_storage_explorer.operations import FileSystemOperations
 from jupyter_storage_explorer.query import QuerySettingsStore
 
 
@@ -943,7 +944,7 @@ class TestJobs:
 
     def test_default_operations(self, memfs):
         kinds = [type(o) for o in make("/", fs=memfs)._operations.operations]
-        assert kinds == [AsyncFsspecOperations, FsspecOperations]
+        assert kinds == [AtomicMoveOperation, AsyncFsspecOperations, FsspecOperations]
         # A list given is used as it is.
         explorer = make("/", fs=memfs, operations=[FsspecOperations()])
         assert [type(o) for o in explorer._operations.operations] == [FsspecOperations]
@@ -964,7 +965,7 @@ class TestJobs:
         explorer.request(
             {"type": "move", "rid": 1, "paths": ["/d/b.txt"], "dest": "/trash"}
         )
-        assert memfs.exists("/trash/b.txt")  # moved by FsspecOperations
+        assert memfs.exists("/trash/b.txt")  # moved by AtomicMoveOperation
 
     def test_cancelled_midway(self, memfs):
         """Cancelled after the first file: that one is pasted, the job says so."""

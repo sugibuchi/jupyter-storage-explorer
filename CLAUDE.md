@@ -85,13 +85,16 @@ through them, never through fsspec directly. Moving, copying, deleting, download
 the operations objects instead (`operations.py`, the `operations=` argument): a chain of `FileSystemOperations`, each
 method tried in order until one does not raise `FileSystemOperations.NotSupported` (its own exception, so that a
 library's `NotImplementedError` is reported as an error). `OperationChain` adds nothing; the defaults are
-`StorageExplorer.default_operations()`: `AsyncFsspecOperations` (async filesystems such as s3fs: their coroutines, many
-files at a time; folder moves left to the next) then `FsspecOperations` (walking folders itself, to report progress
-file by file). `move` and `copy` take a source and a target filesystem, the same one or not (`same_filesystem`:
-fsspec instances compare by their arguments). Tests use fsspec's `AsyncFileSystemWrapper` around a memory filesystem as
-an async one. Copies between filesystems go through a temporary file, so a failure leaves no partial file; moves
-between them copy then delete file by file, so a cancel leaves each file in one place. Object stores (S3, GCS) have no
-empty folders, which matters for creating folders.
+`StorageExplorer.default_operations()`, from the `filesystems/` package: `AtomicMoveOperation` (only moves within a
+filesystem whose `mv` renames a folder in one step: local, memory, or a `DirFileSystem` over them), then
+`AsyncFsspecOperations` (`async_fsspec.py`: async filesystems such as s3fs, their coroutines, many files at a time),
+then `FsspecOperations` (`fsspec.py`). Both of the latter walk folders themselves, moves included, to report progress
+file by file (helpers in `filesystems/_common.py`). `move` and `copy` take a source and a target filesystem, the same
+one or not (`same_filesystem`: fsspec instances compare by their arguments). Between filesystems, single files go
+through `FileSystemOperations._copy_file` and `_move_file` (`_copy_file_async`/`_move_file_async` in the async class),
+overridable: by default through a temporary file, so a failure leaves no partial file, and a move copies then deletes
+each file, so a cancel leaves each file in one place. Tests use fsspec's `AsyncFileSystemWrapper` around a memory
+filesystem as an async one. Object stores (S3, GCS) have no empty folders, which matters for creating folders.
 
 **Jobs.** Move, delete, paste, uploads (from JupyterLab's file browser, and the storage half of uploads from the
 computer) and both downloads to JupyterLab run in the background (`jobs.py`). Each is planned by a `FileTasks` method
@@ -158,7 +161,7 @@ storage options (`spark_url()` rewrites `abfs`/`s3` to `abfss`/`s3a`).
 
 - Comments and docstrings are written in full sentences explaining *why*; keep that density and tone.
 - Docstrings of the public API, what users construct, call, subclass or override (`StorageExplorer`, `DataExplorer`,
-  `QuerySettings`, `QuerySettingsStore`, `FileSystemOperations` and its subclasses, `Progress`, `DataFormat`,
+  `QuerySettings`, `QuerySettingsStore`, `FileSystemOperations` and its subclasses (with `_copy_file`, `_move_file`), `Progress`, `DataFormat`,
   `StorageExplorer._url` and `_locate`, `same_filesystem`), are in numpy style: `Parameters`, `Returns`, `Raises`, `Attributes`, `See Also`, `Examples`.
   Internal ones (underscore names, `DataQuery`, `FileTasks`, `JobRunner`, ...) stay prose.
 - `from __future__ import annotations` everywhere, with type-only imports under `TYPE_CHECKING` (ruff `TC` rules).

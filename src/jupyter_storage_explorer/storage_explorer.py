@@ -19,6 +19,11 @@ from fsspec.core import url_to_fs
 from jupyter_storage_explorer import _paths, _static
 from jupyter_storage_explorer._urls import default_location, default_url
 from jupyter_storage_explorer.file_tasks import FileTasks, Plan, Task
+from jupyter_storage_explorer.filesystems import (
+    AsyncFsspecOperations,
+    AtomicMoveOperation,
+    FsspecOperations,
+)
 from jupyter_storage_explorer.formats import (
     DataFormat,
     MediaPreview,
@@ -36,8 +41,6 @@ from jupyter_storage_explorer.incoming import IncomingFiles
 from jupyter_storage_explorer.jobs import JobRunner
 from jupyter_storage_explorer.listing import Listing
 from jupyter_storage_explorer.operations import (
-    AsyncFsspecOperations,
-    FsspecOperations,
     OperationChain,
     Progress,
     same_filesystem,
@@ -378,11 +381,13 @@ class StorageExplorer(anywidget.AnyWidget):
         Returns
         -------
         list of FileSystemOperations
-            New objects each time: ``AsyncFsspecOperations`` (asynchronous
-            fsspec filesystems such as s3fs, gcsfs and adlfs, many files at a
-            time), then ``FsspecOperations`` (everything else, with fsspec).
+            New objects each time: ``AtomicMoveOperation`` (moves in one step
+            on local disks), ``AsyncFsspecOperations`` (asynchronous fsspec
+            filesystems such as s3fs, gcsfs and adlfs, many files at a time),
+            then ``FsspecOperations`` (everything else, with fsspec), from the
+            ``jupyter_storage_explorer.filesystems`` package.
         """
-        return [AsyncFsspecOperations(), FsspecOperations()]
+        return [AtomicMoveOperation(), AsyncFsspecOperations(), FsspecOperations()]
 
     @traitlets.validate("_filesystem")
     def _validate_filesystem(self, proposal: dict[str, Any]) -> str:
