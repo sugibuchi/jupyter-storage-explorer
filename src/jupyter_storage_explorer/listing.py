@@ -73,6 +73,10 @@ class Listing:
         self.columns = {**self.columns, "sizes": sizes, "mtimes": mtimes}
         self._orders = {k: v for k, v in self._orders.items() if k[0] == "name"}
 
+    def without(self, indexes: set[int]) -> Listing:
+        """This listing without the items at ``indexes`` (e.g. deleted)."""
+        return Listing(self._subset([i for i in range(len(self)) if i not in indexes]))
+
     def query(
         self,
         *,

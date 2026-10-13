@@ -104,9 +104,12 @@ class JobRunner:
         title: str,
         work: Callable[[Progress], dict[str, Any]],
         finish: Callable[[Job], None] | None = None,
+        update: Callable[[Job], None] | None = None,
     ) -> Job:
         """Queue ``work``; once it has ended (whatever the outcome), ``finish(job)``
-        runs on the main thread, before the final ``notify``."""
+        runs on the main thread, before the final ``notify``. While it runs,
+        ``update(job)`` runs on the main thread before each progress report
+        (e.g. to show what it has changed so far)."""
         job = Job(id=f"job-{next(self._ids)}", kind=kind, title=title)
         last = [0.0]
         lock = threading.Lock()
@@ -118,7 +121,7 @@ class JobRunner:
                 if now - last[0] < REPORT_INTERVAL:
                     return
                 last[0] = now
-            self._main(lambda: self._notify_unless_finished(job))
+            self._main(lambda: self._report(job, update))
 
         job.progress = Progress(on_change=report)
         self.jobs[job.id] = job
@@ -134,6 +137,17 @@ class JobRunner:
         job.progress.cancel()
         self._notify(job)
         return True
+
+    def _report(self, job: Job, update: Callable[[Job], None] | None) -> None:
+        """On the main thread: a running job's progress, after ``update``."""
+        if job.finished:
+            return  # a late report: ``finish`` has shown everything
+        if update is not None:
+            try:
+                update(job)
+            except Exception:
+                log.exception("updating for job %s (%s) failed", job.id, job.title)
+        self._notify_unless_finished(job)
 
     def _notify_unless_finished(self, job: Job) -> None:
         # A late progress report must not overwrite the final state.

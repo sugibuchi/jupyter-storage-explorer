@@ -111,9 +111,12 @@ filesystem as an async one. Object stores (S3, GCS) have no empty folders, which
 computer) and both downloads to JupyterLab run in the background (`jobs.py`). Each is planned by a `FileTasks` method
 (`file_tasks.py`, no widget involved) on the main thread: checks, conflicts to ask about (returned as a dict), else a
 `Task` whose `work(progress)` runs in the `JobRunner`'s worker thread (one job at a time) and records what it changed
-(`moved`, `removed`, `changed` folders; `moved_away` from other filesystems). `StorageExplorer` only answers requests
-(`_plan_request`, `_start`) and,
-once a job has ended, shows those changes (`_finish`, on the main thread). Work functions must not touch traits or
+as each item is done, with `Task.record` (under a lock: `moved`, `removed`, `changed` folders, `added_to` those with new
+items; `moved_away` from other filesystems). `StorageExplorer` only answers requests (`_plan_request`, `_start`) and
+shows those changes on the main thread: as the job goes (`_follow`, run by the `JobRunner`'s `update` hook before
+progress reports: items gone dropped from the list and tree without listing, at most every `_FOLLOW_INTERVAL`;
+folders with new items listed again, keeping the selection, at most every `_RELIST_INTERVAL`), and all of them once
+it has ended (`_finish`). Work functions must not touch traits or
 `send`; they report to the `Progress` and stop when `progress.check()` raises `OperationCancelled`. A drop from
 JupyterLab's file browser is a copy from the kernel's local disk (`FileTasks.upload`); files from the computer arrive in
 pieces (`incoming.py`), and the last piece starts `FileTasks.upload_file`. Path helpers are in `_paths.py`. Requests answer `{"job": id}`; the kernel sends

@@ -11,6 +11,7 @@ import pytest
 from fsspec.implementations.asyn_wrapper import AsyncFileSystemWrapper
 from fsspec.implementations.dirfs import DirFileSystem
 
+from jupyter_storage_explorer import jobs
 from jupyter_storage_explorer.filesystems import (
     AsyncFsspecOperations,
     AtomicMoveOperation,
@@ -438,6 +439,39 @@ class TestJobRunner:
         assert runner.submit("test", "Cancelled", cancel_midway).state == "cancelled"
         partial = runner.submit("test", "Partial", lambda p: {"cancelled": True})
         assert partial.state == "cancelled"
+
+    def test_update_before_each_report(self, monkeypatch):
+        monkeypatch.setattr(jobs, "REPORT_INTERVAL", 0)
+        events = []
+        runner = JobRunner(lambda job: events.append(("notify", job.state)))
+
+        def work(progress):
+            progress.advance(files=1)
+            return {}
+
+        runner.submit(
+            "test",
+            "Updating",
+            work,
+            update=lambda job: events.append(("update", job.state)),
+        )
+        assert ("update", "running") in events
+        at = events.index(("update", "running"))
+        assert events[at + 1] == ("notify", "running")  # the update comes first
+
+    def test_failing_update_does_not_stop_the_job(self, monkeypatch):
+        monkeypatch.setattr(jobs, "REPORT_INTERVAL", 0)
+        runner = JobRunner(lambda job: None)
+
+        def update(job):
+            raise RuntimeError("broken")
+
+        def work(progress):
+            progress.advance(files=1)
+            return {"ok": True}
+
+        job = runner.submit("test", "Updating", work, update=update)
+        assert (job.state, job.result) == ("done", {"ok": True})
 
     def test_in_a_worker_thread_with_a_loop(self):
         """In a kernel: the work runs in a worker thread, reports and finishing
