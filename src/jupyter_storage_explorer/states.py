@@ -27,9 +27,12 @@ import os
 import pathlib
 import tempfile
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from jupyter_storage_explorer.query import DEFAULT_SETTINGS, MODES, QuerySettings
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 # The keys this version reads and writes; others are kept as they are.
 _KNOWN_KEYS = ("bookmarks", "queries")
@@ -89,9 +92,10 @@ class ExplorerStates:
     ----------
     path : str or Path, optional
         A JSON file to keep the states in, so that they survive kernel
-        restarts and are shared with other kernels using it: read now and
-        whenever an explorer using these states is created, and written at
-        each change. Default: only in memory, while the kernel runs.
+        restarts and are shared with other kernels using it: read now,
+        whenever an explorer using these states is created and before each
+        change (so that changes made by other kernels are kept), and written
+        at each change. Default: only in memory, while the kernel runs.
     max_queries : int, default 20
         How many datasets' queries are remembered; the least recently used
         are forgotten first.
@@ -159,6 +163,21 @@ class ExplorerStates:
         self._queries = [q for q in queries if q is not None][: self.max_queries]
         self._others = {k: v for k, v in data.items() if k not in _KNOWN_KEYS}
 
+    @contextlib.contextmanager
+    def _changing(self) -> Iterator[None]:
+        """Around a change: read the file again first, so that the change is
+        made to what other kernels wrote since, then write it. A file that
+        cannot be read (e.g. a typo made by hand) is not written over: the
+        change is then kept in memory only."""
+        try:
+            self.reload()
+            readable = True
+        except (OSError, ValueError):
+            readable = False
+        yield
+        if readable:
+            self._write()
+
     def _write(self) -> None:
         """Write the file, if any: whole, through a temporary file, so that
         readers (other kernels) never see half of it."""
@@ -215,13 +234,13 @@ class ExplorerStates:
         A folder already bookmarked keeps its place; its URL is updated.
         """
         bookmark = Bookmark(filesystem, path, url)
-        for i, b in enumerate(self._bookmarks):
-            if (b.filesystem, b.path) == (filesystem, path):
-                self._bookmarks[i] = bookmark
-                break
-        else:
-            self._bookmarks.append(bookmark)
-        self._write()
+        with self._changing():
+            for i, b in enumerate(self._bookmarks):
+                if (b.filesystem, b.path) == (filesystem, path):
+                    self._bookmarks[i] = bookmark
+                    break
+            else:
+                self._bookmarks.append(bookmark)
 
     def remove_bookmark(self, filesystem: str, path: str) -> None:
         """Remove a folder's bookmark, if any (and write the file, if any).
@@ -233,10 +252,12 @@ class ExplorerStates:
         path : str
             The folder.
         """
-        self._bookmarks = [
-            b for b in self._bookmarks if (b.filesystem, b.path) != (filesystem, path)
-        ]
-        self._write()
+        with self._changing():
+            self._bookmarks = [
+                b
+                for b in self._bookmarks
+                if (b.filesystem, b.path) != (filesystem, path)
+            ]
 
     # --- Queries ---
 
@@ -294,14 +315,12 @@ class ExplorerStates:
         if mode not in MODES:
             raise ValueError(f"mode must be one of {MODES}, not {mode!r}")
         entry = {"url": url, "settings": settings.to_dict(), "mode": mode}
-        rest = [q for q in self._queries if q["url"] != url]
-        if entry["settings"] == DEFAULT_SETTINGS and mode == "auto":
-            if len(rest) == len(self._queries):
-                return  # nothing remembered, nothing to forget
-            self._queries = rest
-        else:
-            self._queries = [entry, *rest][: self.max_queries]
-        self._write()
+        forget = entry["settings"] == DEFAULT_SETTINGS and mode == "auto"
+        if forget and all(q["url"] != url for q in self._queries):
+            return  # nothing remembered, nothing to forget (and no file to write)
+        with self._changing():
+            rest = [q for q in self._queries if q["url"] != url]
+            self._queries = rest if forget else [entry, *rest][: self.max_queries]
 
     def forget_query(self, url: str) -> None:
         """Forget how a dataset was shown (and write the file, if any).
@@ -311,8 +330,8 @@ class ExplorerStates:
         url : str
             The dataset's location.
         """
-        self._queries = [q for q in self._queries if q["url"] != url]
-        self._write()
+        with self._changing():
+            self._queries = [q for q in self._queries if q["url"] != url]
 
 
 def _list(value: Any) -> list[Any]:
@@ -351,3 +370,31 @@ def _query_state(entry: dict[str, Any]) -> QueryState:
 # Shared by the explorers in the kernel, unless given their own, so that their
 # bookmarks are the same and data reopened in a new explorer is shown as before.
 default_states = ExplorerStates()
+
+# The states of each file given to explorers as a path (see explorer_states):
+# one object per file, so explorers of the kernel see each other's changes.
+_states_by_file: dict[pathlib.Path, ExplorerStates] = {}
+
+
+def explorer_states(
+    states: ExplorerStates | str | os.PathLike[str] | None,
+) -> ExplorerStates:
+    """The states an explorer uses for its ``states`` argument: the object
+    given, ``default_states`` for None, or for a path, the states of that file,
+    created at the first use (absolute paths, "~" resolved, identify it)."""
+    if states is None:
+        return default_states
+    if isinstance(states, ExplorerStates):
+        return states
+    file = pathlib.Path(states).expanduser().resolve()
+    if file not in _states_by_file:
+        try:
+            _states_by_file[file] = ExplorerStates(file)
+        except ValueError:
+            # Not a JSON object: the explorer still opens, and reports it when
+            # reading the file again. Not written over until it is fixed (see
+            # ExplorerStates._changing).
+            unread = ExplorerStates()
+            unread.path = file
+            _states_by_file[file] = unread
+    return _states_by_file[file]

@@ -44,7 +44,9 @@ A file has some of these functions, all optional:
 | `style()`          | CSS for the page while the tab is open                        | Joined, the user's last                                          |
 | `final()`          | Settings later layers cannot change, e.g. `["filesystems"]`   | Function names (except `parameters`) and parameter names         |
 
-`"."` is the folder the tab opens on, and `height` is `"fill"` (as tall as the tab) unless set. A change to a final
+`"."` is the folder the tab opens on, and `height` is `"fill"` (as tall as the tab) unless set. The tabs keep their
+bookmarks and the data browser's settings in `~/.jupyter/storage-explorer/states.json` (in `JUPYTER_CONFIG_DIR` if
+set) unless `states` is set: another path, or `None` to keep them in each tab's memory. A change to a final
 setting is ignored, with a warning shown in the tab. Final settings help administrators set defaults; they are not a
 security boundary, as users can still create explorers of their own in notebooks.
 

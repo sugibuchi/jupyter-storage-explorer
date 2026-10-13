@@ -138,8 +138,11 @@ explorer asks its kernel to show what is left (`"changed"`, `_sources_changed`).
 **States** (`states.py`). `ExplorerStates` keeps what explorers remember: bookmarks (storage name, folder, and its URL
 when bookmarked, as `_url` only resolves the storage shown) and the data browser's queries (URL, settings, mode chosen),
 the most recent first, at most `max_queries`. One in memory (`default_states`) is shared by the kernel's explorers
-unless `states=` gives another; with a path it is a JSON file, written whole at each change and read again when an
-explorer is created (other kernels may share it). `DataQuery` remembers through it; `DataExplorer` uses a private one.
+unless `states=` gives another, or a file's path (`explorer_states`: one object per file in the kernel). With a path
+it is a JSON file shared with other kernels (each launcher tab is one; the launcher defaults to
+`<jupyter_config_dir>/storage-explorer/states.json`): read again when an explorer is created and before each change,
+then written whole, so kernels do not undo each other's changes; a file that cannot be read is never written over.
+`DataQuery` remembers through it; `DataExplorer` uses a private one.
 The frontend asks for the bookmarks when the ☆ menu opens (`"bookmarks"`, `"bookmark_add"`, ...), as other explorers
 may have changed them.
 

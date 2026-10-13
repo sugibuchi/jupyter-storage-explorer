@@ -502,6 +502,21 @@ class TestStatesFile:
         explorer = make("/", fs=memfs, states=states)
         assert [b.path for b in explorer._states.bookmarks] == ["/data"]
 
+    def test_given_as_a_path(self, memfs, tmp_path):
+        path = tmp_path / "states.json"
+        memfs.mkdir("/data")
+        first = make("/", fs=memfs, states=str(path))
+        second = make("/", fs=memfs, states=path)
+        assert first._states is second._states
+        first.request({"type": "bookmark_add", "rid": 1, "path": "/data"})
+        assert ExplorerStates(path).bookmarks[0].path == "/data"
+
+    def test_unreadable_file_given_as_a_path(self, memfs, tmp_path):
+        path = tmp_path / "broken.json"
+        path.write_text("{typo")
+        explorer = make("/", fs=memfs, states=path)
+        assert explorer._error.startswith("Bookmarks and queries not read again")
+
     def test_unreadable_file_reported(self, memfs, tmp_path):
         path = tmp_path / "states.json"
         states = ExplorerStates(path)

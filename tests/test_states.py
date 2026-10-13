@@ -7,7 +7,13 @@ import json
 import pytest
 
 from jupyter_storage_explorer.query import QuerySettings
-from jupyter_storage_explorer.states import Bookmark, ExplorerStates, QueryState
+from jupyter_storage_explorer.states import (
+    Bookmark,
+    ExplorerStates,
+    QueryState,
+    default_states,
+    explorer_states,
+)
 
 SORTED = QuerySettings(sort="a", descending=True)
 
@@ -63,6 +69,29 @@ class TestFile:
         states = ExplorerStates(path)
         assert states.bookmarks == [Bookmark("a", "/x")]
         assert states.queries == [QueryState("u2", QuerySettings(), "auto")]
+
+    def test_changes_made_elsewhere_are_kept(self, tmp_path):
+        """Each kernel (e.g. each launcher tab) has its own states of the
+        file: a change is made to the file as it is now, not as read before."""
+        path = tmp_path / "states.json"
+        first, second = ExplorerStates(path), ExplorerStates(path)
+        first.add_bookmark("a", "/x")
+        second.add_bookmark("a", "/y")
+        second.remember_query("u", SORTED)
+        first.remove_bookmark("a", "/never")
+        assert ExplorerStates(path).bookmarks == [
+            Bookmark("a", "/x"),
+            Bookmark("a", "/y"),
+        ]
+        assert [q.url for q in ExplorerStates(path).queries] == ["u"]
+
+    def test_unreadable_file_not_written_over(self, tmp_path):
+        path = tmp_path / "states.json"
+        states = ExplorerStates(path)
+        path.write_text("{typo")
+        states.add_bookmark("a", "/x")
+        assert states.bookmarks == [Bookmark("a", "/x")]  # in memory
+        assert path.read_text() == "{typo"
 
     @pytest.mark.parametrize("text", ["[]", "{not json"])
     def test_not_a_json_object(self, tmp_path, text):
@@ -143,6 +172,30 @@ class TestQueries:
     def test_unknown_mode(self):
         with pytest.raises(ValueError, match="mode must be one of"):
             ExplorerStates().remember_query("u", SORTED, "sideways")
+
+
+class TestExplorerStates:
+    """explorer_states: what StorageExplorer's ``states`` argument gives."""
+
+    def test_default_and_objects(self):
+        states = ExplorerStates()
+        assert explorer_states(None) is default_states
+        assert explorer_states(states) is states
+
+    def test_one_per_file(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        by_path = explorer_states(tmp_path / "states.json")
+        assert explorer_states("states.json") is by_path  # relative, as str
+        assert by_path.path == (tmp_path / "states.json").resolve()
+        assert explorer_states(tmp_path / "other.json") is not by_path
+
+    def test_unreadable_file(self, tmp_path):
+        path = tmp_path / "broken.json"
+        path.write_text("{typo")
+        states = explorer_states(path)  # no error: the explorer reports it
+        assert states.bookmarks == []
+        states.add_bookmark("a", "/x")
+        assert path.read_text() == "{typo"
 
 
 def test_max_queries_at_least_one():

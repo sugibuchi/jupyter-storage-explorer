@@ -138,14 +138,18 @@ explorer's options.
 ### Remembered states
 
 Bookmarks and the data browser's settings are kept in an `ExplorerStates`, shared by the explorers in the kernel, until
-it restarts. To keep them in a file, also shared with other kernels (read again when an explorer is created):
+it restarts. To keep them in a JSON file, also shared with other kernels (read again when an explorer is created and
+before each change), give its path, or an `ExplorerStates` for other options:
 
 ```python
 from jupyter_storage_explorer import ExplorerStates, StorageExplorer
 
-states = ExplorerStates("~/.jupyter/storage-explorer-states.json", max_queries=20)
-StorageExplorer("s3://my-bucket/data", states=states)
+StorageExplorer("s3://my-bucket/data", states="~/.jupyter/storage-explorer/states.json")
+StorageExplorer("s3://my-bucket/data", states=ExplorerStates("states.json", max_queries=50))
 ```
+
+Explorers in [the launcher](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/launcher/README.md)'s tabs
+use `~/.jupyter/storage-explorer/states.json`, so the first example shares their bookmarks.
 
 A bookmark names a storage of the explorer (its name in `filesystems`, or `"default"`) and a folder; explorers list
 those of their own storages.
@@ -219,7 +223,7 @@ explorer.selected_urls  # the URLs of the selected items
 | `filesystems={...}`                 | Several named storages, as shown above.                                                                                               |
 | `max_browser_items=20_000`          | Folders with more items are filtered, sorted and paged by the kernel, one page at a time, instead of the browser (`None`: never).     |
 | `operations=[...]`                  | How files are moved, copied, deleted and downloaded, replacing `StorageExplorer.default_operations()`: e.g. `[MyOps(), *StorageExplorer.default_operations()]` for server-side copies of your own (see [operations.py](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/src/jupyter_storage_explorer/operations.py), and [filesystems](https://github.com/sugibuchi/jupyter-storage-explorer/tree/main/src/jupyter_storage_explorer/filesystems) for the defaults). |
-| `states=ExplorerStates(...)`        | Where bookmarks and the data browser's settings are kept; see [Remembered states](#remembered-states).                                |
+| `states="states.json"`              | Where bookmarks and the data browser's settings are kept (a path or an `ExplorerStates`); see [Remembered states](#remembered-states). |
 | `format_options={...}`              | Options for the formats (see [Format options](#format-options)).                                                                      |
 
 ## DataExplorer: browse a dataframe

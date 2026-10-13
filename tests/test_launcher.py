@@ -27,6 +27,20 @@ def layer(tmp_path: pathlib.Path, name: str, code: str) -> pathlib.Path:
     return path
 
 
+@pytest.fixture(autouse=True)
+def config_dir(tmp_path, monkeypatch) -> pathlib.Path:
+    """The user's Jupyter configuration directory, where tabs keep their states
+    file: a temporary one, not the real ~/.jupyter."""
+    path = tmp_path / "jupyter-config"
+    monkeypatch.setenv("JUPYTER_CONFIG_DIR", str(path))
+    return path
+
+
+def defaults() -> tuple:
+    """The arguments of a tab's explorer without any launcher.py."""
+    return (".",), {"height": "fill", "states": launcher.states_file()}
+
+
 @pytest.fixture
 def system(tmp_path):
     return layer(
@@ -51,7 +65,7 @@ def system(tmp_path):
 class TestMerging:
     def test_no_files_is_the_folder_opened_on(self):
         settings = load_settings([])
-        assert settings.explorer_arguments() == ((".",), {"height": "fill"})
+        assert settings.explorer_arguments() == defaults()
 
     def test_user_over_system(self, tmp_path, system):
         user = layer(
@@ -239,7 +253,32 @@ def test_old_launch_function_is_reported(tmp_path):
         f"{path}: launch() is no longer used; set filesystems(), parameters() etc. "
         "instead (see the launcher's README)"
     ]
-    assert settings.explorer_arguments() == ((".",), {"height": "fill"})
+    assert settings.explorer_arguments() == defaults()
+
+
+class TestStates:
+    def test_a_file_in_the_users_config_directory(self, config_dir):
+        assert launcher.states_file() == config_dir / "storage-explorer" / "states.json"
+        explorer = load_settings([]).create_widget()
+        assert config_dir.joinpath("storage-explorer").is_dir()  # created
+        assert explorer._states.path == launcher.states_file().resolve()
+
+    def test_shared_by_the_tabs(self):
+        first = load_settings([]).create_widget()
+        second = load_settings([]).create_widget()
+        assert first._states is second._states
+
+    @pytest.mark.parametrize("value", [None, "other.json"])
+    def test_set_by_parameters(self, tmp_path, config_dir, value):
+        path = layer(
+            tmp_path, "user", f"def parameters():\n    return {{'states': {value!r}}}"
+        )
+        explorer = load_settings([path]).create_widget()
+        assert not config_dir.exists()  # not created
+        if value is None:
+            assert explorer._states.path is None  # in memory
+        else:
+            assert explorer._states.path.name == "other.json"
 
 
 @pytest.mark.parametrize(

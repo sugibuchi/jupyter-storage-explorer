@@ -46,7 +46,7 @@ from jupyter_storage_explorer.operations import (
     same_filesystem,
 )
 from jupyter_storage_explorer.query import DataQuery
-from jupyter_storage_explorer.states import ExplorerStates, default_states
+from jupyter_storage_explorer.states import ExplorerStates, explorer_states
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
@@ -206,11 +206,12 @@ class StorageExplorer(anywidget.AnyWidget):
         The folder "Download to JupyterLab" copies into, on the kernel's
         machine, e.g. ``"~/Downloads"``; relative paths and "~" are resolved
         when the explorer is created. None leaves the item out.
-    states : ExplorerStates, optional
-        Where the bookmarks and the data browser's recent queries are kept.
-        Default: one shared by the explorers in the kernel, in memory; give
-        one with a path to keep them across restarts (its file is read again
-        when the explorer is created).
+    states : ExplorerStates, str or Path, optional
+        Where the bookmarks and the data browser's recent queries are kept:
+        an ``ExplorerStates``, or the path of its JSON file, e.g.
+        ``"~/.jupyter/storage-explorer/states.json"`` (explorers given the
+        same file share one). Default: one shared by the explorers in the
+        kernel, in memory. A file is read again when the explorer is created.
     max_browser_items : int or None, default 20_000
         Folders with more items are filtered, sorted and paged by the kernel
         (see ``listing.Listing``), one page at a time, instead of by the
@@ -325,12 +326,12 @@ class StorageExplorer(anywidget.AnyWidget):
         max_upload_bytes: int | None = 10 * 1024 * 1024,
         allow_download_to_local: bool = True,
         download_to_jupyterlab_path: str | None = ".",
-        states: ExplorerStates | None = None,
+        states: ExplorerStates | str | os.PathLike[str] | None = None,
         max_browser_items: int | None = 20_000,
         operations: Sequence[FileSystemOperations] | None = None,
         **storage_options: Any,
     ) -> None:
-        self._states = default_states if states is None else states
+        self._states = explorer_states(states)
         # Its file may have been changed by another kernel since it was read.
         try:
             self._states.reload()

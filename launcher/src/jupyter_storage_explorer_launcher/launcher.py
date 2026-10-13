@@ -33,7 +33,10 @@ final. Each file may have these functions, all optional:
 ``parameters()``
     ``{parameter: value}`` for ``StorageExplorer``'s other arguments, e.g.
     ``{"height": "fill", "max_upload_bytes": None}``, merged by name.
-    ``height`` is ``"fill"`` unless set.
+    ``height`` is ``"fill"`` unless set, and ``states`` (bookmarks and
+    recent queries) the file ``storage-explorer/states.json`` in the user's
+    Jupyter configuration directory, shared by the tabs (``None``: in each
+    tab's memory only).
 ``style()``
     CSS (without ``<style>``) applied to the page while the tab is open, e.g.
     to customize the explorer's icons; the layers' are joined, the user's
@@ -70,7 +73,7 @@ import pathlib
 import sys
 from typing import TYPE_CHECKING, Any
 
-from jupyter_core.paths import jupyter_config_path
+from jupyter_core.paths import jupyter_config_dir, jupyter_config_path
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -120,7 +123,11 @@ class Settings:
         from jupyter_storage_explorer import StorageExplorer  # noqa: PLC0415
         from jupyter_storage_explorer.formats import default_formats  # noqa: PLC0415
 
-        kwargs: dict[str, Any] = {"height": "fill", **self.parameters}
+        kwargs: dict[str, Any] = {
+            "height": "fill",
+            "states": states_file(),
+            **self.parameters,
+        }
         if self.formats:
             # StorageExplorer takes formats or format_options, not both.
             kwargs["formats"] = [*self.formats, *default_formats(self.format_options)]
@@ -141,7 +148,17 @@ class Settings:
         from jupyter_storage_explorer import StorageExplorer  # noqa: PLC0415
 
         args, kwargs = self.explorer_arguments()
+        if "states" not in self.parameters:
+            states_file().parent.mkdir(parents=True, exist_ok=True)
         return StorageExplorer(*args, **kwargs)
+
+
+def states_file() -> pathlib.Path:
+    """Where the tabs keep their bookmarks and recent queries, unless
+    ``parameters()`` sets ``states``: in the user's Jupyter configuration
+    directory (``~/.jupyter`` unless ``JUPYTER_CONFIG_DIR`` is set), beside
+    their ``storage-explorer/launcher.py``."""
+    return pathlib.Path(jupyter_config_dir(), "storage-explorer", "states.json")
 
 
 def find_launcher_files() -> list[pathlib.Path]:
