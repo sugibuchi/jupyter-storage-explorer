@@ -2,13 +2,23 @@
 // the explorer. The tab is a code console whose prompt and input are hidden:
 // consoles get a widget manager from ipywidgets, so the explorer (an
 // anywidget) renders there. The console runs `launch()` from the Python
-// package jupyter_storage_explorer_launcher, which calls the user's
-// launcher.py (see there) and displays the widget it returns. The kernel is
-// shut down when the tab closes.
+// package jupyter_storage_explorer_launcher, which shows the explorer the
+// launcher.py files describe (see there). The kernel is shut down when the
+// tab closes.
 //
 // JupyterLab restores open consoles when the page is reloaded, reconnected to
-// their kernels but without their outputs. Explorer tabs are recognised by
-// their session name and set up again, running `launch()` once more.
+// their kernels (or, after a server restart, with new ones) but without their
+// outputs. Explorer tabs are recognised by their session name and set up
+// again, running `launch()` once more. A tab whose session is lost while the
+// page stays open (the server restarted), or whose kernel is changed or
+// restarted, is replaced by a new one in its place: ipywidgets binds a
+// console's widgets to its first kernel, and they do not survive a restart,
+// so the explorer could not be shown there again.
+//
+// Each tab's view (the storage shown, the folder of each storage) is kept in
+// JupyterLab's state database, which is saved with the workspace on the
+// server: the explorer reports it with a DOM event, and `launch()` gets it
+// back, so the tab reopens where it was.
 //
 // A second plugin (download.ts) downloads files dragged from any explorer,
 // in a tab or a notebook, onto JupyterLab's file browser.
@@ -17,72 +27,206 @@ import { JupyterFrontEnd, JupyterFrontEndPlugin } from '@jupyterlab/application'
 import { ICommandPalette } from '@jupyterlab/apputils';
 import { ConsolePanel, IConsoleTracker } from '@jupyterlab/console';
 import { ILauncher } from '@jupyterlab/launcher';
+import { IStateDB } from '@jupyterlab/statedb';
 import { LabIcon } from '@jupyterlab/ui-components';
 
 import { downloadPlugin } from './download';
 import iconSvg from '../style/storage-explorer.svg';
 
+const PLUGIN_ID = 'jupyter-storage-explorer-launcher:plugin';
 const COMMAND = 'storage-explorer:open';
 const TITLE = 'Storage Explorer';
 // Session name of explorer tabs; it survives page reloads, so it identifies them.
 const SESSION_NAME = TITLE;
 // Marks the console as an explorer tab, for the styles hiding its prompt and input.
 const PANEL_CLASS = 'jse-launcher-panel';
-// Run in the tab's kernel.
-const CODE = 'from jupyter_storage_explorer_launcher import launch as __jse_launch\n__jse_launch()';
+// Dispatched by an explorer (static/storage_explorer.js) on its element, and
+// bubbling up to the tab, when the storage or folder shown changes:
+// {filesystem, folder}.
+const VIEW_EVENT = 'jupyter-storage-explorer:view';
+
+// A tab's view as saved: the storage shown, and the folder of each storage
+// shown so far, for when the user switches to it.
+interface IView {
+  filesystem: string;
+  folders: { [filesystem: string]: string };
+}
 
 export const storageExplorerIcon = new LabIcon({
   name: 'jupyter-storage-explorer-launcher:icon',
   svgstr: iconSvg
 });
 
+// The view saved for the tab whose console session has path `path`.
+const viewKey = (path: string): string => `${PLUGIN_ID}:view:${path}`;
+
 // `cwd`: the launcher's folder (the one shown in the file browser), where the
 // kernel starts, so "." in launcher.py is that folder. Without it (e.g. from
 // the command palette), the console uses the file browser's folder itself.
-// The new console is then set up by `showExplorer`, like a restored one.
-async function openExplorer(app: JupyterFrontEnd, cwd?: string): Promise<ConsolePanel> {
+// The new console is then set up by `ExplorerTab`, like a restored one.
+// `options`: more for console:create, e.g. where to open (`ref`, `insertMode`).
+async function openExplorer(
+  app: JupyterFrontEnd,
+  cwd?: string,
+  options: { [key: string]: any } = {}
+): Promise<ConsolePanel> {
   const specs = app.serviceManager.kernelspecs;
   await specs.ready;
   return app.commands.execute('console:create', {
     ...(cwd !== undefined ? { basePath: cwd } : {}),
     name: SESSION_NAME,
     activate: true,
-    kernelPreference: { name: specs.specs?.default, shouldStart: true }
+    kernelPreference: { name: specs.specs?.default, shouldStart: true },
+    ...options
   });
 }
 
-// Turns a console with the explorer's session name, new or restored, into an
-// explorer tab and runs `launch()` in it. Other consoles are left alone.
-async function showExplorer(panel: ConsolePanel): Promise<void> {
-  const session = panel.sessionContext;
-  if (session.name !== SESSION_NAME) {
-    return;
+// A console with the explorer's session name, new or restored, as an
+// explorer tab: `launch()` runs in its kernel, with its saved view.
+class ExplorerTab {
+  // The kernel `launch()` last ran in, so that it runs once per kernel.
+  private launchedIn: string | null = null;
+  // Set once a new tab replaces this one, which keeps its saved view.
+  private replaced = false;
+
+  constructor(
+    private app: JupyterFrontEnd,
+    private panel: ConsolePanel,
+    private state: IStateDB | null
+  ) {
+    const session = panel.sessionContext;
+    panel.addClass(PANEL_CLASS);
+    this.decorate();
+    // The kernel only serves this tab (restored consoles lose this preference).
+    session.kernelPreference = { ...session.kernelPreference, shutdownOnDispose: true };
+    session.kernelChanged.connect((_, change) => {
+      if (this.launchedIn !== null && change.newValue && change.newValue.id !== this.launchedIn) {
+        void this.replace(); // the kernel was changed
+      } else {
+        void this.launch();
+      }
+    });
+    session.sessionChanged.connect((_, change) => {
+      // JupyterLab names a console after its session, or "Console" without one.
+      this.decorate();
+      if (change.newValue === null) {
+        void this.replace(); // e.g. the server restarted
+      }
+    });
+    session.statusChanged.connect((_, status) => {
+      // The kernel restarts (the Kernel menu: "restarting"; the server, e.g.
+      // after a crash: "autorestarting"; another client: only "starting"),
+      // losing the explorer, and the console's widgets do not come back with
+      // it: a new tab, with a new kernel.
+      const restarting = ['restarting', 'autorestarting', 'starting'].includes(status);
+      if (restarting && this.launchedIn !== null) {
+        void this.replace();
+      }
+    });
+    panel.node.addEventListener(VIEW_EVENT, ev => void this.saveView(ev as CustomEvent));
+    // Closed by the user (not on page unloads, which do not dispose widgets).
+    panel.disposed.connect(() => {
+      if (!this.replaced) {
+        void this.state?.remove(this.stateKey);
+      }
+    });
+    void session.ready.then(() => this.launch());
   }
-  panel.addClass(PANEL_CLASS);
-  panel.title.label = TITLE;
-  panel.title.icon = storageExplorerIcon;
-  // The kernel only serves this tab (restored consoles lose this preference).
-  session.kernelPreference = { ...session.kernelPreference, shutdownOnDispose: true };
-  await session.ready;
-  if (!panel.isDisposed) {
-    await panel.console.inject(CODE);
+
+  // Per tab: the console's session path, which restoration keeps.
+  private get stateKey(): string {
+    return viewKey(this.panel.sessionContext.path);
+  }
+
+  private decorate(): void {
+    this.panel.title.label = TITLE;
+    this.panel.title.icon = storageExplorerIcon;
+  }
+
+  // Runs `launch()` in the tab's kernel, once per kernel, with the saved view.
+  private async launch(): Promise<void> {
+    const kernel = this.panel.sessionContext.session?.kernel;
+    if (!kernel || this.panel.isDisposed || this.launchedIn === kernel.id) {
+      return;
+    }
+    this.launchedIn = kernel.id;
+    this.decorate();
+    const view = await this.fetchView();
+    // The view as a Python string (JSON is valid Python string syntax), parsed by launch().
+    const argument = view ? `view=${JSON.stringify(JSON.stringify(view))}` : '';
+    await this.panel.console.inject(
+      `from jupyter_storage_explorer_launcher import launch as __jse_launch\n__jse_launch(${argument})`
+    );
+  }
+
+  // Opens a new explorer tab in place of this one, with its view, and closes
+  // this one. The new console gets a path of its own, under which the view
+  // is saved before it opens.
+  private async replace(): Promise<void> {
+    const panel = this.panel;
+    const session = panel.sessionContext;
+    if (this.replaced || panel.isDisposed || session.isDisposed || session.isTerminating) {
+      return;
+    }
+    this.replaced = true;
+    const oldPath = session.path;
+    const dir = oldPath.includes('/') ? oldPath.slice(0, oldPath.lastIndexOf('/')) : '';
+    const name = `storage-explorer-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+    const path = dir ? `${dir}/${name}` : name;
+    const view = await this.fetchView();
+    if (view && this.state) {
+      await this.state.save(viewKey(path), view as any);
+    }
+    await openExplorer(this.app, undefined, {
+      path,
+      ref: panel.id,
+      insertMode: 'tab-after',
+      activate: panel.isVisible,
+      kernelPreference: { name: session.kernelPreference.name, shouldStart: true }
+    });
+    await this.state?.remove(this.stateKey);
+    panel.dispose();
+  }
+
+  private async fetchView(): Promise<IView | undefined> {
+    try {
+      return (await this.state?.fetch(this.stateKey)) as IView | undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  // Keeps the folder of every storage shown so far, and which one is shown.
+  private async saveView(ev: CustomEvent): Promise<void> {
+    const { filesystem, folder } = ev.detail ?? {};
+    if (!this.state || typeof filesystem !== 'string' || typeof folder !== 'string') {
+      return;
+    }
+    const saved = await this.fetchView();
+    const view: IView = { filesystem, folders: { ...saved?.folders, [filesystem]: folder } };
+    await this.state.save(this.stateKey, view as any);
   }
 }
 
 const plugin: JupyterFrontEndPlugin<void> = {
-  id: 'jupyter-storage-explorer-launcher:plugin',
+  id: PLUGIN_ID,
   description: 'Opens Storage Explorer in a new tab from the launcher.',
   autoStart: true,
   requires: [IConsoleTracker],
-  optional: [ILauncher, ICommandPalette],
+  optional: [ILauncher, ICommandPalette, IStateDB],
   activate: (
     app: JupyterFrontEnd,
     consoles: IConsoleTracker,
     launcher: ILauncher | null,
-    palette: ICommandPalette | null
+    palette: ICommandPalette | null,
+    state: IStateDB | null
   ) => {
     // Connected before JupyterLab restores the layout, so restored tabs are seen too.
-    consoles.widgetAdded.connect((_, panel) => void showExplorer(panel));
+    consoles.widgetAdded.connect((_, panel) => {
+      if (panel.sessionContext.name === SESSION_NAME) {
+        new ExplorerTab(app, panel, state);
+      }
+    });
     app.commands.addCommand(COMMAND, {
       label: TITLE,
       caption: 'Browse storage and query data in a new tab',

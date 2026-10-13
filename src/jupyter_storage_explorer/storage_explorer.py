@@ -102,6 +102,14 @@ def _open(
     return fs, root or fs.root_marker
 
 
+def _within_top(path: str, root: str) -> bool:
+    """Whether ``path`` is in top folder ``root`` (any relative path when
+    the root is "", as for DirFileSystems), without ".." parts."""
+    if ".." in path.split("/"):
+        return False
+    return root == "" or _paths.inside(path, root)
+
+
 def _version(data: bytes) -> str:
     """Identifies file contents, to detect changes made elsewhere while editing."""
     return hashlib.sha256(data).hexdigest()
@@ -424,6 +432,43 @@ class StorageExplorer(anywidget.AnyWidget):
                 self._list(path)
             else:
                 self._current_dir = path
+
+    def _restore_view(self, filesystem: Any, folders: Any) -> None:
+        """Show storage ``filesystem`` at its folder in ``folders`` ({storage
+        name: folder}), and remember the others' for when they are shown: a
+        view saved by the launcher's tab, to reopen where it was.
+
+        Saved views may be stale or edited: storages no longer offered,
+        folders outside a storage's top folder and values of the wrong type
+        are ignored, and a folder that is gone gives the top folder (see
+        ``_on_filesystem``).
+        """
+        folders = folders if isinstance(folders, dict) else {}
+        wanted = {
+            name: folder
+            for name, folder in folders.items()
+            if name in self._filesystems
+            and isinstance(folder, str)
+            and _within_top(folder, self._filesystems[name][1])
+        }
+        if filesystem not in self._filesystems:
+            filesystem = self._filesystem
+        if filesystem != self._filesystem:
+            if filesystem in wanted:
+                self._remembered[filesystem] = wanted[filesystem]
+            self._filesystem = filesystem  # shows its remembered folder
+        elif filesystem in wanted and self._exists_folder(wanted[filesystem]):
+            self._current_dir = wanted[filesystem]
+        # Set last: switching remembers the folder left (the top one).
+        self._remembered.update(
+            {name: f for name, f in wanted.items() if name != self._filesystem}
+        )
+
+    def _exists_folder(self, path: str) -> bool:
+        try:
+            return self._isdir(path)
+        except Exception:
+            return False  # cannot tell: stay at the top
 
     # --- Public interface ---
 

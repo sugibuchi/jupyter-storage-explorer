@@ -55,9 +55,14 @@ A uv workspace of two packages released together (version from git tags via hatc
 - `jupyter-storage-explorer-launcher` (`launcher/`): a JupyterLab launcher item opening a tab whose kernel runs
   `launch()`. It merges every `storage-explorer/launcher.py` in Jupyter's config paths as layers, system to user (their
   `filesystems()`, `formats()`, `format_options()`, `operations()`, `parameters()`, `style()` functions; `final()`
-  names what later layers cannot change; see `load_settings`, tested in `tests/test_launcher.py`). Its extension has a
-  second plugin, `download.ts`: files dragged from any explorer onto JupyterLab's file browser are downloaded to the
-  Jupyter server.
+  names what later layers cannot change; see `load_settings`, tested in `tests/test_launcher.py`). The tab is a console
+  (`index.ts`, `ExplorerTab`): ipywidgets binds a console's widgets to its first kernel, so a tab whose session is lost
+  (server restart) or whose kernel changes or restarts is replaced by a new tab. Each tab's view (storage, folder per
+  storage) is reported by the explorer as a bubbling `"jupyter-storage-explorer:view"` DOM event, kept in JupyterLab's
+  state database (saved with the workspace) and passed back as `launch(view=...)` (`StorageExplorer._restore_view`).
+  Check these in a browser against a server you restart (stop and start its process). Its extension has a second
+  plugin, `download.ts`: files dragged from any explorer onto JupyterLab's file browser are downloaded to the Jupyter
+  server.
 
 ## Architecture
 

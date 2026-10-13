@@ -284,6 +284,45 @@ class TestFilesystems:
         explorer._filesystem = "mem"  # no error: back at the top instead
         assert explorer._current_dir == explorer._root == "/"
 
+    def test_restore_view(self, memfs, tmp_path):
+        """The launcher's tab reopens where it was: the storage shown at its
+        folder, the other's folder remembered."""
+        memfs.pipe_file("/m/sub/x.txt", b"")
+        (tmp_path / "data").mkdir()
+        local_folder = (tmp_path / "data").as_posix()
+        explorer = make(filesystems={"mem": memfs, "local": str(tmp_path)})
+        explorer._restore_view("local", {"mem": "/m/sub", "local": local_folder})
+        assert (explorer._filesystem, explorer._current_dir) == ("local", local_folder)
+        explorer._filesystem = "mem"
+        assert explorer._current_dir == "/m/sub"
+
+    def test_restore_view_in_the_storage_shown(self, memfs, tmp_path):
+        memfs.pipe_file("/m/sub/x.txt", b"")
+        explorer = make(filesystems={"mem": memfs, "local": str(tmp_path)})
+        explorer._restore_view("mem", {"mem": "/m/sub"})
+        assert (explorer._filesystem, explorer._current_dir) == ("mem", "/m/sub")
+
+    @pytest.mark.parametrize(
+        ("filesystem", "folders"),
+        [
+            ("gone", {"gone": "/x"}),  # a storage no longer offered
+            ("mem", {"mem": "/m/missing"}),  # a folder that is gone
+            ("mem", {"mem": 3}),  # not a folder
+            ("mem", "not a dict"),
+        ],
+    )
+    def test_restore_view_ignores_what_cannot_be_used(self, memfs, filesystem, folders):
+        explorer = make(filesystems={"mem": memfs})
+        explorer._restore_view(filesystem, folders)
+        assert (explorer._filesystem, explorer._current_dir) == ("mem", "/")
+
+    def test_restore_view_stays_in_the_top_folder(self, memfs):
+        memfs.pipe({"/top/a.txt": b"", "/secret/b.txt": b""})
+        explorer = make(filesystems={"mem": "memory:///top"})
+        for folder in ("/secret", "/top/../secret"):
+            explorer._restore_view("mem", {"mem": folder})
+            assert explorer._current_dir == "/top"
+
     def test_unknown_filesystem(self, memfs):
         explorer = make(filesystems={"mem": memfs})
         with pytest.raises(Exception, match="unknown filesystem"):
