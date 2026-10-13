@@ -7,7 +7,9 @@ import dataclasses
 import datetime as dt
 import functools
 import hashlib
+import math
 import os
+import time
 import uuid
 import weakref
 from typing import TYPE_CHECKING, Any
@@ -77,6 +79,13 @@ _MAX_EDIT_BYTES = 1024 * 1024
 # notebook's connection in one message.
 _MAX_DOWNLOAD_BYTES = 100 * 1024 * 1024
 
+# While a job runs, what it has changed is shown at most this often (seconds):
+# items gone leave the list at once, without asking the storage; new items
+# show by listing their folder again, a request (for large folders on object
+# stores, several), so less often.
+_FOLLOW_INTERVAL = 1.0
+_RELIST_INTERVAL = 3.0
+
 # The explorers in this kernel, by _explorer_id: files copied in one of them
 # are pasted from its own filesystem object (with its credentials), not
 # found again from their URLs. Explorers in other kernels are not here.
@@ -108,6 +117,19 @@ def _within_top(path: str, root: str) -> bool:
     if ".." in path.split("/"):
         return False
     return root == "" or _paths.inside(path, root)
+
+
+@dataclasses.dataclass
+class _Followed:
+    """How much of a running task's changes the explorer has shown (see
+    ``StorageExplorer._follow``): counts of its records shown, and when."""
+
+    moved: int = 0
+    removed: int = 0
+    moved_away: int = 0
+    additions: int = 0
+    shown_at: float = -math.inf
+    listed_at: float = -math.inf
 
 
 def _version(data: bytes) -> str:
@@ -1139,8 +1161,9 @@ class StorageExplorer(anywidget.AnyWidget):
 
     # --- Jobs: move, delete, paste, upload and download run in the
     # background. Each is planned by FileTasks (file_tasks.py), its work runs
-    # in a job's worker thread (jobs.py), and once it has ended, _finish shows
-    # what it changed, back on the main thread ---
+    # in a job's worker thread (jobs.py), and back on the main thread, _follow
+    # shows what it has changed so far as it runs, and _finish all it changed
+    # once it has ended ---
 
     def _tasks(self) -> FileTasks:
         """Plans operations on the filesystem shown."""
@@ -1151,8 +1174,13 @@ class StorageExplorer(anywidget.AnyWidget):
         there is nothing to run (e.g. {"conflicts": [...]} to ask about)."""
         if isinstance(plan, dict):
             return plan
+        followed = _Followed()
         job = self._jobs.submit(
-            plan.kind, plan.title, plan.work, lambda job: self._finish(plan)
+            plan.kind,
+            plan.title,
+            plan.work,
+            finish=lambda job: self._finish(plan),
+            update=lambda job: self._follow(plan, followed),
         )
         return {"job": job.id}
 
@@ -1181,6 +1209,84 @@ class StorageExplorer(anywidget.AnyWidget):
             self._forget(path)
         for folder in task.changed:
             self._refresh_dir(folder)
+
+    def _follow(self, task: Task, followed: _Followed) -> None:
+        """While ``task`` runs, show what it has changed since last time
+        (``followed``): items moved or deleted leave the list and the tree at
+        once (they are only dropped, so this asks the storage nothing);
+        folders that got new items are listed again, less often (see
+        ``_FOLLOW_INTERVAL``, ``_RELIST_INTERVAL``). ``_finish`` shows
+        everything once it has ended."""
+        now = time.monotonic()
+        if now - followed.shown_at < _FOLLOW_INTERVAL:
+            return
+        followed.shown_at = now
+        changes = task.changes()
+        shown = same_filesystem(task.fs, self._fs)  # else the user switched
+        gone: list[tuple[str, str | None]] = []
+        for fs, path in changes.moved_away[followed.moved_away :]:
+            if same_filesystem(fs, self._fs):
+                gone.append((path, None))
+            else:
+                fs.invalidate_cache(_paths.parent(path, fs))
+        if shown:
+            gone += changes.moved[followed.moved :]
+            gone += [(path, None) for path in changes.removed[followed.removed :]]
+        followed.moved_away = len(changes.moved_away)
+        followed.moved = len(changes.moved)
+        followed.removed = len(changes.removed)
+        if gone:
+            self._show_gone(gone)
+        if (
+            shown
+            and changes.additions > followed.additions
+            and now - followed.listed_at >= _RELIST_INTERVAL
+        ):
+            followed.additions = changes.additions
+            followed.listed_at = now
+            for folder in changes.added_to:
+                self._invalidate_cache(folder)
+                if folder == self._current_dir:
+                    self._relist_current()
+                elif folder in self._tree:
+                    self._load_children(folder)
+
+    def _show_gone(self, gone: Sequence[tuple[str, str | None]]) -> None:
+        """Drop items moved (to the path paired with them) or deleted (None)
+        from the list, the selection and the tree, without listing again."""
+        for path, moved_to in gone:
+            self._invalidate_cache(_paths.parent(path, self._fs))
+            self._forget(path, moved_to=moved_to)  # e.g. leaves a folder deleted
+        paths = {_paths.norm(path) for path, _ in gone}
+        rows = {
+            i for i, p in enumerate(self._listed_paths()) if _paths.norm(p) in paths
+        }
+        if rows:
+            self._full_listing = self._full_listing.without(rows)
+            self._send_listing()
+        if any(_paths.norm(p) in paths for p in self._selected):
+            self._selected = [p for p in self._selected if _paths.norm(p) not in paths]
+        tree = {
+            folder: [d for d in dirs if _paths.norm(d["path"]) not in paths]
+            for folder, dirs in self._tree.items()
+        }
+        if tree != self._tree:
+            self._tree = tree
+
+    def _relist_current(self) -> None:
+        """List the folder shown again, keeping the selection (unlike _list,
+        for a folder newly shown): items appear while a job adds them."""
+        path = self._current_dir
+        try:
+            infos = self._ls(path)
+        except Exception:
+            return  # the job's end lists it again, and reports errors
+        self._set_children(path, infos)
+        self._show_listing(self._make_listing(path, infos))
+        listed = {_paths.norm(p) for p in self._listed_paths()}
+        kept = [p for p in self._selected if _paths.norm(p) in listed]
+        if kept != list(self._selected):
+            self._selected = kept
 
     def _moved_away(self, fs: AbstractFileSystem, path: str) -> None:
         """Follow ``path`` of ``fs``, cut and pasted into another filesystem.

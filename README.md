@@ -108,7 +108,7 @@ StorageExplorer(
 - **Drag and drop**: drop files from JupyterLab's file browser or your computer to upload them; drag files onto a folder
   to move them, or onto JupyterLab's file browser to download them (needs [the launcher](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/launcher/README.md)).
 - **In the background**: moving, deleting, pasting and downloading to JupyterLab run while you keep browsing, with
-  their progress above the status bar and **Cancel**.
+  their progress above the status bar and **Cancel**. The list follows as they go.
 
 ### Unsafe operations
 

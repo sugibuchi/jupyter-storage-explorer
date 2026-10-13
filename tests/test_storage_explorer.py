@@ -9,7 +9,7 @@ import polars as pl
 import pytest
 from fsspec.implementations.dirfs import DirFileSystem
 
-from jupyter_storage_explorer import StorageExplorer, _paths
+from jupyter_storage_explorer import StorageExplorer, _paths, jobs, storage_explorer
 from jupyter_storage_explorer.filesystems import (
     AsyncFsspecOperations,
     AtomicMoveOperation,
@@ -691,6 +691,139 @@ class TestDownloadToJupyterLab:
 
 def without_ids(reply):
     return {k: v for k, v in reply.items() if k not in ("type", "rid")}
+
+
+class Watch(FileSystemOperations):
+    """Records what the explorer shows as each item of a job starts, then
+    leaves the item to the default operations."""
+
+    def __init__(self) -> None:
+        self.explorer: Explorer | None = None
+        self.seen: list[dict[str, Any]] = []
+
+    def _look(self) -> None:
+        explorer = self.explorer
+        self.seen.append(
+            {
+                # In the storage's order: the browser sorts.
+                "list": sorted(e["name"] for e in entries(explorer)),
+                "selected": [_paths.basename(p) for p in explorer._selected],
+                "tree": [d["name"] for d in explorer._tree.get("/d", [])],
+            }
+        )
+        raise self.NotSupported
+
+    def delete(self, fs, path, progress):
+        self._look()
+
+    def copy(self, source_fs, source, target_fs, target, progress):
+        self._look()
+
+    def move(self, source_fs, source, target_fs, target, progress):
+        self._look()
+
+
+class TestFollowingJobs:
+    """The list, selection and tree change as a job goes, not only once it has ended."""
+
+    @pytest.fixture
+    def explorer(self, memfs, monkeypatch) -> tuple[Explorer, Watch]:
+        monkeypatch.setattr(jobs, "REPORT_INTERVAL", 0)
+        monkeypatch.setattr(storage_explorer, "_FOLLOW_INTERVAL", 0)
+        monkeypatch.setattr(storage_explorer, "_RELIST_INTERVAL", 0)
+        memfs.pipe({f"/d/f{i}.txt": b"x" for i in range(1, 4)})
+        memfs.pipe(
+            {"/src/n1.txt": b"", "/src/n2.txt": b"", "/d/a/x": b"", "/d/b/x": b""}
+        )
+        watch = Watch()
+        explorer = make(
+            "/", fs=memfs, operations=[watch, *StorageExplorer.default_operations()]
+        )
+        watch.explorer = explorer
+        explorer._current_dir = "/d"
+        return explorer, watch
+
+    def test_deleted_files_leave_as_they_go(self, explorer):
+        explorer, watch = explorer
+        explorer._selected = ["/d/f1.txt", "/d/f2.txt", "/d/f3.txt", "/d/a"]
+        explorer.request(
+            {
+                "type": "delete",
+                "rid": 1,
+                "paths": ["/d/f1.txt", "/d/f2.txt", "/d/f3.txt"],
+            }
+        )
+        assert [s["list"] for s in watch.seen] == [
+            ["a", "b", "f1.txt", "f2.txt", "f3.txt"],
+            ["a", "b", "f2.txt", "f3.txt"],
+            ["a", "b", "f3.txt"],
+        ]
+        assert watch.seen[-1]["selected"] == ["f3.txt", "a"]
+
+    def test_deleted_folders_leave_the_tree(self, explorer):
+        explorer, watch = explorer
+        explorer.request(
+            {"type": "delete", "rid": 1, "paths": ["/d/a", "/d/b"], "unsafe": True}
+        )
+        assert [s["tree"] for s in watch.seen] == [["a", "b"], ["b"]]
+
+    def test_pasted_files_appear_as_they_go(self, explorer):
+        explorer, watch = explorer
+        explorer._selected = ["/d/f1.txt"]
+        explorer.request(
+            {
+                "type": "paste",
+                "rid": 1,
+                "explorer": explorer._explorer_id,
+                "filesystem": "default",
+                "files": [{"path": p} for p in ("/src/n1.txt", "/src/n2.txt")],
+                "dest": "/d",
+            }
+        )
+        before = ["a", "b", "f1.txt", "f2.txt", "f3.txt"]
+        assert [s["list"] for s in watch.seen] == [before, [*before, "n1.txt"]]
+        assert watch.seen[-1]["selected"] == ["f1.txt"]  # kept
+        assert "n2.txt" in [e["name"] for e in entries(explorer)]  # at the end
+
+    def test_moved_files_leave_and_follow(self, explorer):
+        explorer, watch = explorer
+        explorer.request(
+            {
+                "type": "move",
+                "rid": 1,
+                "paths": ["/d/f1.txt", "/d/f2.txt"],
+                "dest": "/d/a",
+            }
+        )
+        assert [s["list"] for s in watch.seen] == [
+            ["a", "b", "f1.txt", "f2.txt", "f3.txt"],
+            ["a", "b", "f2.txt", "f3.txt"],
+        ]
+
+    def test_at_most_every_follow_interval(self, explorer, monkeypatch):
+        explorer, watch = explorer
+        monkeypatch.setattr(storage_explorer, "_FOLLOW_INTERVAL", 3600)
+        explorer.request(
+            {
+                "type": "delete",
+                "rid": 1,
+                "paths": ["/d/f1.txt", "/d/f2.txt", "/d/f3.txt"],
+            }
+        )
+        # Shown once when it started (nothing done yet), then only at its end.
+        assert all(len(s["list"]) == 5 for s in watch.seen)
+        assert [e["name"] for e in entries(explorer)] == ["a", "b"]
+
+    def test_not_after_switching_storage(self, memfs, monkeypatch, tmp_path):
+        monkeypatch.setattr(jobs, "REPORT_INTERVAL", 0)
+        monkeypatch.setattr(storage_explorer, "_FOLLOW_INTERVAL", 0)
+        memfs.pipe({"/d/f1.txt": b"", "/d/f2.txt": b""})
+        (tmp_path / "f1.txt").write_text("")
+        explorer = make(filesystems={"mem": memfs, "local": str(tmp_path)})
+        task = explorer._tasks().delete(["/d/f1.txt", "/d/f2.txt"])
+        explorer._filesystem = "local"  # the user switches while it is planned
+        explorer._run_now(task)  # no error, the local list untouched
+        assert [e["name"] for e in entries(explorer)] == ["f1.txt"]
 
 
 class TestDelete:

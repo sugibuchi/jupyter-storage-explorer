@@ -7,7 +7,7 @@ frontend (e.g. {"conflicts": [...]}), or a ``Task`` to run: its
 ``work(progress)`` does the operation in a job's worker thread (see jobs.py)
 through the operations objects (see operations.py), and records what it
 changed on the task (files moved or removed, folders whose listing changed),
-for the explorer to show once the job has ended.
+for the explorer to show as the job goes and once it has ended.
 
 Planning reads the filesystem (exists, isdir), but nothing here touches the
 widget, so the tasks can be tested and run without one.
@@ -19,6 +19,7 @@ import contextlib
 import dataclasses
 import os
 import tempfile
+import threading
 from typing import TYPE_CHECKING, Any, TypeVar
 
 from fsspec.implementations.local import LocalFileSystem
@@ -45,13 +46,16 @@ class Task:
     ``work(progress)`` does it (in a worker thread) and returns its result:
     lists of names (e.g. {"moved": [...], "skipped": [...], "errors": [...]}),
     with "cancelled": True and "incomplete": a name if the user cancelled.
-    Meanwhile it records what changed on ``fs``, the filesystem it changes:
-    ``moved`` (source, target) pairs, ``removed`` paths, and ``changed``
-    folders, whose listings are to be shown again; and in ``moved_away``,
-    (filesystem, path) of files and folders moved from other filesystems
-    (cut and pasted). ``cleanup()``, if any, runs once the job has ended,
-    whatever the outcome (e.g. to delete a temporary file even if the job
-    was cancelled before starting).
+    Meanwhile it records (``record``) what changed on ``fs``, the filesystem
+    it changes, as each item is done: ``moved`` (source, target) pairs,
+    ``removed`` paths, ``changed`` folders, whose listings are to be shown
+    again, among them ``added_to``, those that got new items; and in
+    ``moved_away``, (filesystem, path) of files and folders moved from other
+    filesystems (cut and pasted). The explorer shows them as the job goes
+    (``changes``, from the main thread) and once it has ended.
+    ``cleanup()``, if any, runs once the job has ended, whatever the outcome
+    (e.g. to delete a temporary file even if the job was cancelled before
+    starting).
     """
 
     kind: str  # "move", "delete", "paste", "upload" or "download"
@@ -62,9 +66,64 @@ class Task:
     moved: list[tuple[str, str]] = dataclasses.field(default_factory=list)
     removed: list[str] = dataclasses.field(default_factory=list)
     changed: set[str] = dataclasses.field(default_factory=set)
+    added_to: set[str] = dataclasses.field(default_factory=set)
+    additions: int = 0  # items added to ``added_to`` folders so far
     moved_away: list[tuple[AbstractFileSystem, str]] = dataclasses.field(
         default_factory=list
     )
+    # Guards the records above: the worker thread adds, the main thread reads.
+    _lock: threading.Lock = dataclasses.field(
+        default_factory=threading.Lock, repr=False, compare=False
+    )
+
+    def record(
+        self,
+        *,
+        moved: tuple[str, str] | None = None,
+        removed: str | None = None,
+        moved_away: tuple[AbstractFileSystem, str] | None = None,
+        changed: Iterable[str] = (),
+        added_to: str | None = None,
+    ) -> None:
+        """Record an item done (in the worker thread): see the class docstring.
+        ``added_to`` is also a changed folder."""
+        with self._lock:
+            if moved is not None:
+                self.moved.append(moved)
+            if removed is not None:
+                self.removed.append(removed)
+            if moved_away is not None:
+                self.moved_away.append(moved_away)
+            self.changed.update(changed)
+            if added_to is not None:
+                self.added_to.add(added_to)
+                self.changed.add(added_to)
+                self.additions += 1
+
+    def changes(self) -> Changes:
+        """Copies of what has been recorded so far, safe to read while the
+        worker thread records more."""
+        with self._lock:
+            return Changes(
+                moved=list(self.moved),
+                removed=list(self.removed),
+                moved_away=list(self.moved_away),
+                changed=set(self.changed),
+                added_to=set(self.added_to),
+                additions=self.additions,
+            )
+
+
+@dataclasses.dataclass
+class Changes:
+    """What a task has changed so far (see ``Task.changes``)."""
+
+    moved: list[tuple[str, str]]
+    removed: list[str]
+    moved_away: list[tuple[AbstractFileSystem, str]]
+    changed: set[str]
+    added_to: set[str]
+    additions: int
 
 
 # What planning returns: a task to run, or a reply as it is (e.g. conflicts).
@@ -149,8 +208,11 @@ class FileTasks:
                     # Renaming onto an existing file fails on some systems.
                     ops.delete(fs, target, progress)
                 ops.move(fs, source, fs, target, progress)
-                task.moved.append((source, target))
-                task.changed.update({dest, _paths.parent(source, fs)})
+                task.record(
+                    moved=(source, target),
+                    changed=[_paths.parent(source, fs)],
+                    added_to=dest,
+                )
 
             stop = _do_each(progress, moves, sizes, move, failed)
             names = [_paths.basename(s) for s, _ in task.moved]
@@ -206,8 +268,7 @@ class FileTasks:
 
             def delete(item: tuple[str, bool]) -> None:
                 ops.delete(fs, item[0], progress)
-                task.removed.append(item[0])
-                task.changed.add(_paths.parent(item[0], fs))
+                task.record(removed=item[0], changed=[_paths.parent(item[0], fs)])
 
             stop = _do_each(progress, items, sizes, delete, failed)
             names = [_paths.basename(p) for p in task.removed]
@@ -341,12 +402,14 @@ class FileTasks:
                         ops.delete(fs, plan.target, progress)
                     ops.move(plan.fs, plan.source, fs, plan.target, progress)
                     if same_filesystem(plan.fs, fs):
-                        task.moved.append((plan.source, plan.target))
-                        task.changed.add(_paths.parent(plan.source, fs))
+                        task.record(
+                            moved=(plan.source, plan.target),
+                            changed=[_paths.parent(plan.source, fs)],
+                        )
                     else:
-                        task.moved_away.append((plan.fs, plan.source))
+                        task.record(moved_away=(plan.fs, plan.source))
                 done.append(_paths.basename(plan.target))
-                task.changed.add(dest)
+                task.record(added_to=dest)
 
             stop = _do_each(progress, plans, sizes, copy, failed)
             return _outcome(stop, **{key: done}, skipped=skipped, errors=failed)
@@ -401,7 +464,7 @@ class FileTasks:
 
             def upload(_: tuple[str]) -> None:
                 ops.upload(local_path, fs, target, progress)
-                task.changed.add(dest)
+                task.record(added_to=dest)
 
             size = os.path.getsize(local_path)
             stop = _do_each(progress, [(target,)], [(1, size)], upload, failed)

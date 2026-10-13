@@ -43,6 +43,16 @@ def listing() -> Listing:
     )
 
 
+def test_without(listing):
+    listing.columns["no_url"] = [2, 4]  # File2.csv and A
+    rest = listing.without({0, 2})
+    assert rest.columns["names"] == ["b", "file1.txt", "A"]
+    assert rest.columns["sizes"] == [None, 20, None]
+    assert rest.columns["format"] == [0, 0, 0]
+    assert rest.columns["no_url"] == [2]  # A, now third
+    assert names(rest.query()) == ["A", "b", "file1.txt"]
+
+
 class TestNameKey:
     def test_like_the_browser(self):
         # The order Intl.Collator(undefined, {numeric: true, sensitivity: "base"})
