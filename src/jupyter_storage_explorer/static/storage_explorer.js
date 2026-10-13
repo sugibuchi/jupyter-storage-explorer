@@ -1466,16 +1466,14 @@ function render({ model, el }) {
       },
     });
     items.push("-");
-    // Files only: downloading folders is intentionally not supported. Each
-    // download is offered unless the explorer's arguments turned it off.
+    // Files only: downloading folders is intentionally not supported. The
+    // kernel refuses files the explorer's policy does not let go there.
     if (targets.every((t) => t.type !== "directory")) {
       const paths = targets.map((t) => t.path);
-      if (model.get("_allow_download_to_local")) {
-        items.push({ label: count ? `Download ${count}files to local` : "Download to local", action: () => download(paths) });
-      }
-      if (model.get("_download_to_jupyterlab_path")) {
-        items.push({ label: count ? `Download ${count}files to JupyterLab` : "Download to JupyterLab", action: () => downloadToJupyterLab(paths) });
-      }
+      items.push(
+        { label: count ? `Download ${count}files to local` : "Download to local", action: () => download(paths) },
+        { label: count ? `Download ${count}files to JupyterLab` : "Download to JupyterLab", action: () => downloadToJupyterLab(paths) },
+      );
     }
     // Locations are copied only as URLs: fsspec's paths can differ from the
     // storage's own notion of a path (e.g. abfs's "container/key"). "Copy"

@@ -620,16 +620,6 @@ def test_download(mem_explorer):
     assert "folders cannot be downloaded" in folder_reply["error"]
 
 
-def test_download_to_local_not_allowed(memfs):
-    memfs.pipe_file("/a.csv", b"a")
-    explorer = make("/", fs=memfs, allow_download_to_local=False)
-    assert explorer._allow_download_to_local is False
-    explorer.message({"type": "download", "paths": ["/a.csv"]})
-    reply, buffers = explorer.sent[-1]
-    assert "not allowed" in reply["error"]
-    assert buffers is None
-
-
 class TestDownloadToJupyterLab:
     def copy(self, explorer, paths, if_exists="ask"):
         """The kernel's reply, without "type" and "rid"."""
@@ -681,12 +671,6 @@ class TestDownloadToJupyterLab:
             "/", fs=memfs, download_to_jupyterlab_path=str(tmp_path / "missing")
         )
         assert "folder not found" in self.copy(explorer, ["/a.csv"])["errors"][0]
-
-    def test_not_offered(self, memfs, tmp_path):
-        memfs.pipe_file("/a.csv", b"a")
-        explorer = make("/", fs=memfs, download_to_jupyterlab_path=None)
-        assert explorer._download_to_jupyterlab_path == ""
-        assert "not allowed" in self.copy(explorer, ["/a.csv"])["errors"][0]
 
 
 def without_ids(reply):

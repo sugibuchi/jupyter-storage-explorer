@@ -100,7 +100,7 @@ StorageExplorer(
 - **Preview**: double-click a file, or **Preview** (with nothing selected: the current folder, e.g. a Delta Lake table).
   Tables open in the [data browser](#query-data).
 - **Right-click**: Preview as, Edit, Python code to load the data, Copy, Cut, Paste, Delete, Create a folder, Download
-  to local or to JupyterLab (see [Options](#storageexplorer-options)), Copy URL, Add bookmark.
+  to local or to JupyterLab, Copy URL, Add bookmark.
 - **Bookmarks**: ☆ (★ when the folder shown is bookmarked) lists them; click one to open it, right-click it for Copy
   URL and Delete bookmark. Explorers in the kernel share them (see [Remembered states](#remembered-states)).
 - **Copy, cut and paste** work between storages and between explorers, also in other notebooks: **Cut**, then
@@ -235,8 +235,7 @@ explorer.selected_urls  # the URLs of the selected items
 |-------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------|
 | `height="400px"`                    | Height of the tree and list; the preview panel adds its own space below. `"fill"`: as tall as the container, e.g. the launcher's tab. |
 | `max_upload_bytes=10 * 1024 * 1024` | Largest file you can upload from your computer (default 10 MB; `None` for no limit).                                                  |
-| `allow_download_to_local=True`      | "Download to local" in the right-click menu (`False`: left out, and refused by the kernel).                                           |
-| `download_to_jupyterlab_path="."`   | Folder "Download to JupyterLab" copies into, e.g. `"~/Downloads"`; default: where it runs. `None`: left out.                          |
+| `download_to_jupyterlab_path="."`   | Folder "Download to JupyterLab" copies into, e.g. `"~/Downloads"`; default: where it runs. To refuse downloads, use `policy`.        |
 | `filesystems={...}`                 | Several named storages, as shown above.                                                                                               |
 | `max_browser_items=20_000`          | Folders with more items are filtered, sorted and paged by the kernel, one page at a time, instead of the browser (`None`: never).     |
 | `operations=[...]`                  | How files are moved, copied, deleted and downloaded, replacing `StorageExplorer.default_operations()`: e.g. `[MyOps(), *StorageExplorer.default_operations()]` for server-side copies of your own (see [operations.py](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/src/jupyter_storage_explorer/operations.py), and [filesystems](https://github.com/sugibuchi/jupyter-storage-explorer/tree/main/src/jupyter_storage_explorer/filesystems) for the defaults). |

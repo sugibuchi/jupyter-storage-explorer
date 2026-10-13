@@ -222,13 +222,11 @@ class StorageExplorer(anywidget.AnyWidget):
     max_upload_bytes : int or None, default 10 MB
         Largest file uploaded from the user's computer; None for no limit.
         Files dragged from JupyterLab's file browser are not limited.
-    allow_download_to_local : bool, default True
-        Whether "Download to local" (files saved by the browser) is offered;
-        if not, the kernel refuses it too.
-    download_to_jupyterlab_path : str or None, default "."
+    download_to_jupyterlab_path : str, default "."
         The folder "Download to JupyterLab" copies into, on the kernel's
         machine, e.g. ``"~/Downloads"``; relative paths and "~" are resolved
-        when the explorer is created. None leaves the item out.
+        when the explorer is created. To refuse downloads (to JupyterLab or
+        to the user's computer), use ``policy``.
     states : ExplorerStates, str or Path, optional
         Where the bookmarks and the data browser's recent queries are kept:
         an ``ExplorerStates``, or the path of its JSON file, e.g.
@@ -341,10 +339,7 @@ class StorageExplorer(anywidget.AnyWidget):
     # Identifies this explorer to "Paste" (see _paste_sources), and to the
     # page-wide "changed" events after its files were cut and pasted elsewhere.
     _explorer_id = traitlets.Unicode().tag(sync=True)
-    # Whether "Download to local" (files saved by the browser) is offered.
-    _allow_download_to_local = traitlets.Bool(True).tag(sync=True)
-    # Absolute folder on the kernel's machine "Download to JupyterLab" copies
-    # into, or "" when it is not offered.
+    # Absolute folder on the kernel's machine "Download to JupyterLab" copies into.
     _download_to_jupyterlab_path = traitlets.Unicode().tag(sync=True)
 
     def __init__(
@@ -358,8 +353,7 @@ class StorageExplorer(anywidget.AnyWidget):
         format_options: Mapping[str, Any] | None = None,
         preview_limits: PreviewLimits | None = None,
         max_upload_bytes: int | None = 10 * 1024 * 1024,
-        allow_download_to_local: bool = True,
-        download_to_jupyterlab_path: str | None = ".",
+        download_to_jupyterlab_path: str = ".",
         states: ExplorerStates | str | os.PathLike[str] | None = None,
         max_browser_items: int | None = 20_000,
         operations: Sequence[FileSystemOperations] | None = None,
@@ -415,12 +409,11 @@ class StorageExplorer(anywidget.AnyWidget):
             _max_upload_bytes=max_upload_bytes,
             _filesystem_names=list(self._filesystems),
             _explorer_id=uuid.uuid4().hex,
-            _allow_download_to_local=allow_download_to_local,
             # Resolved now: "." is the folder the explorer is launched in,
             # even if the kernel's working directory changes later.
-            _download_to_jupyterlab_path=""
-            if download_to_jupyterlab_path is None
-            else os.path.abspath(os.path.expanduser(download_to_jupyterlab_path)),
+            _download_to_jupyterlab_path=os.path.abspath(
+                os.path.expanduser(download_to_jupyterlab_path)
+            ),
         )
         self.on_msg(self._on_custom_msg)
         _explorers[self._explorer_id] = self
@@ -1156,8 +1149,6 @@ class StorageExplorer(anywidget.AnyWidget):
                 "name": _paths.basename(path),
             }
             try:
-                if not self._allow_download_to_local:
-                    raise PermissionError("downloading to local is not allowed")
                 refused = self._policy.error(
                     self._location(self._fs, path),
                     computer_url(_paths.basename(path)),
@@ -1617,8 +1608,6 @@ class StorageExplorer(anywidget.AnyWidget):
         self, content: dict[str, Any]
     ) -> dict[str, Any]:
         """Answer "download_to_jupyterlab": copy into ``download_to_jupyterlab_path``."""
-        if not self._download_to_jupyterlab_path:
-            return {"errors": ["downloading to JupyterLab is not allowed"]}
         return self._plan_request(
             lambda: self._tasks().download(
                 content["paths"],
