@@ -32,6 +32,10 @@ Install the package for your storage too:
 | Google Cloud Storage           | `gcsfs`    | `gs://bucket/path`                                   |
 | Local disk, in-memory          | (included) | `/path`, `memory://`                                 |
 
+On Azure Data Lake Storage Gen2, `pip install "jupyter-storage-explorer[abfs]"` and
+`operations=[AzureDataLakeGen2Operation(), *StorageExplorer.default_operations()]` (from
+`jupyter_storage_explorer.filesystems.abfs`) move folders in one step and create empty folders.
+
 Previewing and querying data files needs a data library, e.g. `pip install polars deltalake`. If one is missing, the
 preview tells you what to install.
 

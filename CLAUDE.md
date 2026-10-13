@@ -50,7 +50,8 @@ A uv workspace of two packages released together (version from git tags via hatc
 - `jupyter-storage-explorer` (root, `src/jupyter_storage_explorer/`): the anywidget widgets `StorageExplorer` (files)
   and `DataExplorer` (a dataframe given by the user, any library narwhals supports, with `QuerySettings`). Runtime
   dependencies are only anywidget, fsspec, narwhals, pygments, traitlets; polars, pandas, pyarrow, deltalake,
-  fastexcel, openpyxl, Pillow, PySpark are all optional and probed at run time.
+  fastexcel, openpyxl, Pillow, PySpark are all optional and probed at run time. The "abfs" extra adds adlfs and the
+  Data Lake SDK, for `filesystems/abfs.py`.
 - `jupyter-storage-explorer-launcher` (`launcher/`): a JupyterLab launcher item opening a tab whose kernel runs
   `launch()`. It merges every `storage-explorer/launcher.py` in Jupyter's config paths as layers, system to user (their
   `filesystems()`, `formats()`, `format_options()`, `operations()`, `parameters()`, `style()` functions; `final()`
@@ -89,7 +90,11 @@ library's `NotImplementedError` is reported as an error). `OperationChain` adds 
 filesystem whose `mv` renames a folder in one step: local, memory, or a `DirFileSystem` over them), then
 `AsyncFsspecOperations` (`async_fsspec.py`: async filesystems such as s3fs, their coroutines, many files at a time),
 then `FsspecOperations` (`fsspec.py`). Both of the latter walk folders themselves, moves included, to report progress
-file by file (helpers in `filesystems/_common.py`). `move` and `copy` take a source and a target filesystem, the same
+file by file (helpers in `filesystems/_common.py`). Opt-in, not a default: `AzureDataLakeGen2Operation` (`abfs.py`,
+the "abfs" extra: adlfs and `azure-storage-file-datalake`), moves (renames) and creates folders on accounts with a
+hierarchical namespace with the async Data Lake SDK, connected from the adlfs filesystem's settings and run on its
+loop with `fsspec.asyn.sync`; tested with a fake client (`tests/test_abfs.py`). `filesystems/__init__.py` does not
+import it, as its packages are optional. `move` and `copy` take a source and a target filesystem, the same
 one or not (`same_filesystem`: fsspec instances compare by their arguments). Between filesystems, single files go
 through `FileSystemOperations._copy_file` and `_move_file` (`_copy_file_async`/`_move_file_async` in the async class),
 overridable: by default through a temporary file, so a failure leaves no partial file, and a move copies then deletes
