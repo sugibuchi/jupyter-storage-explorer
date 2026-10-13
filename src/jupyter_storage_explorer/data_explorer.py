@@ -140,13 +140,19 @@ class DataExplorer(anywidget.AnyWidget):
         )
         self.on_msg(self._on_custom_msg)
 
-    def result(self) -> Any:
+    def result(self, all_columns: bool = False) -> Any:
         """The data with the widget's filters, sort order and hidden columns applied.
 
         Built on the data itself, so it covers all of it, also after In memory
         mode, where the widget showed the first rows only. Filters run in the
         data's library: details such as regex syntax may differ from what In
         memory mode (polars) showed.
+
+        Parameters
+        ----------
+        all_columns : bool, default False
+            Keep the columns hidden in the widget ("Select columns"): only the
+            filters and the sort order are applied.
 
         Returns
         -------
@@ -160,8 +166,9 @@ class DataExplorer(anywidget.AnyWidget):
         >>> explorer = DataExplorer(pl.scan_parquet("sales/*.parquet"))
         >>> # ... filter and sort in the widget ...
         >>> explorer.result().group_by("region").agg(pl.col("amount").sum()).collect()
+        >>> explorer.result(all_columns=True)  # the rows chosen, with every column
         """
-        return self._data.result()
+        return self._data.result(all_columns=all_columns)
 
     @property
     def settings(self) -> QuerySettings:
