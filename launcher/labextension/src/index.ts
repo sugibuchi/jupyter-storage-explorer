@@ -57,6 +57,12 @@ export const storageExplorerIcon = new LabIcon({
   svgstr: iconSvg
 });
 
+// The icon of explorer tabs, sized for a tab. JupyterLab binds this style to a
+// widget's icon only when the widget is added to the shell; a tab whose icon is
+// set afterwards (e.g. a restored console, which ExplorerTab sets up when it is
+// already there) would otherwise show the SVG at its own size, 128px.
+const tabIcon = storageExplorerIcon.bindprops({ stylesheet: 'mainAreaTab' });
+
 // The view saved for the tab whose console session has path `path`.
 const viewKey = (path: string): string => `${PLUGIN_ID}:view:${path}`;
 
@@ -140,7 +146,7 @@ class ExplorerTab {
 
   private decorate(): void {
     this.panel.title.label = TITLE;
-    this.panel.title.icon = storageExplorerIcon;
+    this.panel.title.icon = tabIcon;
   }
 
   // Runs `launch()` in the tab's kernel, once per kernel, with the saved view.
