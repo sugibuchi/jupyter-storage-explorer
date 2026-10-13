@@ -1364,18 +1364,17 @@ function render({ model, el }) {
   }
 
   // The bookmarks menu, below the button: bookmarking the folder shown, then
-  // the bookmarks (with their storage, when there are several); right-click
-  // one for "Copy URL" and "Delete bookmark".
+  // the bookmarks ("[storage] path", in the kernel's order); right-click one
+  // for "Copy URL" and "Delete bookmark".
   async function showBookmarks() {
     await fetchBookmarks();
-    const several = model.get("_filesystem_names").length > 1;
     const current = model.get("_current_dir");
     const label = isBookmarked(current) ? "Remove this folder's bookmark" : "Bookmark this folder";
     const items = [{ ...bookmarkItem(current), label }, "-"];
     if (!bookmarks.length) items.push({ label: "No bookmarks", disabled: true });
     for (const b of bookmarks) {
       items.push({
-        label: several ? `${b.label} [${b.filesystem}]` : b.label,
+        label: b.label,
         title: b.url ?? b.path,
         action: () => openBookmark(b),
         menu: () => [

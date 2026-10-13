@@ -1011,25 +1011,20 @@ class StorageExplorer(anywidget.AnyWidget):
 
     def _bookmark_list(self) -> dict[str, Any]:
         """{"bookmarks": [{"filesystem", "path", "url", "label"}]}: those of this
-        explorer's storages, within their top folders. "label" is the path
-        from the top folder (the top folder's own path for itself)."""
-        bookmarks = []
-        for b in self._states.bookmarks:
-            storage = self._filesystems.get(b.filesystem)
-            if storage is None or not _within_top(b.path, storage[1]):
-                continue
-            root = storage[1]
-            relative = (
-                b.path[len(root) :] if root and b.path.startswith(root) else b.path
-            )
-            bookmarks.append(
-                {
-                    "filesystem": b.filesystem,
-                    "path": b.path,
-                    "url": b.url,
-                    "label": relative.strip("/") or root or "/",
-                }
-            )
+        explorer's storages, within their top folders, labelled "[storage]
+        path" and in alphabetical order of storage, then path (ignoring case)."""
+        bookmarks = [
+            {
+                "filesystem": b.filesystem,
+                "path": b.path,
+                "url": b.url,
+                "label": f"[{b.filesystem}] {b.path}",
+            }
+            for b in self._states.bookmarks
+            if b.filesystem in self._filesystems
+            and _within_top(b.path, self._filesystems[b.filesystem][1])
+        ]
+        bookmarks.sort(key=lambda b: (b["filesystem"].casefold(), b["path"].casefold()))
         return {"bookmarks": bookmarks}
 
     def _add_bookmark(self, path: str) -> dict[str, Any]:

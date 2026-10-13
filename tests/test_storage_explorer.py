@@ -392,7 +392,7 @@ class TestBookmarks:
             "filesystem": "default",
             "path": "/data",
             "url": "memory:///data",
-            "label": "data",
+            "label": "[default] /data",
         }
         assert mem_explorer._states.bookmarks[0].url == "memory:///data"
 
@@ -445,8 +445,8 @@ class TestBookmarks:
             states.add_bookmark(filesystem, path)
         explorer = make(filesystems={"mem": "memory:///top"}, states=states)
         assert self.bookmarks(explorer) == [
-            ("mem", "/top/sub", "sub"),
-            ("mem", "/top", "/top"),
+            ("mem", "/top", "[mem] /top"),
+            ("mem", "/top/sub", "[mem] /top/sub"),
         ]
         reply = explorer.request(
             {"type": "bookmark_open", "rid": 1, "filesystem": "mem", "path": "/secret"}
@@ -473,7 +473,24 @@ class TestBookmarks:
         )
         memfs.mkdir("/data")
         first.request({"type": "bookmark_add", "rid": 1, "path": "/data"})
-        assert self.bookmarks(second) == [("default", "/data", "data")]
+        assert self.bookmarks(second) == [("default", "/data", "[default] /data")]
+
+    def test_alphabetical_order_of_storage_then_path(self, memfs, tmp_path):
+        states = ExplorerStates()
+        for filesystem, path in [
+            ("b", "/m/z"),
+            ("B", "/m/A"),
+            ("a", "/m/b"),
+            ("b", "/m/a"),
+        ]:
+            states.add_bookmark(filesystem, path)
+        explorer = make(filesystems={"a": memfs, "b": memfs, "B": memfs}, states=states)
+        assert [label for _, _, label in self.bookmarks(explorer)] == [
+            "[a] /m/b",
+            "[B] /m/A",
+            "[b] /m/a",
+            "[b] /m/z",
+        ]
 
 
 class TestStatesFile:
