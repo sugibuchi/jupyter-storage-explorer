@@ -129,6 +129,17 @@ the status bar is on (trait `_unsafe_mode`). In the frontend, every operation ca
 turns it off (one operation at a time), and sends whether it was on with its request (`"unsafe"`); the kernel refuses
 folders without it (the methods' `folders=` parameter).
 
+**Transfer policy** (`transfer_policy.py`). `transfer_policy=` rules (`TransferPolicy`: first rule whose `src` and
+`dest` both `fullmatch` decides, default allow) apply to transfers only: copies and moves between filesystems, not
+within one (`same_filesystem`; moves never are). They are checked in the kernel only, per item as it is planned:
+`FileTasks._refused` calls its `check` (the explorer's `_transfer_error`) from `_plan_copies` and `download`, and
+refused items become errors while the others go on. URLs come from `_location` (`_url` on the storage shown, else `default_url`; files
+pasted keep the URL they were copied with, from `_paste_sources`). Transfers with the user's computer use
+`computer_url(name)` (`browser:///<name>`): checked in `_download` and `_upload_chunk`. Transfers with JupyterLab's file
+browser (uploads from it, both downloads to the server) pass filesystem None to `check` for that side, which
+`_location` makes `jupyterlab_url(path)` (`jupyterlab://<absolute path>`), unlike the explorer's own local storage
+(plain paths). Not a security boundary.
+
 **Between explorers and with JupyterLab.** Drag data can only be text, so the frontend shares objects page-wide under
 `Symbol.for(...)` keys on `globalThis`: `"jupyter-storage-explorer.clipboard"` (Copy or Cut, for Paste in any explorer)
 and `"jupyter-storage-explorer.drag"` (the current file drag, with a `download` function, read by the launcher's

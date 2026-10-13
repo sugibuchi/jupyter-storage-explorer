@@ -100,7 +100,7 @@ StorageExplorer(
 - **Preview**: double-click a file, or **Preview** (with nothing selected: the current folder, e.g. a Delta Lake table).
   Tables open in the [data browser](#query-data).
 - **Right-click**: Preview as, Edit, Python code to load the data, Copy, Cut, Paste, Delete, Create a folder, Download
-  to local or to JupyterLab (see [Options](#storageexplorer-options)), Copy URL, Add bookmark.
+  to local or to JupyterLab, Copy URL, Add bookmark.
 - **Bookmarks**: ☆ (★ when the folder shown is bookmarked) lists them; click one to open it, right-click it for Copy
   URL and Delete bookmark. Explorers in the kernel share them (see [Remembered states](#remembered-states)).
 - **Copy, cut and paste** work between storages and between explorers, also in other notebooks: **Cut**, then
@@ -119,6 +119,27 @@ Folder operations need **Unsafe mode**, turned on with the slider in the status 
 | Move folders           | Drag a folder onto another folder, or right-click → **Cut**, then **Move here** on a folder. |
 | Copy and paste folders | Right-click → **Copy**, then **Paste** on a folder.                                          |
 | Delete folders         | Right-click → **Delete** (with everything in it).                                            |
+
+### Transfer policy
+
+`transfer_policy=[...]` limits the directions files may be transferred in: copied or moved from one storage to another
+(copy or cut, then paste), to or from JupyterLab's file browser, and uploaded from or downloaded to your computer.
+Moving and copying within a storage (e.g. dragging files onto a folder) is not a transfer. It is a list of rules,
+tried in order; the first whose `src` and `dest` regular expressions both match the whole URLs decides, and without
+one, files go:
+
+```python
+StorageExplorer(filesystems={...}, transfer_policy=[
+    {"rule": "allow", "src": r"abfs://lake@acct\.dfs\.core\.windows\.net/public/.*", "dest": ".*"},
+    {"rule": "deny", "src": r"abfs://lake@.*", "dest": ".*"},  # nothing else leaves the lake
+])
+```
+
+URLs are those of "Copy URL" (local files: their path; the destination: the item's new location). Files on the
+Jupyter server through JupyterLab's file browser ("Download to JupyterLab", drag and drop with it) are
+`jupyterlab://<absolute path>`, e.g. `jupyterlab:///home/jovyan/x.csv`, and files on your computer
+`browser:///<name>`. A pattern left out matches any URL. Items refused are reported, the others done.
+This keeps files from going the wrong way by mistake; it is not a security boundary.
 
 ## Query data
 
@@ -218,11 +239,11 @@ explorer.selected_urls  # the URLs of the selected items
 |-------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------|
 | `height="400px"`                    | Height of the tree and list; the preview panel adds its own space below. `"fill"`: as tall as the container, e.g. the launcher's tab. |
 | `max_upload_bytes=10 * 1024 * 1024` | Largest file you can upload from your computer (default 10 MB; `None` for no limit).                                                  |
-| `allow_download_to_local=True`      | "Download to local" in the right-click menu (`False`: left out, and refused by the kernel).                                           |
-| `download_to_jupyterlab_path="."`   | Folder "Download to JupyterLab" copies into, e.g. `"~/Downloads"`; default: where it runs. `None`: left out.                          |
+| `download_to_jupyterlab_path="."`   | Folder "Download to JupyterLab" copies into, e.g. `"~/Downloads"`; default: where it runs. To refuse downloads, use `transfer_policy`. |
 | `filesystems={...}`                 | Several named storages, as shown above.                                                                                               |
 | `max_browser_items=20_000`          | Folders with more items are filtered, sorted and paged by the kernel, one page at a time, instead of the browser (`None`: never).     |
 | `operations=[...]`                  | How files are moved, copied, deleted and downloaded, replacing `StorageExplorer.default_operations()`: e.g. `[MyOps(), *StorageExplorer.default_operations()]` for server-side copies of your own (see [operations.py](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/src/jupyter_storage_explorer/operations.py), and [filesystems](https://github.com/sugibuchi/jupyter-storage-explorer/tree/main/src/jupyter_storage_explorer/filesystems) for the defaults). |
+| `transfer_policy=[...]`             | Rules for transfers of files between storages; see [Transfer policy](#transfer-policy).                                               |
 | `states="states.json"`              | Where bookmarks and the data browser's settings are kept (a path or an `ExplorerStates`); see [Remembered states](#remembered-states). |
 | `format_options={...}`              | Options for the formats (see [Format options](#format-options)).                                                                      |
 

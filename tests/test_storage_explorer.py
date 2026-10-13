@@ -620,16 +620,6 @@ def test_download(mem_explorer):
     assert "folders cannot be downloaded" in folder_reply["error"]
 
 
-def test_download_to_local_not_allowed(memfs):
-    memfs.pipe_file("/a.csv", b"a")
-    explorer = make("/", fs=memfs, allow_download_to_local=False)
-    assert explorer._allow_download_to_local is False
-    explorer.message({"type": "download", "paths": ["/a.csv"]})
-    reply, buffers = explorer.sent[-1]
-    assert "not allowed" in reply["error"]
-    assert buffers is None
-
-
 class TestDownloadToJupyterLab:
     def copy(self, explorer, paths, if_exists="ask"):
         """The kernel's reply, without "type" and "rid"."""
@@ -681,12 +671,6 @@ class TestDownloadToJupyterLab:
             "/", fs=memfs, download_to_jupyterlab_path=str(tmp_path / "missing")
         )
         assert "folder not found" in self.copy(explorer, ["/a.csv"])["errors"][0]
-
-    def test_not_offered(self, memfs, tmp_path):
-        memfs.pipe_file("/a.csv", b"a")
-        explorer = make("/", fs=memfs, download_to_jupyterlab_path=None)
-        assert explorer._download_to_jupyterlab_path == ""
-        assert "not allowed" in self.copy(explorer, ["/a.csv"])["errors"][0]
 
 
 def without_ids(reply):
@@ -1556,3 +1540,202 @@ def testformat_size():
 def test_local_explorer_starts_in_the_folder(tmp_path):
     explorer = make(str(tmp_path))
     assert explorer._root == fsspec.filesystem("file")._strip_protocol(str(tmp_path))
+
+
+# Rules refusing to copy or move /d/secret* anywhere.
+DENY_SECRET = [{"rule": "deny", "src": r"memory:///d/secret.*", "dest": ".*"}]
+
+
+class TestTransferPolicy:
+    """Files are transferred (between filesystems) only in the directions the
+    policy allows; within a filesystem, it does not apply."""
+
+    @pytest.fixture
+    def files(self, memfs):
+        memfs.pipe({"/d/secret.txt": b"s", "/d/ok.txt": b"o", "/d/sub/x": b""})
+        return memfs
+
+    def test_move_within_a_filesystem_is_not_a_transfer(self, files):
+        explorer = make("/", fs=files, transfer_policy=DENY_SECRET)
+        reply = explorer.request(
+            {
+                "type": "move",
+                "rid": 1,
+                "paths": ["/d/secret.txt", "/d/ok.txt"],
+                "dest": "/d/sub",
+            }
+        )
+        assert (reply["moved"], reply["errors"]) == (["secret.txt", "ok.txt"], [])
+
+    @pytest.mark.parametrize("cut", [False, True])
+    def test_paste_within_a_filesystem_is_not_a_transfer(self, files, cut):
+        explorer = make("/", fs=files, transfer_policy=DENY_SECRET)
+        reply = explorer.request(
+            {
+                "type": "paste",
+                "rid": 1,
+                "explorer": explorer._explorer_id,
+                "filesystem": "default",
+                "files": [{"path": "/d/secret.txt"}],
+                "dest": "/d/sub",
+                "cut": cut,
+            }
+        )
+        assert reply["moved" if cut else "pasted"] == ["secret.txt"]
+        assert files.exists("/d/sub/secret.txt")
+
+    def test_paste_between_storages_of_the_explorer(self, files, tmp_path):
+        local = fsspec.filesystem("file")._strip_protocol(str(tmp_path))
+        policy = [
+            {"rule": "allow", "src": r"memory:///d/ok\.txt", "dest": ".*"},
+            {"rule": "deny", "src": "memory://.*", "dest": f"{local}/.*"},
+        ]
+        explorer = make(
+            filesystems={"mem": files, "local": str(tmp_path)}, transfer_policy=policy
+        )
+        explorer._filesystem = "local"
+        reply = explorer.request(
+            {
+                "type": "paste",
+                "rid": 1,
+                "explorer": explorer._explorer_id,
+                "filesystem": "mem",
+                "files": [{"path": "/d/secret.txt"}, {"path": "/d/ok.txt"}],
+                "dest": local,
+            }
+        )
+        assert reply["pasted"] == ["ok.txt"]  # allowed before the deny
+        assert reply["errors"][0].startswith(
+            "secret.txt: not allowed by the transfer policy"
+        )
+
+    def test_paste_from_another_kernel_uses_the_url_copied(self, files, tmp_path):
+        policy = [{"rule": "deny", "src": r"s3://elsewhere/.*", "dest": ".*"}]
+        explorer = make(str(tmp_path), transfer_policy=policy)
+        # The URL copied in the other kernel's explorer, which its _url made.
+        explorer._locate = lambda url: (files, "/d/ok.txt")
+        reply = explorer.request(
+            {
+                "type": "paste",
+                "rid": 1,
+                "explorer": "in another kernel",
+                "filesystem": "default",
+                "files": [{"path": "ok.txt", "url": "s3://elsewhere/ok.txt"}],
+                "dest": explorer._root,
+            }
+        )
+        assert (
+            "not allowed by the transfer policy (s3://elsewhere/ok.txt"
+            in reply["errors"][0]
+        )
+
+    def test_upload_from_jupyterlab_file_browser(self, files, tmp_path):
+        (tmp_path / "f.txt").write_text("f")
+        policy = [{"rule": "deny", "src": ".*", "dest": "memory:///d/sub/.*"}]
+        explorer = make("/", fs=files, transfer_policy=policy)
+        content = {
+            "type": "upload",
+            "rid": 1,
+            "root": str(tmp_path),
+            "paths": ["f.txt"],
+        }
+        assert explorer.request({**content, "dest": "/d/sub"})["copied"] == []
+        assert explorer.request({**content, "dest": "/d"})["copied"] == ["f.txt"]
+
+    def test_download_to_jupyterlab(self, files, tmp_path):
+        explorer = make(
+            "/",
+            fs=files,
+            transfer_policy=DENY_SECRET,
+            download_to_jupyterlab_path=str(tmp_path),
+        )
+        reply = explorer.request(
+            {
+                "type": "download_to_jupyterlab",
+                "rid": 1,
+                "paths": ["/d/secret.txt", "/d/ok.txt"],
+            }
+        )
+        assert reply["copied"] == ["ok.txt"]
+        assert "secret.txt: not allowed by the transfer policy" in reply["errors"][0]
+        assert not (tmp_path / "secret.txt").exists()
+
+    def test_download_to_the_computer(self, files):
+        policy = [{"rule": "deny", "dest": "browser:///secret.*"}]
+        explorer = make("/", fs=files, transfer_policy=policy)
+        explorer.message({"type": "download", "paths": ["/d/secret.txt", "/d/ok.txt"]})
+        (secret, buffers), (ok, _) = explorer.sent[-2:]
+        assert "not allowed by the transfer policy" in secret["error"]
+        assert buffers is None
+        assert "error" not in ok
+
+    def test_upload_from_the_computer(self, files):
+        policy = [
+            {"rule": "deny", "src": "browser:///.*", "dest": "memory:///d/sub/.*"}
+        ]
+        explorer = make("/", fs=files, transfer_policy=policy)
+        piece = {
+            "type": "upload_chunk",
+            "rid": 1,
+            "id": "u",
+            "name": "c.txt",
+            "last": True,
+        }
+        reply = explorer.request({**piece, "dest": "/d/sub"}, [b"c"])
+        assert "not allowed by the transfer policy (browser:///c.txt" in reply["error"]
+        assert not files.exists("/d/sub/c.txt")
+        assert explorer.request({**piece, "dest": "/d"}, [b"c"])["copied"] == ["c.txt"]
+
+    def test_jupyterlab_side_is_jupyterlab_urls(self, files, tmp_path):
+        """Transfers with JupyterLab's file browser are told apart from the
+        explorer's own local storage, on the same disk."""
+        (tmp_path / "f.txt").write_text("f")
+        (tmp_path / "down").mkdir()
+        policy = [
+            {"rule": "deny", "src": "jupyterlab://.*"},
+            {"rule": "deny", "dest": "jupyterlab://.*"},
+        ]
+        local = fsspec.filesystem("file")._strip_protocol(str(tmp_path))
+        explorer = make(
+            filesystems={"mem": files, "local": str(tmp_path)},
+            transfer_policy=policy,
+            download_to_jupyterlab_path=str(tmp_path / "down"),
+        )
+        # Dragged from JupyterLab's file browser.
+        upload = {"type": "upload", "rid": 1, "root": str(tmp_path), "paths": ["f.txt"]}
+        reply = explorer.request({**upload, "dest": "/d"})
+        assert (
+            f"(jupyterlab://{'' if local.startswith('/') else '/'}{local}/f.txt"
+            in (reply["errors"][0])
+        )
+        # "Download to JupyterLab", and dropped on its file browser.
+        down = {"rid": 1, "paths": ["/d/ok.txt"]}
+        reply = explorer.request({**down, "type": "download_to_jupyterlab"})
+        assert "→ jupyterlab://" in reply["errors"][0]
+        reply = explorer.request(
+            {
+                **down,
+                "type": "download_to_server",
+                "root": str(tmp_path),
+                "dest": "down",
+            }
+        )
+        assert "→ jupyterlab://" in reply["errors"][0]
+        assert not (tmp_path / "down" / "ok.txt").exists()
+        # Pasted into the explorer's local storage: plain paths, allowed.
+        explorer._filesystem = "local"
+        reply = explorer.request(
+            {
+                "type": "paste",
+                "rid": 1,
+                "explorer": explorer._explorer_id,
+                "filesystem": "mem",
+                "files": [{"path": "/d/ok.txt"}],
+                "dest": local,
+            }
+        )
+        assert reply["pasted"] == ["ok.txt"]
+
+    def test_invalid_policy(self, files):
+        with pytest.raises(ValueError, match="transfer_policy rule 0"):
+            make("/", fs=files, transfer_policy=[{"rule": "block"}])

@@ -49,6 +49,11 @@ from jupyter_storage_explorer.operations import (
 )
 from jupyter_storage_explorer.query import DataQuery
 from jupyter_storage_explorer.states import ExplorerStates, explorer_states
+from jupyter_storage_explorer.transfer_policy import (
+    TransferPolicy,
+    computer_url,
+    jupyterlab_url,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
@@ -221,13 +226,11 @@ class StorageExplorer(anywidget.AnyWidget):
     max_upload_bytes : int or None, default 10 MB
         Largest file uploaded from the user's computer; None for no limit.
         Files dragged from JupyterLab's file browser are not limited.
-    allow_download_to_local : bool, default True
-        Whether "Download to local" (files saved by the browser) is offered;
-        if not, the kernel refuses it too.
-    download_to_jupyterlab_path : str or None, default "."
+    download_to_jupyterlab_path : str, default "."
         The folder "Download to JupyterLab" copies into, on the kernel's
         machine, e.g. ``"~/Downloads"``; relative paths and "~" are resolved
-        when the explorer is created. None leaves the item out.
+        when the explorer is created. To refuse downloads, use ``transfer_policy``
+        (to ``"jupyterlab://.*"`` or ``"browser:///.*"``).
     states : ExplorerStates, str or Path, optional
         Where the bookmarks and the data browser's recent queries are kept:
         an ``ExplorerStates``, or the path of its JSON file, e.g.
@@ -244,6 +247,19 @@ class StorageExplorer(anywidget.AnyWidget):
         operations.py). Default: ``default_operations()``. A list given
         replaces it, e.g. ``[MyOps(), *StorageExplorer.default_operations()]``
         for server-side copies of your own.
+    transfer_policy : list of dict, optional
+        Rules for the directions files may be transferred in, each
+        ``{"rule": "allow" or "deny", "src": regex, "dest": regex}``.
+        Transfers are copies and moves between filesystems: copy (or cut)
+        and paste between storages, and transfers with JupyterLab's file
+        browser (``jupyterlab://<absolute path>``, "Download to JupyterLab"
+        too) and the user's computer (``browser:///<name>``); not those
+        within a filesystem, e.g. dragging files onto a folder. The first
+        rule whose patterns both match the whole source and destination URLs
+        (``re.fullmatch``; a pattern left out matches any) decides; without
+        one, files go. Items refused are reported, the others done. Not a
+        security boundary: it only keeps files from going where they are not
+        meant to by mistake (see transfer_policy.py).
     **storage_options
         Passed to fsspec with ``path``, e.g. ``anon=True`` or
         ``profile="analytics"``.
@@ -254,7 +270,8 @@ class StorageExplorer(anywidget.AnyWidget):
         If ``filesystems`` is combined with ``path``, ``fs`` or storage
         options, or storage options with ``fs``.
     ValueError
-        If ``filesystems`` is empty.
+        If ``filesystems`` is empty, or ``transfer_policy`` has a rule that is not
+        of that form.
 
     See Also
     --------
@@ -329,10 +346,7 @@ class StorageExplorer(anywidget.AnyWidget):
     # Identifies this explorer to "Paste" (see _paste_sources), and to the
     # page-wide "changed" events after its files were cut and pasted elsewhere.
     _explorer_id = traitlets.Unicode().tag(sync=True)
-    # Whether "Download to local" (files saved by the browser) is offered.
-    _allow_download_to_local = traitlets.Bool(True).tag(sync=True)
-    # Absolute folder on the kernel's machine "Download to JupyterLab" copies
-    # into, or "" when it is not offered.
+    # Absolute folder on the kernel's machine "Download to JupyterLab" copies into.
     _download_to_jupyterlab_path = traitlets.Unicode().tag(sync=True)
 
     def __init__(
@@ -346,13 +360,14 @@ class StorageExplorer(anywidget.AnyWidget):
         format_options: Mapping[str, Any] | None = None,
         preview_limits: PreviewLimits | None = None,
         max_upload_bytes: int | None = 10 * 1024 * 1024,
-        allow_download_to_local: bool = True,
-        download_to_jupyterlab_path: str | None = ".",
+        download_to_jupyterlab_path: str = ".",
         states: ExplorerStates | str | os.PathLike[str] | None = None,
         max_browser_items: int | None = 20_000,
         operations: Sequence[FileSystemOperations] | None = None,
+        transfer_policy: Sequence[Mapping[str, str]] | None = None,
         **storage_options: Any,
     ) -> None:
+        self._transfer_policy = TransferPolicy(transfer_policy)
         self._states = explorer_states(states)
         # Its file may have been changed by another kernel since it was read.
         try:
@@ -401,12 +416,11 @@ class StorageExplorer(anywidget.AnyWidget):
             _max_upload_bytes=max_upload_bytes,
             _filesystem_names=list(self._filesystems),
             _explorer_id=uuid.uuid4().hex,
-            _allow_download_to_local=allow_download_to_local,
             # Resolved now: "." is the folder the explorer is launched in,
             # even if the kernel's working directory changes later.
-            _download_to_jupyterlab_path=""
-            if download_to_jupyterlab_path is None
-            else os.path.abspath(os.path.expanduser(download_to_jupyterlab_path)),
+            _download_to_jupyterlab_path=os.path.abspath(
+                os.path.expanduser(download_to_jupyterlab_path)
+            ),
         )
         self.on_msg(self._on_custom_msg)
         _explorers[self._explorer_id] = self
@@ -1142,8 +1156,12 @@ class StorageExplorer(anywidget.AnyWidget):
                 "name": _paths.basename(path),
             }
             try:
-                if not self._allow_download_to_local:
-                    raise PermissionError("downloading to local is not allowed")
+                refused = self._transfer_policy.error(
+                    self._location(self._fs, path),
+                    computer_url(_paths.basename(path)),
+                )
+                if refused is not None:
+                    raise PermissionError(refused)
                 info = self._info(path)
                 if info.get("type") == "directory":
                     raise ValueError("folders cannot be downloaded")
@@ -1165,9 +1183,48 @@ class StorageExplorer(anywidget.AnyWidget):
     # shows what it has changed so far as it runs, and _finish all it changed
     # once it has ended ---
 
-    def _tasks(self) -> FileTasks:
-        """Plans operations on the filesystem shown."""
-        return FileTasks(self._fs, self._root, self._operations)
+    def _tasks(self, urls: Mapping[tuple[int, str], str] | None = None) -> FileTasks:
+        """Plans operations on the filesystem shown, within the policy.
+
+        ``urls``: the URLs of files pasted, as copied, by (id of their
+        filesystem, normalized path), for the policy (see ``_transfer_error``).
+        """
+        return FileTasks(
+            self._fs,
+            self._root,
+            self._operations,
+            check=functools.partial(self._transfer_error, urls=urls or {}),
+        )
+
+    def _transfer_error(
+        self,
+        source_fs: AbstractFileSystem | None,
+        source: str,
+        target_fs: AbstractFileSystem | None,
+        target: str,
+        urls: Mapping[tuple[int, str], str],
+    ) -> str | None:
+        """Why the policy refuses copying or moving ``source`` to ``target``, or
+        None. A filesystem None is JupyterLab's side (see ``FileTasks``)."""
+        if not self._transfer_policy.rules:
+            return None
+        source_url = urls.get((id(source_fs), _paths.norm(source)))
+        if source_url is None:
+            source_url = self._location(source_fs, source)
+        return self._transfer_policy.error(
+            source_url, self._location(target_fs, target)
+        )
+
+    def _location(self, fs: AbstractFileSystem | None, path: str) -> str:
+        """``path``'s URL for the policy: ``_url``'s on the filesystem shown,
+        else (another storage, files without a URL) ``default_url``'s; for
+        fs None, the Jupyter server's disk through JupyterLab's file browser,
+        ``jupyterlab_url``'s."""
+        if fs is None:
+            return jupyterlab_url(path)
+        if same_filesystem(fs, self._fs) and (url := self._url(path)) is not None:
+            return url
+        return default_url(fs, path)
 
     def _start(self, plan: Plan) -> dict[str, Any]:
         """Run ``plan`` as a job: {"job": its id}; or the reply as it is if
@@ -1425,8 +1482,8 @@ class StorageExplorer(anywidget.AnyWidget):
     ) -> Plan:
         """Plan pasting ``files`` ({"path", "url"}, as copied) into ``dest``
         (see ``FileTasks.paste``)."""
-        sources, errors = self._paste_sources(files, explorer, filesystem, cut)
-        return self._tasks().paste(
+        sources, errors, urls = self._paste_sources(files, explorer, filesystem, cut)
+        return self._tasks(urls).paste(
             sources, dest, if_exists, folders=folders, cut=cut, errors=errors
         )
 
@@ -1436,9 +1493,13 @@ class StorageExplorer(anywidget.AnyWidget):
         explorer: str | None,
         filesystem: str | None,
         cut: bool = False,
-    ) -> tuple[list[tuple[AbstractFileSystem, str]], list[str]]:
+    ) -> tuple[
+        list[tuple[AbstractFileSystem, str]], list[str], dict[tuple[int, str], str]
+    ]:
         """The (filesystem, path) of files copied in explorer ``explorer``, from
-        its storage ``filesystem``, and errors for those not found.
+        its storage ``filesystem``, errors for those not found, and their URLs
+        as copied (by their explorer's ``_url``), for the policy (see
+        ``_tasks``).
 
         If that explorer is in this kernel, its filesystem object is used, as
         it is (credentials included). Otherwise it is in another kernel and
@@ -1446,7 +1507,7 @@ class StorageExplorer(anywidget.AnyWidget):
         """
         source = _explorers.get(explorer or "")
         entry = None if source is None else source._filesystems.get(filesystem or "")
-        sources, errors = [], []
+        sources, errors, urls = [], [], {}
         for file in files:
             path, url = file.get("path"), file.get("url")
             try:
@@ -1462,7 +1523,9 @@ class StorageExplorer(anywidget.AnyWidget):
                 errors.append(f"{_paths.basename(path or url or '')}: {exc}")
                 continue
             sources.append((fs, path))
-        return sources, errors
+            if url is not None:
+                urls[id(fs), _paths.norm(path)] = url
+        return sources, errors, urls
 
     # --- Upload: files (and, in unsafe mode, folders) dragged in from
     # JupyterLab's file browser, which the kernel copies itself ---
@@ -1509,7 +1572,13 @@ class StorageExplorer(anywidget.AnyWidget):
         an error ({"error": ...})."""
         upload_id = content["id"]
         try:
-            target = _paths.join(content["dest"], _paths.safe_name(content["name"]))
+            name = _paths.safe_name(content["name"])
+            target = _paths.join(content["dest"], name)
+            refused = self._transfer_policy.error(
+                computer_url(name), self._location(self._fs, target)
+            )
+            if refused is not None:
+                raise PermissionError(refused)
             piece = bytes(buffers[0]) if buffers else None
             self._incoming.add(upload_id, piece, target, self._fs)
             if not content["last"]:
@@ -1553,8 +1622,6 @@ class StorageExplorer(anywidget.AnyWidget):
         self, content: dict[str, Any]
     ) -> dict[str, Any]:
         """Answer "download_to_jupyterlab": copy into ``download_to_jupyterlab_path``."""
-        if not self._download_to_jupyterlab_path:
-            return {"errors": ["downloading to JupyterLab is not allowed"]}
         return self._plan_request(
             lambda: self._tasks().download(
                 content["paths"],

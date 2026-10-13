@@ -158,14 +158,50 @@ class FileTasks:
     moved, copied and deleted only with ``folders`` (the widget's unsafe mode
     was on), never the top folder, never into themselves, and never onto
     anything that exists.
+
+    ``check(source_fs, source, target_fs, target)``, if given, tells why a
+    transfer may not happen (the explorer's transfer policy, see
+    transfer_policy.py), or returns None: items it refuses are left out,
+    with that error. Transfers are copies and moves between filesystems:
+    within one (``same_filesystem``), e.g. moves, nothing is checked. A
+    filesystem None is the Jupyter server's disk as JupyterLab's file
+    browser shows it (uploads from it, downloads to it), with a local path:
+    always a transfer.
     """
 
     def __init__(
-        self, fs: AbstractFileSystem, root: str, operations: OperationChain
+        self,
+        fs: AbstractFileSystem,
+        root: str,
+        operations: OperationChain,
+        check: Callable[
+            [AbstractFileSystem | None, str, AbstractFileSystem | None, str],
+            str | None,
+        ]
+        | None = None,
     ) -> None:
         self.fs = fs
         self.root = root
         self.ops = operations
+        self.check = check
+
+    def _refused(
+        self,
+        source_fs: AbstractFileSystem | None,
+        source: str,
+        target_fs: AbstractFileSystem | None,
+        target: str,
+    ) -> str | None:
+        """Why ``check`` refuses an item, or None (always, within a filesystem)."""
+        if self.check is None:
+            return None
+        if (
+            source_fs is not None
+            and target_fs is not None
+            and same_filesystem(source_fs, target_fs)
+        ):
+            return None  # not a transfer
+        return self.check(source_fs, source, target_fs, target)
 
     def measure(self, fs: AbstractFileSystem, path: str) -> tuple[int, int]:
         """Files and bytes at ``path``, for the progress bar; (1, 0) if unknown."""
@@ -231,6 +267,7 @@ class FileTasks:
             target = _paths.join(dest, name)
             if _paths.norm(path) == _paths.norm(target):
                 continue  # already in that folder
+            # Within the filesystem: not a transfer, so the policy does not apply.
             if not self.fs.isdir(path):
                 moves.append((path, target, False))
             elif not folders:
@@ -376,7 +413,9 @@ class FileTasks:
         with the operations' ``copy``; or ``move`` them, for ``kind`` "move".
         ``kind``: "paste", "move" or "upload" (see ``_COPY_WORDS``)."""
         key, verb, doing = _COPY_WORDS[kind]
-        plans = self._plan_copies(copies, dest, folders, verb, errors)
+        plans = self._plan_copies(
+            copies, dest, folders, verb, errors, from_jupyterlab=kind == "upload"
+        )
         existing = {p.target for p in plans if self.fs.exists(p.target)}
         if if_exists == "ask" and existing:
             return _conflicts(existing)
@@ -424,8 +463,12 @@ class FileTasks:
         folders: bool,
         verb: str,
         errors: list[str],
+        *,
+        from_jupyterlab: bool = False,
     ) -> list[_Copy]:
-        """What to copy into ``dest`` (see ``_copy_into``); adds to ``errors`` for the rest."""
+        """What to copy into ``dest`` (see ``_copy_into``); adds to ``errors``
+        for the rest. ``from_jupyterlab``: the sources are on the Jupyter
+        server's disk, dragged from JupyterLab's file browser (for ``check``)."""
         plans = []
         for source_fs, source, name in copies:
             try:
@@ -434,7 +477,12 @@ class FileTasks:
             except Exception as exc:
                 errors.append(f"{name}: {exc}")
                 continue
-            if is_folder and not folders:
+            refused = self._refused(
+                None if from_jupyterlab else source_fs, source, self.fs, target
+            )
+            if refused is not None:
+                errors.append(f"{name}: {refused}")
+            elif is_folder and not folders:
                 errors.append(
                     f"{name}: folders are not {verb} (turn on unsafe mode first)"
                 )
@@ -492,12 +540,17 @@ class FileTasks:
             # e.g. the kernel runs elsewhere than the Jupyter server (a remote kernel).
             raise ValueError(f"{dest}: folder not found from the kernel")
         files, errors = [], []
+        local = LocalFileSystem()
         for path in paths:
             name = _paths.safe_name(_paths.basename(path))
-            if self.fs.isdir(path):
+            target = os.path.join(dest, name)
+            refused = self._refused(self.fs, path, None, local._strip_protocol(target))
+            if refused is not None:
+                errors.append(f"{name}: {refused}")
+            elif self.fs.isdir(path):
                 errors.append(f"{name}: folders are not downloaded")
             else:
-                files.append((path, os.path.join(dest, name)))
+                files.append((path, target))
         existing = {target for _, target in files if os.path.exists(target)}
         if if_exists == "ask" and existing:
             return {"conflicts": sorted(os.path.basename(t) for t in existing)}
