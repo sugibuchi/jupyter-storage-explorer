@@ -40,7 +40,7 @@ requires-python = ">=3.11"
 dependencies = [
     "anywidget>=0.9",
     "fsspec>=2023.1.0",
-    "narwhals>=2.27.1",
+    "narwhals>=2.20",
     "pygments>=2.12",
     "traitlets>=5.4",
 ]
