@@ -47,13 +47,13 @@ from jupyter_storage_explorer.operations import (
     Progress,
     same_filesystem,
 )
-from jupyter_storage_explorer.policy import (
+from jupyter_storage_explorer.query import DataQuery
+from jupyter_storage_explorer.states import ExplorerStates, explorer_states
+from jupyter_storage_explorer.transfer_policy import (
     TransferPolicy,
     computer_url,
     jupyterlab_url,
 )
-from jupyter_storage_explorer.query import DataQuery
-from jupyter_storage_explorer.states import ExplorerStates, explorer_states
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
@@ -229,7 +229,7 @@ class StorageExplorer(anywidget.AnyWidget):
     download_to_jupyterlab_path : str, default "."
         The folder "Download to JupyterLab" copies into, on the kernel's
         machine, e.g. ``"~/Downloads"``; relative paths and "~" are resolved
-        when the explorer is created. To refuse downloads, use ``policy``
+        when the explorer is created. To refuse downloads, use ``transfer_policy``
         (to ``"jupyterlab://.*"`` or ``"browser:///.*"``).
     states : ExplorerStates, str or Path, optional
         Where the bookmarks and the data browser's recent queries are kept:
@@ -247,17 +247,19 @@ class StorageExplorer(anywidget.AnyWidget):
         operations.py). Default: ``default_operations()``. A list given
         replaces it, e.g. ``[MyOps(), *StorageExplorer.default_operations()]``
         for server-side copies of your own.
-    policy : list of dict, optional
-        Rules for the directions files may be copied and moved in, each
-        ``{"rule": "allow" or "deny", "src": regex, "dest": regex}``, for
-        copy, cut and paste, moves, and transfers with JupyterLab's file
+    transfer_policy : list of dict, optional
+        Rules for the directions files may be transferred in, each
+        ``{"rule": "allow" or "deny", "src": regex, "dest": regex}``.
+        Transfers are copies and moves between filesystems: copy (or cut)
+        and paste between storages, and transfers with JupyterLab's file
         browser (``jupyterlab://<absolute path>``, "Download to JupyterLab"
-        too) and the user's computer (``browser:///<name>``). The first
+        too) and the user's computer (``browser:///<name>``); not those
+        within a filesystem, e.g. dragging files onto a folder. The first
         rule whose patterns both match the whole source and destination URLs
         (``re.fullmatch``; a pattern left out matches any) decides; without
         one, files go. Items refused are reported, the others done. Not a
         security boundary: it only keeps files from going where they are not
-        meant to by mistake (see policy.py).
+        meant to by mistake (see transfer_policy.py).
     **storage_options
         Passed to fsspec with ``path``, e.g. ``anon=True`` or
         ``profile="analytics"``.
@@ -268,7 +270,7 @@ class StorageExplorer(anywidget.AnyWidget):
         If ``filesystems`` is combined with ``path``, ``fs`` or storage
         options, or storage options with ``fs``.
     ValueError
-        If ``filesystems`` is empty, or ``policy`` has a rule that is not
+        If ``filesystems`` is empty, or ``transfer_policy`` has a rule that is not
         of that form.
 
     See Also
@@ -362,10 +364,10 @@ class StorageExplorer(anywidget.AnyWidget):
         states: ExplorerStates | str | os.PathLike[str] | None = None,
         max_browser_items: int | None = 20_000,
         operations: Sequence[FileSystemOperations] | None = None,
-        policy: Sequence[Mapping[str, str]] | None = None,
+        transfer_policy: Sequence[Mapping[str, str]] | None = None,
         **storage_options: Any,
     ) -> None:
-        self._policy = TransferPolicy(policy)
+        self._transfer_policy = TransferPolicy(transfer_policy)
         self._states = explorer_states(states)
         # Its file may have been changed by another kernel since it was read.
         try:
@@ -1154,7 +1156,7 @@ class StorageExplorer(anywidget.AnyWidget):
                 "name": _paths.basename(path),
             }
             try:
-                refused = self._policy.error(
+                refused = self._transfer_policy.error(
                     self._location(self._fs, path),
                     computer_url(_paths.basename(path)),
                 )
@@ -1204,12 +1206,14 @@ class StorageExplorer(anywidget.AnyWidget):
     ) -> str | None:
         """Why the policy refuses copying or moving ``source`` to ``target``, or
         None. A filesystem None is JupyterLab's side (see ``FileTasks``)."""
-        if not self._policy.rules:
+        if not self._transfer_policy.rules:
             return None
         source_url = urls.get((id(source_fs), _paths.norm(source)))
         if source_url is None:
             source_url = self._location(source_fs, source)
-        return self._policy.error(source_url, self._location(target_fs, target))
+        return self._transfer_policy.error(
+            source_url, self._location(target_fs, target)
+        )
 
     def _location(self, fs: AbstractFileSystem | None, path: str) -> str:
         """``path``'s URL for the policy: ``_url``'s on the filesystem shown,
@@ -1570,7 +1574,7 @@ class StorageExplorer(anywidget.AnyWidget):
         try:
             name = _paths.safe_name(content["name"])
             target = _paths.join(content["dest"], name)
-            refused = self._policy.error(
+            refused = self._transfer_policy.error(
                 computer_url(name), self._location(self._fs, target)
             )
             if refused is not None:

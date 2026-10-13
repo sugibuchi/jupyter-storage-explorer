@@ -159,11 +159,14 @@ class FileTasks:
     was on), never the top folder, never into themselves, and never onto
     anything that exists.
 
-    ``check(source_fs, source, target_fs, target)``, if given, tells why an
-    item may not be moved or copied (the explorer's policy, see policy.py),
-    or returns None: those it refuses are left out, with that error. A
+    ``check(source_fs, source, target_fs, target)``, if given, tells why a
+    transfer may not happen (the explorer's transfer policy, see
+    transfer_policy.py), or returns None: items it refuses are left out,
+    with that error. Transfers are copies and moves between filesystems:
+    within one (``same_filesystem``), e.g. moves, nothing is checked. A
     filesystem None is the Jupyter server's disk as JupyterLab's file
-    browser shows it (uploads from it, downloads to it), with a local path.
+    browser shows it (uploads from it, downloads to it), with a local path:
+    always a transfer.
     """
 
     def __init__(
@@ -189,9 +192,15 @@ class FileTasks:
         target_fs: AbstractFileSystem | None,
         target: str,
     ) -> str | None:
-        """Why ``check`` refuses an item, or None."""
+        """Why ``check`` refuses an item, or None (always, within a filesystem)."""
         if self.check is None:
             return None
+        if (
+            source_fs is not None
+            and target_fs is not None
+            and same_filesystem(source_fs, target_fs)
+        ):
+            return None  # not a transfer
         return self.check(source_fs, source, target_fs, target)
 
     def measure(self, fs: AbstractFileSystem, path: str) -> tuple[int, int]:
@@ -258,9 +267,8 @@ class FileTasks:
             target = _paths.join(dest, name)
             if _paths.norm(path) == _paths.norm(target):
                 continue  # already in that folder
-            if (refused := self._refused(self.fs, path, self.fs, target)) is not None:
-                errors.append(f"{name}: {refused}")
-            elif not self.fs.isdir(path):
+            # Within the filesystem: not a transfer, so the policy does not apply.
+            if not self.fs.isdir(path):
                 moves.append((path, target, False))
             elif not folders:
                 errors.append(

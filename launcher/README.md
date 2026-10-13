@@ -87,7 +87,7 @@ parameter too, e.g. in the system's file:
 def parameters():
     # No downloads from the lake to users' computers or to the Jupyter server.
     return {
-        "policy": [
+        "transfer_policy": [
             {"rule": "deny", "src": r"abfs://lake@.*", "dest": "browser:///.*"},
             {"rule": "deny", "src": r"abfs://lake@.*", "dest": "jupyterlab://.*"},
         ]
@@ -95,7 +95,7 @@ def parameters():
 
 
 def final():
-    return ["policy"]
+    return ["transfer_policy"]
 ```
 
 An error in a file (a function that fails, an unknown parameter) is shown in the tab, with the file's path.

@@ -1,10 +1,10 @@
-"""policy.py: the rules of the directions files may be copied and moved in."""
+"""transfer_policy.py: the rules of the directions files may be copied and moved in."""
 
 from __future__ import annotations
 
 import pytest
 
-from jupyter_storage_explorer.policy import (
+from jupyter_storage_explorer.transfer_policy import (
     TransferPolicy,
     computer_url,
     jupyterlab_url,
@@ -48,7 +48,7 @@ class TestAllows:
     def test_error_names_the_urls(self):
         policy = TransferPolicy([{"rule": "deny"}])
         assert policy.error("s3://a/x", "/tmp/x") == (
-            "not allowed by the policy (s3://a/x → /tmp/x)"
+            "not allowed by the transfer policy (s3://a/x → /tmp/x)"
         )
         assert TransferPolicy().error("s3://a/x", "/tmp/x") is None
 
@@ -70,11 +70,14 @@ def test_jupyterlab_url(path, url):
     [
         ({"rule": "deny"}, "must be a list of rules"),
         ("deny", "must be a list of rules"),
-        ([["deny", ".*", ".*"]], "policy rule 0: must be a dict"),
-        ([{"rule": "block"}], 'policy rule 0: "rule" must be "allow" or "deny"'),
+        ([["deny", ".*", ".*"]], "transfer_policy rule 0: must be a dict"),
+        (
+            [{"rule": "block"}],
+            'transfer_policy rule 0: "rule" must be "allow" or "deny"',
+        ),
         (
             [{"rule": "deny"}, {"rule": "deny", "source": ".*"}],
-            "policy rule 1: unknown keys",
+            "transfer_policy rule 1: unknown keys",
         ),
         ([{"rule": "deny", "src": 3}], "'src' must be a regular expression"),
         ([{"rule": "deny", "dest": "("}], "'dest' is not a regular expression"),

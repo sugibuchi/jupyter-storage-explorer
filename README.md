@@ -122,12 +122,14 @@ Folder operations need **Unsafe mode**, turned on with the slider in the status 
 
 ### Transfer policy
 
-`policy=[...]` limits the directions files may be copied and moved in (copy, cut and paste, moves, uploads and
-downloads, with JupyterLab's file browser too). It is a list of rules, tried in order; the first whose `src` and
-`dest` regular expressions both match the whole URLs decides, and without one, files go:
+`transfer_policy=[...]` limits the directions files may be transferred in: copied or moved from one storage to another
+(copy or cut, then paste), to or from JupyterLab's file browser, and uploaded from or downloaded to your computer.
+Moving and copying within a storage (e.g. dragging files onto a folder) is not a transfer. It is a list of rules,
+tried in order; the first whose `src` and `dest` regular expressions both match the whole URLs decides, and without
+one, files go:
 
 ```python
-StorageExplorer(filesystems={...}, policy=[
+StorageExplorer(filesystems={...}, transfer_policy=[
     {"rule": "allow", "src": r"abfs://lake@acct\.dfs\.core\.windows\.net/public/.*", "dest": ".*"},
     {"rule": "deny", "src": r"abfs://lake@.*", "dest": ".*"},  # nothing else leaves the lake
 ])
@@ -237,11 +239,11 @@ explorer.selected_urls  # the URLs of the selected items
 |-------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------|
 | `height="400px"`                    | Height of the tree and list; the preview panel adds its own space below. `"fill"`: as tall as the container, e.g. the launcher's tab. |
 | `max_upload_bytes=10 * 1024 * 1024` | Largest file you can upload from your computer (default 10 MB; `None` for no limit).                                                  |
-| `download_to_jupyterlab_path="."`   | Folder "Download to JupyterLab" copies into, e.g. `"~/Downloads"`; default: where it runs. To refuse downloads, use `policy`.        |
+| `download_to_jupyterlab_path="."`   | Folder "Download to JupyterLab" copies into, e.g. `"~/Downloads"`; default: where it runs. To refuse downloads, use `transfer_policy`. |
 | `filesystems={...}`                 | Several named storages, as shown above.                                                                                               |
 | `max_browser_items=20_000`          | Folders with more items are filtered, sorted and paged by the kernel, one page at a time, instead of the browser (`None`: never).     |
 | `operations=[...]`                  | How files are moved, copied, deleted and downloaded, replacing `StorageExplorer.default_operations()`: e.g. `[MyOps(), *StorageExplorer.default_operations()]` for server-side copies of your own (see [operations.py](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/src/jupyter_storage_explorer/operations.py), and [filesystems](https://github.com/sugibuchi/jupyter-storage-explorer/tree/main/src/jupyter_storage_explorer/filesystems) for the defaults). |
-| `policy=[...]`                      | Rules for the directions files may be copied and moved in; see [Transfer policy](#transfer-policy).                                    |
+| `transfer_policy=[...]`             | Rules for transfers of files between storages; see [Transfer policy](#transfer-policy).                                               |
 | `states="states.json"`              | Where bookmarks and the data browser's settings are kept (a path or an `ExplorerStates`); see [Remembered states](#remembered-states). |
 | `format_options={...}`              | Options for the formats (see [Format options](#format-options)).                                                                      |
 

@@ -1,6 +1,13 @@
-"""Transfer policies: the directions in which an explorer copies and moves files.
+"""Transfer policies: the directions in which an explorer transfers files.
 
-``StorageExplorer(policy=[...])`` takes a list of rules::
+A transfer is a copy or move of files from one filesystem to another: copy
+(or cut) and paste between storages (of the explorer, or another explorer's),
+drag and drop with JupyterLab's file browser, "Download to JupyterLab", and
+uploads from and downloads to the user's computer. Copies and moves within a
+filesystem (``same_filesystem``), e.g. dragging files onto a folder, are not
+transfers: the policy does not apply to them.
+
+``StorageExplorer(transfer_policy=[...])`` takes a list of rules::
 
     [
         {"rule": "allow", "src": r"abfs://lake@acct\\.dfs\\.core\\.windows\\.net/curated/.*", "dest": ".*"},
@@ -61,16 +68,16 @@ class _Rule:
 
 
 class TransferPolicy:
-    """The rules of ``StorageExplorer``'s ``policy`` (see the module docstring).
+    """The rules of ``StorageExplorer``'s ``transfer_policy`` (see the module docstring).
 
     URLs are those the explorer shows (``StorageExplorer._url``, e.g. plain
     paths for local files), files copied in another explorer keeping the URL
     they were copied with; files on the Jupyter server's disk through
     JupyterLab's file browser ("Download to JupyterLab", and drag and drop
     with it) ``jupyterlab://<absolute path>``, and files on the user's
-    computer ``browser:///<name>``. The destination is the item's new location (its
-    folder joined with its name). A folder is checked as one item, by its own
-    URL, not file by file.
+    computer ``browser:///<name>``. The destination is the item's new
+    location (its folder joined with its name). A folder is checked as one
+    item, by its own URL, not file by file.
 
     Raises ValueError for rules that are not of the form {"rule": "allow" or
     "deny", "src": pattern, "dest": pattern}, or patterns that are not
@@ -81,7 +88,7 @@ class TransferPolicy:
         if rules is None:
             rules = []
         if isinstance(rules, (str, bytes, Mapping)):
-            raise ValueError("policy must be a list of rules")
+            raise ValueError("transfer_policy must be a list of rules")
         self.rules = [_rule(i, rule) for i, rule in enumerate(rules)]
 
     def allows(self, source: str, dest: str) -> bool:
@@ -96,11 +103,11 @@ class TransferPolicy:
         rule applied)."""
         if self.allows(source, dest):
             return None
-        return f"not allowed by the policy ({source} → {dest})"
+        return f"not allowed by the transfer policy ({source} → {dest})"
 
 
 def _rule(index: int, rule: Any) -> _Rule:
-    where = f"policy rule {index}"
+    where = f"transfer_policy rule {index}"
     if not isinstance(rule, Mapping):
         raise ValueError(
             f'{where}: must be a dict, e.g. {{"rule": "deny", "src": ".*", "dest": ".*"}}'
