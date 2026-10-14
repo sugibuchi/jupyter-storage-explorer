@@ -38,7 +38,7 @@ A file has some of these functions, all optional:
 |--------------------|---------------------------------------------------------------|------------------------------------------------------------------|
 | `filesystems()`    | `{name: URL or fsspec filesystem}`                            | By name: added or replaced; `None` removes one                   |
 | `formats()`        | Formats of your own (`DataFormat`), tried before the defaults | Later layers' first                                              |
-| `format_options()` | Options for the default formats (see the main README)         | By option name                                                   |
+| `format_options()` | Options for the default formats ([Format options](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#format-options)) | By option name                                                   |
 | `operations()`     | File operations of your own (`FileSystemOperations`)          | Later layers' first, all before the defaults                     |
 | `parameters()`     | Other `StorageExplorer` arguments, e.g. `{"height": "fill"}`  | By name                                                          |
 | `style()`          | CSS for the page while the tab is open                        | Joined, the user's last                                          |
@@ -80,7 +80,7 @@ def style():
     """
 ```
 
-A [transfer policy](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/README.md#transfer-policy) is a
+A [transfer policy](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#transfer-policy) is a
 parameter too, e.g. in the system's file:
 
 ```python

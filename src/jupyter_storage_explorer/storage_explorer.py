@@ -219,8 +219,8 @@ class StorageExplorer(anywidget.AnyWidget):
         ``default_formats()``. Cannot be combined with ``format_options``.
     format_options : mapping, optional
         Keyword arguments to create every default format with, each using
-        those it takes, e.g. ``{"polars_storage_options": {...}}`` (see the
-        README's "Format options").
+        those it takes, e.g. ``{"polars_storage_options": {...}}`` (see
+        "Format options" in docs/storage-explorer.md).
     preview_limits : PreviewLimits, optional
         How much of a file previews read and show (bytes, rows).
     max_upload_bytes : int or None, default 10 MB

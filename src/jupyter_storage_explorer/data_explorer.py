@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import anywidget
 import traitlets
@@ -10,6 +10,9 @@ import traitlets
 from jupyter_storage_explorer import _static
 from jupyter_storage_explorer.query import DataQuery, QuerySettings, normalize_settings
 from jupyter_storage_explorer.states import ExplorerStates
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 # The key DataExplorer's settings are kept under, in its own states.
 _KEY = "data"
@@ -31,8 +34,9 @@ class DataExplorer(anywidget.AnyWidget):
     Queries run on the data itself ("Live") or on its first rows read into
     memory ("In memory", queried with polars when installed), switched at the
     top right of the widget (see ``DataQuery``). ``settings`` gives the
-    current filters, sort order, hidden columns and widths, and ``result()``
-    the data with them applied.
+    current filters, sort order, hidden columns and widths, ``result()`` the
+    data with them applied, and ``on_change()`` calls a function when that
+    result changes, e.g. to redraw a chart of it.
 
     Parameters
     ----------
@@ -138,6 +142,9 @@ class DataExplorer(anywidget.AnyWidget):
             query=self._data.opening(),
             height=height,
         )
+        self._change_callbacks: list[Callable[[DataExplorer], Any]] = []
+        # What result() was built from when on_change's functions last heard of it.
+        self._result_basis = self._result_settings()
         self.on_msg(self._on_custom_msg)
 
     def result(self, all_columns: bool = False) -> Any:
@@ -186,10 +193,86 @@ class DataExplorer(anywidget.AnyWidget):
             normalize_settings(remembered, self._data.schema)
         )
 
+    def on_change(
+        self, callback: Callable[[DataExplorer], Any], *, remove: bool = False
+    ) -> None:
+        """Call a function whenever ``result()`` changes in the widget.
+
+        That is when the user changes a filter, the sort order or the columns
+        shown, or reads the data again with the reload button; not for
+        paging, column widths or switching between Live and In memory, which
+        leave ``result()`` as it was. The function is called after the widget
+        has its rows, in the kernel's main thread, so the widget waits for it
+        before its next request: keep it quick, e.g. a chart of a small or
+        aggregated result.
+
+        Parameters
+        ----------
+        callback : callable
+            Called with the explorer, as ``callback(explorer)``. What it prints
+            or displays goes to no cell (the kernel answers the widget, not a
+            cell): display into an ``ipywidgets.Output`` shown in a cell, as in
+            the example. Errors are shown as tracebacks in the same place and
+            do not stop the other functions.
+        remove : bool, default False
+            Stop calling ``callback`` instead.
+
+        See Also
+        --------
+        result : The data with the widget's settings applied.
+
+        Examples
+        --------
+        >>> import ipywidgets
+        >>> import matplotlib.pyplot as plt
+        >>> chart = ipywidgets.Output()
+        >>> def redraw(explorer):
+        ...     df = explorer.result().group_by("region").agg(pl.len()).collect()
+        ...     with chart:
+        ...         chart.clear_output(wait=True)
+        ...         plt.bar(df["region"], df["len"])
+        ...         plt.show()
+        >>> explorer = DataExplorer(pl.scan_parquet("sales/*.parquet"))
+        >>> explorer.on_change(redraw)
+        >>> redraw(explorer)  # the first chart, before any change
+        >>> chart  # in the cell that shows the chart
+        """
+        if remove:
+            if callback in self._change_callbacks:
+                self._change_callbacks.remove(callback)
+        elif callback not in self._change_callbacks:
+            self._change_callbacks.append(callback)
+
+    def _result_settings(self) -> dict[str, Any]:
+        """The settings ``result()`` depends on: not widths."""
+        settings = self.settings.to_dict()
+        return {key: settings[key] for key in ("filters", "sort", "hidden")}
+
+    def _notify_change(self) -> None:
+        """Call the ``on_change`` functions, each one even if another fails."""
+        for callback in list(self._change_callbacks):
+            try:
+                callback(self)
+            except Exception:
+                from IPython import get_ipython  # noqa: PLC0415
+
+                shell = get_ipython()
+                if shell is None:
+                    raise
+                shell.showtraceback()
+
     def _on_custom_msg(
         self, _widget: Any, content: dict[str, Any], _buffers: Any
     ) -> None:
-        """Answer the data browser's requests, matched by their "rid"."""
+        """Answer the data browser's requests, matched by their "rid", then
+        tell the ``on_change`` functions if ``result()`` changed: the reply
+        goes first, so the widget does not wait for them to show its rows."""
         reply = self._data.handle(content)
-        if reply is not None:
-            self.send({"type": "reply", "rid": content["rid"], **reply})
+        if reply is None:
+            return
+        self.send({"type": "reply", "rid": content["rid"], **reply})
+        basis = self._result_settings()
+        reloaded = content.get("type") == "query_reload" and "error" not in reply
+        if basis != self._result_basis or reloaded:
+            self._result_basis = basis
+            self._notify_change()

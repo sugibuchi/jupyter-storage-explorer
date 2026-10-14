@@ -173,6 +173,73 @@ class TestResult:
         assert explorer.result().collect_schema().names() == ["b"]
 
 
+class TestOnChange:
+    """explorer.on_change(): told when result() changes in the widget."""
+
+    def explorer(self, data: Any = None, **kwargs) -> tuple[Explorer, list[Any]]:
+        explorer = Explorer(DF.lazy() if data is None else data, **kwargs)
+        calls: list[Any] = []
+        explorer.on_change(lambda e: calls.append(e.result().collect()["a"].to_list()))
+        return explorer, calls
+
+    def test_filters_sort_and_columns(self):
+        explorer, calls = self.explorer()
+        # The rows first shown, with the settings it started with: no change.
+        explorer.request({"type": "query_rows", "settings": explorer.query["settings"]})
+        assert calls == []
+        explorer.request({"type": "query_rows", "settings": RESULT_SETTINGS})
+        assert calls == [[3, 2]]
+        explorer.request({"type": "query_rows", "settings": {"sort": {"column": "a"}}})
+        assert calls == [[3, 2], [1, 2, 3]]
+
+    def test_not_for_what_leaves_the_result(self):
+        explorer, calls = self.explorer()
+        settings = {**RESULT_SETTINGS, "widths": {"a": 80}}
+        explorer.request({"type": "query_rows", "settings": RESULT_SETTINGS})
+        explorer.request({"type": "query_save", "settings": settings})  # widths
+        explorer.request({"type": "query_rows", "settings": settings, "offset": 1})
+        explorer.request({"type": "query_mode", "mode": "memory", "settings": settings})
+        explorer.request(
+            {"type": "query_check", "column": "a", "filter": {"op": "null"}}
+        )
+        assert calls == [[3, 2]]
+
+    def test_reload(self):
+        frames = iter([DF.lazy(), DF.head(1).lazy()])
+        explorer, calls = self.explorer(lambda: next(frames))
+        explorer.request({"type": "query_reload"})
+        assert calls == [[3]]
+
+    def test_remove(self):
+        explorer, calls = self.explorer()
+        callback = explorer._change_callbacks[0]
+        explorer.on_change(callback)  # once only
+        explorer.request({"type": "query_rows", "settings": {"hidden": ["b"]}})
+        explorer.on_change(callback, remove=True)
+        explorer.request({"type": "query_rows", "settings": {}})
+        assert calls == [[3, 1, 2]]
+
+    def test_error_after_the_reply(self, monkeypatch):
+        """A failing function: the widget has its rows, and the other functions
+        are called; outside IPython, the error is raised."""
+        explorer, calls = self.explorer()
+
+        def fail(_explorer: Any) -> None:
+            raise RuntimeError("chart failed")
+
+        explorer._change_callbacks.insert(0, fail)
+        with pytest.raises(RuntimeError, match="chart failed"):
+            explorer.request({"type": "query_rows", "settings": {"hidden": ["b"]}})
+        assert explorer.sent[-1]["rows"] == [[3], [1], [2]]
+
+        shown = []
+        shell = type("Shell", (), {"showtraceback": lambda self: shown.append(1)})()
+        monkeypatch.setattr("IPython.get_ipython", lambda: shell)
+        explorer.request({"type": "query_rows", "settings": {}})
+        assert shown == [1]
+        assert calls == [[3, 1, 2]]
+
+
 def test_not_a_dataframe():
     with pytest.raises(TypeError, match="takes a dataframe, not a location"):
         Explorer("data/orders.csv")
