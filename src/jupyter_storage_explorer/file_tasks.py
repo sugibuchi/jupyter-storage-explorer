@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING, Any, TypeVar
 
 from fsspec.implementations.local import LocalFileSystem
 
-from jupyter_storage_explorer import _paths
+from jupyter_storage_explorer import _paths, properties
 from jupyter_storage_explorer.operations import (
     OperationCancelled,
     Progress,
@@ -58,7 +58,7 @@ class Task:
     starting).
     """
 
-    kind: str  # "move", "delete", "paste", "upload" or "download"
+    kind: str  # "move", "delete", "paste", "upload", "download" or "properties"
     title: str  # e.g. "Moving a.csv to data", shown with its progress
     fs: AbstractFileSystem
     work: Callable[[Progress], dict[str, Any]] = lambda progress: {}
@@ -206,7 +206,8 @@ class FileTasks:
     def measure(self, fs: AbstractFileSystem, path: str) -> tuple[int, int]:
         """Files and bytes at ``path``, for the progress bar; (1, 0) if unknown."""
         try:
-            return self.ops.measure(fs, path)
+            measurement = self.ops.measure(fs, path)
+            return measurement.files, measurement.bytes
         except Exception:
             return 1, 0  # the operation itself reports what is wrong
 
@@ -583,6 +584,17 @@ class FileTasks:
             return _outcome(stop, copied=copied, skipped=skipped, errors=failed)
 
         task.work = work
+        return task
+
+    # --- Properties: totals of files and folders, changing nothing ---
+
+    def properties(self, paths: Sequence[str]) -> Task:
+        """Count the files and folders of ``paths`` with the operations'
+        ``measure`` (see ``properties.scan``): a job, as large folders take
+        long. Records no changes."""
+        fs, ops = self.fs, self.ops
+        task = Task("properties", f"Counting {_describe(paths)}", fs)
+        task.work = lambda progress: properties.scan(ops, fs, paths, progress)
         return task
 
 

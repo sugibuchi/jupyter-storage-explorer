@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import base64
 import dataclasses
-import datetime as dt
 import functools
 import hashlib
 import math
@@ -18,7 +17,7 @@ import anywidget
 import traitlets
 from fsspec.core import url_to_fs
 
-from jupyter_storage_explorer import _paths, _static
+from jupyter_storage_explorer import _infos, _paths, _static, properties
 from jupyter_storage_explorer._urls import default_location, default_url
 from jupyter_storage_explorer.file_tasks import FileTasks, Plan, Task
 from jupyter_storage_explorer.filesystems import (
@@ -66,17 +65,6 @@ if TYPE_CHECKING:
 # JavaScript libraries the frontend may ask for (see static/vendor/README.md);
 # only these names are served.
 _VENDOR_FILES = frozenset({"marked.esm.js", "purify.es.mjs"})
-
-# Keys used by different fsspec implementations for the modification time
-# (local: mtime, s3fs: LastModified, adlfs: last_modified, gcsfs: updated).
-_MTIME_KEYS = (
-    "mtime",
-    "LastModified",
-    "last_modified",
-    "updated",
-    "modified",
-    "created",
-)
 
 # Largest file the text editor opens; the whole file is sent to the browser.
 _MAX_EDIT_BYTES = 1024 * 1024
@@ -142,31 +130,14 @@ def _version(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def _to_timestamp(value: Any) -> float | None:
-    if isinstance(value, (int, float)):
-        return float(value)
-    if isinstance(value, dt.datetime):
-        return value.timestamp()
-    if isinstance(value, str):
-        try:
-            return dt.datetime.fromisoformat(value).timestamp()
-        except ValueError:
-            return None
-    return None
-
-
 def _entry(info: dict[str, Any]) -> dict[str, Any]:
     is_dir = info.get("type") == "directory"
-    mtime = next(
-        (ts for key in _MTIME_KEYS if (ts := _to_timestamp(info.get(key))) is not None),
-        None,
-    )
     return {
         "name": _paths.basename(info["name"]),
         "path": _paths.norm(info["name"]),
         "type": "directory" if is_dir else "file",
         "size": None if is_dir else info.get("size"),
-        "mtime": mtime,
+        "mtime": _infos.mtime(info),
     }
 
 
@@ -382,6 +353,9 @@ class StorageExplorer(anywidget.AnyWidget):
             self.default_operations() if operations is None else operations
         )
         self._jobs = JobRunner(self._send_job)
+        # "Properties" counts files with jobs of its own: it changes nothing,
+        # so it need not wait for a move or a copy to end.
+        self._scans = JobRunner(self._send_job, prefix="scan")
         # The current directory's items, kept for "list" requests (and paths).
         self._full_listing = Listing(self._make_listing("", []))
         self._listing_version = 0
@@ -593,6 +567,7 @@ class StorageExplorer(anywidget.AnyWidget):
             "download_to_jupyterlab": lambda c, _: self._reply(
                 c, self._download_to_jupyterlab_request(c)
             ),
+            "properties": lambda c, _: self._reply(c, self._properties_request(c)),
             "query_rows": lambda c, _: self._reply(c, self._query_request(c)),
             "query_check": lambda c, _: self._reply(c, self._query_request(c)),
             "query_save": lambda c, _: self._reply(c, self._query_request(c)),
@@ -1384,7 +1359,9 @@ class StorageExplorer(anywidget.AnyWidget):
         self.send({"type": "job", **job.snapshot()})
 
     def _cancel_job(self, content: dict[str, Any]) -> None:
-        self._jobs.cancel(content.get("id", ""))
+        job_id = content.get("id", "")
+        if not self._jobs.cancel(job_id):
+            self._scans.cancel(job_id)
 
     def _plan_request(self, plan: Callable[[], Plan]) -> dict[str, Any]:
         """Answer a request for an operation: start ``plan()``, or say why not."""
@@ -1614,6 +1591,26 @@ class StorageExplorer(anywidget.AnyWidget):
         self._operations.mkdir(self._fs, path)
         self._refresh_dir(dest)
         return {"created": name, "hidden": not self._isdir(path)}
+
+    # --- Properties: "Properties" in the right-click menu ---
+
+    def _properties_request(self, content: dict[str, Any]) -> dict[str, Any]:
+        """Answer "properties": for a single file, {"file": its properties}
+        (see ``properties.file_properties``); otherwise {"job": id} of a job
+        counting the files and folders (see ``FileTasks.properties``), on the
+        runner of its own. Or {"error": reason}."""
+        paths = content["paths"]
+        try:
+            if len(paths) == 1:
+                info = self._info(paths[0])
+                if info.get("type") != "directory":
+                    url = self._url(_paths.norm(info["name"]))
+                    return {"file": properties.file_properties(info, url)}
+            task = self._tasks().properties(paths)
+        except Exception as exc:
+            return {"error": f"{type(exc).__name__}: {exc}"}
+        job = self._scans.submit(task.kind, task.title, task.work)
+        return {"job": job.id}
 
     # --- Download to the Jupyter server: "Download to JupyterLab", and files
     # dropped on JupyterLab's file browser ---

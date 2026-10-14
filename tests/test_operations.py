@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import threading
 from typing import Any
 
@@ -20,6 +21,7 @@ from jupyter_storage_explorer.filesystems import (
 from jupyter_storage_explorer.jobs import JobRunner
 from jupyter_storage_explorer.operations import (
     FileSystemOperations,
+    Measurement,
     OperationCancelled,
     OperationChain,
     Progress,
@@ -76,12 +78,98 @@ class TestProgress:
         assert len(calls) == 2
 
 
+@pytest.fixture(params=["sync", "async"])
+def measuring(request):
+    """The default operations, and how to give them a filesystem:
+    FsspecOperations on it, or AsyncFsspecOperations on it as an asynchronous
+    filesystem (wrapped when called, as the wrapper binds its methods then)."""
+    if request.param == "sync":
+        return FsspecOperations(), lambda fs: fs
+    return AsyncFsspecOperations(concurrency=2), AsyncFileSystemWrapper
+
+
+class TestMeasure:
+    """measure(), by both default operations: one recursive listing without a
+    progress (before a job), folder by folder with one ("Properties")."""
+
+    def counts(self, measurement: Measurement) -> tuple[int, int, int]:
+        return measurement.files, measurement.bytes, measurement.folders
+
+    def test_a_folder(self, measuring, tree):
+        ops, wrap = measuring
+        fs = wrap(tree)
+        assert self.counts(ops.measure(fs, "/src")) == (3, 7, 1)
+        progress = Recorder()
+        measurement = ops.measure(fs, "/src", progress)
+        assert self.counts(measurement) == (3, 7, 1)
+        assert measurement.complete
+        assert (progress.files_done, progress.bytes_done) == (3, 7)
+        assert sorted(progress.names) == ["src", "sub"]  # the folders listed
+
+    def test_a_file(self, measuring, tree):
+        ops, wrap = measuring
+        measurement = ops.measure(wrap(tree), "/src/a.txt")
+        assert self.counts(measurement) == (1, 4, 0)
+        assert measurement.oldest == measurement.newest
+        assert measurement.oldest[1] == "/src/a.txt"
+
+    def test_oldest_and_newest(self, measuring, tmp_path):
+        ops, wrap = measuring
+        for name, day in {"a.txt": 3, "b.txt": 1, "sub/c.txt": 2}.items():
+            path = tmp_path / name
+            path.parent.mkdir(exist_ok=True)
+            path.write_bytes(b"x")
+            os.utime(path, (day * 1000, day * 1000))
+        fs = wrap(fsspec.filesystem("file"))
+        top = tmp_path.as_posix()
+        for measurement in (ops.measure(fs, top), ops.measure(fs, top, Progress())):
+            assert measurement.oldest == (1000, f"{top}/b.txt")
+            assert measurement.newest == (3000, f"{top}/a.txt")
+
+    def test_folders_that_cannot_be_listed(self, measuring, tree, monkeypatch):
+        ops, wrap = measuring
+        ls = tree.ls
+
+        def refusing(path: str, **kwargs: Any) -> Any:
+            if path.rstrip("/") == "/src/sub":
+                raise PermissionError(13, "Access denied", path)
+            return ls(path, **kwargs)
+
+        monkeypatch.setattr(tree, "ls", refusing)
+        measurement = ops.measure(wrap(tree), "/src", Progress())
+        assert self.counts(measurement) == (2, 6, 1)
+        assert measurement.errors == ["/src/sub: [Errno 13] Access denied: '/src/sub'"]
+
+    def test_cancelled_with_what_was_found(self, measuring, tree):
+        ops, wrap = measuring
+        fs = wrap(tree)
+
+        def cancel_once_files_found() -> None:
+            if progress.files_done:
+                progress.cancel()
+
+        progress = Progress(on_change=cancel_once_files_found)
+        measurement = ops.measure(fs, "/src", progress)
+        assert not measurement.complete
+        assert measurement.files == 2  # /src's files; /src/sub not listed
+
+
+def test_measurements_added():
+    total = Measurement(files=1, bytes=4, oldest=(5, "a"), newest=(5, "a"))
+    total.add(
+        Measurement(
+            files=2, bytes=3, folders=1, oldest=(2, "b"), newest=(9, "c"), errors=["x"]
+        )
+    )
+    assert total == Measurement(
+        files=3, bytes=7, folders=1, oldest=(2, "b"), newest=(9, "c"), errors=["x"]
+    )
+    total.add(Measurement(complete=False))
+    assert not total.complete
+
+
 class TestFsspecOperations:
     ops = FsspecOperations()
-
-    def test_measure(self, tree):
-        assert self.ops.measure(tree, "/src") == (3, 7)
-        assert self.ops.measure(tree, "/src/a.txt") == (1, 4)
 
     def test_copy_folder_file_by_file(self, tree):
         progress = Recorder()
@@ -222,10 +310,6 @@ def async_tree(tree):
 
 class TestAsyncFsspecOperations:
     ops = AsyncFsspecOperations(concurrency=2, delete_batch=2)
-
-    def test_measure(self, async_tree):
-        assert self.ops.measure(async_tree, "/src") == (3, 7)
-        assert self.ops.measure(async_tree, "/src/a.txt") == (1, 4)
 
     def test_copy_folder_concurrently(self, tree, async_tree):
         progress = Recorder()

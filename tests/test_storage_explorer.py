@@ -1207,6 +1207,34 @@ class TestCreateFolder:
         }
 
 
+class TestProperties:
+    """The "properties" request (the scan itself: test_properties.py)."""
+
+    def test_a_file_at_once(self, mem_explorer):
+        reply = mem_explorer.request(
+            {"type": "properties", "rid": 1, "paths": ["/data/a.csv"]}
+        )
+        assert reply["file"]["name"] == "a.csv"
+        assert reply["file"]["size"] == 8
+        assert reply["file"]["url"] == "memory:///data/a.csv"
+        assert "created" in reply["file"]["info"]
+
+    def test_folders_counted_by_a_job_of_its_own(self, mem_explorer):
+        mem_explorer.message({"type": "properties", "rid": 1, "paths": ["/data"]})
+        job_id = mem_explorer.sent[-1][0]["job"]
+        assert job_id.startswith("scan-")  # not one of the file operations' ids
+        job = mem_explorer.job(job_id)
+        assert (job["kind"], job["state"]) == ("properties", "done")
+        result = job["result"]
+        assert (result["files"], result["folders"], result["bytes"]) == (3, 2, 18)
+
+    def test_error(self, mem_explorer):
+        reply = mem_explorer.request(
+            {"type": "properties", "rid": 1, "paths": ["/nope"]}
+        )
+        assert reply["error"].startswith("FileNotFoundError")
+
+
 class TestMove:
     def move(self, explorer, paths, dest, if_exists="ask"):
         return explorer.request(

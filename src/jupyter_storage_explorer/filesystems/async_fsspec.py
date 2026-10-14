@@ -13,6 +13,9 @@ from fsspec.asyn import AsyncFileSystem, sync
 
 from jupyter_storage_explorer.filesystems._common import (
     file_name,
+    measure_by_folder,
+    measure_file,
+    measure_found,
     remove_emptied_folder,
     walk_files,
 )
@@ -27,7 +30,7 @@ if TYPE_CHECKING:
 
     from fsspec import AbstractFileSystem
 
-    from jupyter_storage_explorer.operations import Progress
+    from jupyter_storage_explorer.operations import Measurement, Progress
 
 
 class AsyncFsspecOperations(FileSystemOperations):
@@ -61,13 +64,30 @@ class AsyncFsspecOperations(FileSystemOperations):
         self.concurrency = concurrency
         self.delete_batch = delete_batch
 
-    def measure(self, fs: AbstractFileSystem, path: str) -> tuple[int, int]:
+    def measure(
+        self, fs: AbstractFileSystem, path: str, progress: Progress | None = None
+    ) -> Measurement:
+        """One recursive listing (``_find``: on object stores, a listing of
+        every key under the folder, a thousand per request); with
+        ``progress``, one ``_ls`` per folder, ``concurrency`` folders at a
+        time, so that it shows and can be cancelled."""
         loop = _loop_of(fs)
         info = sync(loop, fs._info, path)
         if info.get("type") != "directory":
-            return 1, info.get("size") or 0
-        files = sync(loop, fs._find, path, detail=True)
-        return len(files), sum(i.get("size") or 0 for i in files.values())
+            return measure_file(info, progress)
+        if progress is None:
+            found = sync(loop, fs._find, path, withdirs=True, detail=True)
+            return measure_found(path, found)
+
+        def list_folders(paths: Sequence[str]) -> list[Any]:
+            async def listings() -> list[Any]:
+                return await asyncio.gather(
+                    *(fs._ls(p, detail=True) for p in paths), return_exceptions=True
+                )
+
+            return sync(loop, listings)
+
+        return measure_by_folder(path, list_folders, progress, self.concurrency)
 
     def move(
         self,

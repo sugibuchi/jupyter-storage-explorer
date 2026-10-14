@@ -763,3 +763,32 @@
     left: 100%;
   }
 }
+
+/* Properties (showProperties in storage_explorer.js): label and value rows. */
+.jse-props {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.jse-props th,
+.jse-props td {
+  padding: 3px 8px 3px 0;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--jse-border);
+}
+
+.jse-props th {
+  width: 1%;
+  white-space: nowrap;
+  font-weight: normal;
+  color: var(--jse-fg-muted);
+}
+
+.jse-props td {
+  overflow-wrap: anywhere;
+}
+
+.jse-props-title {
+  margin-top: 12px;
+}

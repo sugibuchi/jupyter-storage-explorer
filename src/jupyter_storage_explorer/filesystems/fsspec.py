@@ -2,23 +2,26 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from fsspec.implementations.dirfs import DirFileSystem
 
 from jupyter_storage_explorer.filesystems._common import (
     file_name,
+    measure_by_folder,
+    measure_file,
+    measure_found,
     remove_emptied_folder,
     walk_files,
 )
 from jupyter_storage_explorer.operations import FileSystemOperations, same_filesystem
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Iterable, Sequence
 
     from fsspec import AbstractFileSystem
 
-    from jupyter_storage_explorer.operations import Progress
+    from jupyter_storage_explorer.operations import Measurement, Progress
 
 
 class FsspecOperations(FileSystemOperations):
@@ -37,11 +40,24 @@ class FsspecOperations(FileSystemOperations):
     # many files in one request, and cancelling takes effect between batches.
     DELETE_BATCH = 100
 
-    def measure(self, fs: AbstractFileSystem, path: str) -> tuple[int, int]:
-        if not fs.isdir(path):
-            return 1, fs.info(path).get("size") or 0
-        files = fs.find(path, detail=True)
-        return len(files), sum(i.get("size") or 0 for i in files.values())
+    def measure(
+        self, fs: AbstractFileSystem, path: str, progress: Progress | None = None
+    ) -> Measurement:
+        """One recursive listing (``find``); with ``progress``, one ``ls`` per
+        folder, so that it shows and can be cancelled."""
+        info = fs.info(path)
+        if info.get("type") != "directory":
+            return measure_file(info, progress)
+        if progress is None:
+            return measure_found(path, fs.find(path, withdirs=True, detail=True))
+
+        def list_folders(paths: Sequence[str]) -> list[Any]:
+            try:
+                return [fs.ls(paths[0], detail=True)]
+            except Exception as exc:
+                return [exc]
+
+        return measure_by_folder(path, list_folders, progress)
 
     def move(
         self,
