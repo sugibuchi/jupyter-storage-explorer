@@ -66,8 +66,8 @@ On accounts with a hierarchical namespace, `pip install "jupyter-storage-explore
   only names containing the text, or matching a regular expression with **.\***. Case is ignored; ✕ or Esc clears.
 - **Preview**: double-click a file, or **Preview** (with nothing selected: the current folder, e.g. a Delta Lake table).
   Tables open in the [data browser](#query-data).
-- **Right-click**: Preview as, Edit, Python code to load the data, Copy, Cut, Paste, Delete, Create a folder, Download
-  to local or to JupyterLab, Copy URL, Add bookmark.
+- **Right-click**: Preview as, Edit, Python code to load the data, Copy URL; Copy, Cut, Paste; Create a folder,
+  Delete; Download to local or to JupyterLab; Add bookmark.
 - **Bookmarks**: ☆ (★ when the folder shown is bookmarked) lists them; click one to open it, right-click it for Copy
   URL and Delete bookmark. Explorers in the kernel share them (see [Remembered states](#remembered-states)).
 - **Copy, cut and paste** work between storages and between explorers, also in other notebooks: **Cut**, then

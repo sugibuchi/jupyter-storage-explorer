@@ -1436,7 +1436,15 @@ function render({ model, el }) {
     const data = single && hasUrl(single) ? single : null;
     // The reply arrives after the menu is built, so the refs below are set by then.
     const info = data ? requestMenuInfo(data.path) : null;
-    const items = [
+    const folder = single?.type === "directory" ? single : null;
+    const files = !targets.some(isFolder);
+    // Folder operations are dangerous: offered only in unsafe mode.
+    const allowed = files || unsafe();
+    const what = files ? "files" : "items";
+    const withUrls = targets.every(hasUrl);
+
+    // Groups of items, joined by separators; groups left empty are dropped.
+    const open = [
       {
         label: "Preview",
         disabled: !data,
@@ -1446,18 +1454,18 @@ function render({ model, el }) {
       },
     ];
     if (info) {
-      items.push({
+      open.push({
         label: "Preview as",
         hidden: true,
         ref: (row) => (info.previewAsRow = row),
         submenu: (sub) => (info.previewAsSub = sub),
       });
     }
-    if (withOpen && single?.type === "directory") items.push({ label: "Open", action: () => navigate(single.path) });
+    if (withOpen && folder) open.push({ label: "Open", action: () => navigate(folder.path) });
     if (info) {
-      items.push({ label: "Edit", hidden: true, ref: (row) => (info.editRow = row), action: () => openEditor(single.path) });
+      open.push({ label: "Edit", hidden: true, ref: (row) => (info.editRow = row), action: () => openEditor(single.path) });
     }
-    items.push({
+    open.push({
       label: "Python code",
       disabled: !data,
       submenu: (sub) => {
@@ -1465,48 +1473,48 @@ function render({ model, el }) {
         info.codeSub = sub;
       },
     });
-    items.push("-");
+    // Locations are copied only as URLs: fsspec's paths can differ from the
+    // storage's own notion of a path (e.g. abfs's "container/key"). Files'
+    // URLs also come with "Copy" below, so "Copy URL" is for folders, which
+    // "Copy" leaves to unsafe mode.
+    if (withUrls && !files) {
+      open.push({
+        label: `Copy ${count}URL${count ? "s" : ""}`,
+        action: async () => copy(await urlsOf(targets), count ? `${count}URLs` : "URL"),
+      });
+    }
+
+    // "Copy" and "Cut" copy for "Paste" (and put the URLs on the clipboard).
+    const clipboard = [];
+    if (withUrls && allowed) {
+      clipboard.push({ label: count ? `Copy ${count}${what}` : "Copy", action: () => copyFiles(targets) });
+      if (!targets.some((t) => t.path === model.get("_root"))) {
+        clipboard.push({ label: count ? `Cut ${count}${what}` : "Cut", action: () => copyFiles(targets, true) });
+      }
+    }
+    const paste = folder && pasteItem(folder.path);
+    if (paste) clipboard.push(paste);
+
+    const change = [];
+    if (folder) change.push({ label: "Create a folder", action: () => createFolder(folder.path) });
+    if (allowed) change.push({ label: count ? `Delete ${count}${what}` : "Delete", action: () => confirmDelete(targets) });
+
     // Files only: downloading folders is intentionally not supported. The
     // kernel refuses files the explorer's policy does not let go there.
-    if (targets.every((t) => t.type !== "directory")) {
+    const downloads = [];
+    if (files) {
       const paths = targets.map((t) => t.path);
-      items.push(
+      downloads.push(
         { label: count ? `Download ${count}files to local` : "Download to local", action: () => download(paths) },
         { label: count ? `Download ${count}files to JupyterLab` : "Download to JupyterLab", action: () => downloadToJupyterLab(paths) },
       );
     }
-    // Locations are copied only as URLs: fsspec's paths can differ from the
-    // storage's own notion of a path (e.g. abfs's "container/key"). "Copy"
-    // and "Cut" copy for "Paste" too (and put the URLs on the clipboard);
-    // folders only in unsafe mode, otherwise "Copy URL".
-    const files = !targets.some(isFolder);
-    // Folder operations are dangerous: offered only in unsafe mode.
-    const allowed = files || unsafe();
-    const what = files ? "files" : "items";
-    if (targets.every(hasUrl)) {
-      if (allowed) {
-        items.push({ label: count ? `Copy ${count}${what}` : "Copy", action: () => copyFiles(targets) });
-        if (!targets.some((t) => t.path === model.get("_root"))) {
-          items.push({ label: count ? `Cut ${count}${what}` : "Cut", action: () => copyFiles(targets, true) });
-        }
-      }
-      if (!files) {
-        items.push({
-          label: `Copy ${count}URL${count ? "s" : ""}`,
-          action: async () => copy(await urlsOf(targets), count ? `${count}URLs` : "URL"),
-        });
-      }
-    }
-    if (single?.type === "directory") {
-      const paste = pasteItem(single.path);
-      if (paste) items.push(paste);
-      items.push({ label: "Create a folder", action: () => createFolder(single.path) });
-      items.push(bookmarkItem(single.path));
-    }
-    if (allowed) {
-      items.push("-", { label: count ? `Delete ${count}${what}` : "Delete", action: () => confirmDelete(targets) });
-    }
-    return items;
+
+    const bookmark = folder ? [bookmarkItem(folder.path)] : [];
+
+    return [open, clipboard, change, downloads, bookmark]
+      .filter((group) => group.length)
+      .flatMap((group, i) => (i ? ["-", ...group] : group));
   }
 
   const columns = [
