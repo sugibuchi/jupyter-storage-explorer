@@ -1,10 +1,9 @@
 # DataExplorer
 
-`DataExplorer` opens the data browser for a dataframe in your notebook: pandas, polars, PyArrow, DuckDB, Spark, and the
-other libraries [narwhals](https://narwhals-dev.github.io/narwhals/) supports. It is the browser `StorageExplorer` opens
-for tables ([Query data](storage-explorer.md#query-data)). For installation, see the [README](../README.md).
+`DataExplorer` opens the data browser for a dataframe: pandas, polars, PyArrow, DuckDB, Spark, and the other libraries
+[narwhals](https://narwhals-dev.github.io/narwhals/) supports. It is the browser `StorageExplorer` opens for tables.
 
-![DataExplorer showing a Delta Lake table in a notebook](../figs/data-explorer.png)
+![DataExplorer showing a Delta Lake table in a notebook](figs/data-explorer.png)
 
 - [Opening data](#opening-data)
 - [Using the data browser](#using-the-data-browser)
@@ -24,25 +23,45 @@ DataExplorer(spark.table("sales"), mode="memory")  # read the first rows into me
 DataExplorer(orders_df, settings=QuerySettings(sort="date", descending=True))
 ```
 
-Lazy data starts **Live**, eager data **In memory**. Pass a function (`lambda: pl.scan_parquet(url)`) for **⟳** to
-read the data again.
+Pass a function (`lambda: pl.scan_parquet(url)`) for **⟳** to read the data again.
 
 ## Using the data browser
 
-- ◀ ▶ to page, click a column name to sort (again for descending, a third time to stop), its funnel to filter
-  (*Null / empty*, *Range*, *Contains*, *Regex*). Active filters are listed in the toolbar: click one to edit it, × to
-  remove it.
-- **Select columns** to hide columns, drag a header's edge to resize (double-click for automatic widths), **Reset** to
-  clear filters, **⟳** to reload.
-- **Live** / **In memory** (top right): query the data itself, or read its first rows into memory once (100,000 by
-  default) and query those (faster, but filters and sorting then apply to those rows only). Data of up to 1,000 rows is
-  always kept in memory. Eager data, such as pandas', is always in memory, queried with polars when it is installed.
+### Page and sort
+
+◀ ▶ to page. Click a column name to sort (again for descending, a third time to stop). **⟳** reloads the data.
+
+<img src="figs/browser-sort.png" width="830" alt="The data browser sorted by unit_price, descending">
+
+### Filter
+
+Click a column's funnel to filter it: *Null / empty*, *Range*, *Contains* or *Regex*.
+
+<img src="figs/browser-filter.png" width="462" alt="The filter dialog of a column, with a range">
+
+Active filters are listed in the toolbar: click one to edit it, × to remove it. **Reset** removes them all.
+
+<img src="figs/browser-chips.png" width="830" alt="Two active filters in the toolbar">
+
+### Select columns
+
+**Select columns** hides and shows columns. Drag a header's edge to resize a column (double-click for automatic
+widths).
+
+<img src="figs/browser-columns.png" width="462" alt="The Select columns dialog">
+
+### Live / In memory
+
+At the top right: query the data itself, or its first 100,000 rows read into memory (faster, but filters and sorting
+apply to those rows only). Eager data, such as pandas', is always in memory.
+
+<img src="figs/browser-mode.png" width="221" alt="Live and In memory, with In memory on">
 
 ## The result in code
 
 `explorer.result()` gives the data with the widget's filters, sort order and hidden columns applied, as a dataframe of
-the same library (lazy data stays lazy), to continue your analysis in code; `result(all_columns=True)` keeps the
-hidden columns. It covers all the data, also after **In memory**, where the widget shows the first rows only:
+the same library (lazy data stays lazy), all of it even **In memory**; `result(all_columns=True)` keeps the hidden
+columns:
 
 ```python
 explorer = DataExplorer(pl.scan_parquet("sales/*.parquet"))
@@ -52,10 +71,9 @@ explorer.result().group_by("region").agg(pl.col("amount").sum()).collect()
 
 ## Following the widget: on_change
 
-`explorer.on_change(function)` calls `function(explorer)` whenever `result()` changes in the widget (filters, sort
-order, columns shown, ⟳), e.g. to redraw a chart; `on_change(function, remove=True)` stops it. Draw into an
-`ipywidgets.Output` shown in a cell: what the function displays goes to no cell otherwise. It runs in the kernel, so the
-widget waits for it; keep it quick.
+`explorer.on_change(function)` calls `function(explorer)` whenever `result()` changes in the widget, e.g. to redraw a
+chart; `on_change(function, remove=True)` stops it. Draw into an `ipywidgets.Output` shown in a cell, and keep it
+quick: the widget waits for it.
 
 ```python
 import ipywidgets
@@ -77,9 +95,8 @@ chart  # in another cell
 
 ## Settings in code: QuerySettings
 
-`QuerySettings` sets the filters, sort order, hidden columns and widths to start with. `settings=` also takes them as
-a dict or JSON text, as `to_dict()` and `to_json()` give. To keep settings made in the widget, print them as text and
-paste them into your code:
+`settings=` sets the filters, sort order, hidden columns and widths to start with: a `QuerySettings`, or a dict or
+JSON text. To keep settings made in the widget, print them and paste them into your code:
 
 ```python
 explorer = DataExplorer(orders_df)
