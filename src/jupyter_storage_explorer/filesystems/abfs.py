@@ -45,10 +45,7 @@ class AzureDataLakeGen2Operation(FileSystemOperations):
     >>> from jupyter_storage_explorer.filesystems.abfs import AzureDataLakeGen2Operation
     >>> StorageExplorer(
     ...     "abfs://lake@myaccount.dfs.core.windows.net/raw",
-    ...     operations=[
-    ...         AzureDataLakeGen2Operation(),
-    ...         *StorageExplorer.default_operations(),
-    ...     ],
+    ...     operations=[AzureDataLakeGen2Operation()],
     ... )
     """
 

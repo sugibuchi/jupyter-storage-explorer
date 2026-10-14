@@ -30,6 +30,12 @@ final. Each file may have these functions, all optional:
     ``[FileSystemOperations, ...]``: file operations of your own, tried
     before ``StorageExplorer.default_operations()``; a later layer's come
     first.
+``transfer_policy()``
+    ``[{"rule": "allow" or "deny", "src": regex, "dest": regex}, ...]``:
+    the rules of the directions files may be transferred in (see
+    ``StorageExplorer``'s ``transfer_policy``); a later layer's come first,
+    so they decide before an earlier layer's, unless one made the policy
+    final.
 ``parameters()``
     ``{parameter: value}`` for ``StorageExplorer``'s other arguments, e.g.
     ``{"height": "fill", "max_upload_bytes": None}``, merged by name.
@@ -53,8 +59,13 @@ For example, ``/etc/jupyter/storage-explorer/launcher.py``::
     def filesystems():
         return {"Data lake": "abfs://lake@myaccount.dfs.core.windows.net"}
 
+    def transfer_policy():
+        # Nothing leaves the lake for users' computers.
+        return [{"rule": "deny", "src": "abfs://lake@.*", "dest": "browser:///.*"}]
+
     def final():
-        return ["filesystems"]  # users cannot change the storages offered
+        # Users cannot change the storages offered, or the policy.
+        return ["filesystems", "transfer_policy"]
 
 and ``~/.jupyter/storage-explorer/launcher.py``::
 
@@ -87,6 +98,7 @@ HOOKS = (
     "formats",
     "format_options",
     "operations",
+    "transfer_policy",
     "parameters",
     "style",
 )
@@ -94,7 +106,16 @@ HOOKS = (
 # StorageExplorer arguments that are not "parameters": set by their own
 # function, or by the launcher.
 _NOT_PARAMETERS = frozenset(
-    {"self", "path", "fs", "filesystems", "formats", "format_options", "operations"}
+    {
+        "self",
+        "path",
+        "fs",
+        "filesystems",
+        "formats",
+        "format_options",
+        "operations",
+        "transfer_policy",
+    }
 )
 
 
@@ -114,13 +135,13 @@ class Settings:
     formats: list[Any] = dataclasses.field(default_factory=list)
     format_options: dict[str, Any] = dataclasses.field(default_factory=dict)
     operations: list[Any] = dataclasses.field(default_factory=list)
+    transfer_policy: list[Any] = dataclasses.field(default_factory=list)
     parameters: dict[str, Any] = dataclasses.field(default_factory=dict)
     style: str = ""
     warnings: list[str] = dataclasses.field(default_factory=list)
 
     def explorer_arguments(self) -> tuple[tuple[Any, ...], dict[str, Any]]:
         """The positional and keyword arguments to create the explorer with."""
-        from jupyter_storage_explorer import StorageExplorer  # noqa: PLC0415
         from jupyter_storage_explorer.formats import default_formats  # noqa: PLC0415
 
         kwargs: dict[str, Any] = {
@@ -134,10 +155,9 @@ class Settings:
         elif self.format_options:
             kwargs["format_options"] = dict(self.format_options)
         if self.operations:
-            kwargs["operations"] = [
-                *self.operations,
-                *StorageExplorer.default_operations(),
-            ]
+            kwargs["operations"] = list(self.operations)
+        if self.transfer_policy:
+            kwargs["transfer_policy"] = list(self.transfer_policy)
         filesystems = {k: v for k, v in self.filesystems.items() if v is not None}
         if filesystems:
             return (), {"filesystems": filesystems, **kwargs}
@@ -242,6 +262,7 @@ _MERGES = {
     "formats": "first",
     "format_options": "by name",
     "operations": "first",
+    "transfer_policy": "first",
     "style": "joined",
 }
 

@@ -213,11 +213,11 @@ class StorageExplorer(anywidget.AnyWidget):
         (see ``listing.Listing``), one page at a time, instead of by the
         browser from the whole listing; None for never.
     operations : sequence of FileSystemOperations, optional
-        How files are moved, copied, deleted, uploaded and downloaded: for
-        each operation, the first object that supports it does it (see
-        operations.py). Default: ``default_operations()``. A list given
-        replaces it, e.g. ``[MyOps(), *StorageExplorer.default_operations()]``
-        for server-side copies of your own.
+        File operations of your own, tried before ``default_operations()``,
+        e.g. ``[MyOps()]`` for server-side copies: for each operation (move,
+        copy, delete, ...), the first object that supports it does it (see
+        operations.py). To change the defaults themselves, override
+        ``default_operations`` in a subclass.
     transfer_policy : list of dict, optional
         Rules for the directions files may be transferred in, each
         ``{"rule": "allow" or "deny", "src": regex, "dest": regex}``.
@@ -350,7 +350,7 @@ class StorageExplorer(anywidget.AnyWidget):
         # How files are moved, copied, deleted and downloaded (see operations.py),
         # and the jobs doing it in the background (see jobs.py).
         self._operations = OperationChain(
-            self.default_operations() if operations is None else operations
+            [*(operations or ()), *self.default_operations()]
         )
         self._jobs = JobRunner(self._send_job)
         # "Properties" counts files with jobs of its own: it changes nothing,
@@ -404,7 +404,7 @@ class StorageExplorer(anywidget.AnyWidget):
 
     @staticmethod
     def default_operations() -> list[FileSystemOperations]:
-        """The file operations used unless ``operations`` is given.
+        """The file operations tried after those given as ``operations``.
 
         Returns
         -------
@@ -413,7 +413,8 @@ class StorageExplorer(anywidget.AnyWidget):
             on local disks), ``AsyncFsspecOperations`` (asynchronous fsspec
             filesystems such as s3fs, gcsfs and adlfs, many files at a time),
             then ``FsspecOperations`` (everything else, with fsspec), from the
-            ``jupyter_storage_explorer.filesystems`` package.
+            ``jupyter_storage_explorer.filesystems`` package. The last does
+            every operation, so the explorer can always do them.
         """
         return [AtomicMoveOperation(), AsyncFsspecOperations(), FsspecOperations()]
 

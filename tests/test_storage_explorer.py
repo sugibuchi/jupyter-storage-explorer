@@ -720,9 +720,7 @@ class TestFollowingJobs:
             {"/src/n1.txt": b"", "/src/n2.txt": b"", "/d/a/x": b"", "/d/b/x": b""}
         )
         watch = Watch()
-        explorer = make(
-            "/", fs=memfs, operations=[watch, *StorageExplorer.default_operations()]
-        )
+        explorer = make("/", fs=memfs, operations=[watch])
         watch.explorer = explorer
         explorer._current_dir = "/d"
         return explorer, watch
@@ -1300,9 +1298,12 @@ class TestJobs:
     def test_default_operations(self, memfs):
         kinds = [type(o) for o in make("/", fs=memfs)._operations.operations]
         assert kinds == [AtomicMoveOperation, AsyncFsspecOperations, FsspecOperations]
-        # A list given is used as it is.
-        explorer = make("/", fs=memfs, operations=[FsspecOperations()])
-        assert [type(o) for o in explorer._operations.operations] == [FsspecOperations]
+        # Those given come first, then the defaults.
+        explorer = make("/", fs=memfs, operations=[FileSystemOperations()])
+        assert [type(o) for o in explorer._operations.operations] == [
+            FileSystemOperations,
+            *kinds,
+        ]
 
     def test_operations_of_your_own(self, memfs):
         """An operations object doing deletions its own way, fsspec the rest."""
@@ -1312,9 +1313,7 @@ class TestJobs:
                 fs.mv(path, "/trash/" + path.rsplit("/", 1)[-1])
 
         memfs.pipe({"/d/a.txt": b"a", "/d/b.txt": b"b"})
-        explorer = make(
-            "/d", fs=memfs, operations=[Trash(), *StorageExplorer.default_operations()]
-        )
+        explorer = make("/d", fs=memfs, operations=[Trash()])
         explorer.request({"type": "delete", "rid": 1, "paths": ["/d/a.txt"]})
         assert memfs.cat_file("/trash/a.txt") == b"a"
         explorer.request(
@@ -1334,7 +1333,7 @@ class TestJobs:
         explorer = make(
             "/d",
             fs=memfs,
-            operations=[CancelAfterOne(), *StorageExplorer.default_operations()],
+            operations=[CancelAfterOne()],
         )
         explorer.message(
             {
@@ -1369,7 +1368,7 @@ class TestJobs:
         explorer = make(
             "/d",
             fs=memfs,
-            operations=[CancelInside(), *StorageExplorer.default_operations()],
+            operations=[CancelInside()],
         )
         reply = explorer.request(
             {

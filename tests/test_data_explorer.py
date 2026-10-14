@@ -86,6 +86,27 @@ def test_function_called_again_on_reload():
     assert [c["name"] for c in reply["columns"]] == ["a"]
 
 
+@pytest.mark.parametrize(
+    "given",
+    [
+        QuerySettings(sort="a", descending=True, hidden=["b"]),
+        {"sort": {"column": "a", "descending": True}, "hidden": ["b"]},
+        '{"sort": {"column": "a", "descending": true}, "hidden": ["b"]}',
+    ],
+)
+def test_settings_as_dict_or_json(given):
+    explorer = Explorer(DF.lazy(), settings=given)
+    assert explorer.settings == QuerySettings(sort="a", descending=True, hidden=["b"])
+
+
+@pytest.mark.parametrize(
+    ("given", "error"), [("[1]", ValueError), ("{", ValueError), (3, TypeError)]
+)
+def test_settings_of_another_form(given, error):
+    with pytest.raises(error):
+        Explorer(DF.lazy(), settings=given)
+
+
 def test_settings_in_and_out():
     settings = QuerySettings(
         filters={"a": {"op": "range", "min": 2}},

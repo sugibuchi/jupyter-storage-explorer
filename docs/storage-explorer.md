@@ -55,7 +55,7 @@ StorageExplorer(
 ### Azure Data Lake Storage Gen2
 
 On accounts with a hierarchical namespace, `pip install "jupyter-storage-explorer[abfs]"` and
-`operations=[AzureDataLakeGen2Operation(), *StorageExplorer.default_operations()]` (from
+`operations=[AzureDataLakeGen2Operation()]` (from
 `jupyter_storage_explorer.filesystems.abfs`) move folders in one step and create empty folders.
 
 ## Using the explorer
@@ -109,7 +109,8 @@ URLs are those of "Copy URL" (local files: their path; the destination: the item
 Jupyter server through JupyterLab's file browser ("Download to JupyterLab", drag and drop with it) are
 `jupyterlab://<absolute path>`, e.g. `jupyterlab:///home/jovyan/x.csv`, and files on your computer
 `browser:///<name>`. A pattern left out matches any URL. Items refused are reported, the others done.
-This keeps files from going the wrong way by mistake; it is not a security boundary.
+This keeps files from going the wrong way by mistake; it is not a security boundary. For the launcher's tabs, set it
+with `transfer_policy()` in its configuration (see [the launcher](../launcher/README.md#configuration)).
 
 ## Query data
 
@@ -209,7 +210,7 @@ explorer.selected_urls  # the URLs of the selected items
 | `download_to_jupyterlab_path="."`   | Folder "Download to JupyterLab" copies into, e.g. `"~/Downloads"`; default: where it runs. To refuse downloads, use `transfer_policy`. |
 | `filesystems={...}`                 | Several named storages; see [Several storages in one explorer](#several-storages-in-one-explorer).                                    |
 | `max_browser_items=20_000`          | Folders with more items are filtered, sorted and paged by the kernel, one page at a time, instead of the browser (`None`: never).     |
-| `operations=[...]`                  | How files are moved, copied, deleted and downloaded, replacing `StorageExplorer.default_operations()`: e.g. `[MyOps(), *StorageExplorer.default_operations()]` for server-side copies of your own (see [operations.py](../src/jupyter_storage_explorer/operations.py), and [filesystems](../src/jupyter_storage_explorer/filesystems) for the defaults). |
+| `operations=[...]`                  | File operations of your own, tried before `StorageExplorer.default_operations()`: e.g. `[MyOps()]` for server-side copies (see [operations.py](../src/jupyter_storage_explorer/operations.py), and [filesystems](../src/jupyter_storage_explorer/filesystems) for the defaults). |
 | `transfer_policy=[...]`             | Rules for transfers of files between storages; see [Transfer policy](#transfer-policy).                                               |
 | `states="states.json"`              | Where bookmarks and the data browser's settings are kept (a path or an `ExplorerStates`); see [Remembered states](#remembered-states). |
 | `format_options={...}`              | Options for the formats (see [Format options](#format-options)).                                                                      |

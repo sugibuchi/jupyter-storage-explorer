@@ -77,28 +77,30 @@ chart  # in another cell
 
 ## Settings in code: QuerySettings
 
-`QuerySettings` sets the filters, sort order, hidden columns and widths to start with. To keep settings made in the
-widget, print them as text and paste them into your code:
+`QuerySettings` sets the filters, sort order, hidden columns and widths to start with. `settings=` also takes them as
+a dict or JSON text, as `to_dict()` and `to_json()` give. To keep settings made in the widget, print them as text and
+paste them into your code:
 
 ```python
 explorer = DataExplorer(orders_df)
 print(explorer.settings.to_json())  # after filtering and sorting in the widget
 
-DataExplorer(orders_df, settings=QuerySettings.from_json("""
+settings = """
 {
     "filters": {"price": {"op": "range", "min": "10", "max": ""}},
     "sort": {"column": "date", "descending": true},
     "hidden": ["comment"],
     "widths": {}
 }
-"""))
+"""
+DataExplorer(orders_df, settings=settings)
 ```
 
 ## DataExplorer options
 
 | Option                     | Meaning                                                                                                                      |
 |----------------------------|------------------------------------------------------------------------------------------------------------------------------|
-| `settings=QuerySettings()` | Filters, sort order, hidden columns and widths to start with (see above).                                                    |
+| `settings=QuerySettings()` | Filters, sort order, hidden columns and widths to start with: a `QuerySettings`, dict or JSON text (see above).              |
 | `mode="auto"`              | Where queries run first: `"auto"`, `"live"` (lazy data only) or `"memory"`; switch in the widget.                            |
 | `max_live_rows=1000`       | Data up to this size is kept in memory; also the most rows a live query gives if the library cannot skip rows (e.g. Spark). |
 | `max_memory_rows=100_000`  | The most rows read into memory.                                                                                              |

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
 import anywidget
@@ -27,6 +28,20 @@ _LIBRARY_LABELS = {
 }
 
 
+def _query_settings(settings: Any) -> QuerySettings:
+    """``DataExplorer``'s ``settings``, given in any of the forms it takes."""
+    if isinstance(settings, QuerySettings):
+        return settings
+    if isinstance(settings, str):
+        return QuerySettings.from_json(settings)
+    if isinstance(settings, Mapping):
+        return QuerySettings.from_dict(dict(settings))
+    raise TypeError(
+        f"settings must be a QuerySettings, a dict or JSON text, "
+        f"not {type(settings).__name__}"
+    )
+
+
 class DataExplorer(anywidget.AnyWidget):
     """The data browser for one dataframe: page through it, sort, filter and
     choose columns, as "Query data" does in ``StorageExplorer``.
@@ -45,10 +60,11 @@ class DataExplorer(anywidget.AnyWidget):
         Spark, Dask, Ibis, ...) or eager (pandas, polars DataFrame, PyArrow,
         ...). Or a function returning one, called again by the reload button,
         e.g. ``lambda: pl.scan_parquet(url)`` to read a file again.
-    settings : QuerySettings, optional
-        The filters, sort order, hidden columns and widths to start with.
-        Settings that do not fit the data (unknown columns, filters for
-        another type) are left out.
+    settings : QuerySettings, dict or str, optional
+        The filters, sort order, hidden columns and widths to start with: a
+        ``QuerySettings``, or the dict or JSON text it gives with
+        ``to_dict()`` or ``to_json()``. Settings that do not fit the data
+        (unknown columns, filters for another type) are left out.
     mode : {"auto", "live", "memory"}, default "auto"
         Where queries run first: "auto" is live for lazy data, unless it has
         at most ``max_live_rows`` rows (kept in memory then), and in memory
@@ -70,9 +86,11 @@ class DataExplorer(anywidget.AnyWidget):
     ------
     TypeError
         If ``data`` is not a dataframe narwhals supports, e.g. a file location
-        (read it first, or browse it with ``StorageExplorer``).
+        (read it first, or browse it with ``StorageExplorer``), or
+        ``settings`` is of another type.
     ValueError
-        If ``mode`` is unknown, or "live" for eager data.
+        If ``mode`` is unknown, or "live" for eager data, or ``settings`` is
+        text that is not a JSON object.
 
     See Also
     --------
@@ -84,6 +102,8 @@ class DataExplorer(anywidget.AnyWidget):
     >>> DataExplorer(pl.scan_parquet("s3://bucket/sales/*.parquet"))
     >>> DataExplorer(spark.table("sales"), mode="memory")
     >>> DataExplorer(df, settings=QuerySettings(sort="date", descending=True))
+    >>> settings = '{"sort": {"column": "date", "descending": true}}'  # to_json()'s
+    >>> DataExplorer(df, settings=settings)
     """
 
     _esm = _static.esm("data_explorer")
@@ -100,7 +120,7 @@ class DataExplorer(anywidget.AnyWidget):
         self,
         data: Any,
         *,
-        settings: QuerySettings | None = None,
+        settings: QuerySettings | Mapping[str, Any] | str | None = None,
         mode: str = "auto",
         max_live_rows: int = 1000,
         max_memory_rows: int = 100_000,
@@ -117,7 +137,7 @@ class DataExplorer(anywidget.AnyWidget):
         # remember them by, unlike files in StorageExplorer.
         self._states = ExplorerStates()
         if settings is not None:
-            self._states.remember_query(_KEY, settings)
+            self._states.remember_query(_KEY, _query_settings(settings))
         try:
             self._data = DataQuery(
                 data,
