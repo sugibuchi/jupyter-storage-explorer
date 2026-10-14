@@ -76,11 +76,13 @@ class JobRunner:
 
     ``notify(job)`` is called on the main thread whenever a job changes: at
     most every ``REPORT_INTERVAL`` seconds while it runs, and when it starts
-    and ends.
+    and ends. Job ids are ``prefix`` and a number, so that the jobs of
+    several runners notifying the same frontend have different ids.
     """
 
-    def __init__(self, notify: Callable[[Job], None]) -> None:
+    def __init__(self, notify: Callable[[Job], None], prefix: str = "job") -> None:
         self._notify = notify
+        self._prefix = prefix
         self.jobs: dict[str, Job] = {}
         self._ids = itertools.count(1)
         try:
@@ -110,7 +112,7 @@ class JobRunner:
         runs on the main thread, before the final ``notify``. While it runs,
         ``update(job)`` runs on the main thread before each progress report
         (e.g. to show what it has changed so far)."""
-        job = Job(id=f"job-{next(self._ids)}", kind=kind, title=title)
+        job = Job(id=f"{self._prefix}-{next(self._ids)}", kind=kind, title=title)
         last = [0.0]
         lock = threading.Lock()
 

@@ -67,7 +67,10 @@ On accounts with a hierarchical namespace, `pip install "jupyter-storage-explore
 - **Preview**: double-click a file, or **Preview** (with nothing selected: the current folder, e.g. a Delta Lake table).
   Tables open in the [data browser](#query-data).
 - **Right-click**: Preview as, Edit, Python code to load the data, Copy URL; Copy, Cut, Paste; Create a folder,
-  Delete; Download to local or to JupyterLab; Add bookmark.
+  Delete; Download to local or to JupyterLab; Properties, Add bookmark.
+- **Properties**: for a file, its size, modification time and everything its storage tells about it; for folders and
+  several items, the number of files and folders in them, their total size, and the oldest and newest files. Counting
+  large folders can take a while: the explorer waits meanwhile, and **Cancel** shows what was counted so far.
 - **Bookmarks**: ☆ (★ when the folder shown is bookmarked) lists them; click one to open it, right-click it for Copy
   URL and Delete bookmark. Explorers in the kernel share them (see [Remembered states](#remembered-states)).
 - **Copy, cut and paste** work between storages and between explorers, also in other notebooks: **Cut**, then

@@ -21,12 +21,15 @@ user cancelled, which raises ``OperationCancelled``.
 from __future__ import annotations
 
 import contextlib
+import dataclasses
 import os
 import tempfile
 import threading
 from typing import TYPE_CHECKING, Any
 
 from fsspec.callbacks import Callback
+
+from jupyter_storage_explorer import _infos
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -207,6 +210,76 @@ class _ProgressCallback(Callback):
         self._progress.check()
 
 
+@dataclasses.dataclass
+class Measurement:
+    """What ``FileSystemOperations.measure`` found at a path.
+
+    Attributes
+    ----------
+    files : int
+        Files: 1 for a file; for a folder, those in it and its subfolders.
+    bytes : int
+        Their total size.
+    folders : int
+        Folders in a folder and its subfolders (not the folder itself).
+    oldest, newest : tuple of (float, str), optional
+        The modification time (seconds since the epoch) and path of the
+        oldest and newest files; None when no file has a modification time.
+    errors : list of str
+        Folders that could not be listed ("path: reason"), left out.
+    complete : bool
+        False if measuring stopped before the end (the user cancelled): the
+        counts are of what was found until then.
+    """
+
+    files: int = 0
+    bytes: int = 0
+    folders: int = 0
+    oldest: tuple[float, str] | None = None
+    newest: tuple[float, str] | None = None
+    errors: list[str] = dataclasses.field(default_factory=list)
+    complete: bool = True
+
+    def add_files(self, infos: Sequence[dict[str, Any]]) -> None:
+        """Count files, given their fsspec info dicts (e.g. from ``ls``).
+
+        Parameters
+        ----------
+        infos : sequence of dict
+            The files' info dicts, with "name", and "size" and a modification
+            time when the filesystem gives them.
+        """
+        for info in infos:
+            self.files += 1
+            self.bytes += info.get("size") or 0
+            ts = _infos.mtime(info)
+            if ts is not None:
+                self._dated(ts, info["name"].rstrip("/"))
+
+    def add(self, other: Measurement) -> None:
+        """Add what ``other`` found, e.g. for several selected items.
+
+        Parameters
+        ----------
+        other : Measurement
+            Another path's measurement.
+        """
+        self.files += other.files
+        self.bytes += other.bytes
+        self.folders += other.folders
+        for stamp in (other.oldest, other.newest):
+            if stamp is not None:
+                self._dated(*stamp)
+        self.errors += other.errors
+        self.complete = self.complete and other.complete
+
+    def _dated(self, ts: float, path: str) -> None:
+        if self.oldest is None or ts < self.oldest[0]:
+            self.oldest = (ts, path)
+        if self.newest is None or ts > self.newest[0]:
+            self.newest = (ts, path)
+
+
 class FileSystemOperations:
     """File operations for ``StorageExplorer``, to do some of them in a way of
     your own (see the module docstring).
@@ -255,11 +328,18 @@ class FileSystemOperations:
         error, not taken to mean "not supported".
         """
 
-    def measure(self, fs: AbstractFileSystem, path: str) -> tuple[int, int]:
-        """Count the files at a path and their size, for the progress bar.
+    def measure(
+        self, fs: AbstractFileSystem, path: str, progress: Progress | None = None
+    ) -> Measurement:
+        """Count the files and folders at a path, their size, and the oldest
+        and newest files.
 
-        Called for each item of a job before it starts; it should be quick
-        compared with the operation itself (e.g. one listing).
+        Used two ways. Without ``progress``: for the progress bar of a job,
+        for each of its items before it starts, so it should be quick
+        compared with the operation itself (e.g. one recursive listing).
+        With ``progress``: for "Properties" in the explorer, where measuring
+        is the job itself, so it reports as it goes and can be cancelled
+        (e.g. listing folder by folder).
 
         Parameters
         ----------
@@ -267,12 +347,18 @@ class FileSystemOperations:
             The filesystem ``path`` is on.
         path : str
             A file or folder on ``fs`` (an fsspec path of ``fs``).
+        progress : Progress, optional
+            Where to report the files found (``advance``, their bytes too)
+            and the folder being listed (``working_on``), and check for a
+            cancel (``progress.check()``, between listings). Folders that
+            cannot be listed are then left out, in ``Measurement.errors``,
+            rather than raising; and once the user cancels, measuring stops
+            and returns what it found, with ``complete`` False.
 
         Returns
         -------
-        tuple of (int, int)
-            The number of files (1 for a file; for a folder, those in it and
-            its subfolders) and their total size in bytes.
+        Measurement
+            What was found.
 
         Raises
         ------

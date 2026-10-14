@@ -124,6 +124,17 @@ pieces (`incoming.py`), and the last piece starts `FileTasks.upload_file`. Path 
 that. The main thread is reached through the kernel's asyncio loop (`call_soon_threadsafe`); without a running loop
 (tests), jobs run synchronously, so tests see the result at once.
 
+**Properties** ("Properties" in the right-click menu, `properties.py`). One file: its fsspec info, answered at once.
+Folders or several items: `FileTasks.properties` adds up the operations' `measure` of each item (`properties.scan`),
+as a job on a `JobRunner` of its own (`_scans`, ids `scan-N`), so it never waits for a move; the frontend shows it in
+a blocking dialog with Cancel (not in the jobs above the status bar). It is not an operation: it does not take unsafe
+mode. `FileSystemOperations.measure(fs, path, progress=None)` returns a `Measurement` (files, bytes, folders, oldest
+and newest files, errors, `complete`): without `progress` (before a job's work, for its progress bar) the defaults
+make one recursive `find`; with it, they list folder by folder (`_common.measure_by_folder`; async: `concurrency`
+folders at a time), reporting files found, leaving unlistable folders in `errors` (not `fs.walk`, whose `on_error`
+misses subfolders) and returning what was found, `complete` False, on a cancel. `_infos.mtime` gives the
+modification time whichever key a filesystem uses, for the list too.
+
 **Unsafe mode.** Folder operations (move, copy or cut and paste, delete) are offered only while the "Unsafe mode" slider in
 the status bar is on (trait `_unsafe_mode`). In the frontend, every operation calls `takeUnsafe()` as it starts, which
 turns it off (one operation at a time), and sends whether it was on with its request (`"unsafe"`); the kernel refuses
@@ -197,7 +208,7 @@ storage options (`spark_url()` rewrites `abfs`/`s3` to `abfss`/`s3a`).
 
 - Comments and docstrings are written in full sentences explaining *why*; keep that density and tone.
 - Docstrings of the public API, what users construct, call, subclass or override (`StorageExplorer`, `DataExplorer`,
-  `QuerySettings`, `ExplorerStates` (with `Bookmark`, `QueryState`), `FileSystemOperations` and its subclasses (with `_copy_file`, `_move_file`), `Progress`, `DataFormat`,
+  `QuerySettings`, `ExplorerStates` (with `Bookmark`, `QueryState`), `FileSystemOperations` and its subclasses (with `_copy_file`, `_move_file`), `Measurement`, `Progress`, `DataFormat`,
   `StorageExplorer._url` and `_locate`, `same_filesystem`), are in numpy style: `Parameters`, `Returns`, `Raises`, `Attributes`, `See Also`, `Examples`.
   Internal ones (underscore names, `DataQuery`, `FileTasks`, `JobRunner`, ...) stay prose.
 - `from __future__ import annotations` everywhere, with type-only imports under `TYPE_CHECKING` (ruff `TC` rules).
