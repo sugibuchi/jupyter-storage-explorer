@@ -11,8 +11,8 @@ from jupyter_storage_explorer.filesystems._common import (
     measure_by_folder,
     measure_file,
     measure_found,
+    prepare_folder_copy,
     remove_emptied_folder,
-    walk_files,
 )
 from jupyter_storage_explorer.operations import FileSystemOperations, same_filesystem
 
@@ -79,7 +79,9 @@ class FsspecOperations(FileSystemOperations):
             progress.working_on(file_name(source))
             move_file(source, target)
             return
-        for path, dest, size in walk_files(source_fs, source, target_fs, target):
+        for path, dest, size in prepare_folder_copy(
+            source_fs, source, target_fs, target
+        ):
             progress.check()
             progress.working_on(file_name(path))
             move_file(path, dest)
@@ -107,7 +109,9 @@ class FsspecOperations(FileSystemOperations):
             progress.working_on(file_name(source))
             copy_file(source, target)
             return
-        for path, dest, size in walk_files(source_fs, source, target_fs, target):
+        for path, dest, size in prepare_folder_copy(
+            source_fs, source, target_fs, target
+        ):
             progress.check()
             progress.working_on(file_name(path))
             copy_file(path, dest)

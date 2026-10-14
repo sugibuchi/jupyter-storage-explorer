@@ -5,7 +5,11 @@ from __future__ import annotations
 import collections
 from typing import TYPE_CHECKING, Any
 
-from jupyter_storage_explorer.operations import Measurement, OperationCancelled
+from jupyter_storage_explorer.operations import (
+    Measurement,
+    OperationCancelled,
+    measure_file_info,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -26,9 +30,13 @@ def measure_found(path: str, found: dict[str, dict[str, Any]]) -> Measurement:
     folder itself."""
     top = path.rstrip("/")
     measurement = Measurement()
-    infos = [i for name, i in found.items() if name.rstrip("/") != top]
-    measurement.folders = sum(i.get("type") == "directory" for i in infos)
-    measurement.add_files([i for i in infos if i.get("type") != "directory"])
+    for name, info in found.items():
+        if name.rstrip("/") == top:
+            continue
+        if info.get("type") == "directory":
+            measurement.folders += 1
+        else:
+            measurement.merge(measure_file_info(info))
     return measurement
 
 
@@ -60,7 +68,7 @@ def measure_by_folder(
                     continue
                 if isinstance(listing, Exception):
                     raise listing
-                files = []
+                found = Measurement()
                 for info in listing:
                     name = info["name"].rstrip("/")
                     if name == folder:
@@ -69,11 +77,9 @@ def measure_by_folder(
                         measurement.folders += 1
                         pending.append(name)
                     else:
-                        files.append(info)
-                measurement.add_files(files)
-                progress.advance(
-                    files=len(files), bytes=sum(i.get("size") or 0 for i in files)
-                )
+                        found.merge(measure_file_info(info))
+                measurement.merge(found)
+                progress.advance(files=found.files, bytes=found.bytes)
     except OperationCancelled:
         measurement.complete = False
     return measurement
@@ -81,22 +87,22 @@ def measure_by_folder(
 
 def measure_file(info: dict[str, Any], progress: Progress | None) -> Measurement:
     """A file's measurement, from its info dict."""
-    measurement = Measurement()
-    measurement.add_files([info])
+    measurement = measure_file_info(info)
     if progress is not None:
         progress.advance(files=1, bytes=measurement.bytes)
     return measurement
 
 
-def walk_files(
+def prepare_folder_copy(
     source_fs: AbstractFileSystem,
     source: str,
     fs: AbstractFileSystem,
     target: str,
 ) -> list[tuple[str, str, int]]:
-    """(file, its target, size) for each file in folder ``source``, creating
-    the target folders on ``fs`` as needed (empty folders are not copied, as
-    object stores have none)."""
+    """Prepare copying (or moving, file by file) folder ``source`` to
+    ``target`` on ``fs``: create the target folders the files go in (empty
+    folders are not copied, as object stores have none), and return (file,
+    its target, size) for each file in ``source``, to copy."""
     fs.makedirs(target, exist_ok=True)
     made = {target.rstrip("/")}
     out = []

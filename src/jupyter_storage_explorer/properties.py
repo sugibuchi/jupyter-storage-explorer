@@ -65,7 +65,7 @@ def scan(
             except OSError as exc:
                 total.errors.append(f"{path}: {exc}")
                 continue
-            total.add(measurement)
+            total.merge(measurement)
             if not measurement.complete:
                 break
     except OperationCancelled:

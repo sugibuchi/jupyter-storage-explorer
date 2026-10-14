@@ -240,24 +240,9 @@ class Measurement:
     errors: list[str] = dataclasses.field(default_factory=list)
     complete: bool = True
 
-    def add_files(self, infos: Sequence[dict[str, Any]]) -> None:
-        """Count files, given their fsspec info dicts (e.g. from ``ls``).
-
-        Parameters
-        ----------
-        infos : sequence of dict
-            The files' info dicts, with "name", and "size" and a modification
-            time when the filesystem gives them.
-        """
-        for info in infos:
-            self.files += 1
-            self.bytes += info.get("size") or 0
-            ts = _infos.mtime(info)
-            if ts is not None:
-                self._dated(ts, info["name"].rstrip("/"))
-
-    def add(self, other: Measurement) -> None:
-        """Add what ``other`` found, e.g. for several selected items.
+    def merge(self, other: Measurement) -> None:
+        """Add what ``other`` found, e.g. a file of a folder, or another item
+        selected.
 
         Parameters
         ----------
@@ -267,17 +252,37 @@ class Measurement:
         self.files += other.files
         self.bytes += other.bytes
         self.folders += other.folders
-        for stamp in (other.oldest, other.newest):
-            if stamp is not None:
-                self._dated(*stamp)
+        if other.oldest is not None and (
+            self.oldest is None or other.oldest[0] < self.oldest[0]
+        ):
+            self.oldest = other.oldest
+        if other.newest is not None and (
+            self.newest is None or other.newest[0] > self.newest[0]
+        ):
+            self.newest = other.newest
         self.errors += other.errors
         self.complete = self.complete and other.complete
 
-    def _dated(self, ts: float, path: str) -> None:
-        if self.oldest is None or ts < self.oldest[0]:
-            self.oldest = (ts, path)
-        if self.newest is None or ts > self.newest[0]:
-            self.newest = (ts, path)
+
+def measure_file_info(info: dict[str, Any]) -> Measurement:
+    """A file's measurement, from its fsspec info dict.
+
+    Parameters
+    ----------
+    info : dict
+        The file's info dict (e.g. from ``info`` or ``ls(detail=True)``), with
+        "name", and "size" and a modification time when the filesystem gives
+        them.
+
+    Returns
+    -------
+    Measurement
+        One file of its size, which is the oldest and newest file if it has
+        a modification time.
+    """
+    ts = _infos.mtime(info)
+    found = None if ts is None else (ts, info["name"].rstrip("/"))
+    return Measurement(files=1, bytes=info.get("size") or 0, oldest=found, newest=found)
 
 
 class FileSystemOperations:
