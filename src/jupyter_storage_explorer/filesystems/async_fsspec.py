@@ -16,8 +16,8 @@ from jupyter_storage_explorer.filesystems._common import (
     measure_by_folder,
     measure_file,
     measure_found,
+    prepare_folder_copy,
     remove_emptied_folder,
-    walk_files,
 )
 from jupyter_storage_explorer.operations import (
     FileSystemOperations,
@@ -119,7 +119,7 @@ class AsyncFsspecOperations(FileSystemOperations):
             # Transfers between filesystems report their bytes as they go.
             progress.advance(files=1, bytes=size if same else 0)
 
-        files = walk_files(source_fs, source, target_fs, target)
+        files = prepare_folder_copy(source_fs, source, target_fs, target)
         self._each(loop, progress, files, move_one, self.concurrency)
         remove_emptied_folder(source_fs, source)
 
@@ -152,7 +152,7 @@ class AsyncFsspecOperations(FileSystemOperations):
             await copy_file(path, dest)
             progress.advance(files=1, bytes=size if same else 0)
 
-        files = walk_files(source_fs, source, target_fs, target)
+        files = prepare_folder_copy(source_fs, source, target_fs, target)
         self._each(loop, progress, files, copy_one, self.concurrency)
 
     def delete(self, fs: AbstractFileSystem, path: str, progress: Progress) -> None:

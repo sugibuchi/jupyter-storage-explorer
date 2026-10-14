@@ -25,6 +25,7 @@ from jupyter_storage_explorer.operations import (
     OperationCancelled,
     OperationChain,
     Progress,
+    measure_file_info,
     same_filesystem,
 )
 
@@ -154,9 +155,16 @@ class TestMeasure:
         assert measurement.files == 2  # /src's files; /src/sub not listed
 
 
-def test_measurements_added():
+def test_measure_file_info():
+    assert measure_file_info({"name": "/d/a/", "size": 4, "mtime": 5}) == Measurement(
+        files=1, bytes=4, oldest=(5, "/d/a"), newest=(5, "/d/a")
+    )
+    assert measure_file_info({"name": "/d/b", "size": None}) == Measurement(files=1)
+
+
+def test_measurements_merged():
     total = Measurement(files=1, bytes=4, oldest=(5, "a"), newest=(5, "a"))
-    total.add(
+    total.merge(
         Measurement(
             files=2, bytes=3, folders=1, oldest=(2, "b"), newest=(9, "c"), errors=["x"]
         )
@@ -164,7 +172,7 @@ def test_measurements_added():
     assert total == Measurement(
         files=3, bytes=7, folders=1, oldest=(2, "b"), newest=(9, "c"), errors=["x"]
     )
-    total.add(Measurement(complete=False))
+    total.merge(Measurement(complete=False))
     assert not total.complete
 
 
