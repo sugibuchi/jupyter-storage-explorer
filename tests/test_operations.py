@@ -12,7 +12,7 @@ import pytest
 from fsspec.implementations.asyn_wrapper import AsyncFileSystemWrapper
 from fsspec.implementations.dirfs import DirFileSystem
 
-from jupyter_storage_explorer import jobs
+from jupyter_storage_explorer import StorageExplorer, jobs
 from jupyter_storage_explorer.filesystems import (
     AsyncFsspecOperations,
     AtomicMoveOperation,
@@ -397,6 +397,15 @@ class TestAsyncFsspecOperations:
     def test_other_filesystems_left_to_the_next(self, tree):
         with pytest.raises(FileSystemOperations.NotSupported):
             self.ops.copy(tree, "/src", tree, "/dst", Progress())
+        # Async by its class, but over a filesystem that is not.
+        with pytest.raises(FileSystemOperations.NotSupported):
+            self.ops.measure(DirFileSystem("/src", tree), "", Progress())
+
+    def test_dir_filesystem_over_an_async_one(self, tree, async_tree):
+        fs = DirFileSystem("/src", async_tree)
+        assert self.ops.measure(fs, "", Progress()).files == 3
+        self.ops.copy(fs, "sub", fs, "copy", Progress())
+        assert tree.cat_file("/src/copy/c.txt") == b"c"
 
 
 class TestAtomicMoveOperation:
@@ -421,6 +430,20 @@ class TestAtomicMoveOperation:
         fs = DirFileSystem(tmp_path.as_posix(), fsspec.filesystem("file"))
         self.ops.move(fs, "src", fs, "moved", Progress())
         assert (tmp_path / "moved" / "a.txt").read_bytes() == b"a"
+
+
+def test_default_operations_on_a_dir_filesystem(tmp_path):
+    """A DirFileSystem over local files is async by its class: the async
+    operations leave it to fsspec's."""
+    (tmp_path / "src" / "sub").mkdir(parents=True)
+    (tmp_path / "src" / "sub" / "a.txt").write_bytes(b"aa")
+    fs = DirFileSystem(tmp_path.as_posix(), fsspec.filesystem("file"))
+    ops = OperationChain(StorageExplorer.default_operations())
+    assert ops.measure(fs, "src", Progress()).files == 1
+    ops.copy(fs, "src", fs, "copy", Progress())
+    assert (tmp_path / "copy" / "sub" / "a.txt").read_bytes() == b"aa"
+    ops.delete(fs, "copy", Progress())
+    assert not (tmp_path / "copy").exists()
 
     def test_everything_else_left_to_the_next(self, tree, tmp_path):
         local = fsspec.filesystem("file")

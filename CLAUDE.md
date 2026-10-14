@@ -213,10 +213,11 @@ storage options (`spark_url()` rewrites `abfs`/`s3` to `abfss`/`s3a`).
   Internal ones (underscore names, `DataQuery`, `FileTasks`, `JobRunner`, ...) stay prose.
 - `from __future__ import annotations` everywhere, with type-only imports under `TYPE_CHECKING` (ruff `TC` rules).
 - The root README is the quick start and highlights only; user-facing details are in `docs/storage-explorer.md`
-  ("Using the explorer", "Unsafe operations", "Transfer policy", "Supported formats", "Format options",
+  ("File operation extensions" (a table: add new ones there), "Using the explorer", "Unsafe operations", "Transfer policy", "Supported formats", "Format options",
   "StorageExplorer options") and `docs/data-explorer.md` (the data browser, `result()`, `on_change()`, `QuerySettings`,
   "DataExplorer options"). Update them when operations, formats or options change, and the README's highlights for
   new features. Keep them short.
 - Images and links to other files in the READMEs are absolute URLs (`raw.githubusercontent.com/.../main/...` for
   images, `github.com/.../blob/main/...` for files): PyPI shows the README but cannot resolve relative paths. `docs/`
-  is read on GitHub only, so it uses relative paths.
+  is read on GitHub only, so it uses relative paths. Screenshots are in `docs/figs/` (the launcher's in
+  `launcher/figs/`), taken at 2× and shown at their CSS size with `<img width="...">`.

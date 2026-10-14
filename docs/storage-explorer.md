@@ -1,9 +1,9 @@
 # StorageExplorer
 
 `StorageExplorer` is the file explorer: browse storage, preview files, query tables, and upload, download, move and
-edit files. For installation and a first example, see the [README](../README.md).
+edit files. For installation, see the [README](../README.md).
 
-![StorageExplorer with a JSON Lines file open in the data browser](../figs/storage-explorer.png)
+![StorageExplorer with a JSON Lines file open in the data browser](figs/storage-explorer.png)
 
 - [Storages](#storages)
 - [Using the explorer](#using-the-explorer)
@@ -18,8 +18,7 @@ edit files. For installation and a first example, see the [README](../README.md)
 
 ## Storages
 
-The first argument is the address of the folder to open; options after it are passed to the storage package, for
-example to choose credentials:
+Give the address of the folder to open; options after it go to the storage package, e.g. credentials:
 
 ```python
 from jupyter_storage_explorer import StorageExplorer
@@ -39,8 +38,7 @@ StorageExplorer("gs://my-bucket", token="google_default")  # Google Cloud
 
 ### Several storages in one explorer
 
-Give each storage a name; a drop-down on the left of the address bar switches between them, and each one remembers the
-folder you were in.
+Name each storage, and switch between them with the drop-down left of the address bar:
 
 ```python
 StorageExplorer(
@@ -52,37 +50,91 @@ StorageExplorer(
 )
 ```
 
-### Azure Data Lake Storage Gen2
+### File operation extensions
 
-On accounts with a hierarchical namespace, `pip install "jupyter-storage-explorer[abfs]"` and
-`operations=[AzureDataLakeGen2Operation()]` (from
-`jupyter_storage_explorer.filesystems.abfs`) move folders in one step and create empty folders.
+The explorer moves, copies, deletes and downloads files with fsspec's standard API, which works on any storage but not
+always efficiently: e.g. moving a folder copies and deletes each file in it. Extensions add implementations of some
+operations optimized for a particular storage. Pass them as `operations=[...]`.
+
+| Extension                    | Storage                                               | Operations                                         | Install                                      |
+|------------------------------|-------------------------------------------------------|----------------------------------------------------|----------------------------------------------|
+| `AzureDataLakeGen2Operation` | Azure Data Lake Storage Gen2 (hierarchical namespace) | Move folders in one step; create empty folders     | `pip install "jupyter-storage-explorer[abfs]"` |
+
+```python
+from jupyter_storage_explorer import StorageExplorer
+from jupyter_storage_explorer.filesystems.abfs import AzureDataLakeGen2Operation
+
+StorageExplorer(
+    "abfs://lake@myaccount.dfs.core.windows.net/raw",
+    operations=[AzureDataLakeGen2Operation()],
+)
+```
+
+To write your own, subclass `FileSystemOperations` (see [operations.py](../src/jupyter_storage_explorer/operations.py)).
 
 ## Using the explorer
 
-- **Browse**: click folders in the tree or list; ↑ goes up, ⟳ refreshes. Ctrl+click (⌘+click) selects several items.
-  The list shows 100 items per page (◀ ▶ above it).
-- **Filter**: type in the fields above the tree and the list (and in **Select columns** of the data browser) to show
-  only names containing the text, or matching a regular expression with **.\***. Case is ignored; ✕ or Esc clears.
-- **Preview**: double-click a file, or **Preview** (with nothing selected: the current folder, e.g. a Delta Lake table).
-  Tables open in the [data browser](#query-data).
-- **Right-click**: Preview as, Edit, Python code to load the data, Copy URL; Copy, Cut, Paste; Create a folder,
-  Delete; Download to local or to JupyterLab; Properties, Add bookmark.
-- **Properties**: for a file, its size, modification time and everything its storage tells about it; for folders and
-  several items, the number of files and folders in them, their total size, and the oldest and newest files. Counting
-  large folders can take a while: the explorer waits meanwhile, and **Cancel** shows what was counted so far.
-- **Bookmarks**: ☆ (★ when the folder shown is bookmarked) lists them; click one to open it, right-click it for Copy
-  URL and Delete bookmark. Explorers in the kernel share them (see [Remembered states](#remembered-states)).
-- **Copy, cut and paste** work between storages and between explorers, also in other notebooks: **Cut**, then
-  **Move here**, moves files to another storage.
-- **Drag and drop**: drop files from JupyterLab's file browser or your computer to upload them; drag files onto a folder
-  to move them, or onto JupyterLab's file browser to download them (needs [the launcher](../launcher/README.md)).
-- **In the background**: moving, deleting, pasting and downloading to JupyterLab run while you keep browsing, with
-  their progress above the status bar and **Cancel**. The list follows as they go.
+### Browse
+
+Click folders in the tree or list; ↑ goes up, ⟳ refreshes, ◀ ▶ pages through the list. Ctrl+click (⌘+click) selects
+several items.
+
+<img src="figs/using-browse.png" width="830" alt="Browsing a folder, with two items selected">
+
+### Filter
+
+Type in the fields above the tree and the list to show names containing the text, or matching a regular expression
+with **.\***. ✕ or Esc clears.
+
+<img src="figs/using-filter.png" width="562" alt="The list filtered with a regular expression">
+
+### Preview
+
+Double-click a file, or **Preview** (with nothing selected: the current folder, e.g. a Delta Lake table), or right-click
+→ **Preview**; **Preview as** chooses another format. Tables open in the [data browser](#query-data).
+
+<img src="figs/using-preview.png" width="562" alt="Preview in the toolbar, and Preview as in the right-click menu of a Markdown file">
+
+### Right-click
+
+Preview as, Edit, Python code to load the data, Copy URL; Copy, Cut, Paste; Create a folder, Delete; Download to local
+or to JupyterLab; Properties, Add bookmark.
+
+<img src="figs/using-right-click.png" width="367" alt="The right-click menu of a JSON Lines file">
+
+### Properties
+
+A file's size, modification time and everything its storage tells about it; for folders and several items, the number
+of files and folders, their total size, and the oldest and newest files.
+
+<img src="figs/using-properties.png" width="640" alt="The properties of a folder">
+
+### Bookmarks
+
+Right-click a folder → **Add bookmark**. ☆ lists them; click one to open it, right-click it for Copy URL and Delete
+bookmark.
+
+<img src="figs/using-bookmarks.png" width="334" alt="The bookmarks menu">
+
+### Copy, cut and paste
+
+Between storages and between explorers, also in other notebooks.
+
+### Drag and drop
+
+Drop files from JupyterLab's file browser or your computer to upload them; drag files onto a folder to move them, or
+onto JupyterLab's file browser to download them (needs [the launcher](../launcher/README.md)).
+
+### Background operations
+
+Moving, deleting, pasting and downloading to JupyterLab run in the background, with progress and **Cancel** above the
+status bar.
 
 ## Unsafe operations
 
-Folder operations need **Unsafe mode**, turned on with the slider in the status bar:
+Folder operations need **Unsafe mode**, turned on with the slider in the status bar, for one operation:
+
+<img src="figs/unsafe-mode.png" width="403" alt="The Unsafe mode slider, on, at the right of the status bar">
 
 | Operation              | How                                                                                          |
 |------------------------|----------------------------------------------------------------------------------------------|
@@ -92,11 +144,9 @@ Folder operations need **Unsafe mode**, turned on with the slider in the status 
 
 ## Transfer policy
 
-`transfer_policy=[...]` limits the directions files may be transferred in: copied or moved from one storage to another
-(copy or cut, then paste), to or from JupyterLab's file browser, and uploaded from or downloaded to your computer.
-Moving and copying within a storage (e.g. dragging files onto a folder) is not a transfer. It is a list of rules,
-tried in order; the first whose `src` and `dest` regular expressions both match the whole URLs decides, and without
-one, files go:
+`transfer_policy=[...]` limits where files may be transferred: between storages, to or from JupyterLab's file browser,
+and to or from your computer (not within a storage). The first rule whose `src` and `dest` regular expressions match
+the whole URLs decides; without one, files go:
 
 ```python
 StorageExplorer(filesystems={...}, transfer_policy=[
@@ -105,42 +155,32 @@ StorageExplorer(filesystems={...}, transfer_policy=[
 ])
 ```
 
-URLs are those of "Copy URL" (local files: their path; the destination: the item's new location). Files on the
-Jupyter server through JupyterLab's file browser ("Download to JupyterLab", drag and drop with it) are
-`jupyterlab://<absolute path>`, e.g. `jupyterlab:///home/jovyan/x.csv`, and files on your computer
-`browser:///<name>`. A pattern left out matches any URL. Items refused are reported, the others done.
-This keeps files from going the wrong way by mistake; it is not a security boundary. For the launcher's tabs, set it
-with `transfer_policy()` in its configuration (see [the launcher](../launcher/README.md#configuration)).
+URLs are those of "Copy URL"; files through JupyterLab's file browser are `jupyterlab://<absolute path>`, e.g.
+`jupyterlab:///home/jovyan/x.csv`, and files on your computer `browser:///<name>`. A pattern left out matches any URL.
+It prevents mistakes; it is not a security boundary. For the launcher's tabs, use `transfer_policy()` in
+[its configuration](../launcher/README.md#configuration).
 
 ## Query data
 
-With [polars](https://pola.rs) installed (plus `deltalake` for Delta Lake, `fastexcel` for Excel), tables open in a data
-browser that reads 1,000 rows at a time: page, sort, filter and choose columns, on the data itself (**Live**) or on its
-first 100,000 rows read into memory (**In memory**). It is the same browser as `DataExplorer`'s; see
-[Using the data browser](data-explorer.md#using-the-data-browser).
+With [polars](https://pola.rs) installed (plus `deltalake` for Delta Lake, `fastexcel` for Excel), tables open in the
+data browser: page, sort, filter and choose columns, on the data itself (**Live**) or on its first 100,000 rows
+(**In memory**). It is `DataExplorer`'s browser; see [Using the data browser](data-explorer.md#using-the-data-browser).
 
-Filters, sorting, hidden columns, widths and the mode chosen are remembered for the 20 tables queried last (see
-[Remembered states](#remembered-states)). polars reads the data with the credentials in the environment, not the
-explorer's options; see [Format options](#format-options) for its own.
+polars reads the data with the credentials in the environment, not the explorer's options; see
+[Format options](#format-options) for its own.
 
 ## Remembered states
 
-Bookmarks and the data browser's settings are kept in an `ExplorerStates`, shared by the explorers in the kernel, until
-it restarts. To keep them in a JSON file, also shared with other kernels (read again when an explorer is created and
-before each change), give its path, or an `ExplorerStates` for other options:
+Bookmarks and the data browser's settings are shared by the explorers in the kernel. To keep them in a file, shared
+with other kernels and [the launcher](../launcher/README.md)'s tabs, give its path, or an `ExplorerStates` for other
+options:
 
 ```python
 from jupyter_storage_explorer import ExplorerStates, StorageExplorer
 
-StorageExplorer("s3://my-bucket/data", states="~/.jupyter/storage-explorer/states.json")
+StorageExplorer("s3://my-bucket/data", states="~/.jupyter/storage-explorer/states.json")  # the launcher's file
 StorageExplorer("s3://my-bucket/data", states=ExplorerStates("states.json", max_queries=50))
 ```
-
-Explorers in [the launcher](../launcher/README.md)'s tabs use `~/.jupyter/storage-explorer/states.json`, so the first
-example shares their bookmarks.
-
-A bookmark names a storage of the explorer (its name in `filesystems`, or `"default"`) and a folder; explorers list
-those of their own storages.
 
 ## Supported formats
 
@@ -156,14 +196,12 @@ those of their own storages.
 | Text, code, configuration (YAML, SQL, Python, …)             | `text`       | With syntax highlighting      |            | Python                                              |
 | Images (PNG, JPEG, GIF, SVG, …)                              | `image`      | Shown                         |            | Pillow                                              |
 
-Previewing and querying data files needs a data library, e.g. `pip install polars deltalake`. If one is missing, the
-preview tells you what to install. The name identifies the format in CSS (see
-[Customizing icons](../DEVELOPMENT.md#customizing-icons)).
+The name identifies the format in CSS (see [Customizing icons](../DEVELOPMENT.md#customizing-icons)).
 
 ## Format options
 
-`format_options` is one dictionary for all formats; each format uses the options it takes. Options are named after the
-library they are for, and the ones for a single format also after the format:
+`format_options` is one dictionary for all formats; each uses the options it takes, named after their library (and
+format):
 
 ```python
 StorageExplorer(
@@ -186,8 +224,7 @@ StorageExplorer(
 | `polars_delta_use_pyarrow`     | `delta`                                         | `scan_delta`'s `use_pyarrow`.                                                                                         |
 | `polars_delta_pyarrow_options` | `delta`                                         | `scan_delta`'s `pyarrow_options`.                                                                                     |
 
-Storage options that look like credentials are left out of the code. Without storage options, the code relies on the
-environment's configuration and credentials.
+Options that look like credentials are left out of the code.
 
 ## Working with the explorer from Python
 
@@ -210,7 +247,7 @@ explorer.selected_urls  # the URLs of the selected items
 | `download_to_jupyterlab_path="."`   | Folder "Download to JupyterLab" copies into, e.g. `"~/Downloads"`; default: where it runs. To refuse downloads, use `transfer_policy`. |
 | `filesystems={...}`                 | Several named storages; see [Several storages in one explorer](#several-storages-in-one-explorer).                                    |
 | `max_browser_items=20_000`          | Folders with more items are filtered, sorted and paged by the kernel, one page at a time, instead of the browser (`None`: never).     |
-| `operations=[...]`                  | File operations of your own, tried before `StorageExplorer.default_operations()`: e.g. `[MyOps()]` for server-side copies (see [operations.py](../src/jupyter_storage_explorer/operations.py), and [filesystems](../src/jupyter_storage_explorer/filesystems) for the defaults). |
+| `operations=[...]`                  | File operation extensions, tried before the defaults; see [File operation extensions](#file-operation-extensions).                   |
 | `transfer_policy=[...]`             | Rules for transfers of files between storages; see [Transfer policy](#transfer-policy).                                               |
 | `states="states.json"`              | Where bookmarks and the data browser's settings are kept (a path or an `ExplorerStates`); see [Remembered states](#remembered-states). |
 | `format_options={...}`              | Options for the formats (see [Format options](#format-options)).                                                                      |
