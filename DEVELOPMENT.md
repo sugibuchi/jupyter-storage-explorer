@@ -112,6 +112,12 @@ the tag: uncommitted changes give a version like `X.Y.Z.post0+g<commit>.d<date>`
 `uv build` still succeeds, but the launcher's wheel has no launcher item; `uv build` also packages whatever was built
 last, so run `build:prod` just before it.
 
+## Documentation
+
+The root `README.md` is the quick start and highlights, shown on PyPI too: links and images there are absolute URLs on
+GitHub, as PyPI cannot resolve relative paths. The details are in `docs/` (`storage-explorer.md`, `data-explorer.md`),
+read on GitHub only, which link to each other and to the repository's files with relative paths.
+
 ## Customizing icons
 
 Rows in the explorer carry attributes you can style with CSS:
