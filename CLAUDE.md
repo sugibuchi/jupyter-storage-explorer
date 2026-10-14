@@ -55,7 +55,7 @@ explorer of exactly its own version (`launcher/hatch_build.py` sets its dependen
   Data Lake SDK, for `filesystems/abfs.py`.
 - `jupyter-storage-explorer-launcher` (`launcher/`): a JupyterLab launcher item opening a tab whose kernel runs
   `launch()`. It merges every `storage-explorer/launcher.py` in Jupyter's config paths as layers, system to user (their
-  `filesystems()`, `formats()`, `format_options()`, `operations()`, `parameters()`, `style()` functions; `final()`
+  `filesystems()`, `formats()`, `format_options()`, `operations()`, `transfer_policy()`, `parameters()`, `style()` functions; `final()`
   names what later layers cannot change; see `load_settings`, tested in `tests/test_launcher.py`). The tab is a console
   (`index.ts`, `ExplorerTab`): ipywidgets binds a console's widgets to its first kernel, so a tab whose session is lost
   (server restart) or whose kernel changes or restarts is replaced by a new tab. Each tab's view (storage, folder per
@@ -91,7 +91,7 @@ listing, reading and writing, e.g. `_ls`, `_info`, `_exists`, `_isdir`, `_read_b
 through them, never through fsspec directly. Moving, copying, deleting, downloading and creating folders go through
 the operations objects instead (`operations.py`, the `operations=` argument): a chain of `FileSystemOperations`, each
 method tried in order until one does not raise `FileSystemOperations.NotSupported` (its own exception, so that a
-library's `NotImplementedError` is reported as an error). `OperationChain` adds nothing; the defaults are
+library's `NotImplementedError` is reported as an error). `OperationChain` adds nothing; `operations=` are tried before the defaults,
 `StorageExplorer.default_operations()`, from the `filesystems/` package: `AtomicMoveOperation` (only moves within a
 filesystem whose `mv` renames a folder in one step: local, memory, or a `DirFileSystem` over them), then
 `AsyncFsspecOperations` (`async_fsspec.py`: async filesystems such as s3fs, their coroutines, many files at a time),

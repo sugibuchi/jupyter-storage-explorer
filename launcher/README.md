@@ -40,6 +40,7 @@ A file has some of these functions, all optional:
 | `formats()`        | Formats of your own (`DataFormat`), tried before the defaults | Later layers' first                                              |
 | `format_options()` | Options for the default formats ([Format options](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#format-options)) | By option name                                                   |
 | `operations()`     | File operations of your own (`FileSystemOperations`)          | Later layers' first, all before the defaults                     |
+| `transfer_policy()` | Rules of a [transfer policy](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#transfer-policy) | Later layers' first (they decide first)                          |
 | `parameters()`     | Other `StorageExplorer` arguments, e.g. `{"height": "fill"}`  | By name                                                          |
 | `style()`          | CSS for the page while the tab is open                        | Joined, the user's last                                          |
 | `final()`          | Settings later layers cannot change, e.g. `["filesystems"]`   | Function names (except `parameters`) and parameter names         |
@@ -80,22 +81,23 @@ def style():
     """
 ```
 
-A [transfer policy](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#transfer-policy) is a
-parameter too, e.g. in the system's file:
+A [transfer policy](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#transfer-policy),
+e.g. in the system's file:
 
 ```python
-def parameters():
+def transfer_policy():
     # No downloads from the lake to users' computers or to the Jupyter server.
-    return {
-        "transfer_policy": [
-            {"rule": "deny", "src": r"abfs://lake@.*", "dest": "browser:///.*"},
-            {"rule": "deny", "src": r"abfs://lake@.*", "dest": "jupyterlab://.*"},
-        ]
-    }
+    return [
+        {"rule": "deny", "src": r"abfs://lake@.*", "dest": "browser:///.*"},
+        {"rule": "deny", "src": r"abfs://lake@.*", "dest": "jupyterlab://.*"},
+    ]
 
 
 def final():
-    return ["transfer_policy"]
+    return ["transfer_policy"]  # users cannot add rules that would decide first
 ```
+
+Later layers' rules are tried first, so without `final()` a user's `allow` rule can let through what the system's
+file denies.
 
 An error in a file (a function that fails, an unknown parameter) is shown in the tab, with the file's path.

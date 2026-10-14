@@ -10,7 +10,6 @@ import pytest
 from jupyter_storage_explorer_launcher import launcher
 from jupyter_storage_explorer_launcher.launcher import LauncherError, load_settings
 
-from jupyter_storage_explorer import StorageExplorer
 from jupyter_storage_explorer.filesystems import FsspecOperations
 from jupyter_storage_explorer.formats import default_formats
 from jupyter_storage_explorer.operations import FileSystemOperations
@@ -136,9 +135,35 @@ class TestMerging:
         names = [f.name for f in kwargs["formats"]]
         assert names[:2] == ["json", "csv"]  # the user's first
         assert names[2:] == [f.name for f in default_formats()]
+        # The explorer tries the defaults after them.
         kinds = [type(o) for o in kwargs["operations"]]
-        assert kinds[:2] == [FileSystemOperations, FsspecOperations]
-        assert kinds[2:] == [type(o) for o in StorageExplorer.default_operations()]
+        assert kinds == [FileSystemOperations, FsspecOperations]
+
+    def test_transfer_policy_later_layers_first(self, tmp_path):
+        system = layer(
+            tmp_path,
+            "system",
+            """
+            def transfer_policy():
+                return [{"rule": "deny", "src": "s3://.*"}]
+            """,
+        )
+        user = layer(
+            tmp_path,
+            "user",
+            """
+            def transfer_policy():
+                return [{"rule": "allow", "src": "s3://public/.*"}]
+            """,
+        )
+        _, kwargs = load_settings([user, system]).explorer_arguments()
+        assert kwargs["transfer_policy"] == [
+            {"rule": "allow", "src": "s3://public/.*"},
+            {"rule": "deny", "src": "s3://.*"},
+        ]
+        policy = load_settings([user, system]).create_widget()._transfer_policy
+        assert policy.allows("s3://public/a.csv", "browser:///a.csv")
+        assert not policy.allows("s3://private/a.csv", "browser:///a.csv")
 
     def test_creates_the_explorer(self, tmp_path, memfs):
         memfs.mkdir("/lake")
@@ -167,8 +192,11 @@ class TestFinal:
             def parameters():
                 return {"max_upload_bytes": 1000}
 
+            def transfer_policy():
+                return [{"rule": "deny", "dest": "browser:///.*"}]
+
             def final():
-                return ["filesystems", "max_upload_bytes", "style"]
+                return ["filesystems", "max_upload_bytes", "style", "transfer_policy"]
             """,
         )
         user = layer(
@@ -177,6 +205,9 @@ class TestFinal:
             """
             def filesystems():
                 return {"Lake": None, "Mine": "memory://mine"}
+
+            def transfer_policy():
+                return [{"rule": "allow"}]
 
             def parameters():
                 return {"max_upload_bytes": None, "height": "300px"}
@@ -189,8 +220,10 @@ class TestFinal:
         assert settings.filesystems == {"Lake": "memory://lake"}
         assert settings.parameters == {"max_upload_bytes": 1000, "height": "300px"}
         assert settings.style == ""
+        assert settings.transfer_policy == [{"rule": "deny", "dest": "browser:///.*"}]
         assert [w.split(": ", 1)[1] for w in settings.warnings] == [
             f"filesystems is ignored: it is final in {system}",
+            f"transfer_policy is ignored: it is final in {system}",
             f"style is ignored: it is final in {system}",
             f"max_upload_bytes is ignored: it is final in {system}",
         ]
@@ -223,6 +256,14 @@ class TestErrors:
             (
                 "def parameters():\n    return {'filesystems': {}}",
                 "set by its own function",
+            ),
+            (
+                "def parameters():\n    return {'transfer_policy': []}",
+                "transfer_policy is set by its own function",
+            ),
+            (
+                "def parameters():\n    return {'operations': []}",
+                "operations is set by its own function",
             ),
             ("def parameters():\n    return {'path': '.'}", "set by the launcher"),
             ("def final():\n    return ['parameters']", "unknown setting 'parameters'"),
