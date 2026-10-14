@@ -10,6 +10,7 @@ import tempfile
 from typing import TYPE_CHECKING, Any
 
 from fsspec.asyn import AsyncFileSystem, sync
+from fsspec.implementations.dirfs import DirFileSystem
 
 from jupyter_storage_explorer.filesystems._common import (
     file_name,
@@ -278,6 +279,10 @@ def _loop_of(fs: AbstractFileSystem) -> asyncio.AbstractEventLoop:
     usable from another thread."""
     if not isinstance(fs, AsyncFileSystem) or fs.asynchronous:
         raise FileSystemOperations.NotSupported
+    if isinstance(fs, DirFileSystem):
+        # Async by its class, whatever it wraps: its coroutines call those of
+        # the filesystem it wraps, which a local or memory one does not have.
+        return _loop_of(fs.fs)
     return fs.loop
 
 
