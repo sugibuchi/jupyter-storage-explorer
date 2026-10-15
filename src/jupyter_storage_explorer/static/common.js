@@ -42,7 +42,7 @@ function createRequester(model) {
 // to right. answer(value) closes it as if a button was clicked.
 function createConfirm() {
   const body = h("div", { className: "jse-dialog-body" });
-  const buttons = h("div", { className: "jse-editor-foot" });
+  const buttons = h("div", { className: "jse-dialog-foot" });
   const el = h("div", { className: "jse-dialog", tabIndex: -1, hidden: true }, h("div", { className: "jse-modal jse-confirm" }, body, buttons));
   let pending = null;
 

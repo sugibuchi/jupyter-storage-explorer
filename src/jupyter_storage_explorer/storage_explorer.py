@@ -5,7 +5,6 @@ from __future__ import annotations
 import base64
 import dataclasses
 import functools
-import hashlib
 import math
 import os
 import time
@@ -17,7 +16,13 @@ import anywidget
 import traitlets
 from fsspec.core import url_to_fs
 
-from jupyter_storage_explorer import _infos, _paths, _static, properties
+from jupyter_storage_explorer import (
+    _infos,
+    _jupyterlab_files,
+    _paths,
+    _static,
+    properties,
+)
 from jupyter_storage_explorer._urls import default_location, default_url
 from jupyter_storage_explorer.file_tasks import FileTasks, Plan, Task
 from jupyter_storage_explorer.filesystems import (
@@ -67,8 +72,6 @@ if TYPE_CHECKING:
 # only these names are served.
 _VENDOR_FILES = frozenset({"marked.esm.js", "purify.es.mjs"})
 
-# Largest file the text editor opens; the whole file is sent to the browser.
-_MAX_EDIT_BYTES = 1024 * 1024
 # Largest file that can be downloaded: it passes through kernel memory and the
 # notebook's connection in one message.
 _MAX_DOWNLOAD_BYTES = 100 * 1024 * 1024
@@ -126,9 +129,10 @@ class _Followed:
     listed_at: float = -math.inf
 
 
-def _version(data: bytes) -> str:
-    """Identifies file contents, to detect changes made elsewhere while editing."""
-    return hashlib.sha256(data).hexdigest()
+def _error_text(exc: Exception) -> str:
+    """An error for users: the explorer's own refusals (ValueError) as they
+    are, others with their type, e.g. "FileNotFoundError: ..."."""
+    return str(exc) if isinstance(exc, ValueError) else f"{type(exc).__name__}: {exc}"
 
 
 def _entry(info: dict[str, Any]) -> dict[str, Any]:
@@ -296,6 +300,10 @@ class StorageExplorer(anywidget.AnyWidget):
     _preview = traitlets.Dict().tag(sync=True)
     # Format name -> label shown to the user, e.g. {"delta": "Delta Lake table"}.
     _format_labels = traitlets.Dict().tag(sync=True)
+    # Formats of text files (Text and its subclasses, e.g. code, logs, Markdown),
+    # which JupyterLab's text editor opens even when it does not know the
+    # file's type ("Open in JupyterLab", double-click).
+    _text_formats = traitlets.List().tag(sync=True)
     # Format name of the current directory itself (e.g. "delta"), or ""
     # if it cannot be previewed; enables the Preview button when nothing is selected.
     _current_format = traitlets.Unicode().tag(sync=True)
@@ -397,6 +405,7 @@ class StorageExplorer(anywidget.AnyWidget):
         super().__init__(
             _height=height,
             _format_labels={f.name: f.label for f in self._formats},
+            _text_formats=[f.name for f in self._formats if isinstance(f, Text)],
             _max_upload_bytes=max_upload_bytes,
             _filesystem_names=list(self._filesystems),
             _explorer_id=uuid.uuid4().hex,
@@ -547,10 +556,8 @@ class StorageExplorer(anywidget.AnyWidget):
             "refresh": lambda c, _: self._refresh(),
             "preview": lambda c, _: self._open_preview(c["path"], c.get("format")),
             "menu_info": lambda c, _: self._send_menu_info(c["path"]),
-            "edit_open": lambda c, _: self._edit_open(c["path"]),
-            "edit_save": lambda c, _: self._edit_save(
-                c["path"], c["text"], c.get("version")
-            ),
+            "jupyterlab_get": lambda c, _: self._reply(c, self._jupyterlab_get(c)),
+            "jupyterlab_save": lambda c, _: self._reply(c, self._jupyterlab_save(c)),
             "download": lambda c, _: self._download(c["paths"]),
             "upload": lambda c, _: self._reply(c, self._upload_request(c)),
             "upload_check": lambda c, _: self._reply(
@@ -1014,8 +1021,8 @@ class StorageExplorer(anywidget.AnyWidget):
         return formats[0].recipes(target)
 
     def _send_menu_info(self, path: str) -> None:
-        """Answer the right-click menu's request: matching formats ("Preview as"),
-        load code ("Python code") and whether it can be edited ("Edit")."""
+        """Answer the right-click menu's request: matching formats ("Preview as")
+        and load code ("Python code")."""
         reply: dict[str, Any] = {"type": "menu_info", "path": path}
         try:
             target, formats = self._detect(path)
@@ -1024,11 +1031,6 @@ class StorageExplorer(anywidget.AnyWidget):
                 [dataclasses.asdict(r) for r in formats[0].recipes(target)]
                 if formats
                 else []
-            )
-            reply["editable"] = (
-                target is not None
-                and not target.is_dir
-                and any(isinstance(f, Text) for f in formats)
             )
             reply["query"] = bool(formats) and formats[0].can_query()
         except Exception as exc:
@@ -1085,57 +1087,79 @@ class StorageExplorer(anywidget.AnyWidget):
             self._filesystem = filesystem  # shows the folder remembered
         return {}
 
-    # --- Text editor ---
+    # --- Open in JupyterLab: its own editors and viewers, through the launcher's drive ---
 
-    def _edit_open(self, path: str) -> None:
-        reply: dict[str, Any] = {"type": "edit_open", "path": path}
+    def _jupyterlab_file(
+        self, content: dict[str, Any]
+    ) -> tuple[AbstractFileSystem, str]:
+        """The storage and path of a file opened in JupyterLab: by the storage's
+        name, as the file may stay open there while another storage is shown."""
+        storage = self._filesystems.get(content.get("filesystem"))
+        path = content.get("path")
+        if (
+            storage is None
+            or not isinstance(path, str)
+            or not _within_top(path, storage[1])
+        ):
+            raise ValueError("not a file of this explorer's storages")
+        return storage[0], path
+
+    def _jupyterlab_get(self, content: dict[str, Any]) -> dict[str, Any]:
+        """Answer "jupyterlab_get": {"model": the file's contents model} (see
+        _jupyterlab_files.contents_model), or {"error"}."""
         try:
-            reply["text"], reply["version"] = self._read_text(path)
-        except Exception as exc:
-            reply["error"] = f"Cannot open {_paths.basename(path)}: {exc}"
-        self.send(reply)
-
-    def _edit_save(self, path: str, text: str, version: str | None) -> None:
-        reply: dict[str, Any] = {"type": "edit_save", "path": path}
-        try:
-            reply["version"] = self._write_text(path, text, version)
-        except Exception as exc:
-            reply["error"] = f"Cannot save: {exc}"
-        self.send(reply)
-
-    def _read_text(self, path: str) -> tuple[str, str]:
-        """The text of a UTF-8 file, and a version string to pass to ``_write_text``."""
-        data = self._read_bytes(path)
-        if len(data) > _MAX_EDIT_BYTES:
-            raise ValueError(
-                f"too large to edit (over {_MAX_EDIT_BYTES // (1024 * 1024)} MB)"
+            fs, path = self._jupyterlab_file(content)
+            info = self._info(path, fs)
+            if info.get("type") == "directory":
+                raise ValueError("folders cannot be opened in JupyterLab")
+            size = info.get("size")
+            if size is not None and size > _jupyterlab_files.MAX_BYTES:
+                raise ValueError(
+                    f"too large to open in JupyterLab "
+                    f"(over {_jupyterlab_files.MAX_BYTES // (1024 * 1024)} MB)"
+                )
+            data = self._read_bytes(path, fs)
+            model = _jupyterlab_files.contents_model(
+                path,
+                data,
+                info,
+                type_=content.get("contentType"),
+                format_=content.get("format"),
+                content=content.get("content", True),
             )
-        try:
-            text = data.decode("utf-8")
-        except UnicodeDecodeError:
-            raise ValueError("not UTF-8 text") from None
-        return text, _version(data)
+        except Exception as exc:
+            return {"error": _error_text(exc)}
+        return {"model": model}
 
-    def _write_text(self, path: str, text: str, version: str | None = None) -> str:
-        """Save ``text`` to the file at ``path``; returns its new version.
+    def _jupyterlab_save(self, content: dict[str, Any]) -> dict[str, Any]:
+        """Answer "jupyterlab_save": write the content JupyterLab saves to the
+        file; {"model": its contents model, without content} or {"error"}.
 
-        With ``version`` (from ``_read_text``), refuses to save if the file has
-        changed since, rather than overwriting that change. Files with Windows
-        line endings keep them, although browsers edit text with "\\n" only.
+        JupyterLab itself checks, with the hash, that the file has not been
+        changed elsewhere since it was opened, before saving.
         """
-        current = self._read_bytes(path) if self._exists(path) else b""
-        if version is not None and _version(current) != version:
-            raise RuntimeError(
-                "the file has changed since it was opened; close the editor and open it again"
+        try:
+            fs, path = self._jupyterlab_file(content)
+            current = self._read_bytes(path, fs) if self._exists(path, fs) else None
+            data = _jupyterlab_files.saved_bytes(
+                content.get("content"), content.get("format"), current
             )
-        if b"\r\n" in current:
-            text = text.replace("\r\n", "\n").replace("\n", "\r\n")
-        data = text.encode("utf-8")
-        self._write_bytes(path, data)
-        self._update_entry(path)
-        if self._preview.get("path") == path:
-            self._open_preview(path, self._preview.get("format"))
-        return _version(data)
+            self._write_bytes(path, data, fs)
+            model = _jupyterlab_files.contents_model(
+                path,
+                data,
+                self._info(path, fs),
+                type_=content.get("contentType"),
+                format_=content.get("format"),
+                content=False,
+            )
+        except Exception as exc:
+            return {"error": _error_text(exc)}
+        if content.get("filesystem") == self._filesystem:
+            self._update_entry(path)
+            if self._preview.get("path") == path:
+                self._open_preview(path, self._preview.get("format"))
+        return {"model": model}
 
     # --- Download to local: the browser saves the files on the user's computer ---
 
@@ -1684,11 +1708,11 @@ class StorageExplorer(anywidget.AnyWidget):
         # Some backends include the directory itself in its own listing.
         return [i for i in infos if _paths.norm(i["name"]) != _paths.norm(path)]
 
-    def _info(self, path: str) -> dict[str, Any]:
-        return self._fs.info(path)
+    def _info(self, path: str, fs: AbstractFileSystem | None = None) -> dict[str, Any]:
+        return (fs or self._fs).info(path)
 
-    def _exists(self, path: str) -> bool:
-        return self._fs.exists(path)
+    def _exists(self, path: str, fs: AbstractFileSystem | None = None) -> bool:
+        return (fs or self._fs).exists(path)
 
     def _isdir(self, path: str, fs: AbstractFileSystem | None = None) -> bool:
         """Whether ``path`` is a directory; False if it does not exist (fsspec
@@ -1698,12 +1722,15 @@ class StorageExplorer(anywidget.AnyWidget):
         """
         return (fs or self._fs).isdir(path)
 
-    def _read_bytes(self, path: str) -> bytes:
-        return self._fs.cat_file(path)
+    def _read_bytes(self, path: str, fs: AbstractFileSystem | None = None) -> bytes:
+        return (fs or self._fs).cat_file(path)
 
-    def _write_bytes(self, path: str, data: bytes) -> None:
-        self._fs.pipe_file(path, data)
-        self._fs.invalidate_cache(path)
+    def _write_bytes(
+        self, path: str, data: bytes, fs: AbstractFileSystem | None = None
+    ) -> None:
+        fs = fs or self._fs
+        fs.pipe_file(path, data)
+        fs.invalidate_cache(path)
 
     def _put_file(
         self, local_path: str, path: str, fs: AbstractFileSystem | None = None

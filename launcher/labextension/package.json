@@ -33,10 +33,13 @@
     "@jupyterlab/application": "^4.0.0",
     "@jupyterlab/apputils": "^4.0.0",
     "@jupyterlab/console": "^4.0.0",
+    "@jupyterlab/coreutils": "^6.0.0",
     "@jupyterlab/filebrowser": "^4.0.0",
     "@jupyterlab/launcher": "^4.0.0",
+    "@jupyterlab/services": "^7.0.0",
     "@jupyterlab/statedb": "^4.0.0",
-    "@jupyterlab/ui-components": "^4.0.0"
+    "@jupyterlab/ui-components": "^4.0.0",
+    "@lumino/signaling": "^2.0.0"
   },
   "devDependencies": {
     "@jupyter/builder": "^1.2.3",
@@ -63,6 +66,11 @@
         "singleton": true,
         "requiredVersion": "^4.0.0"
       },
+      "@jupyterlab/coreutils": {
+        "bundled": false,
+        "singleton": true,
+        "requiredVersion": "^6.0.0"
+      },
       "@jupyterlab/filebrowser": {
         "bundled": false,
         "singleton": true,
@@ -73,6 +81,11 @@
         "singleton": true,
         "requiredVersion": "^4.0.0"
       },
+      "@jupyterlab/services": {
+        "bundled": false,
+        "singleton": true,
+        "requiredVersion": "^7.0.0"
+      },
       "@jupyterlab/statedb": {
         "bundled": false,
         "singleton": true,
@@ -82,6 +95,11 @@
         "bundled": false,
         "singleton": true,
         "requiredVersion": "^4.0.0"
+      },
+      "@lumino/signaling": {
+        "bundled": false,
+        "singleton": true,
+        "requiredVersion": "^2.0.0"
       }
     }
   }

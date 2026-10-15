@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import fsspec
@@ -222,13 +223,14 @@ class TestListing:
         explorer = make("/", fs=memfs, max_browser_items=2)
         explorer._current_dir = "/data"
         version = explorer._listing["version"]
-        opened = explorer.request({"type": "edit_open", "path": "/data/a.md"})
         explorer.request(
             {
-                "type": "edit_save",
+                "type": "jupyterlab_save",
+                "rid": 1,
+                "filesystem": explorer._filesystem,
                 "path": "/data/a.md",
-                "text": "longer",
-                "version": opened["version"],
+                "content": "longer",
+                "format": "text",
             }
         )
         assert explorer._listing["version"] != version
@@ -580,67 +582,9 @@ class TestStatesFile:
 def test_menu_info(mem_explorer):
     reply = mem_explorer.request({"type": "menu_info", "path": "/data/a.csv"})
     assert reply["formats"] == ["csv", "text"]
-    assert reply["editable"] is True
     assert [r["library"] for r in reply["recipes"]] == ["polars", "pandas", "pyspark"]
     folder = mem_explorer.request({"type": "menu_info", "path": "/data/table"})
     assert folder["formats"] == ["delta"]
-    assert folder["editable"] is False
-
-
-class TestEditor:
-    def test_open_and_save(self, mem_explorer):
-        opened = mem_explorer.request({"type": "edit_open", "path": "/data/notes.md"})
-        assert opened["text"] == "# Notes\n"
-        saved = mem_explorer.request(
-            {
-                "type": "edit_save",
-                "path": "/data/notes.md",
-                "text": "new",
-                "version": opened["version"],
-            }
-        )
-        assert "error" not in saved
-        assert mem_explorer._fs.cat_file("/data/notes.md") == b"new"
-
-    def test_save_updates_the_size_listed(self, mem_explorer):
-        mem_explorer._current_dir = "/data"
-        opened = mem_explorer.request({"type": "edit_open", "path": "/data/notes.md"})
-        mem_explorer.request(
-            {
-                "type": "edit_save",
-                "path": "/data/notes.md",
-                "text": "longer text",
-                "version": opened["version"],
-            }
-        )
-        sizes = {e["name"]: e["size"] for e in entries(mem_explorer)}
-        assert sizes == {"a.csv": 8, "notes.md": 11, "table": None}
-
-    def test_refuses_to_overwrite_changes_made_elsewhere(self, mem_explorer):
-        opened = mem_explorer.request({"type": "edit_open", "path": "/data/notes.md"})
-        mem_explorer._fs.pipe_file("/data/notes.md", b"changed elsewhere")
-        saved = mem_explorer.request(
-            {
-                "type": "edit_save",
-                "path": "/data/notes.md",
-                "text": "mine",
-                "version": opened["version"],
-            }
-        )
-        assert "has changed since it was opened" in saved["error"]
-        assert mem_explorer._fs.cat_file("/data/notes.md") == b"changed elsewhere"
-
-    def test_keeps_windows_line_endings(self, mem_explorer):
-        mem_explorer._fs.pipe_file("/w.txt", b"a\r\nb\r\n")
-        mem_explorer._write_text("/w.txt", "a\nc\n")
-        assert mem_explorer._fs.cat_file("/w.txt") == b"a\r\nc\r\n"
-
-    def test_binary_file(self, mem_explorer):
-        mem_explorer._fs.pipe_file("/bin", b"\xff\xfe")
-        assert (
-            "not UTF-8"
-            in mem_explorer.request({"type": "edit_open", "path": "/bin"})["error"]
-        )
 
 
 def test_download(mem_explorer):
@@ -1233,6 +1177,94 @@ class TestCreateFolder:
             "created": "new",
             "hidden": True,
         }
+
+
+class TestOpenInJupyterLab:
+    """The requests of the launcher's drive ("Open in JupyterLab"), through the explorer."""
+
+    def get(self, explorer: Explorer, path: str, **options: Any) -> dict[str, Any]:
+        return explorer.request(
+            {
+                "type": "jupyterlab_get",
+                "rid": 1,
+                "filesystem": explorer._filesystem,
+                "path": path,
+                **options,
+            }
+        )
+
+    def save(self, explorer: Explorer, path: str, content: Any, **options: Any):
+        return explorer.request(
+            {
+                "type": "jupyterlab_save",
+                "rid": 2,
+                "filesystem": explorer._filesystem,
+                "path": path,
+                "content": content,
+                "format": "text",
+                **options,
+            }
+        )
+
+    def test_get_and_save(self, mem_explorer, memfs):
+        model = self.get(mem_explorer, "/data/notes.md", format="text")["model"]
+        assert model["content"] == "# Notes\n"
+        saved = self.save(mem_explorer, "/data/notes.md", "# Changed\n")["model"]
+        assert memfs.cat_file("/data/notes.md") == b"# Changed\n"
+        assert saved["content"] is None and saved["hash"] != model["hash"]
+        # The list shows the new size.
+        mem_explorer._current_dir = "/data"
+        assert {e["name"]: e["size"] for e in entries(mem_explorer)}["notes.md"] == 10
+
+    def test_by_storage_name_while_another_is_shown(self, memfs):
+        memfs.pipe_file("/a/f.txt", b"a")
+        memfs.pipe_file("/b/g.txt", b"b")
+        explorer = make(filesystems={"A": "memory:///a", "B": "memory:///b"})
+        explorer._filesystem = "B"
+        reply = explorer.request(
+            {
+                "type": "jupyterlab_save",
+                "rid": 1,
+                "filesystem": "A",
+                "path": "/a/f.txt",
+                "content": "new",
+                "format": "text",
+            }
+        )
+        assert "model" in reply
+        assert memfs.cat_file("/a/f.txt") == b"new"
+
+    def test_preview_of_the_file_follows(self, mem_explorer):
+        mem_explorer._open_preview("/data/notes.md", "markdown")
+        self.save(mem_explorer, "/data/notes.md", "# Changed\n")
+        assert "Changed" in json.dumps(mem_explorer._preview)
+
+    def test_refused(self, mem_explorer):
+        assert "error" in self.get(mem_explorer, "/data")  # a folder
+        assert "error" in self.get(mem_explorer, "/data/missing.txt")
+        assert "error" in self.get(mem_explorer, "/data/../other/b.txt")
+        other = mem_explorer.request(
+            {
+                "type": "jupyterlab_get",
+                "rid": 1,
+                "filesystem": "nope",
+                "path": "/data/a.csv",
+            }
+        )
+        assert other["error"] == "not a file of this explorer's storages"
+
+    def test_text_formats(self, mem_explorer):
+        # Opened in JupyterLab's text editor even when it does not know the
+        # file type; data files are not (Parquet, Excel), nor are formats
+        # JupyterLab knows itself (CSV, JSON).
+        assert {"text", "markdown"} <= set(mem_explorer._text_formats)
+        assert not {"parquet", "excel", "delta", "image", "csv"} & set(
+            mem_explorer._text_formats
+        )
+
+    def test_too_large(self, mem_explorer, memfs, monkeypatch):
+        monkeypatch.setattr(storage_explorer._jupyterlab_files, "MAX_BYTES", 3)
+        assert "too large" in self.get(mem_explorer, "/data/a.csv")["error"]
 
 
 class TestRename:

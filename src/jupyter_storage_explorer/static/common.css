@@ -178,7 +178,7 @@
   overflow: hidden;
 }
 
-.jse-editor-foot {
+.jse-dialog-foot {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -189,13 +189,13 @@
 
 /* Dialog buttons, as JupyterLab's dialogs': filled, grey, and the main
    action (jse-primary) blue. */
-.jse-editor-foot .jse-btn {
+.jse-dialog-foot .jse-btn {
   padding: 4px 12px;
   background: var(--jp-reject-color-normal, #757575);
   color: var(--jse-selected-fg);
 }
 
-.jse-editor-foot .jse-btn:hover:not(:disabled) {
+.jse-dialog-foot .jse-btn:hover:not(:disabled) {
   background: var(--jp-reject-color-hover, #616161);
 }
 

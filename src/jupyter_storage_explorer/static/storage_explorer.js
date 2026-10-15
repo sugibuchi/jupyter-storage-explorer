@@ -276,24 +276,6 @@ function render({ model, el }) {
     h("div", { className: "jse-modal" }, dialogHead, dialogBody),
   );
   const menuEl = h("div", { className: "jse-menu", hidden: true });
-  // Modal text editor. Only Cancel/Save (or Esc/Ctrl+S) close it, so a stray
-  // click outside cannot discard changes.
-  const editorTitle = h("span", { className: "jse-preview-name" });
-  const editorText = h("textarea", { className: "jse-editor-text", spellcheck: false });
-  const editorMsg = h("span", { className: "jse-editor-msg" });
-  const cancelBtn = h("button", { className: "jse-btn", textContent: "Cancel", title: "Close without saving (Esc)" });
-  const saveBtn = h("button", { className: "jse-btn jse-primary", textContent: "Save", title: "Save changes (Ctrl+S)" });
-  const editorEl = h(
-    "div",
-    { className: "jse-dialog", hidden: true },
-    h(
-      "div",
-      { className: "jse-modal jse-editor" },
-      h("div", { className: "jse-dialog-head" }, editorTitle),
-      editorText,
-      h("div", { className: "jse-editor-foot" }, editorMsg, h("span", { className: "jse-spacer" }), cancelBtn, saveBtn),
-    ),
-  );
 
   // Small confirmation dialog, e.g. "Upload sales.csv? [Cancel] [Upload]".
   const { el: confirmEl, ask, answer } = createConfirm();
@@ -335,7 +317,6 @@ function render({ model, el }) {
     previewEl,
     grip,
     dialogEl,
-    editorEl,
     confirmEl,
     menuEl,
     busyEl,
@@ -596,7 +577,7 @@ function render({ model, el }) {
   }
 
   // Places the menu at the pointer, kept inside the widget (which clips what
-  // is outside it). Called again when rows appear later ("Preview as", "Edit").
+  // is outside it). Called again when rows appear later ("Preview as").
   function placeMenu() {
     const box = el.getBoundingClientRect();
     const x = Math.min(menuAt.x - box.left, box.width - menuEl.offsetWidth - 4);
@@ -607,9 +588,9 @@ function render({ model, el }) {
     menuEl.classList.toggle("jse-flip", Math.max(0, x) + 2 * menuEl.offsetWidth > box.width);
   }
 
-  // --- Menu items filled in by the kernel: "Preview as", "Edit" and "Python code" ---
+  // --- Menu items filled in by the kernel: "Preview as" and "Python code" ---
 
-  // For the open menu: {path, previewAsRow, previewAsSub, editRow, codeSub},
+  // For the open menu: {path, previewRow, previewAsRow, previewAsSub, codeRow, codeSub},
   // the elements to fill when the kernel's "menu_info" reply arrives.
   let menuInfo = null;
 
@@ -621,8 +602,6 @@ function render({ model, el }) {
 
   function onCustomMsg(msg, buffers) {
     if (msg.type === "menu_info") onMenuInfo(msg);
-    else if (msg.type === "edit_open") onEditOpen(msg);
-    else if (msg.type === "edit_save") onEditSave(msg);
     else if (msg.type === "download") onDownload(msg, buffers);
     else if (msg.type === "reply") onReply(msg);
     else if (msg.type === "job") onJob(msg);
@@ -1061,6 +1040,58 @@ function render({ model, el }) {
     parts.push(...errors.map((e) => `Failed: ${e}`));
     parts.push(...jobOutcome(result, parts, "Delete"));
     flash(parts.join("; ") || "Nothing deleted");
+  }
+
+  // --- Open in JupyterLab: its own editors and viewers ---
+  // The launcher's JupyterLab extension (launcher/labextension/src/files.ts),
+  // when on the page, puts {open(file)} under this key. It shows the file
+  // through a drive of its own, which reads and saves it with `get` and `save`
+  // below, through this widget's kernel ("jupyterlab_get", "jupyterlab_save").
+  // Without the extension, the item is not offered.
+  const JUPYTERLAB = Symbol.for("jupyter-storage-explorer.jupyterlab");
+  // A kernel that stopped never answers: JupyterLab then shows this error.
+  const JUPYTERLAB_TIMEOUT_MS = 120_000;
+
+  function askKernel(content) {
+    let timer;
+    const timeout = new Promise((_, reject) => {
+      timer = setTimeout(
+        () => reject(new Error("The Storage Explorer did not answer: its kernel may have stopped. Open the file from the explorer again.")),
+        JUPYTERLAB_TIMEOUT_MS,
+      );
+    });
+    return Promise.race([request(content), timeout]).then((reply) => {
+      clearTimeout(timer);
+      if (reply.error) throw new Error(reply.error);
+      return reply.model;
+    });
+  }
+
+  // Whether JupyterLab can show the file ({name, type, format}): the
+  // extension is on the page, and JupyterLab knows the file's type (e.g. CSV,
+  // JSON, notebooks, images) or the explorer reads it as text (its text
+  // editor opens any), not e.g. Parquet or Excel, which it would only show
+  // as an error.
+  function canOpenInJupyterLab(entry) {
+    const jupyterlab = globalThis[JUPYTERLAB];
+    if (!jupyterlab || entry.type === "directory") return false;
+    return jupyterlab.canOpen(entry.name) || model.get("_text_formats").includes(entry.format);
+  }
+
+  function openInJupyterLab(path) {
+    takeUnsafe(); // an operation, though not a risky one
+    // The storage shown now: the file stays in it while the explorer moves on.
+    const filesystem = model.get("_filesystem");
+    const ask = (type, options) => askKernel({ ...options, type, filesystem, path });
+    globalThis[JUPYTERLAB]
+      .open({
+        explorer: model.get("_explorer_id"),
+        storage: filesystem,
+        path,
+        get: (options) => ask("jupyterlab_get", options),
+        save: (options) => ask("jupyterlab_save", options),
+      })
+      .catch((err) => flash(`Cannot open in JupyterLab: ${err.message ?? err}`));
   }
 
   // --- Copy, cut and paste: "Copy" (or "Cut") puts files (and, in unsafe
@@ -1630,15 +1661,18 @@ function render({ model, el }) {
 
   function onMenuInfo(msg) {
     if (menuInfo?.path !== msg.path) return;
-    const { path, previewRow, previewAsRow, previewAsSub, editRow, codeSub } = menuInfo;
-    if (!msg.error && msg.query && previewRow) previewRow.querySelector(".jse-menu-label").textContent = "Query data";
+    const { path, previewRow, previewAsRow, previewAsSub, codeRow, codeSub } = menuInfo;
+    // A folder's rows, hidden until now: shown if it has a format (an error
+    // shows in "Python code").
+    if (msg.error || msg.formats.length) codeRow.hidden = false;
+    if (!msg.error && msg.formats.length) previewRow.hidden = false;
+    if (!msg.error && msg.query) previewRow.querySelector(".jse-menu-label").textContent = "Query data";
     // "Preview as" only appears when the item matches more than one format.
     if (!msg.error && msg.formats.length > 1) {
       const items = msg.formats.map((format) => ({ label: `Preview as ${formatLabel(format)}`, action: () => openPreview(path, format) }));
       previewAsSub.replaceChildren(...menuRows(items));
       previewAsRow.hidden = false;
     }
-    if (!msg.error && msg.editable) editRow.hidden = false;
     let items;
     if (msg.error) {
       items = [{ label: msg.error, disabled: true }];
@@ -1660,7 +1694,7 @@ function render({ model, el }) {
     const single = targets.length === 1 ? targets[0] : null;
     const count = targets.length > 1 ? `${targets.length} ` : "";
     // Items without a URL (the kernel's _url gave None) are not treated as data:
-    // no preview, code or editing.
+    // no preview or code.
     const data = single && hasUrl(single) ? single : null;
     // The reply arrives after the menu is built, so the refs below are set by then.
     const info = data ? requestMenuInfo(data.path) : null;
@@ -1672,38 +1706,45 @@ function render({ model, el }) {
     const withUrls = targets.every(hasUrl);
 
     // Groups of items, joined by separators; groups left empty are dropped.
-    const open = [
-      {
-        label: "Preview",
-        icon: "eye",
-        disabled: !data,
-        // Relabelled "Query data" when the kernel says it opens in the data browser.
-        ref: (row) => info && (info.previewRow = row),
-        action: () => openPreview(single.path),
-      },
-    ];
-    if (info) {
-      open.push({
-        label: "Preview as",
-        icon: "eye",
-        hidden: true,
-        ref: (row) => (info.previewAsRow = row),
-        submenu: (sub) => (info.previewAsSub = sub),
-      });
+    // Opening comes first, as in JupyterLab's file browser.
+    const open = [];
+    if (single && canOpenInJupyterLab(single)) {
+      open.push({ label: "Open in JupyterLab", icon: "open-in-new", action: () => openInJupyterLab(single.path) });
     }
     if (withOpen && folder) open.push({ label: "Open", icon: "folder", action: () => navigate(folder.path) });
     if (info) {
-      open.push({ label: "Edit", icon: "text", hidden: true, ref: (row) => (info.editRow = row), action: () => openEditor(single.path) });
+      // Only for what has a format: a file's is in the listing; whether a
+      // folder has one (a Delta table, a Parquet dataset) only the kernel
+      // tells (onMenuInfo), so its rows appear then.
+      const hasFormat = !isFolder(data) && Boolean(data.format);
+      open.push(
+        {
+          label: "Preview",
+          icon: "eye",
+          hidden: !hasFormat,
+          // Relabelled "Query data" when the kernel says it opens in the data browser.
+          ref: (row) => (info.previewRow = row),
+          action: () => openPreview(single.path),
+        },
+        {
+          label: "Preview as",
+          icon: "eye",
+          hidden: true,
+          ref: (row) => (info.previewAsRow = row),
+          submenu: (sub) => (info.previewAsSub = sub),
+        },
+        {
+          label: "Python code",
+          icon: "code",
+          hidden: !hasFormat,
+          ref: (row) => (info.codeRow = row),
+          submenu: (sub) => {
+            sub.replaceChildren(...menuRows([{ label: "Loading…", disabled: true }]));
+            info.codeSub = sub;
+          },
+        },
+      );
     }
-    open.push({
-      label: "Python code",
-      icon: "code",
-      disabled: !data,
-      submenu: (sub) => {
-        sub.replaceChildren(...menuRows([{ label: "Loading…", disabled: true }]));
-        info.codeSub = sub;
-      },
-    });
     // Locations are copied only as URLs: fsspec's paths can differ from the
     // storage's own notion of a path (e.g. abfs's "container/key"). Files'
     // URLs also come with "Copy" below, so "Copy URL" is for folders, which
@@ -2128,8 +2169,11 @@ function render({ model, el }) {
       tr.draggable = true;
       tr.addEventListener("dragstart", (ev) => startDrag(ev, entry));
       tr.addEventListener("click", (ev) => select(entry.path, ev.ctrlKey || ev.metaKey));
+      // As in JupyterLab's file browser: a folder opens, a file opens in
+      // JupyterLab's editor or viewer when it can show it, else in the preview.
       tr.addEventListener("dblclick", () => {
         if (isDir) navigate(entry.path);
+        else if (canOpenInJupyterLab(entry)) openInJupyterLab(entry.path);
         else if (hasUrl(entry)) openPreview(entry.path); // no URL: no preview
       });
       tr.addEventListener("contextmenu", (ev) => {
@@ -2261,103 +2305,6 @@ function render({ model, el }) {
     dialogEl.hidden = true;
     el.focus({ preventScroll: true });
   }
-
-  // --- Text editor: the kernel reads and writes the file ---
-
-  // {path, version, original, saving} while the editor is open. `version`
-  // identifies the contents opened, so the kernel can refuse to overwrite a
-  // file changed elsewhere; `original` is the text as shown, to detect edits.
-  let editing = null;
-
-  function editorMessage(text, isError = false) {
-    editorMsg.textContent = text;
-    editorMsg.classList.toggle("jse-error-text", isError);
-  }
-
-  function updateEditorButtons() {
-    const dirty = editing != null && editing.original != null && editorText.value !== editing.original;
-    saveBtn.disabled = !dirty || editing.saving;
-    cancelBtn.disabled = Boolean(editing?.saving);
-  }
-
-  function openEditor(path) {
-    editing = { path, version: null, original: null, saving: false };
-    editorTitle.textContent = editorTitle.title = path;
-    editorText.value = "";
-    editorText.disabled = true;
-    editorMessage("Loading…");
-    updateEditorButtons();
-    editorEl.hidden = false;
-    model.send({ type: "edit_open", path });
-  }
-
-  function onEditOpen(msg) {
-    if (editing?.path !== msg.path) return;
-    if (msg.error) {
-      editorMessage(msg.error, true);
-      return;
-    }
-    editorText.value = msg.text;
-    // Browsers turn "\r\n" into "\n" in text areas; compare against what is shown.
-    editing.original = editorText.value;
-    editing.version = msg.version;
-    editorText.disabled = false;
-    editorMessage("");
-    updateEditorButtons();
-    editorText.focus({ preventScroll: true });
-    editorText.setSelectionRange(0, 0);
-    editorText.scrollTop = 0;
-  }
-
-  function saveEdit() {
-    if (!editing || saveBtn.disabled) return;
-    takeUnsafe(); // an operation, though not on folders
-    editing.saving = true;
-    editorMessage("Saving…");
-    updateEditorButtons();
-    model.send({ type: "edit_save", path: editing.path, text: editorText.value, version: editing.version });
-  }
-
-  function onEditSave(msg) {
-    if (editing?.path !== msg.path) return;
-    editing.saving = false;
-    if (msg.error) {
-      editorMessage(msg.error, true);
-      updateEditorButtons();
-      return;
-    }
-    const name = editing.path.slice(editing.path.lastIndexOf("/") + 1);
-    closeEditor();
-    flash(`Saved ${name}`);
-  }
-
-  function cancelEdit() {
-    if (editing?.saving) return;
-    const dirty = editing?.original != null && editorText.value !== editing.original;
-    if (dirty && !window.confirm("Discard your changes?")) return;
-    closeEditor();
-  }
-
-  function closeEditor() {
-    editing = null;
-    editorEl.hidden = true;
-    el.focus({ preventScroll: true });
-  }
-
-  editorText.addEventListener("input", updateEditorButtons);
-  saveBtn.addEventListener("click", saveEdit);
-  cancelBtn.addEventListener("click", cancelEdit);
-  editorEl.addEventListener("keydown", (ev) => {
-    if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "s") {
-      ev.preventDefault(); // not the browser's "Save page"
-      saveEdit();
-    } else if (ev.key === "Escape") {
-      cancelEdit();
-    } else {
-      return;
-    }
-    ev.stopPropagation(); // keep the widget's own Escape handling out of it
-  });
 
   // --- Data browser ("Query data"): the panel is in query.js ---
 
