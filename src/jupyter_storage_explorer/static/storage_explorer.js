@@ -203,7 +203,7 @@ function render({ model, el }) {
   const tbody = h("tbody");
   const listEl = h("div", { className: "jse-list" }, h("table", {}, h("thead", {}, headRow), tbody));
   const statusEl = h("div", { className: "jse-status" });
-  // "Unsafe mode", at the right end of the status bar (see takeUnsafe): a
+  // "Unsafe mode", at the right end of the toolbar (see takeUnsafe): a
   // slider. The checkbox is hidden but still focusable (Space toggles it);
   // the track and knob are drawn by CSS.
   const unsafeInput = h("input", { type: "checkbox", role: "switch", className: "jse-switch-input" });
@@ -220,14 +220,13 @@ function render({ model, el }) {
     h("span", { className: "jse-switch", ariaHidden: "true" }),
     unsafeLabel,
   );
-  // The status bar: messages on the left (hidden with the preview panel open), the switch on the right.
-  const statusBarEl = h("div", { className: "jse-status-bar" }, statusEl, unsafeEl);
+  // The status bar: messages on the left (hidden with the preview panel open), Preview on the right.
+  const statusBarEl = h("div", { className: "jse-status-bar" }, statusEl, previewBtn);
   // Tree and list; its height is the `height` trait until resized by dragging.
-  // Above each pane, a bar: a filter for the tree's folders; for the list, a
-  // filter and the pager (pages of PAGE_SIZE items; see renderList).
+  // Above each pane, a bar: the filesystem chooser for the tree; for the list,
+  // its filter and the pager (pages of PAGE_SIZE items; see renderList).
   const PAGE_SIZE = 100;
   let listPage = 0;
-  const treeFilter = createFilter({ placeholder: "Filter folders", onChange: () => renderTree() });
   // Set while typing in the list's filter: in large folders, the kernel is
   // then asked once typing pauses (see renderList).
   let filterTyped = false;
@@ -247,7 +246,7 @@ function render({ model, el }) {
   const panesEl = h(
     "div",
     { className: "jse-panes" },
-    h("div", { className: "jse-pane jse-tree-pane" }, h("div", { className: "jse-pane-bar" }, treeFilter.el), treeEl),
+    h("div", { className: "jse-pane jse-tree-pane" }, h("div", { className: "jse-pane-bar" }, fsSelect), treeEl),
     h("div", { className: "jse-pane jse-list-pane" }, h("div", { className: "jse-pane-bar" }, listFilter.el, pagerEl), listEl),
   );
   // Bottom edge of the widget: resizes the last area (preview panel or tree and list).
@@ -325,7 +324,7 @@ function render({ model, el }) {
   // each, above the status bar; see "Jobs" below.
   const jobsEl = h("div", { className: "jse-jobs", hidden: true });
   el.replaceChildren(
-    h("div", { className: "jse-toolbar" }, fsSelect, bookmarkBtn, upBtn, refreshBtn, pathEl, previewBtn),
+    h("div", { className: "jse-toolbar" }, bookmarkBtn, upBtn, refreshBtn, pathEl, unsafeEl),
     panesEl,
     previewEl,
     jobsEl,
@@ -1693,37 +1692,9 @@ function render({ model, el }) {
       expandRoot = false;
     }
 
-    // While the folder filter is active, of the folders loaded so far: those
-    // whose names match, and those leading to them (shown open), so a match
-    // deep down stays reachable; the root and the folder shown always stay.
-    let shown = null;
-    let opened = null;
-    if (treeFilter.active()) {
-      shown = new Set([root]);
-      opened = new Set();
-      const visit = (path) => {
-        let found = false;
-        for (const child of tree[path] ?? []) {
-          const below = visit(child.path);
-          if (below) opened.add(child.path);
-          if (below || treeFilter.test(child.name)) {
-            shown.add(child.path);
-            found = true;
-          }
-        }
-        return found;
-      };
-      if (visit(root)) opened.add(root);
-      const chain = ancestors(current);
-      chain.forEach((path, i) => {
-        shown.add(path);
-        if (i < chain.length - 1) opened.add(path);
-      });
-    }
-
     function node(dir, depth) {
       const children = tree[dir.path];
-      const isOpen = expanded.has(dir.path) || Boolean(opened?.has(dir.path));
+      const isOpen = expanded.has(dir.path);
       if (isOpen) requestChildren(dir.path);
 
       const twisty = h("span", {
@@ -1746,25 +1717,18 @@ function render({ model, el }) {
       row.dataset.dropDir = dir.path; // files dropped here are uploaded into this folder
       // For styling by depth, e.g. [data-depth="1"]: 0 is the root, 1 a top-level folder.
       row.dataset.depth = depth;
-      // Clicking a folder ends the search for it: the whole tree shows again.
-      row.addEventListener("click", () => {
-        treeFilter.clear();
-        navigate(dir.path);
-      });
+      row.addEventListener("click", () => navigate(dir.path));
       row.addEventListener("contextmenu", (ev) => showMenu(ev, itemMenu([{ ...dir, type: "directory" }], false)));
 
       const wrap = h("div", {}, row);
       if (isOpen && children) {
-        for (const child of children) if (!shown || shown.has(child.path)) wrap.append(node(child, depth + 1));
+        for (const child of children) wrap.append(node(child, depth + 1));
       }
       return wrap;
     }
 
     // The root's menu offers no previews, code or copying (no_url).
     treeEl.replaceChildren(node({ name: treeRootLabel(root), path: root, no_url: true }, 0));
-    if (shown && shown.size === ancestors(current).length) {
-      treeEl.append(h("div", { className: "jse-placeholder jse-tree-note", textContent: "No loaded folders match" }));
-    }
     treeEl.querySelector(".jse-active")?.scrollIntoView({ block: "nearest" });
   }
 
@@ -1779,14 +1743,17 @@ function render({ model, el }) {
 
   function renderPath() {
     const chain = ancestors(model.get("_current_dir"));
-    pathEl.replaceChildren();
+    // In a span of its own, left to right: pathEl is right to left, so that a
+    // path too long is cut at its start, and the current folder stays in view.
+    const crumbs = h("span", { className: "jse-crumbs" });
     chain.forEach((path, i) => {
-      if (i > 0) pathEl.append(h("span", { className: "jse-sep", textContent: "/" }));
+      if (i > 0) crumbs.append(h("span", { className: "jse-sep", textContent: "/" }));
       const name = i === 0 ? rootLabel(path) : path.slice(path.lastIndexOf("/") + 1);
       const crumb = h("span", { className: "jse-crumb", textContent: name, title: path });
       crumb.addEventListener("click", () => navigate(path));
-      pathEl.append(crumb);
+      crumbs.append(crumb);
     });
+    pathEl.replaceChildren(crumbs);
     upBtn.disabled = chain.length < 2;
   }
 
@@ -1941,7 +1908,19 @@ function render({ model, el }) {
     }
   }
 
+  // The folder whose items the list last showed, to tell when another's arrive.
+  let listShowsDir = null;
+
   function renderList() {
+    // Another folder's items are shown unfiltered, from the first page. Done
+    // when they arrive, not on clicking the folder: the previous folder's
+    // items would show unfiltered until then, a long wait for a large folder.
+    const dir = model.get("_listing").dir;
+    if (dir !== listShowsDir) {
+      listShowsDir = dir;
+      listPage = 0;
+      listFilter.clear(false);
+    }
     headRow.replaceChildren(
       ...columns.map((col) => {
         const arrow = sort.key === col.key ? (sort.asc ? " ▲" : " ▼") : "";
@@ -2304,9 +2283,6 @@ function render({ model, el }) {
     return (dy) => (area.style.height = `${Math.max(MIN_AREA_HEIGHT, start + dy)}px`);
   });
 
-  // The folder the list was last shown for, to tell when another is shown.
-  let listShowsDir = null;
-
   function onDirChange() {
     // Only folders under the root belong to this filesystem's tree.
     if (model.get("_current_dir").startsWith(model.get("_root"))) {
@@ -2314,17 +2290,6 @@ function render({ model, el }) {
     }
     renderTree();
     renderPath();
-    // Another folder is shown unfiltered (clearing the filter renders the
-    // list), from its first page (its entries may have been drawn already).
-    const dir = model.get("_current_dir");
-    if (dir !== listShowsDir) {
-      listShowsDir = dir;
-      listFilter.clear();
-    }
-    if (listPage) {
-      listPage = 0;
-      renderList();
-    }
     renderBookmarkBtn();
     reportView();
   }

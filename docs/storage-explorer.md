@@ -3,7 +3,7 @@
 `StorageExplorer` is the file explorer: browse storage, preview files, query tables, and upload, download, move and
 edit files. For installation, see the [README](../README.md).
 
-![StorageExplorer with a JSON Lines file open in the data browser](figs/storage-explorer.png)
+<img src="figs/storage-explorer.png" width="954" alt="StorageExplorer with a JSON Lines file open in the data browser">
 
 - [Storages](#storages)
 - [Using the explorer](#using-the-explorer)
@@ -38,7 +38,7 @@ StorageExplorer("gs://my-bucket", token="google_default")  # Google Cloud
 
 ### Several storages in one explorer
 
-Name each storage, and switch between them with the drop-down left of the address bar:
+Name each storage, and switch between them with the drop-down above the tree:
 
 ```python
 StorageExplorer(
@@ -83,24 +83,24 @@ several items.
 
 ### Filter
 
-Type in the fields above the tree and the list to show names containing the text, or matching a regular expression
-with **.\***. ✕ or Esc clears.
+Type in the field above the list to show names containing the text, or matching a regular expression with **.\***.
+✕ or Esc clears; opening another folder clears it too.
 
 <img src="figs/using-filter.png" width="562" alt="The list filtered with a regular expression">
 
 ### Preview
 
-Double-click a file, or **Preview** (with nothing selected: the current folder, e.g. a Delta Lake table), or right-click
+Double-click a file, or **Preview** at the bottom right (with nothing selected: the current folder, e.g. a Delta Lake table), or right-click
 → **Preview**; **Preview as** chooses another format. Tables open in the [data browser](#query-data).
 
-<img src="figs/using-preview.png" width="562" alt="Preview in the toolbar, and Preview as in the right-click menu of a Markdown file">
+<img src="figs/using-preview.png" width="562" alt="Preview in the status bar, and Preview as in the right-click menu of a Markdown file">
 
 ### Right-click
 
 Preview as, Edit, Python code to load the data, Copy URL; Copy, Cut, Paste; Create a folder, Delete; Download to local
 or to JupyterLab; Properties, Add bookmark.
 
-<img src="figs/using-right-click.png" width="367" alt="The right-click menu of a JSON Lines file">
+<img src="figs/using-right-click.png" width="366" alt="The right-click menu of a JSON Lines file">
 
 ### Properties
 
@@ -114,7 +114,7 @@ of files and folders, their total size, and the oldest and newest files.
 Right-click a folder → **Add bookmark**. ☆ lists them; click one to open it, right-click it for Copy URL and Delete
 bookmark.
 
-<img src="figs/using-bookmarks.png" width="334" alt="The bookmarks menu">
+<img src="figs/using-bookmarks.png" width="227" alt="The bookmarks menu">
 
 ### Copy, cut and paste
 
@@ -132,9 +132,9 @@ status bar.
 
 ## Unsafe operations
 
-Folder operations need **Unsafe mode**, turned on with the slider in the status bar, for one operation:
+Folder operations need **Unsafe mode**, turned on with the slider at the right of the toolbar, for one operation:
 
-<img src="figs/unsafe-mode.png" width="403" alt="The Unsafe mode slider, on, at the right of the status bar">
+<img src="figs/unsafe-mode.png" width="405" alt="The Unsafe mode slider, on, at the right of the toolbar">
 
 | Operation              | How                                                                                          |
 |------------------------|----------------------------------------------------------------------------------------------|

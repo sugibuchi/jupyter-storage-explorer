@@ -9,8 +9,10 @@
   background: var(--jse-bg-alt);
 }
 
+/* Above the tree, as wide as it. */
 .jse-fs-select {
-  max-width: 200px;
+  flex: 1;
+  min-width: 0;
   padding: 2px 4px;
   border: 1px solid var(--jse-border);
   border-radius: 3px;
@@ -28,6 +30,8 @@
   color: var(--jse-accent);
 }
 
+/* Right to left, so a long path is cut at its start (…/folder shown); the
+   crumbs themselves are left to right (.jse-crumbs). */
 .jse-path {
   flex: 1;
   min-width: 0;
@@ -35,6 +39,13 @@
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+  direction: rtl;
+  text-align: left;
+}
+
+.jse-crumbs {
+  direction: ltr;
+  unicode-bidi: isolate;
 }
 
 .jse-crumb {
@@ -64,9 +75,9 @@
   flex: 1 1 0;
 }
 
-/* Each pane is a column: its bar (filter, and for the list the pager) on top,
-   then the tree or list. The tree's pane is as wide as the tree, which can be
-   resized from its corner. */
+/* Each pane is a column: its bar (the filesystem chooser for the tree; the
+   filter and pager for the list) on top, then the tree or list. The tree's
+   pane is as wide as the tree, which can be resized from its corner. */
 .jse-pane {
   display: flex;
   flex-direction: column;
@@ -106,10 +117,6 @@
 
 .jse-pager[hidden] {
   display: none;
-}
-
-.jse-tree-note {
-  padding: 4px 10px;
 }
 
 .jse-tree {
@@ -534,7 +541,7 @@
 }
 
 /* The status bar: messages on the left (.jse-status, without its own border
-   here), the "Unsafe mode" slider on the right. */
+   here), Preview on the right. */
 .jse-status-bar {
   display: flex;
   align-items: center;
@@ -548,12 +555,16 @@
   border-top: none;
 }
 
+.jse-status-bar > .jse-btn {
+  margin: 2px 6px 2px auto; /* stays right when the message is hidden */
+}
+
+/* At the toolbar's right end. */
 .jse-unsafe {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-left: auto; /* stays right when the message is hidden */
-  padding: 2px 8px;
+  padding: 2px 4px 2px 8px;
   color: var(--jse-fg-muted);
   font-size: 0.9em;
   white-space: nowrap;

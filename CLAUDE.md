@@ -137,7 +137,7 @@ misses subfolders) and returning what was found, `complete` False, on a cancel. 
 modification time whichever key a filesystem uses, for the list too.
 
 **Unsafe mode.** Folder operations (move, copy or cut and paste, delete) are offered only while the "Unsafe mode" slider in
-the status bar is on (trait `_unsafe_mode`). In the frontend, every operation calls `takeUnsafe()` as it starts, which
+the toolbar is on (trait `_unsafe_mode`). In the frontend, every operation calls `takeUnsafe()` as it starts, which
 turns it off (one operation at a time), and sends whether it was on with its request (`"unsafe"`); the kernel refuses
 folders without it (the methods' `folders=` parameter).
 
@@ -178,8 +178,9 @@ the kernel sends; selection survives filtering and paging. Folders can hold tens
 (`"urls"`) when copying. It sorts once per listing, not per keystroke. Folders of more than `max_browser_items` are
 handled by the kernel instead (`listing.py`): `_listing` then only gives their size and a version, and the frontend
 asks for pages (`"list"`), filtering the rows shown while it waits; sorting and filters there follow the browser's as
-closely as Python allows (natural order ignoring case and accents; Python's `re`). Filters (tree, list, *Select columns*) use `createFilter`
-in `common.js`: text or a regular expression, always case-insensitive.
+closely as Python allows (natural order ignoring case and accents; Python's `re`). Filters (the list's; *Select columns*) use
+`createFilter` in `common.js`: text or a regular expression, always case-insensitive. The list's is cleared when
+another folder's listing arrives (`renderList`), not on the click, so the previous folder's items never show unfiltered.
 
 **Formats** (`formats/`). Each `DataFormat` subclass (`base.py`) declares `name`, `label`, `priority`, `extensions` and
 which package sets can read it (`preferred_requirements` for previews and code, `code_only_requirements` such as PySpark

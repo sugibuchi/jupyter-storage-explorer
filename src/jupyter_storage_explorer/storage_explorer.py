@@ -160,7 +160,7 @@ class StorageExplorer(anywidget.AnyWidget):
     or others), "Delete" and "Create a folder".
     Files dragged from JupyterLab's file browser or the user's computer are
     uploaded; files dragged onto a folder are moved there. Folders are moved,
-    copied and deleted only in "Unsafe mode" (the slider in the status bar),
+    copied and deleted only in "Unsafe mode" (the slider in the toolbar),
     which any operation turns off again.
 
     Moving, deleting, pasting, uploading and downloading to JupyterLab run in
@@ -316,7 +316,7 @@ class StorageExplorer(anywidget.AnyWidget):
     # widget's drop-down sets `_filesystem` to switch.
     _filesystem_names = traitlets.List(traitlets.Unicode()).tag(sync=True)
     _filesystem = traitlets.Unicode().tag(sync=True)
-    # The "Unsafe mode" switch in the status bar: while on, risky operations
+    # The "Unsafe mode" switch in the toolbar: while on, risky operations
     # are offered (today: moving, copying, pasting and deleting folders). The
     # frontend turns it off when any operation starts, and sends with each
     # request whether it was on ("unsafe").
