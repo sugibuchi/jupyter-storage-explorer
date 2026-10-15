@@ -1080,6 +1080,31 @@ function render({ model, el }) {
     return urls;
   }
 
+  // The list's tooltips are URLs. The listing does not carry them, so those of
+  // the rows shown are asked for in one request as they are drawn, before any
+  // hover (a title set while the pointer rests on a row would not show), and
+  // kept by storage and path: a URL, or the request's promise while it is out.
+  // Items without one show their path.
+  const tooltipUrls = new Map();
+
+  function setTooltips(rows) {
+    const filesystem = model.get("_filesystem");
+    const key = (entry) => `${filesystem}\n${entry.path}`;
+    const missing = rows.map(([, entry]) => entry).filter((e) => hasUrl(e) && !tooltipUrls.has(key(e)));
+    if (missing.length) {
+      const asked = urlsOf(missing).then(
+        (urls) => missing.forEach((e, i) => tooltipUrls.set(key(e), urls[i] ?? e.path)),
+        () => missing.forEach((e) => tooltipUrls.delete(key(e))), // asked again when drawn again
+      );
+      missing.forEach((e) => tooltipUrls.set(key(e), asked));
+    }
+    for (const [tr, entry] of rows) {
+      const known = hasUrl(entry) ? tooltipUrls.get(key(entry)) : entry.path;
+      if (typeof known === "string") tr.title = known;
+      else known.then(() => (tr.title = tooltipUrls.get(key(entry)) ?? entry.path));
+    }
+  }
+
   // targets: [{path, type}] of the filesystem shown, all with URLs. `cut`:
   // pasting moves them.
   async function copyFiles(targets, cut = false) {
@@ -2049,52 +2074,52 @@ function render({ model, el }) {
     pageLabel.title = kernelMode() ? "A large folder: filtered, sorted and paged by the kernel" : "";
     prevPageBtn.disabled = listPage === 0;
     nextPageBtn.disabled = listPage >= pages - 1;
-    tbody.replaceChildren(
-      ...page.map((entry) => {
-        const isDir = entry.type === "directory";
-        const tr = h(
-          "tr",
-          { className: selected.has(entry.path) ? "jse-selected" : "", title: entry.path },
-          h(
-            "td",
-            { className: "jse-col-name" },
-            h("span", { className: "jse-icon", textContent: isDir ? "📁" : "📄" }),
-            entry.name,
-          ),
-          h("td", { className: "jse-col-size", textContent: formatSize(entry.size) }),
-          h("td", { className: "jse-col-mtime", textContent: formatTime(entry.mtime) }),
-        );
-        if (isDir) {
-          tr.dataset.dropDir = entry.path; // files dropped here are uploaded or moved into this folder
-          // Depth from the root, as in the tree: ancestors() lists the root down to
-          // this folder, so a top-level folder gives 2 entries, i.e. depth 1.
-          if (entry.path.startsWith(model.get("_root"))) tr.dataset.depth = ancestors(entry.path).length - 1;
-        } else if (entry.format) {
-          // e.g. "csv", "json-lines"; lets CSS style the icon per format.
-          tr.dataset.fileFormat = entry.format;
+    const rows = page.map((entry) => {
+      const isDir = entry.type === "directory";
+      const tr = h(
+        "tr",
+        { className: selected.has(entry.path) ? "jse-selected" : "" },
+        h(
+          "td",
+          { className: "jse-col-name" },
+          h("span", { className: "jse-icon", textContent: isDir ? "📁" : "📄" }),
+          entry.name,
+        ),
+        h("td", { className: "jse-col-size", textContent: formatSize(entry.size) }),
+        h("td", { className: "jse-col-mtime", textContent: formatTime(entry.mtime) }),
+      );
+      if (isDir) {
+        tr.dataset.dropDir = entry.path; // files dropped here are uploaded or moved into this folder
+        // Depth from the root, as in the tree: ancestors() lists the root down to
+        // this folder, so a top-level folder gives 2 entries, i.e. depth 1.
+        if (entry.path.startsWith(model.get("_root"))) tr.dataset.depth = ancestors(entry.path).length - 1;
+      } else if (entry.format) {
+        // e.g. "csv", "json-lines"; lets CSS style the icon per format.
+        tr.dataset.fileFormat = entry.format;
+      }
+      // Files (and, in unsafe mode, folders) can be dragged onto a folder to move
+      // them there; files onto JupyterLab's file browser to download them to
+      // the Jupyter server (see startDrag).
+      tr.draggable = true;
+      tr.addEventListener("dragstart", (ev) => startDrag(ev, entry));
+      tr.addEventListener("click", (ev) => select(entry.path, ev.ctrlKey || ev.metaKey));
+      tr.addEventListener("dblclick", () => {
+        if (isDir) navigate(entry.path);
+        else if (hasUrl(entry)) openPreview(entry.path); // no URL: no preview
+      });
+      tr.addEventListener("contextmenu", (ev) => {
+        // Like file managers: right-clicking outside the selection selects that item.
+        let paths = model.get("_selected");
+        if (!paths.includes(entry.path)) {
+          select(entry.path, false);
+          paths = [entry.path];
         }
-        // Files (and, in unsafe mode, folders) can be dragged onto a folder to move
-        // them there; files onto JupyterLab's file browser to download them to
-        // the Jupyter server (see startDrag).
-        tr.draggable = true;
-        tr.addEventListener("dragstart", (ev) => startDrag(ev, entry));
-        tr.addEventListener("click", (ev) => select(entry.path, ev.ctrlKey || ev.metaKey));
-        tr.addEventListener("dblclick", () => {
-          if (isDir) navigate(entry.path);
-          else if (hasUrl(entry)) openPreview(entry.path); // no URL: no preview
-        });
-        tr.addEventListener("contextmenu", (ev) => {
-          // Like file managers: right-clicking outside the selection selects that item.
-          let paths = model.get("_selected");
-          if (!paths.includes(entry.path)) {
-            select(entry.path, false);
-            paths = [entry.path];
-          }
-          showMenu(ev, itemMenu(entriesAt(paths)));
-        });
-        return tr;
-      }),
-    );
+        showMenu(ev, itemMenu(entriesAt(paths)));
+      });
+      return [tr, entry];
+    });
+    tbody.replaceChildren(...rows.map(([tr]) => tr));
+    setTooltips(rows);
     if (!page.length && total) {
       const text = loading ? "Loading…" : "No items match the filter";
       tbody.append(h("tr", {}, h("td", { className: "jse-placeholder", colSpan: columns.length, textContent: text })));
