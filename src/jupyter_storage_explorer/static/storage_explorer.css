@@ -142,6 +142,17 @@
   background: var(--jse-hover);
 }
 
+/* "plus N folders": not a folder, not clickable. */
+.jse-node.jse-tree-more {
+  color: var(--jse-fg-muted);
+  font-style: italic;
+  cursor: default;
+}
+
+.jse-node.jse-tree-more:hover {
+  background: none;
+}
+
 .jse-node.jse-active {
   background: var(--jse-accent-bg);
 }
