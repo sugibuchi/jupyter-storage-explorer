@@ -220,7 +220,7 @@ function render({ model, el }) {
     h("span", { className: "jse-switch", ariaHidden: "true" }),
     unsafeLabel,
   );
-  // The status bar: messages on the left (hidden with the preview panel open), Preview on the right.
+  // The status bar: messages on the left, Preview on the right.
   const statusBarEl = h("div", { className: "jse-status-bar" }, statusEl, previewBtn);
   // Tree and list; its height is the `height` trait until resized by dragging.
   // Above each pane, a bar: the filesystem chooser for the tree; for the list,
@@ -323,12 +323,15 @@ function render({ model, el }) {
   // Jobs running in the kernel (moves, deletions, pastes, downloads), one row
   // each, above the status bar; see "Jobs" below.
   const jobsEl = h("div", { className: "jse-jobs", hidden: true });
+  // The status bar belongs to the list, so it stays under it, above the
+  // preview panel: Preview and the item count stay in view when the panel
+  // opens.
   el.replaceChildren(
     h("div", { className: "jse-toolbar" }, bookmarkBtn, upBtn, refreshBtn, pathEl, unsafeEl),
     panesEl,
-    previewEl,
     jobsEl,
     statusBarEl,
+    previewEl,
     grip,
     dialogEl,
     editorEl,
@@ -502,10 +505,9 @@ function render({ model, el }) {
   // --- Right-click menu ---
 
   let flashTimer;
-  // A short message in the status bar, shown even while it is otherwise hidden.
+  // A short message in the status bar, in place of the item count.
   function flash(message) {
     statusEl.textContent = message;
-    statusEl.hidden = false;
     clearTimeout(flashTimer);
     flashTimer = setTimeout(() => {
       flashTimer = null;
@@ -2081,10 +2083,6 @@ function render({ model, el }) {
     if (flashTimer) return; // a message is showing; it calls back when done
     const error = model.get("_error");
     statusEl.classList.toggle("jse-error", Boolean(error));
-    // Errors always show. The item count is about the file list, so it is
-    // hidden while the preview panel (just above the status bar) is open,
-    // where it could be mistaken for a count of the previewed data.
-    statusEl.hidden = !error && !previewEl.hidden;
     if (error) {
       statusEl.textContent = error;
       return;
@@ -2250,7 +2248,6 @@ function render({ model, el }) {
     }
     if (!preview.path) {
       previewEl.hidden = true;
-      renderStatus(); // the item count shows again
       return;
     }
     const opening = previewEl.hidden || previewHead.dataset.path !== preview.path;
@@ -2279,10 +2276,7 @@ function render({ model, el }) {
     }
     previewBody.replaceChildren(...body);
     previewEl.hidden = false;
-    if (opening) {
-      previewBody.scrollTop = 0;
-      renderStatus(); // hides the item count
-    }
+    if (opening) previewBody.scrollTop = 0;
   }
 
   // --- Resizing by dragging; heights set here are kept until `height` changes ---

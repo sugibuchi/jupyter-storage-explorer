@@ -235,6 +235,12 @@
   outline: none;
 }
 
+/* Filling: shrinks (to its min-height) rather than push the widget past the
+   bottom of a short container. */
+.jse-browser.jse-fill .jse-preview-panel {
+  flex: 0 1 auto;
+}
+
 .jse-preview-panel[hidden] {
   display: none;
 }

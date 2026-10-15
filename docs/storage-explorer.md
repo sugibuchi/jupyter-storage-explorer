@@ -90,7 +90,7 @@ Type in the field above the list to show names containing the text, or matching 
 
 ### Preview
 
-Double-click a file, or **Preview** at the bottom right (with nothing selected: the current folder, e.g. a Delta Lake table), or right-click
+Double-click a file, or **Preview** below the list (with nothing selected: the current folder, e.g. a Delta Lake table), or right-click
 → **Preview**; **Preview as** chooses another format. Tables open in the [data browser](#query-data).
 
 <img src="figs/using-preview.png" width="562" alt="Preview in the status bar, and Preview as in the right-click menu of a Markdown file">
