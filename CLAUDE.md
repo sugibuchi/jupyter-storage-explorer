@@ -39,7 +39,8 @@ extension (`launcher/labextension/`, TypeScript) is built by hand: `uv run jlpm 
 then `uv sync` at the root and restart JupyterLab.
 
 CI (`.github/workflows/ci.yaml`) runs ruff and pytest with coverage (uploaded to Codecov) on pull requests and pushes to
-`main`. Releases are tag-driven GitHub Actions (see DEVELOPMENT.md); the maintainer pushes the version tag. In the
+`main`. Releases are tag-driven GitHub Actions (see DEVELOPMENT.md, also for the annotated tag and the release notes' sections);
+the maintainer pushes the version tag. In the
 workflows, `astral-sh/setup-uv` must be pinned to a full version (e.g. `@v10.3.0`): since v8 it publishes no
 major-version tags.
 

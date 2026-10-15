@@ -78,6 +78,19 @@ git push origin vX.Y.Z
    same tag, checks them (version X.Y.Z, the wheel has the extension and requires `jupyter-storage-explorer==X.Y.Z`), adds them to the GitHub release and publishes
    them to PyPI. To retry it, run it by hand for the tag: *Actions ▸ Release launcher ▸ Run workflow*.
 
+### Release notes
+
+Once both workflows have succeeded, replace the generated notes (`gh release edit vX.Y.Z --notes-file notes.md`) with
+these sections, leaving out those with nothing to say, and keeping the generated ones at the end:
+
+- **New**, **Changes**, **Fixes**: one item each, saying what users can now do or what behaves differently, with the
+  option or function names.
+- **Breaking changes**: what users must change in their code or `launcher.py`, and how.
+- Links to the documentation of the new features (absolute GitHub URLs).
+- **Install**: the `pip install -U` command for both packages, and that the launcher requires the explorer of the same
+  version (restart JupyterLab after upgrading it).
+- **What's Changed** and **Full Changelog**: as generated.
+
 ### One-time setup for PyPI
 
 The workflows publish with PyPI's [trusted publishing](https://docs.pypi.org/trusted-publishers/), without a token:
