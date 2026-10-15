@@ -2225,9 +2225,24 @@ function render({ model, el }) {
       matches = () => entries.filter((e) => listFilter.test(e.name)).length;
     }
     const count = `${total.toLocaleString()} item${total === 1 ? "" : "s"}`;
-    const sel = model.get("_selected").length;
+    const selected = model.get("_selected");
     const matching = listFilter.active() ? `${matches().toLocaleString()} of ${count} match` : count;
-    statusEl.textContent = matching + (sel ? `, ${sel} selected` : "");
+    statusEl.textContent = matching + (selected.length ? `, ${selectionSummary(selected)} selected` : "");
+  }
+
+  // "4 files (123 KB) 1 folder": the selected files and their total size,
+  // from the listing, and the selected folders, whose contents are not
+  // counted (Properties does).
+  function selectionSummary(paths) {
+    const entries = entriesAt(paths);
+    if (!entries.length) return paths.length.toLocaleString(); // not in the pages received
+    const files = entries.filter((e) => !isFolder(e));
+    const folders = entries.length - files.length;
+    const plural = (n, word) => `${n.toLocaleString()} ${word}${n === 1 ? "" : "s"}`;
+    const parts = [];
+    if (files.length) parts.push(`${plural(files.length, "file")} (${formatSize(files.reduce((sum, e) => sum + (e.size ?? 0), 0))})`);
+    if (folders) parts.push(plural(folders, "folder"));
+    return parts.join(" ");
   }
 
   // --- Dialog for "Python code" ---
