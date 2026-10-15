@@ -169,6 +169,25 @@ data browser: page, sort, filter and choose columns, on the data itself (**Live*
 polars reads the data with the credentials in the environment, not the explorer's options; see
 [Format options](#format-options) for its own.
 
+### Reading pages
+
+`fetch_rows=` customizes how live queries read each page of rows. Tables can be read by different libraries, so check
+the library of the data, handle those you want to, and return `None` for the others to read them the default way:
+
+```python
+import narwhals as nw
+
+
+def streaming_pages(lf, offset, length):
+    if lf.implementation.is_polars():
+        page = lf.to_native().slice(offset, length).collect(engine="streaming")
+        return nw.from_native(page)
+    return None  # other libraries: the default
+
+
+StorageExplorer("s3://my-bucket/lake", fetch_rows=streaming_pages)
+```
+
 ## Remembered states
 
 Bookmarks and the data browser's settings are shared by the explorers in the kernel. To keep them in a file, shared
@@ -247,6 +266,7 @@ explorer.selected_urls  # the URLs of the selected items
 | `download_to_jupyterlab_path="."`   | Folder "Download to JupyterLab" copies into, e.g. `"~/Downloads"`; default: where it runs. To refuse downloads, use `transfer_policy`. |
 | `filesystems={...}`                 | Several named storages; see [Several storages in one explorer](#several-storages-in-one-explorer).                                    |
 | `max_browser_items=20_000`          | Folders with more items are filtered, sorted and paged by the kernel, one page at a time, instead of the browser (`None`: never).     |
+| `fetch_rows=...`                    | How the data browser reads pages; see [Reading pages](#reading-pages).                                                                |
 | `operations=[...]`                  | File operation extensions, tried before the defaults; see [File operation extensions](#file-operation-extensions).                   |
 | `transfer_policy=[...]`             | Rules for transfers of files between storages; see [Transfer policy](#transfer-policy).                                               |
 | `states="states.json"`              | Where bookmarks and the data browser's settings are kept (a path or an `ExplorerStates`); see [Remembered states](#remembered-states). |

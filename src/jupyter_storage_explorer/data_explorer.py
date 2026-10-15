@@ -15,6 +15,8 @@ from jupyter_storage_explorer.states import ExplorerStates
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    import narwhals as nw
+
 # The key DataExplorer's settings are kept under, in its own states.
 _KEY = "data"
 
@@ -69,12 +71,18 @@ class DataExplorer(anywidget.AnyWidget):
         Where queries run first: "auto" is live for lazy data, unless it has
         at most ``max_live_rows`` rows (kept in memory then), and in memory
         for eager data; "live" is for lazy data only.
-    max_live_rows : int, default 1000
-        Data up to this size is kept in memory. Also the most rows a live
-        query gives when the data's library cannot skip rows (e.g. Spark).
+    max_live_rows : int, default 5000
+        Data up to this size is kept in memory.
     max_memory_rows : int, default 100_000
         The most rows read into memory; filters and sorting then apply to
-        those only.
+        those only. Also the most rows a live query gives, as libraries that
+        cannot skip rows (e.g. Spark) read all rows before each page.
+    fetch_rows : callable, optional
+        Reads one page of a live query's result (on the data itself, not
+        rows in memory), as ``fetch_rows(lf, offset, length)``, e.g. to skip
+        rows in a library the default reads them all for; None to leave the
+        page to the default, ``jupyter_storage_explorer.fetch_rows``, which
+        has an example.
     title : str, optional
         Shown above the table. Default: the dataframe's type, e.g.
         "LazyFrame".
@@ -96,6 +104,7 @@ class DataExplorer(anywidget.AnyWidget):
     --------
     StorageExplorer : The file explorer, whose "Query data" is the same browser.
     QuerySettings : Settings written in code.
+    fetch_rows : How pages are read by default.
 
     Examples
     --------
@@ -122,8 +131,10 @@ class DataExplorer(anywidget.AnyWidget):
         *,
         settings: QuerySettings | Mapping[str, Any] | str | None = None,
         mode: str = "auto",
-        max_live_rows: int = 1000,
+        max_live_rows: int = 5000,
         max_memory_rows: int = 100_000,
+        fetch_rows: Callable[[nw.LazyFrame, int, int], nw.DataFrame | None]
+        | None = None,
         title: str | None = None,
         height: str = "400px",
     ) -> None:
@@ -146,6 +157,7 @@ class DataExplorer(anywidget.AnyWidget):
                 mode=mode,
                 max_live_rows=max_live_rows,
                 max_memory_rows=max_memory_rows,
+                fetch=fetch_rows,
             )
         except TypeError as exc:
             if "Unsupported dataframe type" not in str(exc):

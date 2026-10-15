@@ -10,7 +10,7 @@ import polars as pl
 import pytest
 from sqlframe.duckdb import DuckDBSession
 
-from jupyter_storage_explorer import DataExplorer, QuerySettings
+from jupyter_storage_explorer import DataExplorer, QuerySettings, fetch_rows
 
 DF = pl.DataFrame({"a": [3, 1, 2], "b": ["x", "y", None]})
 
@@ -76,7 +76,33 @@ def test_spark_like_dataframe():
     explorer = Explorer(data, max_live_rows=10)
     assert (explorer.title, explorer.library) == ("DuckDBDataFrame", "SQLFrame")
     assert explorer.query["mode"]["mode"] == "live"
-    assert explorer.query["mode"]["live_limit"] == 10
+    assert explorer.query["mode"]["live_limit"] == 100_000  # max_memory_rows
+
+
+def test_fetch_rows_given():
+    fetched = []
+
+    def fetch(lf, offset, length):
+        fetched.append((offset, length))
+        return fetch_rows(lf, offset, length)
+
+    data = DuckDBSession().createDataFrame([(i,) for i in range(30)], schema="n bigint")
+    explorer = Explorer(data, max_live_rows=10, fetch_rows=fetch)
+    reply = explorer.request({"type": "query_rows", "offset": 25, "window": 10})
+    assert reply["rows"] == [[25], [26], [27], [28], [29]]
+    assert fetched == [(25, 11)]  # one extra row tells whether there are more
+    # Rows in memory (in polars) are read by the default, not for the data's library.
+    explorer.request({"type": "query_mode", "mode": "memory"})
+    reply = explorer.request({"type": "query_rows", "offset": 25, "window": 10})
+    assert len(reply["rows"]) == 5
+    assert fetched == [(25, 11)]
+
+
+def test_fetch_rows_none_reads_the_default_way():
+    data = DuckDBSession().createDataFrame([(i,) for i in range(30)], schema="n bigint")
+    explorer = Explorer(data, max_live_rows=10, fetch_rows=lambda lf, o, n: None)
+    reply = explorer.request({"type": "query_rows", "offset": 25, "window": 10})
+    assert reply["rows"] == [[25], [26], [27], [28], [29]]
 
 
 def test_function_called_again_on_reload():

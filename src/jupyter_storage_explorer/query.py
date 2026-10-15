@@ -474,17 +474,43 @@ def as_lazy(frame: Any) -> nw.LazyFrame:
     return data
 
 
-def has_offsets(lf: nw.LazyFrame) -> bool:
-    """Whether ``lf``'s library can skip rows itself (see ``fetch_rows``)."""
-    return lf.implementation.is_polars() or lf.implementation.is_duckdb()
-
-
 def fetch_rows(lf: nw.LazyFrame, offset: int, length: int) -> nw.DataFrame:
-    """Rows ``offset`` to ``offset + length`` of ``lf``, read.
+    """Read one page of a query's result, for the data browser's table.
 
-    polars and DuckDB skip the rows before ``offset`` themselves; other
-    libraries (e.g. Spark) have no portable way to, so all rows up to
-    ``offset + length`` are read and the first ones dropped here.
+    The default of ``DataExplorer``'s and ``StorageExplorer``'s
+    ``fetch_rows``, which replace it for live queries only (rows in memory
+    always use it), and fall back to it for pages they return None for.
+    polars and DuckDB skip the rows before ``offset``
+    themselves; other libraries (e.g. Spark) have no portable way to, so all
+    rows up to ``offset + length`` are read and the first ones dropped.
+
+    Parameters
+    ----------
+    lf : narwhals.LazyFrame
+        The query: the data (or the rows in memory) with the browser's
+        filters, sort order and hidden columns applied.
+    offset : int
+        The first row to read.
+    length : int
+        The most rows to read.
+
+    Returns
+    -------
+    narwhals.DataFrame
+        Rows ``offset`` to ``offset + length`` of the result, or fewer at its
+        end. Pages are separate queries, so they line up only if the library
+        gives the result in the same order each time.
+
+    Examples
+    --------
+    Spark (3.4 and later) can skip rows with ``offset``. Its order is stable
+    only when sorted by columns that tell all rows apart.
+
+    >>> import narwhals as nw
+    >>> def spark_offset(lf, offset, length):
+    ...     page = lf.to_native().offset(offset).limit(length)
+    ...     return nw.from_native(page).collect()
+    >>> DataExplorer(spark.table("sales"), fetch_rows=spark_offset)
     """
     native = lf.to_native()
     if lf.implementation.is_polars():
@@ -510,9 +536,10 @@ class DataQuery:
     Queries run in one of two modes, switched between in the data browser:
 
     - "live": on the source itself, e.g. a polars LazyFrame or a Spark
-      DataFrame, each query reading the data again. Libraries that cannot
-      skip rows (see ``has_offsets``, e.g. Spark) give only the first
-      ``max_live_rows`` rows of each result.
+      DataFrame, each query reading the data again, a page at a time with
+      ``fetch`` (``fetch_rows`` by default). Results give at most
+      ``max_memory_rows`` rows: libraries that cannot skip rows (e.g. Spark)
+      read all rows before each page.
     - "memory": on rows read into memory once, at most ``max_memory_rows``
       (the first ones; filters and sorting then apply to those only), queried
       with polars when installed (see ``_memory_backend``).
@@ -532,8 +559,9 @@ class DataQuery:
         states: ExplorerStates,
         *,
         mode: str = "auto",
-        max_live_rows: int = 1000,
+        max_live_rows: int = 5000,
         max_memory_rows: int = 100_000,
+        fetch: Callable[[nw.LazyFrame, int, int], nw.DataFrame | None] | None = None,
     ) -> None:
         if mode not in MODES:
             raise ValueError(f"mode must be one of {MODES}, not {mode!r}")
@@ -542,6 +570,7 @@ class DataQuery:
         self.states = states
         self.max_live_rows = max_live_rows
         self.max_memory_rows = max_memory_rows
+        self.fetch = fetch
         # The mode asked for, by the caller or the user: reloading starts in it.
         self.requested = mode
         self._open(mode)
@@ -615,10 +644,10 @@ class DataQuery:
 
     @property
     def live_limit(self) -> int | None:
-        """The most rows a query gives (live mode without offsets), or None for no limit."""
-        if self.mode == "live" and not has_offsets(self.lf):
-            return self.max_live_rows
-        return None
+        """The most rows a query gives: ``max_memory_rows`` in live mode, as
+        libraries that cannot skip rows read all rows before each page; None
+        in memory mode, which holds no more."""
+        return self.max_memory_rows if self.mode == "live" else None
 
     def mode_state(self) -> dict[str, Any]:
         """The mode for the frontend: {"mode", "fixed", "memory", "live_limit",
@@ -728,7 +757,13 @@ class DataQuery:
         try:
             # One extra row tells whether there are more.
             query = build_query(self.lf, self.schema, settings)
-            df = fetch_rows(query, offset, window + 1)
+            # ``fetch`` is for the data's library: rows in memory may be in
+            # polars. It returns None to leave a page to the default.
+            df = None
+            if self.mode == "live" and self.fetch is not None:
+                df = self.fetch(query, offset, window + 1)
+            if df is None:
+                df = fetch_rows(query, offset, window + 1)
             total = None
             if self.mode == "memory":
                 total = query.select(nw.len()).collect().item()

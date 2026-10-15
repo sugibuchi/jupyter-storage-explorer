@@ -57,6 +57,7 @@ from jupyter_storage_explorer.transfer_policy import (
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
 
+    import narwhals as nw
     from fsspec import AbstractFileSystem
 
     from jupyter_storage_explorer.jobs import Job
@@ -212,6 +213,12 @@ class StorageExplorer(anywidget.AnyWidget):
         Folders with more items are filtered, sorted and paged by the kernel
         (see ``listing.Listing``), one page at a time, instead of by the
         browser from the whole listing; None for never.
+    fetch_rows : callable, optional
+        Reads one page of a live query's result in the data browser, as
+        ``fetch_rows(lf, offset, length)``, e.g. to skip rows in a library
+        the default reads them all for; None to leave the page to the
+        default, ``jupyter_storage_explorer.fetch_rows``, which has an
+        example.
     operations : sequence of FileSystemOperations, optional
         File operations of your own, tried before ``default_operations()``,
         e.g. ``[MyOps()]`` for server-side copies: for each operation (move,
@@ -334,11 +341,14 @@ class StorageExplorer(anywidget.AnyWidget):
         download_to_jupyterlab_path: str = ".",
         states: ExplorerStates | str | os.PathLike[str] | None = None,
         max_browser_items: int | None = 20_000,
+        fetch_rows: Callable[[nw.LazyFrame, int, int], nw.DataFrame | None]
+        | None = None,
         operations: Sequence[FileSystemOperations] | None = None,
         transfer_policy: Sequence[Mapping[str, str]] | None = None,
         **storage_options: Any,
     ) -> None:
         self._transfer_policy = TransferPolicy(transfer_policy)
+        self._fetch_rows = fetch_rows
         self._states = explorer_states(states)
         # Its file may have been changed by another kernel since it was read.
         try:
@@ -970,13 +980,14 @@ class StorageExplorer(anywidget.AnyWidget):
         scan = functools.partial(fmt.scan, target.url, target.is_dir)
         state = self._states.query(target.url)
         mode = state.mode if state is not None else "auto"
+        fetch = self._fetch_rows
         try:
-            data = DataQuery(scan, target.url, self._states, mode=mode)
+            data = DataQuery(scan, target.url, self._states, mode=mode, fetch=fetch)
         except ValueError:
             if mode != "live":
                 raise
             # "live" chosen when the format scanned lazily, and no longer does.
-            data = DataQuery(scan, target.url, self._states)
+            data = DataQuery(scan, target.url, self._states, fetch=fetch)
         self._queries[path] = data
         return data.opening()
 

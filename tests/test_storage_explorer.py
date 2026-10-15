@@ -17,7 +17,7 @@ from jupyter_storage_explorer.filesystems import (
 )
 from jupyter_storage_explorer.incoming import format_size
 from jupyter_storage_explorer.operations import FileSystemOperations
-from jupyter_storage_explorer.query import QuerySettings
+from jupyter_storage_explorer.query import QuerySettings, fetch_rows
 from jupyter_storage_explorer.states import ExplorerStates
 
 
@@ -525,8 +525,8 @@ class TestStatesFile:
         assert explorer._error.startswith("Bookmarks and queries not read again")
 
     def test_query_reopens_in_the_mode_chosen(self, tmp_path):
-        # More rows than max_live_rows (1000), so "auto" queries live.
-        pl.DataFrame({"a": range(1500)}).write_parquet(tmp_path / "big.parquet")
+        # More rows than max_live_rows (5000), so "auto" queries live.
+        pl.DataFrame({"a": range(6000)}).write_parquet(tmp_path / "big.parquet")
         explorer = make(str(tmp_path))
         path = path_of(explorer, "big.parquet")
         explorer.message({"type": "preview", "path": path})
@@ -545,6 +545,24 @@ class TestStatesFile:
         explorer._states.remember_query(explorer._url(path), QuerySettings(), "live")
         explorer.message({"type": "preview", "path": path})
         assert explorer._queries[path].mode == "live"
+
+    def test_query_with_fetch_rows_given(self, tmp_path):
+        fetched = []
+
+        def fetch(lf, offset, length):
+            fetched.append((offset, length))
+            return fetch_rows(lf, offset, length)
+
+        # More rows than max_live_rows (5000), so "auto" queries live.
+        pl.DataFrame({"a": range(6000)}).write_parquet(tmp_path / "big.parquet")
+        explorer = make(str(tmp_path), fetch_rows=fetch)
+        path = path_of(explorer, "big.parquet")
+        explorer.message({"type": "preview", "path": path})
+        reply = explorer.request(
+            {"type": "query_rows", "rid": 1, "path": path, "offset": 5998, "window": 5}
+        )
+        assert reply["rows"] == [[5998], [5999]]
+        assert fetched == [(5998, 6)]
 
 
 def test_menu_info(mem_explorer):
