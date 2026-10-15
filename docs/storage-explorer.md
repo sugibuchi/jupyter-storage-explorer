@@ -97,10 +97,10 @@ Double-click a file, or **Preview** below the list (with nothing selected: the c
 
 ### Right-click
 
-Preview as, Edit, Python code to load the data, Copy URL; Copy, Cut, Paste; Create a folder, Delete; Download to local
-or to JupyterLab; Properties, Add bookmark.
+Preview as, Edit, Python code to load the data, Copy URL; Copy, Cut, Paste; Create a folder, Rename, Delete; Download
+to local or to JupyterLab; Properties, Add bookmark.
 
-<img src="figs/using-right-click.png" width="366" alt="The right-click menu of a JSON Lines file">
+<img src="figs/using-right-click.png" width="367" alt="The right-click menu of a JSON Lines file">
 
 ### Properties
 
@@ -127,7 +127,7 @@ onto JupyterLab's file browser to download them (needs [the launcher](../launche
 
 ### Background operations
 
-Moving, deleting, pasting and downloading to JupyterLab run in the background, with progress and **Cancel** above the
+Moving, renaming, deleting, pasting and downloading to JupyterLab run in the background, with progress and **Cancel** above the
 status bar.
 
 ## Unsafe operations
@@ -140,6 +140,7 @@ Folder operations need **Unsafe mode**, turned on with the slider at the right o
 |------------------------|----------------------------------------------------------------------------------------------|
 | Move folders           | Drag a folder onto another folder, or right-click → **Cut**, then **Move here** on a folder. |
 | Copy and paste folders | Right-click → **Copy**, then **Paste** on a folder.                                          |
+| Rename folders         | Right-click → **Rename** (on most storages, a move of everything in it).                     |
 | Delete folders         | Right-click → **Delete** (with everything in it).                                            |
 
 ## Transfer policy

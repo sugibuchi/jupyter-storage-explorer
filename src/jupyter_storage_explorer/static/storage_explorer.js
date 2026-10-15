@@ -213,7 +213,7 @@ function render({ model, el }) {
     {
       className: "jse-unsafe",
       title:
-        "For the next operation only: allows risky operations (moving, copying, pasting and deleting folders). " +
+        "For the next operation only: allows risky operations (moving, copying, pasting, renaming and deleting folders). " +
         "Turns off when any operation starts.",
     },
     unsafeInput,
@@ -472,7 +472,7 @@ function render({ model, el }) {
   }
 
   // --- "Unsafe mode": while on, risky operations are offered (today:
-  // moving, copying, pasting and deleting folders). Any operation turns it
+  // moving, copying, pasting, renaming and deleting folders). Any operation turns it
   // off as it starts, risky or not, so it allows one operation at a time. The
   // kernel refuses folders unless the request says it was on ("unsafe") ---
 
@@ -1181,12 +1181,12 @@ function render({ model, el }) {
 
   // --- Create a folder: "Create a folder" in the right-click menu ---
 
-  // Why `name` cannot name a new folder, or null: the kernel's checks
-  // (_folder_name_error in storage_explorer.py), answered before sending anything.
-  function folderNameError(name) {
+  // Why `name` cannot name a new folder or a renamed item, or null: the
+  // kernel's checks (name_error in _paths.py), answered before sending anything.
+  function nameError(name) {
     if (!name.trim()) return "Enter a name";
     if (name !== name.trim()) return "No spaces at the start or the end";
-    if (name === "." || name === "..") return `"${name}" is not a folder name`;
+    if (name === "." || name === "..") return `"${name}" is not a name`;
     if (/[\\/]/.test(name)) return "A name, without / or \\";
     if (/[\x00-\x1f\x7f]/.test(name)) return "No control characters";
     if (name.length > 255) return "At most 255 characters";
@@ -1217,7 +1217,7 @@ function render({ model, el }) {
       input.select();
       if (!(await asked)) return;
       const name = input.value;
-      const error = folderNameError(name);
+      const error = nameError(name);
       if (error) {
         problem.textContent = error;
         continue;
@@ -1232,6 +1232,65 @@ function render({ model, el }) {
           ? `Created ${name}: it shows once a file is put in it (this storage has no empty folders)`
           : `Created ${name}`,
       );
+      return;
+    }
+  }
+
+  // --- Rename: "Rename" in the right-click menu, a file (or, in unsafe mode, a folder) ---
+
+  // Asks for the new name, with the current one to edit (a file's without its
+  // extension selected), and renames `target` ({path, type}) in its folder: a
+  // move, as a job. A name that cannot be used, or is taken, is explained in
+  // the dialog, which stays open until the item is renamed or it is cancelled.
+  async function renameItem(target) {
+    const folders = takeUnsafe();
+    if (isFolder(target) && !folders) {
+      flash("Turn on unsafe mode to rename folders");
+      return;
+    }
+    const old = target.path.slice(target.path.lastIndexOf("/") + 1);
+    const input = h("input", { type: "text", className: "jse-name-input", value: old, spellcheck: false });
+    const problem = h("div", { className: "jse-note jse-error-text" });
+    input.addEventListener("keydown", (ev) => {
+      if (ev.key !== "Enter") return;
+      ev.preventDefault();
+      answer(true);
+    });
+    const dot = old.lastIndexOf(".");
+    const stem = !isFolder(target) && dot > 0 ? dot : old.length;
+    let first = true;
+    for (;;) {
+      const asked = ask(
+        [h("div", { textContent: `Rename ${old}` }), input, problem],
+        [
+          { label: "Cancel", value: null },
+          { label: "Rename", value: true, primary: true },
+        ],
+      );
+      input.focus();
+      if (first) input.setSelectionRange(0, stem);
+      first = false;
+      if (!(await asked)) return;
+      const name = input.value;
+      if (name === old) return;
+      const error = nameError(name);
+      if (error) {
+        problem.textContent = error;
+        continue;
+      }
+      const reply = await busy(`Renaming ${old}…`, () =>
+        request({ type: "rename", path: target.path, name, unsafe: folders }),
+      );
+      if (reply.error || reply.errors) {
+        problem.textContent = reply.error ?? reply.errors.join("; ");
+        continue;
+      }
+      const result = await jobResult(reply);
+      const { renamed = [], errors = [] } = result;
+      const parts = renamed.length ? [`Renamed ${old} to ${name}`] : [];
+      parts.push(...errors.map((e) => `Failed: ${e}`));
+      parts.push(...jobOutcome(result, parts, "Rename"));
+      flash(parts.join("; ") || "Nothing renamed");
       return;
     }
   }
@@ -1622,6 +1681,9 @@ function render({ model, el }) {
 
     const change = [];
     if (folder) change.push({ label: "Create a folder", action: () => createFolder(folder.path) });
+    if (single && allowed && single.path !== model.get("_root")) {
+      change.push({ label: "Rename", action: () => renameItem(single) });
+    }
     if (allowed) change.push({ label: count ? `Delete ${count}${what}` : "Delete", action: () => confirmDelete(targets) });
 
     // Files only: downloading folders is intentionally not supported. The

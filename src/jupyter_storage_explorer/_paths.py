@@ -46,15 +46,15 @@ def safe_name(name: str) -> str:
     return name
 
 
-def folder_name_error(name: str) -> str | None:
-    """Why ``name`` cannot name a new folder, or None if it can. The same checks
-    as the frontend's (see folderNameError in storage_explorer.js)."""
+def name_error(name: str) -> str | None:
+    """Why ``name`` cannot name a new folder or a renamed item, or None if it
+    can. The same checks as the frontend's (see nameError in storage_explorer.js)."""
     if not name.strip():
         return "enter a name"
     if name != name.strip():
         return "no spaces at the start or the end"
     if name in (".", ".."):
-        return f"{name!r} is not a folder name"
+        return f"{name!r} is not a name"
     if "/" in name or "\\" in name:
         return "a name, without / or \\"
     if any(ord(c) < 32 or ord(c) == 127 for c in name):
