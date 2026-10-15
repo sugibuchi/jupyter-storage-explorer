@@ -101,7 +101,7 @@ below the list, or Esc, closes it.
 Preview as, Edit, Python code to load the data, Copy URL; Copy, Cut, Paste; Create a folder, Rename, Delete; Download
 to local or to JupyterLab; Properties, Add bookmark.
 
-<img src="figs/using-right-click.png" width="367" alt="The right-click menu of a JSON Lines file">
+<img src="figs/using-right-click.png" width="384" alt="The right-click menu of a JSON Lines file">
 
 ### Properties
 
@@ -115,7 +115,7 @@ of files and folders, their total size, and the oldest and newest files.
 Right-click a folder → **Add bookmark**. ☆ lists them; click one to open it, right-click it for Copy URL and Delete
 bookmark.
 
-<img src="figs/using-bookmarks.png" width="227" alt="The bookmarks menu">
+<img src="figs/using-bookmarks.png" width="245" alt="The bookmarks menu">
 
 ### Copy, cut and paste
 
