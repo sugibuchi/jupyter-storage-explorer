@@ -75,7 +75,7 @@
 }
 
 .jse-btn:disabled {
-  opacity: 0.4;
+  opacity: 0.55;
   cursor: default;
 }
 
@@ -95,6 +95,20 @@
   justify-content: center;
   padding: 2px 4px;
   color: var(--jse-icon);
+}
+
+/* Buttons among labels (the pagers, the data browser's toolbar): filled, as
+   JupyterLab's plain buttons, so that they stand out from the text; icons in
+   the text's colour. After .jse-icon-btn, which they override. */
+.jse-pager .jse-btn,
+.jse-query-bar .jse-btn {
+  background: var(--jp-layout-color2, #eee);
+  color: var(--jse-fg);
+}
+
+.jse-pager .jse-btn:hover:not(:disabled),
+.jse-query-bar .jse-btn:hover:not(:disabled) {
+  background: var(--jp-layout-color3, #bdbdbd);
 }
 
 /* A link-like button, e.g. Preview. */

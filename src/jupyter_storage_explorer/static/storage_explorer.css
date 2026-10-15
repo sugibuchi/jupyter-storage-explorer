@@ -105,7 +105,6 @@
   align-items: center;
   gap: 4px;
   margin-left: auto;
-  color: var(--jse-fg-muted);
   font-size: 0.9em;
   white-space: nowrap;
 }

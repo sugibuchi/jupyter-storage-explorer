@@ -57,7 +57,6 @@
 .jse-query-status {
   min-width: 9em;
   text-align: center;
-  color: var(--jse-fg-muted);
 }
 
 /* "Live | In memory" at the right of the toolbar: two buttons, the current
