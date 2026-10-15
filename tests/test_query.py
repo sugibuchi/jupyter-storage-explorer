@@ -37,7 +37,7 @@ SCHEMA = nw.from_native(DF).schema
 
 def spark_like(df: pl.DataFrame) -> Any:
     """``df`` as a PySpark-style DataFrame (sqlframe, on DuckDB), which narwhals
-    queries as it does Spark: in SQL, without skipping rows (see has_offsets).
+    queries as it does Spark: in SQL, without skipping rows (see fetch_rows).
     Stands in for Spark, which needs Java."""
     spark_types = {
         pl.Int64: "bigint",
@@ -343,10 +343,11 @@ class TestModes:
             "mode": "live",
             "fixed": "",
             "memory": None,
-            "live_limit": None,  # polars skips rows itself: no limit
+            "live_limit": 20,  # max_memory_rows
             "max_memory_rows": 20,
         }
-        assert len(rows_of(query)["rows"]) == 50
+        reply = rows_of(query)
+        assert (len(reply["rows"]), reply["limited"]) == (20, True)
 
     def test_small_lazy_data_kept_in_memory(self):
         query = mode_query(BIG.head(10).lazy, max_live_rows=10)
@@ -380,15 +381,16 @@ class TestModes:
             mode_query(mode="online")
 
     def test_switching(self):
-        query = mode_query()
+        query = mode_query(max_memory_rows=30)
         reply = query.handle({"type": "query_mode", "mode": "memory", "settings": {}})
         assert reply["mode"]["mode"] == "memory"
-        assert reply["mode"]["memory"] == {"rows": 20, "cut": True}
+        assert reply["mode"]["memory"] == {"rows": 30, "cut": True}
         assert [c["name"] for c in reply["columns"]] == ["n"]
-        assert len(rows_of(query)["rows"]) == 20
+        live_from_40 = {"filters": {"n": {"op": "range", "min": "40", "max": ""}}}
+        assert rows_of(query, settings=live_from_40)["rows"] == []  # not in memory
         reply = query.handle({"type": "query_mode", "mode": "live", "settings": {}})
         assert reply["mode"]["mode"] == "live"
-        assert len(rows_of(query)["rows"]) == 50
+        assert len(rows_of(query, settings=live_from_40)["rows"]) == 10
 
     def test_switching_back_from_complete_data_in_memory(self):
         # Chosen by the user, memory mode stays switchable even with all rows.
@@ -414,16 +416,22 @@ class TestModes:
         query.handle({"type": "query_mode", "mode": "memory"})
         assert query.handle({"type": "query_reload"})["mode"]["mode"] == "memory"
 
-    def test_live_limit_without_offsets(self, monkeypatch):
-        # As Spark: DuckDB, with has_offsets saying it cannot skip rows.
-        monkeypatch.setattr(query_module, "has_offsets", lambda lf: False)
-        query = mode_query(lambda: duckdb.from_arrow(BIG.to_arrow()))
-        assert query.mode_state()["live_limit"] == 10
+    def test_live_limit(self):
+        reads = []
+
+        def fetch(lf, offset, length):
+            reads.append((offset, length))
+            return query_module.fetch_rows(lf, offset, length)
+
+        query = mode_query(lambda: duckdb.from_arrow(BIG.to_arrow()), fetch=fetch)
+        assert query.mode_state()["live_limit"] == 20  # max_memory_rows
         first = rows_of(query, window=4)
         assert first["rows"] == [[0], [1], [2], [3]] and first["more"] is True
-        last = rows_of(query, offset=8, window=4)
-        assert last["rows"] == [[8], [9]]
+        last = rows_of(query, offset=16, window=8)
+        assert last["rows"] == [[16], [17], [18], [19]]
         assert (last["more"], last["limited"]) == (False, True)
+        # Pages read through fetch, with one row more: is there more, or a limit?
+        assert reads == [(0, 5), (16, 5)]
         # A result within the limit is not limited.
         small = rows_of(
             query, settings={"filters": {"n": {"op": "range", "min": "45", "max": ""}}}
@@ -432,8 +440,8 @@ class TestModes:
 
 
 class TestSparkLike:
-    """What differs for Spark (here sqlframe, see ``spark_like``): no offsets,
-    so live queries give at most ``max_live_rows`` rows."""
+    """Spark (here sqlframe, see ``spark_like``): no offsets, all rows before
+    each page are read; at most ``max_memory_rows`` rows, as for all data."""
 
     def query(self, rows: int = 50, **kwargs) -> DataQuery:
         return mode_query(spark_like(BIG.head(rows)), **kwargs)
@@ -441,13 +449,13 @@ class TestSparkLike:
     def test_live_with_a_limit(self):
         query = self.query()
         assert query.lf.implementation.is_spark_like()
-        assert query.mode_state()["live_limit"] == 10
+        assert query.mode_state()["live_limit"] == 20
         desc = {"sort": {"column": "n", "descending": True}}
         first = rows_of(query, window=4, settings=desc)
         assert first["rows"] == [[49], [48], [47], [46]]
         assert (first["more"], first["limited"], first["total"]) == (True, False, None)
-        last = rows_of(query, offset=8, window=4, settings=desc)
-        assert last["rows"] == [[41], [40]]
+        last = rows_of(query, offset=16, window=4, settings=desc)
+        assert last["rows"] == [[33], [32], [31], [30]]
         assert (last["more"], last["limited"]) == (False, True)
 
     def test_filtered_result_within_the_limit(self):

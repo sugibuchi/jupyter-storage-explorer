@@ -11,6 +11,7 @@
 - [Following the widget: on_change](#following-the-widget-on_change)
 - [Settings in code: QuerySettings](#settings-in-code-querysettings)
 - [DataExplorer options](#dataexplorer-options)
+    - [Reading pages](#reading-pages)
 
 ## Opening data
 
@@ -81,12 +82,14 @@ import matplotlib.pyplot as plt
 
 chart = ipywidgets.Output()
 
+
 def draw(explorer):
     df = explorer.result(all_columns=True).group_by("region").agg(pl.col("amount").sum()).collect()
     with chart:
         chart.clear_output(wait=True)
         plt.bar(df["region"], df["amount"])
         plt.show()
+
 
 explorer.on_change(draw)
 draw(explorer)
@@ -115,11 +118,31 @@ DataExplorer(orders_df, settings=settings)
 
 ## DataExplorer options
 
-| Option                     | Meaning                                                                                                                      |
-|----------------------------|------------------------------------------------------------------------------------------------------------------------------|
-| `settings=QuerySettings()` | Filters, sort order, hidden columns and widths to start with: a `QuerySettings`, dict or JSON text (see above).              |
-| `mode="auto"`              | Where queries run first: `"auto"`, `"live"` (lazy data only) or `"memory"`; switch in the widget.                            |
-| `max_live_rows=1000`       | Data up to this size is kept in memory; also the most rows a live query gives if the library cannot skip rows (e.g. Spark). |
-| `max_memory_rows=100_000`  | The most rows read into memory.                                                                                              |
-| `title=...`                | Shown above the table (default: the dataframe's type).                                                                       |
-| `height="400px"`           | Height of the table area. `"fill"`: as tall as the container, e.g. a tab (not a notebook cell).                              |
+| Option                     | Meaning                                                                                                         |
+|----------------------------|-----------------------------------------------------------------------------------------------------------------|
+| `settings=QuerySettings()` | Filters, sort order, hidden columns and widths to start with: a `QuerySettings`, dict or JSON text (see above). |
+| `mode="auto"`              | Where queries run first: `"auto"`, `"live"` (lazy data only) or `"memory"`; switch in the widget.               |
+| `max_live_rows=5000`       | Data up to this size is kept in memory.                                                                         |
+| `max_memory_rows=100_000`  | The most rows read into memory; also the most rows a live query gives.                                          |
+| `fetch_rows=...`           | How pages are read; see [Reading pages](#reading-pages).                                                        |
+| `title=...`                | Shown above the table (default: the dataframe's type).                                                          |
+| `height="400px"`           | Height of the table area. `"fill"`: as tall as the container, e.g. a tab (not a notebook cell).                 |
+
+### Reading pages
+
+`fetch_rows=` customizes how live queries read each page of rows, e.g. with Spark's `offset()`:
+
+```python
+import narwhals as nw
+from jupyter_storage_explorer import DataExplorer
+
+
+def spark_offset(lf, offset, length):
+    return nw.from_native(lf.to_native().offset(offset).limit(length)).collect()
+
+
+DataExplorer(spark.table("sales"), fetch_rows=spark_offset)
+```
+
+Return `None` to read a page the default way. `StorageExplorer` takes the same `fetch_rows=` for its data browser
+([Reading pages](storage-explorer.md#reading-pages)).

@@ -208,7 +208,7 @@ storage options (`spark_url()` rewrites `abfs`/`s3` to `abfss`/`s3a`).
 
 - Comments and docstrings are written in full sentences explaining *why*; keep that density and tone.
 - Docstrings of the public API, what users construct, call, subclass or override (`StorageExplorer`, `DataExplorer`,
-  `QuerySettings`, `ExplorerStates` (with `Bookmark`, `QueryState`), `FileSystemOperations` and its subclasses (with `_copy_file`, `_move_file`), `Measurement`, `Progress`, `DataFormat`,
+  `fetch_rows` (the `fetch_rows=` default of both), `QuerySettings`, `ExplorerStates` (with `Bookmark`, `QueryState`), `FileSystemOperations` and its subclasses (with `_copy_file`, `_move_file`), `Measurement`, `Progress`, `DataFormat`,
   `StorageExplorer._url` and `_locate`, `same_filesystem`), are in numpy style: `Parameters`, `Returns`, `Raises`, `Attributes`, `See Also`, `Examples`.
   Internal ones (underscore names, `DataQuery`, `FileTasks`, `JobRunner`, ...) stay prose.
 - `from __future__ import annotations` everywhere, with type-only imports under `TYPE_CHECKING` (ruff `TC` rules).
