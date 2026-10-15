@@ -1067,6 +1067,17 @@ function render({ model, el }) {
     });
   }
 
+  // Whether JupyterLab can show the file ({name, type, format}): the
+  // extension is on the page, and JupyterLab knows the file's type (e.g. CSV,
+  // JSON, notebooks, images) or the explorer reads it as text (its text
+  // editor opens any), not e.g. Parquet or Excel, which it would only show
+  // as an error.
+  function canOpenInJupyterLab(entry) {
+    const jupyterlab = globalThis[JUPYTERLAB];
+    if (!jupyterlab || entry.type === "directory") return false;
+    return jupyterlab.canOpen(entry.name) || model.get("_text_formats").includes(entry.format);
+  }
+
   function openInJupyterLab(path) {
     takeUnsafe(); // an operation, though not a risky one
     // The storage shown now: the file stays in it while the explorer moves on.
@@ -1711,7 +1722,7 @@ function render({ model, el }) {
       });
     }
     if (withOpen && folder) open.push({ label: "Open", icon: "folder", action: () => navigate(folder.path) });
-    if (single && !folder && globalThis[JUPYTERLAB]) {
+    if (single && canOpenInJupyterLab(single)) {
       open.push({ label: "Open in JupyterLab", icon: "open-in-new", action: () => openInJupyterLab(single.path) });
     }
     open.push({
@@ -2147,8 +2158,11 @@ function render({ model, el }) {
       tr.draggable = true;
       tr.addEventListener("dragstart", (ev) => startDrag(ev, entry));
       tr.addEventListener("click", (ev) => select(entry.path, ev.ctrlKey || ev.metaKey));
+      // As in JupyterLab's file browser: a folder opens, a file opens in
+      // JupyterLab's editor or viewer when it can show it, else in the preview.
       tr.addEventListener("dblclick", () => {
         if (isDir) navigate(entry.path);
+        else if (canOpenInJupyterLab(entry)) openInJupyterLab(entry.path);
         else if (hasUrl(entry)) openPreview(entry.path); // no URL: no preview
       });
       tr.addEventListener("contextmenu", (ev) => {

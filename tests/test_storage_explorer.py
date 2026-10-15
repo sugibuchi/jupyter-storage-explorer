@@ -1253,6 +1253,15 @@ class TestOpenInJupyterLab:
         )
         assert other["error"] == "not a file of this explorer's storages"
 
+    def test_text_formats(self, mem_explorer):
+        # Opened in JupyterLab's text editor even when it does not know the
+        # file type; data files are not (Parquet, Excel), nor are formats
+        # JupyterLab knows itself (CSV, JSON).
+        assert {"text", "markdown"} <= set(mem_explorer._text_formats)
+        assert not {"parquet", "excel", "delta", "image", "csv"} & set(
+            mem_explorer._text_formats
+        )
+
     def test_too_large(self, mem_explorer, memfs, monkeypatch):
         monkeypatch.setattr(storage_explorer._jupyterlab_files, "MAX_BYTES", 3)
         assert "too large" in self.get(mem_explorer, "/data/a.csv")["error"]

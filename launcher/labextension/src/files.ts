@@ -158,6 +158,12 @@ export const filesPlugin: JupyterFrontEndPlugin<void> = {
     const drive = new StorageDrive(contents.serverSettings);
     contents.addDrive(drive);
     (globalThis as Record<symbol, unknown>)[REGISTRY] = {
+      // Whether JupyterLab knows the type of a file of this name (e.g. CSV,
+      // JSON, notebooks, images), so has an editor or viewer for it; the
+      // explorer also opens the files it reads as text.
+      canOpen(name: string): boolean {
+        return app.docRegistry.getFileTypesForPath(name).length > 0;
+      },
       async open(file: IExplorerFile): Promise<void> {
         const path = drive.add(file);
         await app.commands.execute('docmanager:open', { path: `${DRIVE_NAME}:${path}` });

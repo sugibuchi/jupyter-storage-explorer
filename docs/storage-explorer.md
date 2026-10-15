@@ -90,9 +90,10 @@ Type in the field above the list to show names containing the text, or matching 
 
 ### Preview
 
-Double-click a file, or **Preview** below the list (with nothing selected: the current folder, e.g. a Delta Lake table), or right-click
-→ **Preview**; **Preview as** chooses another format. Tables open in the [data browser](#query-data). **Close preview**
-below the list, or Esc, closes it.
+**Preview** below the list (with nothing selected: the current folder, e.g. a Delta Lake table), or right-click →
+**Preview**; **Preview as** chooses another format. Double-clicking a file previews it when JupyterLab cannot
+[open it](#open-in-jupyterlab), e.g. Parquet or Excel. Tables open in the [data browser](#query-data). While the panel is
+open, clicking a file previews it. **Close preview** below the list, or Esc, closes it.
 
 <img src="figs/using-preview.png" width="562" alt="Preview in the status bar, and Preview as in the right-click menu of a Markdown file">
 
@@ -105,9 +106,10 @@ Rename, Delete; Download to local or to JupyterLab; Properties, Add bookmark.
 
 ### Open in JupyterLab
 
-Right-click a file → **Open in JupyterLab** opens it in JupyterLab's own editor or viewer for its type: the text editor,
-the notebook, the CSV or image viewer. **Save** writes it back to the storage; if the file has changed there since it
-was opened, JupyterLab asks whether to overwrite it.
+Double-click a file, or right-click → **Open in JupyterLab**, to open it in JupyterLab's own editor or viewer for its
+type, as in JupyterLab's file browser: the text editor, the notebook, the CSV or image viewer. **Save** writes it back to
+the storage; if the file has changed there since it was opened, JupyterLab asks whether to overwrite it. Files JupyterLab
+cannot show (Parquet, Excel, …) open in the [preview](#preview) instead.
 
 This needs the [launcher](../launcher/README.md) package, whose JupyterLab extension serves these files, and works for
 explorers in notebooks too. The files go through the explorer's kernel (up to 20 MB each): if the explorer's kernel stops,
