@@ -140,8 +140,8 @@ Rows in the explorer carry attributes you can style with CSS:
 - **Files** (list): `data-file-format`, the format name: `parquet`, `csv`, `json`, `json-lines`, `excel`, `markdown`,
   `text`, `image`. Files of no known format, or without a URL, have none.
 
-The icons are grey SVG images (`.jse-icon svg`): a folder, a file, or a table for the formats the data browser reads.
-To change one, hide its image and show something else in its `::before`, e.g. an emoji. Run the CSS in a notebook cell,
+The icons are JupyterLab's file browser's, as SVG images (`.jse-icon svg`), chosen by the file's extension. To change
+one, hide its image and show something else in its `::before`, e.g. an emoji. Run the CSS in a notebook cell,
 before or after the explorer. This example shows the top folder as 🗄️, the folders in it as 🗃️ (deeper ones keep the
 folder icon), and gives data files their own icons:
 

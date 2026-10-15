@@ -217,12 +217,22 @@
   color: var(--jse-selected-fg);
 }
 
-/* Icons and dates in the selected row's colour, as in JupyterLab. */
+/* Dates and arrows in the selected row's colour, as in JupyterLab. */
 .jse-list tbody tr.jse-selected td.jse-col-mtime,
-.jse-list tbody tr.jse-selected .jse-icon,
-.jse-node.jse-active .jse-icon,
 .jse-node.jse-active .jse-twisty {
   color: inherit;
+}
+
+/* File icons (fileIcon in icons.js) in selected rows, as JupyterLab's file
+   browser shows them: white, their light parts in the selection's colour. */
+.jse-list tbody tr.jse-selected .jse-file-svg .jp-icon-selectable[fill],
+.jse-node.jse-active .jse-file-svg .jp-icon-selectable[fill] {
+  fill: var(--jse-selected-fg);
+}
+
+.jse-list tbody tr.jse-selected .jse-file-svg .jp-icon-selectable-inverse[fill],
+.jse-node.jse-active .jse-file-svg .jp-icon-selectable-inverse[fill] {
+  fill: var(--jse-selected-bg);
 }
 
 .jse-col-name {

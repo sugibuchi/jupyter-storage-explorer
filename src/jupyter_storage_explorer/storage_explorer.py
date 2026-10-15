@@ -296,8 +296,6 @@ class StorageExplorer(anywidget.AnyWidget):
     _preview = traitlets.Dict().tag(sync=True)
     # Format name -> label shown to the user, e.g. {"delta": "Delta Lake table"}.
     _format_labels = traitlets.Dict().tag(sync=True)
-    # Formats of tables (those the data browser can read), shown with a table icon.
-    _table_formats = traitlets.List().tag(sync=True)
     # Format name of the current directory itself (e.g. "delta"), or ""
     # if it cannot be previewed; enables the Preview button when nothing is selected.
     _current_format = traitlets.Unicode().tag(sync=True)
@@ -399,7 +397,6 @@ class StorageExplorer(anywidget.AnyWidget):
         super().__init__(
             _height=height,
             _format_labels={f.name: f.label for f in self._formats},
-            _table_formats=[f.name for f in self._formats if f.query_requirements],
             _max_upload_bytes=max_upload_bytes,
             _filesystem_names=list(self._filesystems),
             _explorer_id=uuid.uuid4().hex,

@@ -15,6 +15,10 @@ Downloaded unmodified from jsDelivr (`npm/marked@16.4.2/lib/marked.esm.js`,
 
 ## Icons
 
-The SVG paths in `../icons.js` are from [Material Design Icons](https://github.com/google/material-design-icons)
-(filled style), as JupyterLab's own icons are. Apache License 2.0,
-https://www.apache.org/licenses/LICENSE-2.0.
+The SVG paths of `ICON_PATHS` in `../icons.js` (menus, buttons) are from
+[Material Design Icons](https://github.com/google/material-design-icons) (filled style), as JupyterLab's own icons
+are. Apache License 2.0, https://www.apache.org/licenses/LICENSE-2.0.
+
+`FILE_ICON_SVGS` there (the tree and list) are JupyterLab's file icons, copied from JupyterLab 4.6.4
+(`@jupyterlab/ui-components`), and `FILE_ICON_EXTENSIONS` its default file types' extensions. BSD-3-Clause,
+Copyright (c) 2015-2026 Project Jupyter Contributors, https://github.com/jupyterlab/jupyterlab/blob/main/LICENSE.

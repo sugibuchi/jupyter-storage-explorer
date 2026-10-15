@@ -1827,7 +1827,7 @@ function render({ model, el }) {
         "div",
         { className: "jse-node" + (dir.path === current ? " jse-active" : ""), title: dir.path },
         twisty,
-        h("span", { className: "jse-icon" }, icon("folder")),
+        h("span", { className: "jse-icon" }, fileIcon(dir.name, true)),
         h("span", { className: "jse-label", textContent: dir.name }),
       );
       row.style.paddingLeft = `${depth * 14 + 4}px`;
@@ -2046,14 +2046,6 @@ function render({ model, el }) {
     }
   }
 
-  // A list item's icon: a folder, a table for files of formats the data browser
-  // reads, else a file. (Folders have no format in the listing: detecting
-  // Delta tables would mean listing each folder.)
-  function entryIcon(entry) {
-    if (entry.format && model.get("_table_formats").includes(entry.format)) return "table";
-    return entry.type === "directory" ? "folder" : "file";
-  }
-
   // The folder whose items the list last showed, to tell when another's arrive.
   let listShowsDir = null;
 
@@ -2115,7 +2107,7 @@ function render({ model, el }) {
         h(
           "td",
           { className: "jse-col-name" },
-          h("span", { className: "jse-icon" }, icon(entryIcon(entry))),
+          h("span", { className: "jse-icon" }, fileIcon(entry.name, isDir)),
           entry.name,
         ),
         h("td", { className: "jse-col-size", textContent: formatSize(entry.size) }),

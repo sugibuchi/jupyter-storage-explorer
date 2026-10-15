@@ -138,13 +138,6 @@ class TestListing:
         local = Explorer(str(tmp_path))
         assert local._listing["ctimes"] == [int((tmp_path / "x.txt").stat().st_ctime)]
 
-    def test_table_formats(self, mem_explorer):
-        # Those the data browser reads get a table icon in the list.
-        assert {"csv", "parquet", "delta"} <= set(mem_explorer._table_formats)
-        assert not {"text", "markdown", "json", "image"} & set(
-            mem_explorer._table_formats
-        )
-
     def test_urls_on_request(self, mem_explorer):
         reply = mem_explorer.request(
             {"type": "urls", "rid": 1, "paths": ["/data/a.csv", "/data"]}
