@@ -17,7 +17,13 @@ import anywidget
 import traitlets
 from fsspec.core import url_to_fs
 
-from jupyter_storage_explorer import _infos, _paths, _static, properties
+from jupyter_storage_explorer import (
+    _infos,
+    _jupyterlab_files,
+    _paths,
+    _static,
+    properties,
+)
 from jupyter_storage_explorer._urls import default_location, default_url
 from jupyter_storage_explorer.file_tasks import FileTasks, Plan, Task
 from jupyter_storage_explorer.filesystems import (
@@ -129,6 +135,12 @@ class _Followed:
 def _version(data: bytes) -> str:
     """Identifies file contents, to detect changes made elsewhere while editing."""
     return hashlib.sha256(data).hexdigest()
+
+
+def _error_text(exc: Exception) -> str:
+    """An error for users: the explorer's own refusals (ValueError) as they
+    are, others with their type, e.g. "FileNotFoundError: ..."."""
+    return str(exc) if isinstance(exc, ValueError) else f"{type(exc).__name__}: {exc}"
 
 
 def _entry(info: dict[str, Any]) -> dict[str, Any]:
@@ -551,6 +563,8 @@ class StorageExplorer(anywidget.AnyWidget):
             "edit_save": lambda c, _: self._edit_save(
                 c["path"], c["text"], c.get("version")
             ),
+            "jupyterlab_get": lambda c, _: self._reply(c, self._jupyterlab_get(c)),
+            "jupyterlab_save": lambda c, _: self._reply(c, self._jupyterlab_save(c)),
             "download": lambda c, _: self._download(c["paths"]),
             "upload": lambda c, _: self._reply(c, self._upload_request(c)),
             "upload_check": lambda c, _: self._reply(
@@ -1137,6 +1151,80 @@ class StorageExplorer(anywidget.AnyWidget):
             self._open_preview(path, self._preview.get("format"))
         return _version(data)
 
+    # --- Open in JupyterLab: its own editors and viewers, through the launcher's drive ---
+
+    def _jupyterlab_file(
+        self, content: dict[str, Any]
+    ) -> tuple[AbstractFileSystem, str]:
+        """The storage and path of a file opened in JupyterLab: by the storage's
+        name, as the file may stay open there while another storage is shown."""
+        storage = self._filesystems.get(content.get("filesystem"))
+        path = content.get("path")
+        if (
+            storage is None
+            or not isinstance(path, str)
+            or not _within_top(path, storage[1])
+        ):
+            raise ValueError("not a file of this explorer's storages")
+        return storage[0], path
+
+    def _jupyterlab_get(self, content: dict[str, Any]) -> dict[str, Any]:
+        """Answer "jupyterlab_get": {"model": the file's contents model} (see
+        _jupyterlab_files.contents_model), or {"error"}."""
+        try:
+            fs, path = self._jupyterlab_file(content)
+            info = self._info(path, fs)
+            if info.get("type") == "directory":
+                raise ValueError("folders cannot be opened in JupyterLab")
+            size = info.get("size")
+            if size is not None and size > _jupyterlab_files.MAX_BYTES:
+                raise ValueError(
+                    f"too large to open in JupyterLab "
+                    f"(over {_jupyterlab_files.MAX_BYTES // (1024 * 1024)} MB)"
+                )
+            data = self._read_bytes(path, fs)
+            model = _jupyterlab_files.contents_model(
+                path,
+                data,
+                info,
+                type_=content.get("contentType"),
+                format_=content.get("format"),
+                content=content.get("content", True),
+            )
+        except Exception as exc:
+            return {"error": _error_text(exc)}
+        return {"model": model}
+
+    def _jupyterlab_save(self, content: dict[str, Any]) -> dict[str, Any]:
+        """Answer "jupyterlab_save": write the content JupyterLab saves to the
+        file; {"model": its contents model, without content} or {"error"}.
+
+        JupyterLab itself checks, with the hash, that the file has not been
+        changed elsewhere since it was opened, before saving.
+        """
+        try:
+            fs, path = self._jupyterlab_file(content)
+            current = self._read_bytes(path, fs) if self._exists(path, fs) else None
+            data = _jupyterlab_files.saved_bytes(
+                content.get("content"), content.get("format"), current
+            )
+            self._write_bytes(path, data, fs)
+            model = _jupyterlab_files.contents_model(
+                path,
+                data,
+                self._info(path, fs),
+                type_=content.get("contentType"),
+                format_=content.get("format"),
+                content=False,
+            )
+        except Exception as exc:
+            return {"error": _error_text(exc)}
+        if content.get("filesystem") == self._filesystem:
+            self._update_entry(path)
+            if self._preview.get("path") == path:
+                self._open_preview(path, self._preview.get("format"))
+        return {"model": model}
+
     # --- Download to local: the browser saves the files on the user's computer ---
 
     def _download(self, paths: list[str]) -> None:
@@ -1684,11 +1772,11 @@ class StorageExplorer(anywidget.AnyWidget):
         # Some backends include the directory itself in its own listing.
         return [i for i in infos if _paths.norm(i["name"]) != _paths.norm(path)]
 
-    def _info(self, path: str) -> dict[str, Any]:
-        return self._fs.info(path)
+    def _info(self, path: str, fs: AbstractFileSystem | None = None) -> dict[str, Any]:
+        return (fs or self._fs).info(path)
 
-    def _exists(self, path: str) -> bool:
-        return self._fs.exists(path)
+    def _exists(self, path: str, fs: AbstractFileSystem | None = None) -> bool:
+        return (fs or self._fs).exists(path)
 
     def _isdir(self, path: str, fs: AbstractFileSystem | None = None) -> bool:
         """Whether ``path`` is a directory; False if it does not exist (fsspec
@@ -1698,12 +1786,15 @@ class StorageExplorer(anywidget.AnyWidget):
         """
         return (fs or self._fs).isdir(path)
 
-    def _read_bytes(self, path: str) -> bytes:
-        return self._fs.cat_file(path)
+    def _read_bytes(self, path: str, fs: AbstractFileSystem | None = None) -> bytes:
+        return (fs or self._fs).cat_file(path)
 
-    def _write_bytes(self, path: str, data: bytes) -> None:
-        self._fs.pipe_file(path, data)
-        self._fs.invalidate_cache(path)
+    def _write_bytes(
+        self, path: str, data: bytes, fs: AbstractFileSystem | None = None
+    ) -> None:
+        fs = fs or self._fs
+        fs.pipe_file(path, data)
+        fs.invalidate_cache(path)
 
     def _put_file(
         self, local_path: str, path: str, fs: AbstractFileSystem | None = None

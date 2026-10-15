@@ -24,6 +24,7 @@ result back in code.
 - **`DataExplorer`**: page, sort and filter any dataframe; get the result back in code.
 - **Previews** of Delta Lake, Parquet, CSV, JSON, Excel, text and images, with code to load them.
 - **Background file operations** with progress and Cancel; folder operations only in Unsafe mode.
+- **Edit files in JupyterLab**: open storage files in JupyterLab's own editors and viewers, and save them back.
 - **Bookmarks**, remembered queries, transfer rules, and a JupyterLab launcher item.
 
 ## Installation

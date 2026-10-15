@@ -21,7 +21,8 @@
 // back, so the tab reopens where it was.
 //
 // A second plugin (download.ts) downloads files dragged from any explorer,
-// in a tab or a notebook, onto JupyterLab's file browser.
+// in a tab or a notebook, onto JupyterLab's file browser; a third (files.ts)
+// opens the explorers' files in JupyterLab's own editors and viewers.
 
 import { JupyterFrontEnd, JupyterFrontEndPlugin } from '@jupyterlab/application';
 import { ICommandPalette } from '@jupyterlab/apputils';
@@ -31,6 +32,7 @@ import { IStateDB } from '@jupyterlab/statedb';
 import { LabIcon } from '@jupyterlab/ui-components';
 
 import { downloadPlugin } from './download';
+import { filesPlugin } from './files';
 import iconSvg from '../style/storage-explorer.svg';
 
 const PLUGIN_ID = 'jupyter-storage-explorer-launcher:plugin';
@@ -244,4 +246,4 @@ const plugin: JupyterFrontEndPlugin<void> = {
   }
 };
 
-export default [plugin, downloadPlugin];
+export default [plugin, downloadPlugin, filesPlugin];

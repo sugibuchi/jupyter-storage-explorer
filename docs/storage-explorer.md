@@ -98,10 +98,20 @@ below the list, or Esc, closes it.
 
 ### Right-click
 
-Preview as, Edit, Python code to load the data, Copy URL; Copy, Cut, Paste; Create a folder, Rename, Delete; Download
-to local or to JupyterLab; Properties, Add bookmark.
+Preview as, Edit, Open in JupyterLab, Python code to load the data, Copy URL; Copy, Cut, Paste; Create a folder, Rename,
+Delete; Download to local or to JupyterLab; Properties, Add bookmark.
 
 <img src="figs/using-right-click.png" width="384" alt="The right-click menu of a JSON Lines file">
+
+### Open in JupyterLab
+
+Right-click a file → **Open in JupyterLab** opens it in JupyterLab's own editor or viewer for its type: the text editor,
+the notebook, the CSV or image viewer. **Save** writes it back to the storage; if the file has changed there since it
+was opened, JupyterLab asks whether to overwrite it.
+
+This needs the [launcher](../launcher/README.md) package, whose JupyterLab extension serves these files, and works for
+explorers in notebooks too. The files go through the explorer's kernel (up to 20 MB each): if the explorer's kernel stops,
+open them from the explorer again. They cannot be renamed, deleted or created from JupyterLab; do that in the explorer.
 
 ### Properties
 

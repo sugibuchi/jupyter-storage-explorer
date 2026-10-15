@@ -1063,6 +1063,47 @@ function render({ model, el }) {
     flash(parts.join("; ") || "Nothing deleted");
   }
 
+  // --- Open in JupyterLab: its own editors and viewers ---
+  // The launcher's JupyterLab extension (launcher/labextension/src/files.ts),
+  // when on the page, puts {open(file)} under this key. It shows the file
+  // through a drive of its own, which reads and saves it with `get` and `save`
+  // below, through this widget's kernel ("jupyterlab_get", "jupyterlab_save").
+  // Without the extension, the item is not offered.
+  const JUPYTERLAB = Symbol.for("jupyter-storage-explorer.jupyterlab");
+  // A kernel that stopped never answers: JupyterLab then shows this error.
+  const JUPYTERLAB_TIMEOUT_MS = 120_000;
+
+  function askKernel(content) {
+    let timer;
+    const timeout = new Promise((_, reject) => {
+      timer = setTimeout(
+        () => reject(new Error("The Storage Explorer did not answer: its kernel may have stopped. Open the file from the explorer again.")),
+        JUPYTERLAB_TIMEOUT_MS,
+      );
+    });
+    return Promise.race([request(content), timeout]).then((reply) => {
+      clearTimeout(timer);
+      if (reply.error) throw new Error(reply.error);
+      return reply.model;
+    });
+  }
+
+  function openInJupyterLab(path) {
+    takeUnsafe(); // an operation, though not a risky one
+    // The storage shown now: the file stays in it while the explorer moves on.
+    const filesystem = model.get("_filesystem");
+    const ask = (type, options) => askKernel({ ...options, type, filesystem, path });
+    globalThis[JUPYTERLAB]
+      .open({
+        explorer: model.get("_explorer_id"),
+        storage: filesystem,
+        path,
+        get: (options) => ask("jupyterlab_get", options),
+        save: (options) => ask("jupyterlab_save", options),
+      })
+      .catch((err) => flash(`Cannot open in JupyterLab: ${err.message ?? err}`));
+  }
+
   // --- Copy, cut and paste: "Copy" (or "Cut") puts files (and, in unsafe
   // mode, folders) on a clipboard shared by the explorers on the page (and
   // their URLs on the system clipboard); "Paste" copies (or moves) them into a
@@ -1694,6 +1735,9 @@ function render({ model, el }) {
     if (withOpen && folder) open.push({ label: "Open", icon: "folder", action: () => navigate(folder.path) });
     if (info) {
       open.push({ label: "Edit", icon: "text", hidden: true, ref: (row) => (info.editRow = row), action: () => openEditor(single.path) });
+    }
+    if (single && !folder && globalThis[JUPYTERLAB]) {
+      open.push({ label: "Open in JupyterLab", icon: "open-in-new", action: () => openInJupyterLab(single.path) });
     }
     open.push({
       label: "Python code",

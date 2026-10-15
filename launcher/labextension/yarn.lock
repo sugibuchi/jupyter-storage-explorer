@@ -584,7 +584,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@jupyterlab/coreutils@npm:^6.6.4":
+"@jupyterlab/coreutils@npm:^6.0.0, @jupyterlab/coreutils@npm:^6.6.4":
   version: 6.6.4
   resolution: "@jupyterlab/coreutils@npm:6.6.4"
   dependencies:
@@ -789,7 +789,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@jupyterlab/services@npm:^7.6.4":
+"@jupyterlab/services@npm:^7.0.0, @jupyterlab/services@npm:^7.6.4":
   version: 7.6.4
   resolution: "@jupyterlab/services@npm:7.6.4"
   dependencies:
@@ -1192,7 +1192,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@lumino/signaling@npm:^1.10.0 || ^2.0.0, @lumino/signaling@npm:^2.1.5, @lumino/signaling@npm:^2.1.6":
+"@lumino/signaling@npm:^1.10.0 || ^2.0.0, @lumino/signaling@npm:^2.0.0, @lumino/signaling@npm:^2.1.5, @lumino/signaling@npm:^2.1.6":
   version: 2.1.6
   resolution: "@lumino/signaling@npm:2.1.6"
   dependencies:
@@ -2167,10 +2167,13 @@ __metadata:
     "@jupyterlab/apputils": ^4.0.0
     "@jupyterlab/console": ^4.0.0
     "@jupyterlab/core-meta": ^4.6.0
+    "@jupyterlab/coreutils": ^6.0.0
     "@jupyterlab/filebrowser": ^4.0.0
     "@jupyterlab/launcher": ^4.0.0
+    "@jupyterlab/services": ^7.0.0
     "@jupyterlab/statedb": ^4.0.0
     "@jupyterlab/ui-components": ^4.0.0
+    "@lumino/signaling": ^2.0.0
     rimraf: ^5.0.0
     typescript: ~5.5.4
   languageName: unknown
