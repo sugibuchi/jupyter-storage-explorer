@@ -16,6 +16,10 @@ _MTIME_KEYS = (
     "created",
 )
 
+# And for the creation time (local and memory: created, adlfs: creation_time,
+# gcsfs: timeCreated).
+_CTIME_KEYS = ("created", "creation_time", "timeCreated")
+
 
 def _to_timestamp(value: Any) -> float | None:
     if isinstance(value, (int, float)):
@@ -30,10 +34,22 @@ def _to_timestamp(value: Any) -> float | None:
     return None
 
 
+def _first_time(info: dict[str, Any], keys: tuple[str, ...]) -> float | None:
+    return next(
+        (ts for key in keys if (ts := _to_timestamp(info.get(key))) is not None),
+        None,
+    )
+
+
 def mtime(info: dict[str, Any]) -> float | None:
     """The modification time in an fsspec info dict (seconds), whichever key
     its filesystem uses, or None."""
-    return next(
-        (ts for key in _MTIME_KEYS if (ts := _to_timestamp(info.get(key))) is not None),
-        None,
-    )
+    return _first_time(info, _MTIME_KEYS)
+
+
+def ctime(info: dict[str, Any]) -> float | None:
+    """The creation time in an fsspec info dict (seconds), or None where the
+    filesystem's listing does not give it (s3fs). Local files' is fsspec's
+    "created", ``st_ctime``: on Linux the last change of the file's metadata,
+    as in JupyterLab's file browser."""
+    return _first_time(info, _CTIME_KEYS)

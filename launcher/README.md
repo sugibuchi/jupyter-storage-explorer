@@ -71,9 +71,9 @@ def parameters():
 
 
 def style():
-    # The folders in the top folder as 🗃️ instead of 📁: hide the icon, show another
+    # The folders in the top folder as 🗃️: hide the folder icon, show another
     return """
-    .jse-browser [data-depth="1"] .jse-icon { font-size: 0; }
-    .jse-browser [data-depth="1"] .jse-icon::before { font-size: 14px; content: "🗃️"; }
+    .jse-browser [data-depth="1"] .jse-icon svg { display: none; }
+    .jse-browser [data-depth="1"] .jse-icon::before { content: "🗃️"; }
     """
 ```

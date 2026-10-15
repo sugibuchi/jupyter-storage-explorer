@@ -190,13 +190,15 @@ function render({ model, el }) {
   const pending = new Set(); // directories requested from the kernel but not yet in the tree
   const sort = { key: "name", asc: true };
 
-  const upBtn = h("button", { className: "jse-btn", title: "Parent directory", textContent: "↑" });
-  const refreshBtn = h("button", { className: "jse-btn", title: "Refresh", textContent: "⟳" });
-  const previewBtn = h("button", { className: "jse-btn", textContent: "Preview" });
+  const upBtn = iconButton("up", "Parent directory");
+  const refreshBtn = iconButton("refresh", "Refresh");
+  // A link, as JupyterLab's "Close All" in its running sessions panel: previews
+  // the selected item, or closes the preview panel showing it (see updatePreviewBtn).
+  const previewBtn = h("button", { className: "jse-link", textContent: "Preview" });
   // Filesystem chooser; hidden when there is only one.
   const fsSelect = h("select", { className: "jse-fs-select", title: "Filesystem" });
-  // Opens the bookmarks menu; filled (★) while the folder shown is bookmarked.
-  const bookmarkBtn = h("button", { className: "jse-btn jse-bookmark-btn", title: "Bookmarks", textContent: "☆" });
+  // Opens the bookmarks menu; a filled star while the folder shown is bookmarked.
+  const bookmarkBtn = iconButton("star-border", "Bookmarks", "jse-bookmark-btn");
   const pathEl = h("div", { className: "jse-path" });
   const treeEl = h("div", { className: "jse-tree" });
   const headRow = h("tr");
@@ -207,7 +209,7 @@ function render({ model, el }) {
   // slider. The checkbox is hidden but still focusable (Space toggles it);
   // the track and knob are drawn by CSS.
   const unsafeInput = h("input", { type: "checkbox", role: "switch", className: "jse-switch-input" });
-  const unsafeLabel = h("span");
+  const unsafeLabel = h("span", { textContent: "Unsafe mode" }); // grey, red while on
   const unsafeEl = h(
     "label",
     {
@@ -238,8 +240,8 @@ function render({ model, el }) {
       renderList();
     },
   });
-  const prevPageBtn = h("button", { className: "jse-btn", title: "Previous page", textContent: "◀" });
-  const nextPageBtn = h("button", { className: "jse-btn", title: "Next page", textContent: "▶" });
+  const prevPageBtn = iconButton("chevron-left", "Previous page");
+  const nextPageBtn = iconButton("chevron-right", "Next page");
   const pageLabel = h("span", { className: "jse-page-label" });
   const pagerEl = h("div", { className: "jse-pager", hidden: true }, prevPageBtn, pageLabel, nextPageBtn);
   // Each pane is a column, its bar on top, so the bars follow the tree's width when it is resized.
@@ -252,8 +254,7 @@ function render({ model, el }) {
   // Bottom edge of the widget: resizes the last area (preview panel or tree and list).
   const grip = h("div", { className: "jse-grip", title: "Drag to resize" });
   // Preview panel below the tree and list; the splitter on its top edge moves
-  // the boundary between them.
-  const previewCloseBtn = h("button", { className: "jse-btn", title: "Close preview (Esc)", textContent: "✕" });
+  // the boundary between them. The Preview link or Esc closes it.
   const previewHead = h("div", { className: "jse-dialog-head" });
   const previewBody = h("div", { className: "jse-dialog-body" });
   const splitter = h("div", { className: "jse-splitter", title: "Drag to resize" });
@@ -266,7 +267,7 @@ function render({ model, el }) {
     previewBody,
   );
   // Modal window for "Python code", centred over a backdrop that dims the widget.
-  const closeBtn = h("button", { className: "jse-btn", title: "Close (Esc)", textContent: "✕" });
+  const closeBtn = iconButton("close", "Close (Esc)");
   const dialogHead = h("div", { className: "jse-dialog-head" });
   const dialogBody = h("div", { className: "jse-dialog-body" });
   const dialogEl = h(
@@ -482,7 +483,6 @@ function render({ model, el }) {
     const on = unsafe();
     unsafeInput.checked = on;
     unsafeEl.classList.toggle("jse-on", on);
-    unsafeLabel.textContent = on ? "Unsafe mode on" : "Unsafe mode";
   }
 
   unsafeInput.addEventListener("change", () => {
@@ -547,7 +547,9 @@ function render({ model, el }) {
   }
 
   // items: {label, action, disabled}, {label, submenu, disabled} or "-" for a
-  // separator. `submenu(el)` fills the submenu element, possibly later.
+  // separator. `icon`: an icon's name (ICON_PATHS), on the left; rows without
+  // one keep its space, so labels line up. `submenu(el)` fills the submenu
+  // element, possibly later.
   // `hidden` rows can be shown later through the element passed to `ref(row)`.
   // `title`: the row's tooltip. `menu()`: the items of the menu right-clicking
   // the row opens in place of this one.
@@ -557,7 +559,8 @@ function render({ model, el }) {
       const row = h(
         "div",
         { className: "jse-menu-item" + (item.disabled ? " jse-disabled" : ""), hidden: Boolean(item.hidden), title: item.title ?? "" },
-        h("span", { textContent: item.label }),
+        h("span", { className: "jse-menu-icon" }, ...(item.icon ? [icon(item.icon)] : [])),
+        h("span", { className: "jse-menu-label", textContent: item.label }),
       );
       item.ref?.(row);
       if (item.menu) row.addEventListener("contextmenu", (ev) => showMenu(ev, item.menu()));
@@ -565,7 +568,7 @@ function render({ model, el }) {
       if (item.submenu) {
         const sub = h("div", { className: "jse-menu jse-submenu" });
         row.classList.add("jse-has-sub");
-        row.append(h("span", { className: "jse-sub-arrow", textContent: "▸" }), sub);
+        row.append(h("span", { className: "jse-sub-arrow" }, icon("caret-right")), sub);
         item.submenu(sub);
       } else {
         row.addEventListener("click", () => {
@@ -1080,12 +1083,23 @@ function render({ model, el }) {
     return urls;
   }
 
-  // The list's tooltips are URLs. The listing does not carry them, so those of
-  // the rows shown are asked for in one request as they are drawn, before any
-  // hover (a title set while the pointer rests on a row would not show), and
-  // kept by storage and path: a URL, or the request's promise while it is out.
-  // Items without one show their path.
+  // The list's tooltips, as JupyterLab's file browser's: name, size, times,
+  // format and URL. The listing does not carry URLs, so those of the rows
+  // shown are asked for in one request as they are drawn, before any hover (a
+  // title set while the pointer rests on a row would not show), and kept by
+  // storage and path: a URL, or the request's promise while it is out. Items
+  // without one show their path.
   const tooltipUrls = new Map();
+
+  function tooltip(entry, location) {
+    const lines = [`Name: ${entry.name}`];
+    if (entry.size != null) lines.push(`Size: ${formatSize(entry.size)}`);
+    if (entry.mtime != null) lines.push(`Modified: ${formatTime(entry.mtime)}`);
+    if (entry.ctime != null) lines.push(`Created: ${formatTime(entry.ctime)}`);
+    if (entry.format) lines.push(`Format: ${formatLabel(entry.format)}`);
+    if (location != null) lines.push(hasUrl(entry) ? `URL: ${location}` : `Path: ${location}`);
+    return lines.join("\n");
+  }
 
   function setTooltips(rows) {
     const filesystem = model.get("_filesystem");
@@ -1100,8 +1114,12 @@ function render({ model, el }) {
     }
     for (const [tr, entry] of rows) {
       const known = hasUrl(entry) ? tooltipUrls.get(key(entry)) : entry.path;
-      if (typeof known === "string") tr.title = known;
-      else known.then(() => (tr.title = tooltipUrls.get(key(entry)) ?? entry.path));
+      if (typeof known === "string") {
+        tr.title = tooltip(entry, known);
+      } else {
+        tr.title = tooltip(entry, null);
+        known.then(() => (tr.title = tooltip(entry, tooltipUrls.get(key(entry)))));
+      }
     }
   }
 
@@ -1142,10 +1160,10 @@ function render({ model, el }) {
   // unsafe mode is off.
   function pasteItem(dest) {
     const clip = globalThis[CLIPBOARD];
-    if (!clip?.files.length) return { label: "Paste", disabled: true };
+    if (!clip?.files.length) return { label: "Paste", icon: "paste", disabled: true };
     if (clip.folders && !unsafe()) return null;
     const what = clip.files.length === 1 ? clip.files[0].name : `${clip.files.length} items`;
-    return { label: clip.cut ? `Move ${what} here` : `Paste ${what}`, action: () => confirmPaste(clip, dest) };
+    return { label: clip.cut ? `Move ${what} here` : `Paste ${what}`, icon: "paste", action: () => confirmPaste(clip, dest) };
   }
 
   async function confirmPaste(clip, dest) {
@@ -1446,8 +1464,8 @@ function render({ model, el }) {
     const dest = model.get("_current_dir");
     showMenu(ev, [
       // Folders on the clipboard while locked: a greyed-out "Paste".
-      pasteItem(dest) ?? { label: "Paste", disabled: true },
-      { label: "Create a folder", action: () => createFolder(dest) },
+      pasteItem(dest) ?? { label: "Paste", icon: "paste", disabled: true },
+      { label: "Create a folder", icon: "new-folder", action: () => createFolder(dest) },
     ]);
   });
 
@@ -1547,7 +1565,7 @@ function render({ model, el }) {
 
   function renderBookmarkBtn() {
     const marked = isBookmarked(model.get("_current_dir"));
-    bookmarkBtn.textContent = marked ? "★" : "☆";
+    bookmarkBtn.replaceChildren(icon(marked ? "star" : "star-border"));
     bookmarkBtn.classList.toggle("jse-on", marked);
   }
 
@@ -1568,8 +1586,8 @@ function render({ model, el }) {
   function bookmarkItem(path) {
     const filesystem = model.get("_filesystem");
     return isBookmarked(path)
-      ? { label: "Remove bookmark", action: () => removeBookmark({ filesystem, path }) }
-      : { label: "Add bookmark", action: () => addBookmark(path) };
+      ? { label: "Remove bookmark", icon: "star-border", action: () => removeBookmark({ filesystem, path }) }
+      : { label: "Add bookmark", icon: "star", action: () => addBookmark(path) };
   }
 
   // The bookmarks menu, below the button: bookmarking the folder shown, then
@@ -1584,11 +1602,12 @@ function render({ model, el }) {
     for (const b of bookmarks) {
       items.push({
         label: b.label,
+        icon: "folder",
         title: b.url ?? b.path,
         action: () => openBookmark(b),
         menu: () => [
-          { label: "Copy URL", disabled: !b.url, action: () => copy([b.url], "URL") },
-          { label: "Delete bookmark", action: () => removeBookmark(b) },
+          { label: "Copy URL", icon: "link", disabled: !b.url, action: () => copy([b.url], "URL") },
+          { label: "Delete bookmark", icon: "close", action: () => removeBookmark(b) },
         ],
       });
     }
@@ -1612,7 +1631,7 @@ function render({ model, el }) {
   function onMenuInfo(msg) {
     if (menuInfo?.path !== msg.path) return;
     const { path, previewRow, previewAsRow, previewAsSub, editRow, codeSub } = menuInfo;
-    if (!msg.error && msg.query && previewRow) previewRow.firstChild.textContent = "Query data";
+    if (!msg.error && msg.query && previewRow) previewRow.querySelector(".jse-menu-label").textContent = "Query data";
     // "Preview as" only appears when the item matches more than one format.
     if (!msg.error && msg.formats.length > 1) {
       const items = msg.formats.map((format) => ({ label: `Preview as ${formatLabel(format)}`, action: () => openPreview(path, format) }));
@@ -1656,6 +1675,7 @@ function render({ model, el }) {
     const open = [
       {
         label: "Preview",
+        icon: "eye",
         disabled: !data,
         // Relabelled "Query data" when the kernel says it opens in the data browser.
         ref: (row) => info && (info.previewRow = row),
@@ -1665,17 +1685,19 @@ function render({ model, el }) {
     if (info) {
       open.push({
         label: "Preview as",
+        icon: "eye",
         hidden: true,
         ref: (row) => (info.previewAsRow = row),
         submenu: (sub) => (info.previewAsSub = sub),
       });
     }
-    if (withOpen && folder) open.push({ label: "Open", action: () => navigate(folder.path) });
+    if (withOpen && folder) open.push({ label: "Open", icon: "folder", action: () => navigate(folder.path) });
     if (info) {
-      open.push({ label: "Edit", hidden: true, ref: (row) => (info.editRow = row), action: () => openEditor(single.path) });
+      open.push({ label: "Edit", icon: "text", hidden: true, ref: (row) => (info.editRow = row), action: () => openEditor(single.path) });
     }
     open.push({
       label: "Python code",
+      icon: "code",
       disabled: !data,
       submenu: (sub) => {
         sub.replaceChildren(...menuRows([{ label: "Loading…", disabled: true }]));
@@ -1689,6 +1711,7 @@ function render({ model, el }) {
     if (withUrls && !files) {
       open.push({
         label: `Copy ${count}URL${count ? "s" : ""}`,
+        icon: "link",
         action: async () => copy(await urlsOf(targets), count ? `${count}URLs` : "URL"),
       });
     }
@@ -1696,20 +1719,20 @@ function render({ model, el }) {
     // "Copy" and "Cut" copy for "Paste" (and put the URLs on the clipboard).
     const clipboard = [];
     if (withUrls && allowed) {
-      clipboard.push({ label: count ? `Copy ${count}${what}` : "Copy", action: () => copyFiles(targets) });
+      clipboard.push({ label: count ? `Copy ${count}${what}` : "Copy", icon: "copy", action: () => copyFiles(targets) });
       if (!targets.some((t) => t.path === model.get("_root"))) {
-        clipboard.push({ label: count ? `Cut ${count}${what}` : "Cut", action: () => copyFiles(targets, true) });
+        clipboard.push({ label: count ? `Cut ${count}${what}` : "Cut", icon: "cut", action: () => copyFiles(targets, true) });
       }
     }
     const paste = folder && pasteItem(folder.path);
     if (paste) clipboard.push(paste);
 
     const change = [];
-    if (folder) change.push({ label: "Create a folder", action: () => createFolder(folder.path) });
+    if (folder) change.push({ label: "Create a folder", icon: "new-folder", action: () => createFolder(folder.path) });
     if (single && allowed && single.path !== model.get("_root")) {
-      change.push({ label: "Rename", action: () => renameItem(single) });
+      change.push({ label: "Rename", icon: "edit", action: () => renameItem(single) });
     }
-    if (allowed) change.push({ label: count ? `Delete ${count}${what}` : "Delete", action: () => confirmDelete(targets) });
+    if (allowed) change.push({ label: count ? `Delete ${count}${what}` : "Delete", icon: "close", action: () => confirmDelete(targets) });
 
     // Files only: downloading folders is intentionally not supported. The
     // kernel refuses files the explorer's policy does not let go there.
@@ -1717,12 +1740,12 @@ function render({ model, el }) {
     if (files) {
       const paths = targets.map((t) => t.path);
       downloads.push(
-        { label: count ? `Download ${count}files to local` : "Download to local", action: () => download(paths) },
-        { label: count ? `Download ${count}files to JupyterLab` : "Download to JupyterLab", action: () => downloadToJupyterLab(paths) },
+        { label: count ? `Download ${count}files to local` : "Download to local", icon: "download", action: () => download(paths) },
+        { label: count ? `Download ${count}files to JupyterLab` : "Download to JupyterLab", icon: "inbox", action: () => downloadToJupyterLab(paths) },
       );
     }
 
-    const about = [{ label: "Properties", action: () => showProperties(targets) }];
+    const about = [{ label: "Properties", icon: "info", action: () => showProperties(targets) }];
     if (folder) about.push(bookmarkItem(folder.path));
 
     return [open, clipboard, change, downloads, about]
@@ -1790,10 +1813,11 @@ function render({ model, el }) {
       const isOpen = expanded.has(dir.path);
       if (isOpen) requestChildren(dir.path);
 
-      const twisty = h("span", {
-        className: "jse-twisty",
-        textContent: children && children.length === 0 ? "" : isOpen ? "▾" : "▸",
-      });
+      const twisty = h(
+        "span",
+        { className: "jse-twisty" },
+        ...(children && children.length === 0 ? [] : [icon(isOpen ? "caret-down" : "caret-right")]),
+      );
       twisty.addEventListener("click", (ev) => {
         ev.stopPropagation();
         toggle(dir.path);
@@ -1803,7 +1827,7 @@ function render({ model, el }) {
         "div",
         { className: "jse-node" + (dir.path === current ? " jse-active" : ""), title: dir.path },
         twisty,
-        h("span", { className: "jse-icon", textContent: "📁" }),
+        h("span", { className: "jse-icon" }, icon("folder")),
         h("span", { className: "jse-label", textContent: dir.name }),
       );
       row.style.paddingLeft = `${depth * 14 + 4}px`;
@@ -1892,6 +1916,7 @@ function render({ model, el }) {
       type: l.is_dir[i] ? "directory" : "file",
       size: l.sizes[i],
       mtime: l.mtimes[i],
+      ctime: l.ctimes?.[i],
       format: l.formats[l.format[i]],
       no_url: noUrl.has(i),
     }));
@@ -2021,6 +2046,14 @@ function render({ model, el }) {
     }
   }
 
+  // A list item's icon: a folder, a table for files of formats the data browser
+  // reads, else a file. (Folders have no format in the listing: detecting
+  // Delta tables would mean listing each folder.)
+  function entryIcon(entry) {
+    if (entry.format && model.get("_table_formats").includes(entry.format)) return "table";
+    return entry.type === "directory" ? "folder" : "file";
+  }
+
   // The folder whose items the list last showed, to tell when another's arrive.
   let listShowsDir = null;
 
@@ -2036,8 +2069,8 @@ function render({ model, el }) {
     }
     headRow.replaceChildren(
       ...columns.map((col) => {
-        const arrow = sort.key === col.key ? (sort.asc ? " ▲" : " ▼") : "";
-        const th = h("th", { className: `jse-col-${col.key}`, textContent: col.label + arrow });
+        const th = h("th", { className: `jse-col-${col.key}`, textContent: col.label });
+        if (sort.key === col.key) th.append(icon(sort.asc ? "caret-up" : "caret-down"));
         th.addEventListener("click", () => {
           sort.asc = sort.key === col.key ? !sort.asc : true;
           sort.key = col.key;
@@ -2082,7 +2115,7 @@ function render({ model, el }) {
         h(
           "td",
           { className: "jse-col-name" },
-          h("span", { className: "jse-icon", textContent: isDir ? "📁" : "📄" }),
+          h("span", { className: "jse-icon" }, icon(entryIcon(entry))),
           entry.name,
         ),
         h("td", { className: "jse-col-size", textContent: formatSize(entry.size) }),
@@ -2152,7 +2185,22 @@ function render({ model, el }) {
     return null;
   }
 
+  // The panel shows what the link would preview, or nothing else can be
+  // previewed: the link closes it.
+  function previewLinkCloses() {
+    const shown = model.get("_preview").path;
+    if (shown == null) return false;
+    const target = previewTarget();
+    return target == null || target.path === shown;
+  }
+
   function updatePreviewBtn() {
+    if (previewLinkCloses()) {
+      previewBtn.disabled = false;
+      previewBtn.textContent = "Close preview";
+      previewBtn.title = "Close the preview panel (Esc)";
+      return;
+    }
     const target = previewTarget();
     const selected = model.get("_selected").length;
     // Tabular data opens in the data browser when polars is installed.
@@ -2341,7 +2389,6 @@ function render({ model, el }) {
     previewHead.dataset.path = preview.path;
     previewHead.replaceChildren(h("span", { className: "jse-preview-name", textContent: preview.path, title: preview.path }));
     if (preview.format) previewHead.append(h("span", { className: "jse-badge", textContent: formatLabel(preview.format) }));
-    previewHead.append(h("span", { className: "jse-spacer" }), previewCloseBtn);
 
     let body;
     if (preview.loading) {
@@ -2454,13 +2501,13 @@ function render({ model, el }) {
   });
   refreshBtn.addEventListener("click", () => model.send({ type: "refresh" }));
   previewBtn.addEventListener("click", () => {
+    if (previewLinkCloses()) return closePreview();
     const target = previewTarget();
     if (target != null) openPreview(target.path, target.format);
   });
   closeBtn.addEventListener("click", closeDialog);
   // Clicking the backdrop (outside the window) closes the dialog.
   dialogEl.addEventListener("pointerdown", (ev) => ev.target === dialogEl && closeDialog());
-  previewCloseBtn.addEventListener("click", closePreview);
   el.addEventListener("keydown", (ev) => {
     if (ev.key !== "Escape") return;
     if (!dialogEl.hidden) closeDialog();
@@ -2480,7 +2527,10 @@ function render({ model, el }) {
     "change:_selected": renderList,
     "change:_error": renderStatus,
     "change:_height": applyHeight,
-    "change:_preview": renderPreview,
+    "change:_preview": () => {
+      renderPreview();
+      updatePreviewBtn(); // "Close preview" while the panel shows the selected item
+    },
     "change:_current_format": updatePreviewBtn,
     "change:_selected_format": updatePreviewBtn,
     "change:_current_query": updatePreviewBtn,

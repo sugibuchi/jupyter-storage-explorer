@@ -12,3 +12,9 @@ the widget asks the kernel for a file's source (only the files listed in
 Downloaded unmodified from jsDelivr (`npm/marked@16.4.2/lib/marked.esm.js`,
 `npm/dompurify@3/dist/purify.es.mjs`), except that the trailing
 `//# sourceMappingURL=` line was removed, as the source maps are not included.
+
+## Icons
+
+The SVG paths in `../icons.js` are from [Material Design Icons](https://github.com/google/material-design-icons)
+(filled style), as JupyterLab's own icons are. Apache License 2.0,
+https://www.apache.org/licenses/LICENSE-2.0.

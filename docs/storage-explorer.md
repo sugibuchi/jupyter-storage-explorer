@@ -77,7 +77,7 @@ To write your own, subclass `FileSystemOperations` (see [operations.py](../src/j
 ### Browse
 
 Click folders in the tree or list; ↑ goes up, ⟳ refreshes, ◀ ▶ pages through the list. Ctrl+click (⌘+click) selects
-several items.
+several items. Hover over an item for its size, times, format and URL.
 
 <img src="figs/using-browse.png" width="830" alt="Browsing a folder, with two items selected">
 
@@ -91,7 +91,8 @@ Type in the field above the list to show names containing the text, or matching 
 ### Preview
 
 Double-click a file, or **Preview** below the list (with nothing selected: the current folder, e.g. a Delta Lake table), or right-click
-→ **Preview**; **Preview as** chooses another format. Tables open in the [data browser](#query-data).
+→ **Preview**; **Preview as** chooses another format. Tables open in the [data browser](#query-data). **Close preview**
+below the list, or Esc, closes it.
 
 <img src="figs/using-preview.png" width="562" alt="Preview in the status bar, and Preview as in the right-click menu of a Markdown file">
 

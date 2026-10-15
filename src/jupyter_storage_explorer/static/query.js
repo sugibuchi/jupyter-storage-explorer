@@ -23,17 +23,6 @@ const OP_LABELS = {
 const NO_VALUE_OPS = new Set(["not_null", "null", "not_empty", "empty"]);
 const VALUE_HINTS = { numeric: "e.g. 10", temporal: "e.g. 2025-01-31", text: "" };
 
-// Column header filter icons: SVG, drawn in the text colour (currentColor);
-// CSS fills them in when the column has a filter. FILTER_ICON is the one used.
-const FUNNEL_ICON =
-  '<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">' +
-  '<path d="M1.5 2.5h13l-5 6v5l-3-1.5v-3.5z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>';
-const SEARCH_ICON =
-  '<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">' +
-  '<circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" stroke-width="1.5"/>' +
-  '<path d="M10 10l4.5 4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
-const FILTER_ICON = FUNNEL_ICON;
-
 // Column widths: automatic until a column is resized, then fixed. Part of the
 // dataset's settings ("widths": {column name: px}), so the kernel remembers
 // them with the filters.
@@ -56,8 +45,9 @@ const INPUT_TYPES = {
   time: { type: "time", step: "1" },
 };
 
+// label: text, or an icon (an SVG element).
 function queryButton(label, onClick, title = "") {
-  const btn = h("button", { className: "jse-btn", textContent: label, title });
+  const btn = h("button", { className: typeof label === "string" ? "jse-btn" : "jse-btn jse-icon-btn", title }, label);
   btn.addEventListener("click", onClick);
   return btn;
 }
@@ -231,13 +221,13 @@ function createQueryPanel(host, path, data) {
       status = `Rows ${(first + 1).toLocaleString()}–${(first + pageRows.length).toLocaleString()} / ${total}`;
     }
 
-    const prev = queryButton("◀", prevPage, "Previous page");
+    const prev = queryButton(icon("chevron-left"), prevPage, "Previous page");
     prev.disabled = view.loading || first === 0;
-    const next = queryButton("▶", nextPage, "Next page");
+    const next = queryButton(icon("chevron-right"), nextPage, "Next page");
     next.disabled = view.loading || !hasNext;
     const reset = queryButton("Reset", resetQuery, "Remove all filters and show all columns");
     reset.disabled = !resettable;
-    const reloadBtn = queryButton("⟳", reload, "Reload the data, e.g. after it changed");
+    const reloadBtn = queryButton(icon("refresh"), reload, "Reload the data, e.g. after it changed");
     reloadBtn.disabled = view.loading;
     const toolbar = h(
       "div",
@@ -278,16 +268,21 @@ function createQueryPanel(host, path, data) {
     const sorted = s.sort?.column === column.name;
     const name = h("span", {
       className: "jse-query-name",
-      textContent: column.name + (sorted ? (s.sort.descending ? " ▼" : " ▲") : ""),
+      textContent: column.name,
       title: "Sort by this column (click again to reverse, a third time to stop sorting)",
     });
+    if (sorted) name.append(icon(s.sort.descending ? "caret-down" : "caret-up"));
     name.addEventListener("click", () => toggleSort(column.name));
     const active = s.filters[column.name];
-    const filterBtn = h("button", {
-      className: "jse-query-filter" + (active ? " jse-active" : ""),
-      innerHTML: FILTER_ICON,
-      title: active ? `Filter: ${describeFilter(column.name, active)}` : "Filter",
-    });
+    // Light grey, dark when the column has a filter.
+    const filterBtn = h(
+      "button",
+      {
+        className: "jse-query-filter" + (active ? " jse-active" : ""),
+        title: active ? `Filter: ${describeFilter(column.name, active)}` : "Filter",
+      },
+      icon("filter"),
+    );
     filterBtn.addEventListener("click", (ev) => {
       ev.stopPropagation();
       openFilterDialog(column);

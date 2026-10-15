@@ -169,7 +169,7 @@ it is a JSON file shared with other kernels (each launcher tab is one; the launc
 `<jupyter_config_dir>/storage-explorer/states.json`): read again when an explorer is created and before each change,
 then written whole, so kernels do not undo each other's changes; a file that cannot be read is never written over.
 `DataQuery` remembers through it; `DataExplorer` uses a private one.
-The frontend asks for the bookmarks when the ☆ menu opens (`"bookmarks"`, `"bookmark_add"`, ...), as other explorers
+The frontend asks for the bookmarks when the bookmarks (star) menu opens (`"bookmarks"`, `"bookmark_add"`, ...), as other explorers
 may have changed them.
 
 **Lists.** The file list is filtered (by name), sorted and paged (100 per page) in the browser, from the full listing

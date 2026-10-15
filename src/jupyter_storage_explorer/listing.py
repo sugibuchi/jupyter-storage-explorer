@@ -161,7 +161,7 @@ class Listing:
             "dir": c["dir"],
             **{
                 key: [c[key][i] for i in indexes]
-                for key in ("names", "is_dir", "sizes", "mtimes", "format")
+                for key in ("names", "is_dir", "sizes", "mtimes", "ctimes", "format")
             },
             "formats": c["formats"],
             "paths": None if c["paths"] is None else [c["paths"][i] for i in indexes],

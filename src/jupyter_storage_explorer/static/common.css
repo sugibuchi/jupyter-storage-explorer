@@ -2,16 +2,29 @@
    before query.css and each widget's own stylesheet (see _static.py). */
 /* The widget's own element. StorageExplorer's also has the class
    "jse-browser", and DataExplorer's "jse-data-explorer". */
+/* Colours are JupyterLab's theme variables, so they follow its theme (dark
+   included), with fallbacks for other frontends. */
 .jse-widget {
   --jse-bg: var(--jp-layout-color1, #fff);
-  --jse-bg-alt: var(--jp-layout-color2, #f3f3f3);
-  --jse-fg: var(--jp-ui-font-color1, #222);
-  --jse-fg-muted: var(--jp-ui-font-color2, #666);
-  --jse-border: var(--jp-border-color2, #ddd);
-  --jse-hover: var(--jp-layout-color3, #e6e6e6);
+  /* Toolbars and bars: as JupyterLab's toolbars, the content's colour. */
+  --jse-bar-bg: var(--jp-toolbar-background, var(--jse-bg));
+  /* Code blocks, the status bar (as JupyterLab's), ... */
+  --jse-bg-alt: var(--jp-layout-color2, #eee);
+  --jse-fg: var(--jp-ui-font-color1, rgba(0, 0, 0, 0.87));
+  --jse-fg-muted: var(--jp-ui-font-color2, rgba(0, 0, 0, 0.54));
+  --jse-fg-faint: var(--jp-ui-font-color3, rgba(0, 0, 0, 0.38));
+  --jse-border: var(--jp-border-color2, #e0e0e0);
+  --jse-hover: var(--jp-layout-color2, #eee);
+  /* Icons: JupyterLab's grey (its "jp-icon3"). */
+  --jse-icon: var(--jp-inverse-layout-color3, #616161);
   --jse-accent: var(--jp-brand-color1, #1976d2);
   --jse-accent-bg: var(--jp-brand-color3, #bbdefb);
+  /* Selected items, as in JupyterLab's file browser. */
+  --jse-selected-bg: var(--jp-brand-color1, #1976d2);
+  --jse-selected-fg: var(--jp-ui-inverse-font-color1, #fff);
   --jse-error: var(--jp-error-color1, #d32f2f);
+  /* Links such as Preview: as "Close All" in JupyterLab's running sessions panel. */
+  --jse-link: var(--jp-warn-color1, #f57c00);
 
   position: relative; /* dialogs cover the widget */
   display: flex;
@@ -41,13 +54,16 @@
   display: none;
 }
 
+/* Buttons, as JupyterLab's toolbar buttons: no border, the background shows
+   on hover. */
 .jse-btn {
-  min-width: 26px;
+  min-width: 24px;
   padding: 2px 6px;
-  border: 1px solid var(--jse-border);
-  border-radius: 3px;
-  background: var(--jse-bg);
+  border: none;
+  border-radius: var(--jp-border-radius, 2px);
+  background: transparent;
   color: var(--jse-fg);
+  font: inherit;
   cursor: pointer;
 }
 
@@ -60,11 +76,50 @@
   cursor: default;
 }
 
+/* Icons (icon() in icons.js): filled, in the colour of the text around them,
+   which is JupyterLab's icon grey where they stand alone. */
+.jse-svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+  vertical-align: middle;
+}
+
+.jse-btn.jse-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 4px;
+  color: var(--jse-icon);
+}
+
+/* A link-like button, e.g. Preview. */
+.jse-link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--jse-link);
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.jse-link:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.jse-link:disabled {
+  color: var(--jse-fg-faint);
+  cursor: default;
+}
+
 .jse-grip {
   flex: none;
   height: 6px;
   cursor: ns-resize;
-  background: var(--jse-bg-alt);
+  border-top: 1px solid var(--jse-border);
+  background: var(--jse-bar-bg);
 }
 
 /* Backdrop dimming the widget; the modal window is centred on it. */
@@ -101,13 +156,28 @@
   gap: 6px;
   padding: 6px 8px;
   border-top: 1px solid var(--jse-border);
-  background: var(--jse-bg-alt);
+  background: var(--jse-bar-bg);
+}
+
+/* Dialog buttons, as JupyterLab's dialogs': filled, grey, and the main
+   action (jse-primary) blue. */
+.jse-editor-foot .jse-btn {
+  padding: 4px 12px;
+  background: var(--jp-reject-color-normal, #757575);
+  color: var(--jse-selected-fg);
+}
+
+.jse-editor-foot .jse-btn:hover:not(:disabled) {
+  background: var(--jp-reject-color-hover, #616161);
 }
 
 .jse-btn.jse-primary:not(:disabled) {
-  border-color: var(--jse-accent);
-  background: var(--jse-accent);
-  color: #fff;
+  background: var(--jp-accept-color-normal, var(--jse-accent));
+  color: var(--jse-selected-fg);
+}
+
+.jse-btn.jse-primary:hover:not(:disabled) {
+  background: var(--jp-accept-color-hover, #1565c0);
 }
 
 /* Sized by its content (scrolling past max-height), unlike in the preview panel. */
@@ -121,7 +191,7 @@
   gap: 8px;
   padding: 4px 6px 4px 10px;
   border-bottom: 1px solid var(--jse-border);
-  background: var(--jse-bg-alt);
+  background: var(--jse-bar-bg);
 }
 
 /* A filter (see createFilter in common.js): a text field and a ".*" toggle. */
@@ -198,8 +268,8 @@
   font-family: var(--jp-code-font-family, monospace);
 }
 
-.jse-filter-regex.jse-on {
-  border-color: var(--jse-accent);
+.jse-filter-regex.jse-on,
+.jse-filter-regex.jse-on:hover:not(:disabled) {
   background: var(--jse-accent-bg);
 }
 
@@ -280,7 +350,7 @@
 .jse-data thead th {
   position: sticky;
   top: 0;
-  background: var(--jse-bg-alt);
+  background: var(--jse-bar-bg);
 }
 
 .jse-data .jse-dtypes th {
