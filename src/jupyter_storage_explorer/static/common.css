@@ -18,7 +18,10 @@
   /* Icons: JupyterLab's grey (its "jp-icon3"). */
   --jse-icon: var(--jp-inverse-layout-color3, #616161);
   --jse-accent: var(--jp-brand-color1, #1976d2);
-  --jse-accent-bg: var(--jp-brand-color3, #bbdefb);
+  /* Behind text (badges, filter chips, toggles that are on): the accent,
+     translucent, so it is light on light themes and dark on dark ones, and
+     the text stays readable on both. */
+  --jse-accent-bg: color-mix(in srgb, var(--jse-accent) 25%, transparent);
   /* Selected items, as in JupyterLab's file browser. */
   --jse-selected-bg: var(--jp-brand-color1, #1976d2);
   --jse-selected-fg: var(--jp-ui-inverse-font-color1, #fff);
