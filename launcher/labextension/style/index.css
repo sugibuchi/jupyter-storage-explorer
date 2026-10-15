@@ -48,6 +48,25 @@
   min-height: 0;
 }
 
+/* No margins: the widget fills the tab to its edges, under the tab's toolbar,
+   without the room the console keeps around cells and outputs, nor a border
+   of its own against the tab's. */
+.jse-launcher-panel .jp-CodeConsole-content,
+.jse-launcher-panel .jp-Console-cell,
+.jse-launcher-panel .jp-Console-cell .jp-Cell-outputWrapper, /* more specific than JupyterLab's margin */
+.jse-launcher-panel .jp-Cell-outputArea,
+.jse-launcher-panel .jp-OutputArea-child,
+.jse-launcher-panel .jp-OutputArea-output {
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.jse-launcher-panel .jse-widget {
+  border: none;
+  border-radius: 0;
+}
+
 /* The output of launcher.py's style(): a <style> element, which applies even
    when hidden. */
 .jse-launcher-panel .jp-OutputArea-child:has(.jp-RenderedHTMLCommon > style:only-child) {
