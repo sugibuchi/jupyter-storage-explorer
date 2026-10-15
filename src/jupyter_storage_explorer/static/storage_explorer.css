@@ -322,12 +322,23 @@
   object-position: left top;
 }
 
+/* The preview panel's top edge (its border), dragged to resize: it takes no
+   room, its handle (::after) lies across the edge. */
 .jse-splitter {
+  position: relative;
   flex: none;
-  height: 5px;
+  height: 0;
+}
+
+.jse-splitter::after {
+  content: "";
+  position: absolute;
+  z-index: 5; /* above the areas it lies over, below dialogs and menus */
+  top: -3px;
+  right: 0;
+  left: 0;
+  height: 6px;
   cursor: row-resize;
-  background: var(--jse-bar-bg);
-  border-bottom: 1px solid var(--jse-border);
 }
 
 .jse-editor {
@@ -593,7 +604,7 @@
   background: var(--jse-border);
 }
 
-.jse-splitter:hover {
+.jse-splitter:hover::after {
   background: var(--jse-accent-bg);
 }
 

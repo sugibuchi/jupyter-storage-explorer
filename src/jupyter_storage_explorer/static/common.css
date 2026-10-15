@@ -114,12 +114,23 @@
   cursor: default;
 }
 
+/* The bottom edge, dragged to resize: it takes no room, its handle (::after)
+   lies over the bottom of the area above it. */
 .jse-grip {
+  position: relative;
   flex: none;
-  height: 6px;
+  height: 0;
+}
+
+.jse-grip::after {
+  content: "";
+  position: absolute;
+  z-index: 5; /* above the area it lies over, below dialogs and menus */
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 5px;
   cursor: ns-resize;
-  border-top: 1px solid var(--jse-border);
-  background: var(--jse-bar-bg);
 }
 
 /* Backdrop dimming the widget; the modal window is centred on it. */
@@ -391,6 +402,6 @@
   color: var(--jse-error);
 }
 
-.jse-grip:hover {
+.jse-grip:hover::after {
   background: var(--jse-accent-bg);
 }
