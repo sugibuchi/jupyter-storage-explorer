@@ -3,7 +3,7 @@
 `StorageExplorer` is the file explorer: browse storage, preview files, query tables, and upload, download, move and
 edit files. For installation, see the [README](../README.md).
 
-![StorageExplorer with a JSON Lines file open in the data browser](figs/storage-explorer.png)
+<img src="figs/storage-explorer.png" width="954" alt="StorageExplorer with a JSON Lines file open in the data browser">
 
 - [Storages](#storages)
 - [Using the explorer](#using-the-explorer)
@@ -83,8 +83,8 @@ several items.
 
 ### Filter
 
-Type in the fields above the tree and the list to show names containing the text, or matching a regular expression
-with **.\***. ✕ or Esc clears.
+Type in the field in the toolbar to list only the names containing the text, or matching a regular expression with
+**.\***. ✕ or Esc clears; opening another folder clears it too.
 
 <img src="figs/using-filter.png" width="562" alt="The list filtered with a regular expression">
 
@@ -114,7 +114,7 @@ of files and folders, their total size, and the oldest and newest files.
 Right-click a folder → **Add bookmark**. ☆ lists them; click one to open it, right-click it for Copy URL and Delete
 bookmark.
 
-<img src="figs/using-bookmarks.png" width="334" alt="The bookmarks menu">
+<img src="figs/using-bookmarks.png" width="333" alt="The bookmarks menu">
 
 ### Copy, cut and paste
 
@@ -134,7 +134,7 @@ status bar.
 
 Folder operations need **Unsafe mode**, turned on with the slider in the status bar, for one operation:
 
-<img src="figs/unsafe-mode.png" width="403" alt="The Unsafe mode slider, on, at the right of the status bar">
+<img src="figs/unsafe-mode.png" width="405" alt="The Unsafe mode slider, on, at the right of the status bar">
 
 | Operation              | How                                                                                          |
 |------------------------|----------------------------------------------------------------------------------------------|

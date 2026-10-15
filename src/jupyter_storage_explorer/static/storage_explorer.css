@@ -1,7 +1,9 @@
 /* StorageExplorer: toolbar, tree and list, preview panel, menus and editor.
    Joined after common.css and query.css (see _static.py). */
+/* Wraps when narrow: the filter, pager and Preview go to a second line. */
 .jse-toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 4px;
   padding: 4px 6px;
@@ -28,13 +30,23 @@
   color: var(--jse-accent);
 }
 
+/* Takes the toolbar's free width; below 120px, the toolbar wraps instead. Right
+   to left, so a long path is cut at its start (…/folder shown); the crumbs
+   themselves are left to right (.jse-crumbs). */
 .jse-path {
-  flex: 1;
+  flex: 1 1 120px;
   min-width: 0;
   margin-left: 6px;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+  direction: rtl;
+  text-align: left;
+}
+
+.jse-crumbs {
+  direction: ltr;
+  unicode-bidi: isolate;
 }
 
 .jse-crumb {
@@ -64,41 +76,16 @@
   flex: 1 1 0;
 }
 
-/* Each pane is a column: its bar (filter, and for the list the pager) on top,
-   then the tree or list. The tree's pane is as wide as the tree, which can be
-   resized from its corner. */
-.jse-pane {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-
-.jse-tree-pane {
-  flex: none;
-  max-width: 70%;
-  border-right: 1px solid var(--jse-border);
-}
-
-.jse-list-pane {
-  flex: 1;
-  min-width: 0;
-}
-
-.jse-pane-bar {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 26px;
-  padding: 2px 6px;
-  border-bottom: 1px solid var(--jse-border);
-  background: var(--jse-bg-alt);
+/* The list's filter, between the path and the pager: the path takes what is left. */
+.jse-toolbar .jse-filter {
+  flex: 0 1 240px;
+  min-width: 120px;
 }
 
 .jse-pager {
   display: flex;
   align-items: center;
   gap: 4px;
-  margin-left: auto;
   color: var(--jse-fg-muted);
   font-size: 0.9em;
   white-space: nowrap;
@@ -108,13 +95,11 @@
   display: none;
 }
 
-.jse-tree-note {
-  padding: 4px 10px;
-}
-
+/* As wide as set by dragging its corner. */
 .jse-tree {
-  flex: 1;
-  min-height: 0;
+  flex: none;
+  max-width: 70%;
+  border-right: 1px solid var(--jse-border);
   width: 260px;
   min-width: 120px;
   overflow: auto;
@@ -152,7 +137,7 @@
 
 .jse-list {
   flex: 1;
-  min-height: 0;
+  min-width: 0;
   overflow: auto;
 }
 

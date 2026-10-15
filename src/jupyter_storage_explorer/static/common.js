@@ -104,7 +104,7 @@ function createFilter({ placeholder = "Filter", onChange = () => {} } = {}) {
   let test = () => true;
   let active = false;
 
-  function update() {
+  function update(notify = true) {
     const text = input.value;
     clearBtn.hidden = !text;
     input.classList.remove("jse-invalid");
@@ -125,17 +125,18 @@ function createFilter({ placeholder = "Filter", onChange = () => {} } = {}) {
       test = (name) => name.toLowerCase().includes(needle);
       active = true;
     }
-    onChange();
+    if (notify) onChange();
   }
 
-  // Empties the field; onChange() only if it had text.
-  function clear() {
+  // Empties the field; onChange() only if it had text, and `notify` is true
+  // (false when the caller is about to render anyway).
+  function clear(notify = true) {
     if (!input.value) return;
     input.value = "";
-    update();
+    update(notify);
   }
 
-  input.addEventListener("input", update);
+  input.addEventListener("input", () => update());
   input.addEventListener("keydown", (ev) => {
     if (ev.key !== "Escape" || !input.value) return;
     ev.stopPropagation(); // clears the field, rather than closing a dialog or panel
