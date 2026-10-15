@@ -1685,7 +1685,7 @@ function render({ model, el }) {
 
   // At most this many subfolders of a folder below the root are shown in the
   // tree, so that opening a folder of thousands does not draw them all.
-  const TREE_FOLDERS = 100;
+  const TREE_FOLDERS = 50;
 
   function renderTree() {
     const tree = model.get("_tree");
