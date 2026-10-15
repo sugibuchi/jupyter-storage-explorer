@@ -1681,6 +1681,10 @@ function render({ model, el }) {
     renderTree();
   }
 
+  // At most this many subfolders of a folder below the root are shown in the
+  // tree, so that opening a folder of thousands does not draw them all.
+  const TREE_FOLDERS = 100;
+
   function renderTree() {
     const tree = model.get("_tree");
     const root = model.get("_root");
@@ -1722,9 +1726,29 @@ function render({ model, el }) {
 
       const wrap = h("div", {}, row);
       if (isOpen && children) {
-        for (const child of children) wrap.append(node(child, depth + 1));
+        const shown = shownChildren(children, depth);
+        for (const child of shown) wrap.append(node(child, depth + 1));
+        const more = children.length - shown.length;
+        if (more) {
+          const note = h("div", {
+            className: "jse-node jse-tree-more",
+            textContent: `plus ${more.toLocaleString()} folder${more === 1 ? "" : "s"}`,
+          });
+          note.style.paddingLeft = `${(depth + 1) * 14 + 4 + 16}px`; // aligned with the folders' icons
+          wrap.append(note);
+        }
       }
       return wrap;
+    }
+
+    // The root's folders, all; below, the first TREE_FOLDERS (the rest are in
+    // the list), and the one leading to the current folder if after those.
+    function shownChildren(children, depth) {
+      if (depth === 0 || children.length <= TREE_FOLDERS) return children;
+      const shown = children.slice(0, TREE_FOLDERS);
+      const onPath = children.slice(TREE_FOLDERS).find((c) => current === c.path || current.startsWith(`${c.path}/`));
+      if (onPath) shown.push(onPath);
+      return shown;
     }
 
     // The root's menu offers no previews, code or copying (no_url).

@@ -77,7 +77,7 @@ To write your own, subclass `FileSystemOperations` (see [operations.py](../src/j
 ### Browse
 
 Click folders in the tree or list; ↑ goes up, ⟳ refreshes, ◀ ▶ pages through the list. Ctrl+click (⌘+click) selects
-several items.
+several items. Below the top level, the tree shows the first 100 subfolders of a folder; the list shows them all.
 
 <img src="figs/using-browse.png" width="830" alt="Browsing a folder, with two items selected">
 
