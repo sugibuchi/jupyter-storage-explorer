@@ -5,7 +5,6 @@ from __future__ import annotations
 import base64
 import dataclasses
 import functools
-import hashlib
 import math
 import os
 import time
@@ -38,7 +37,6 @@ from jupyter_storage_explorer.formats import (
     PreviewLimits,
     Recipe,
     Target,
-    Text,
     explorer_formats,
     matching_formats,
 )
@@ -73,8 +71,6 @@ if TYPE_CHECKING:
 # only these names are served.
 _VENDOR_FILES = frozenset({"marked.esm.js", "purify.es.mjs"})
 
-# Largest file the text editor opens; the whole file is sent to the browser.
-_MAX_EDIT_BYTES = 1024 * 1024
 # Largest file that can be downloaded: it passes through kernel memory and the
 # notebook's connection in one message.
 _MAX_DOWNLOAD_BYTES = 100 * 1024 * 1024
@@ -130,11 +126,6 @@ class _Followed:
     additions: int = 0
     shown_at: float = -math.inf
     listed_at: float = -math.inf
-
-
-def _version(data: bytes) -> str:
-    """Identifies file contents, to detect changes made elsewhere while editing."""
-    return hashlib.sha256(data).hexdigest()
 
 
 def _error_text(exc: Exception) -> str:
@@ -559,10 +550,6 @@ class StorageExplorer(anywidget.AnyWidget):
             "refresh": lambda c, _: self._refresh(),
             "preview": lambda c, _: self._open_preview(c["path"], c.get("format")),
             "menu_info": lambda c, _: self._send_menu_info(c["path"]),
-            "edit_open": lambda c, _: self._edit_open(c["path"]),
-            "edit_save": lambda c, _: self._edit_save(
-                c["path"], c["text"], c.get("version")
-            ),
             "jupyterlab_get": lambda c, _: self._reply(c, self._jupyterlab_get(c)),
             "jupyterlab_save": lambda c, _: self._reply(c, self._jupyterlab_save(c)),
             "download": lambda c, _: self._download(c["paths"]),
@@ -1028,8 +1015,8 @@ class StorageExplorer(anywidget.AnyWidget):
         return formats[0].recipes(target)
 
     def _send_menu_info(self, path: str) -> None:
-        """Answer the right-click menu's request: matching formats ("Preview as"),
-        load code ("Python code") and whether it can be edited ("Edit")."""
+        """Answer the right-click menu's request: matching formats ("Preview as")
+        and load code ("Python code")."""
         reply: dict[str, Any] = {"type": "menu_info", "path": path}
         try:
             target, formats = self._detect(path)
@@ -1038,11 +1025,6 @@ class StorageExplorer(anywidget.AnyWidget):
                 [dataclasses.asdict(r) for r in formats[0].recipes(target)]
                 if formats
                 else []
-            )
-            reply["editable"] = (
-                target is not None
-                and not target.is_dir
-                and any(isinstance(f, Text) for f in formats)
             )
             reply["query"] = bool(formats) and formats[0].can_query()
         except Exception as exc:
@@ -1098,58 +1080,6 @@ class StorageExplorer(anywidget.AnyWidget):
             self._remembered[filesystem] = path
             self._filesystem = filesystem  # shows the folder remembered
         return {}
-
-    # --- Text editor ---
-
-    def _edit_open(self, path: str) -> None:
-        reply: dict[str, Any] = {"type": "edit_open", "path": path}
-        try:
-            reply["text"], reply["version"] = self._read_text(path)
-        except Exception as exc:
-            reply["error"] = f"Cannot open {_paths.basename(path)}: {exc}"
-        self.send(reply)
-
-    def _edit_save(self, path: str, text: str, version: str | None) -> None:
-        reply: dict[str, Any] = {"type": "edit_save", "path": path}
-        try:
-            reply["version"] = self._write_text(path, text, version)
-        except Exception as exc:
-            reply["error"] = f"Cannot save: {exc}"
-        self.send(reply)
-
-    def _read_text(self, path: str) -> tuple[str, str]:
-        """The text of a UTF-8 file, and a version string to pass to ``_write_text``."""
-        data = self._read_bytes(path)
-        if len(data) > _MAX_EDIT_BYTES:
-            raise ValueError(
-                f"too large to edit (over {_MAX_EDIT_BYTES // (1024 * 1024)} MB)"
-            )
-        try:
-            text = data.decode("utf-8")
-        except UnicodeDecodeError:
-            raise ValueError("not UTF-8 text") from None
-        return text, _version(data)
-
-    def _write_text(self, path: str, text: str, version: str | None = None) -> str:
-        """Save ``text`` to the file at ``path``; returns its new version.
-
-        With ``version`` (from ``_read_text``), refuses to save if the file has
-        changed since, rather than overwriting that change. Files with Windows
-        line endings keep them, although browsers edit text with "\\n" only.
-        """
-        current = self._read_bytes(path) if self._exists(path) else b""
-        if version is not None and _version(current) != version:
-            raise RuntimeError(
-                "the file has changed since it was opened; close the editor and open it again"
-            )
-        if b"\r\n" in current:
-            text = text.replace("\r\n", "\n").replace("\n", "\r\n")
-        data = text.encode("utf-8")
-        self._write_bytes(path, data)
-        self._update_entry(path)
-        if self._preview.get("path") == path:
-            self._open_preview(path, self._preview.get("format"))
-        return _version(data)
 
     # --- Open in JupyterLab: its own editors and viewers, through the launcher's drive ---
 

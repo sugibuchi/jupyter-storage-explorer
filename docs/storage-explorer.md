@@ -98,8 +98,8 @@ below the list, or Esc, closes it.
 
 ### Right-click
 
-Preview as, Edit, Open in JupyterLab, Python code to load the data, Copy URL; Copy, Cut, Paste; Create a folder, Rename,
-Delete; Download to local or to JupyterLab; Properties, Add bookmark.
+Preview as, Open in JupyterLab (to edit), Python code to load the data, Copy URL; Copy, Cut, Paste; Create a folder,
+Rename, Delete; Download to local or to JupyterLab; Properties, Add bookmark.
 
 <img src="figs/using-right-click.png" width="384" alt="The right-click menu of a JSON Lines file">
 

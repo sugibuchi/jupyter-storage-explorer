@@ -276,24 +276,6 @@ function render({ model, el }) {
     h("div", { className: "jse-modal" }, dialogHead, dialogBody),
   );
   const menuEl = h("div", { className: "jse-menu", hidden: true });
-  // Modal text editor. Only Cancel/Save (or Esc/Ctrl+S) close it, so a stray
-  // click outside cannot discard changes.
-  const editorTitle = h("span", { className: "jse-preview-name" });
-  const editorText = h("textarea", { className: "jse-editor-text", spellcheck: false });
-  const editorMsg = h("span", { className: "jse-editor-msg" });
-  const cancelBtn = h("button", { className: "jse-btn", textContent: "Cancel", title: "Close without saving (Esc)" });
-  const saveBtn = h("button", { className: "jse-btn jse-primary", textContent: "Save", title: "Save changes (Ctrl+S)" });
-  const editorEl = h(
-    "div",
-    { className: "jse-dialog", hidden: true },
-    h(
-      "div",
-      { className: "jse-modal jse-editor" },
-      h("div", { className: "jse-dialog-head" }, editorTitle),
-      editorText,
-      h("div", { className: "jse-editor-foot" }, editorMsg, h("span", { className: "jse-spacer" }), cancelBtn, saveBtn),
-    ),
-  );
 
   // Small confirmation dialog, e.g. "Upload sales.csv? [Cancel] [Upload]".
   const { el: confirmEl, ask, answer } = createConfirm();
@@ -335,7 +317,6 @@ function render({ model, el }) {
     previewEl,
     grip,
     dialogEl,
-    editorEl,
     confirmEl,
     menuEl,
     busyEl,
@@ -596,7 +577,7 @@ function render({ model, el }) {
   }
 
   // Places the menu at the pointer, kept inside the widget (which clips what
-  // is outside it). Called again when rows appear later ("Preview as", "Edit").
+  // is outside it). Called again when rows appear later ("Preview as").
   function placeMenu() {
     const box = el.getBoundingClientRect();
     const x = Math.min(menuAt.x - box.left, box.width - menuEl.offsetWidth - 4);
@@ -607,9 +588,9 @@ function render({ model, el }) {
     menuEl.classList.toggle("jse-flip", Math.max(0, x) + 2 * menuEl.offsetWidth > box.width);
   }
 
-  // --- Menu items filled in by the kernel: "Preview as", "Edit" and "Python code" ---
+  // --- Menu items filled in by the kernel: "Preview as" and "Python code" ---
 
-  // For the open menu: {path, previewAsRow, previewAsSub, editRow, codeSub},
+  // For the open menu: {path, previewAsRow, previewAsSub, codeSub},
   // the elements to fill when the kernel's "menu_info" reply arrives.
   let menuInfo = null;
 
@@ -621,8 +602,6 @@ function render({ model, el }) {
 
   function onCustomMsg(msg, buffers) {
     if (msg.type === "menu_info") onMenuInfo(msg);
-    else if (msg.type === "edit_open") onEditOpen(msg);
-    else if (msg.type === "edit_save") onEditSave(msg);
     else if (msg.type === "download") onDownload(msg, buffers);
     else if (msg.type === "reply") onReply(msg);
     else if (msg.type === "job") onJob(msg);
@@ -1671,7 +1650,7 @@ function render({ model, el }) {
 
   function onMenuInfo(msg) {
     if (menuInfo?.path !== msg.path) return;
-    const { path, previewRow, previewAsRow, previewAsSub, editRow, codeSub } = menuInfo;
+    const { path, previewRow, previewAsRow, previewAsSub, codeSub } = menuInfo;
     if (!msg.error && msg.query && previewRow) previewRow.querySelector(".jse-menu-label").textContent = "Query data";
     // "Preview as" only appears when the item matches more than one format.
     if (!msg.error && msg.formats.length > 1) {
@@ -1679,7 +1658,6 @@ function render({ model, el }) {
       previewAsSub.replaceChildren(...menuRows(items));
       previewAsRow.hidden = false;
     }
-    if (!msg.error && msg.editable) editRow.hidden = false;
     let items;
     if (msg.error) {
       items = [{ label: msg.error, disabled: true }];
@@ -1701,7 +1679,7 @@ function render({ model, el }) {
     const single = targets.length === 1 ? targets[0] : null;
     const count = targets.length > 1 ? `${targets.length} ` : "";
     // Items without a URL (the kernel's _url gave None) are not treated as data:
-    // no preview, code or editing.
+    // no preview or code.
     const data = single && hasUrl(single) ? single : null;
     // The reply arrives after the menu is built, so the refs below are set by then.
     const info = data ? requestMenuInfo(data.path) : null;
@@ -1733,9 +1711,6 @@ function render({ model, el }) {
       });
     }
     if (withOpen && folder) open.push({ label: "Open", icon: "folder", action: () => navigate(folder.path) });
-    if (info) {
-      open.push({ label: "Edit", icon: "text", hidden: true, ref: (row) => (info.editRow = row), action: () => openEditor(single.path) });
-    }
     if (single && !folder && globalThis[JUPYTERLAB]) {
       open.push({ label: "Open in JupyterLab", icon: "open-in-new", action: () => openInJupyterLab(single.path) });
     }
@@ -2305,103 +2280,6 @@ function render({ model, el }) {
     dialogEl.hidden = true;
     el.focus({ preventScroll: true });
   }
-
-  // --- Text editor: the kernel reads and writes the file ---
-
-  // {path, version, original, saving} while the editor is open. `version`
-  // identifies the contents opened, so the kernel can refuse to overwrite a
-  // file changed elsewhere; `original` is the text as shown, to detect edits.
-  let editing = null;
-
-  function editorMessage(text, isError = false) {
-    editorMsg.textContent = text;
-    editorMsg.classList.toggle("jse-error-text", isError);
-  }
-
-  function updateEditorButtons() {
-    const dirty = editing != null && editing.original != null && editorText.value !== editing.original;
-    saveBtn.disabled = !dirty || editing.saving;
-    cancelBtn.disabled = Boolean(editing?.saving);
-  }
-
-  function openEditor(path) {
-    editing = { path, version: null, original: null, saving: false };
-    editorTitle.textContent = editorTitle.title = path;
-    editorText.value = "";
-    editorText.disabled = true;
-    editorMessage("Loading…");
-    updateEditorButtons();
-    editorEl.hidden = false;
-    model.send({ type: "edit_open", path });
-  }
-
-  function onEditOpen(msg) {
-    if (editing?.path !== msg.path) return;
-    if (msg.error) {
-      editorMessage(msg.error, true);
-      return;
-    }
-    editorText.value = msg.text;
-    // Browsers turn "\r\n" into "\n" in text areas; compare against what is shown.
-    editing.original = editorText.value;
-    editing.version = msg.version;
-    editorText.disabled = false;
-    editorMessage("");
-    updateEditorButtons();
-    editorText.focus({ preventScroll: true });
-    editorText.setSelectionRange(0, 0);
-    editorText.scrollTop = 0;
-  }
-
-  function saveEdit() {
-    if (!editing || saveBtn.disabled) return;
-    takeUnsafe(); // an operation, though not on folders
-    editing.saving = true;
-    editorMessage("Saving…");
-    updateEditorButtons();
-    model.send({ type: "edit_save", path: editing.path, text: editorText.value, version: editing.version });
-  }
-
-  function onEditSave(msg) {
-    if (editing?.path !== msg.path) return;
-    editing.saving = false;
-    if (msg.error) {
-      editorMessage(msg.error, true);
-      updateEditorButtons();
-      return;
-    }
-    const name = editing.path.slice(editing.path.lastIndexOf("/") + 1);
-    closeEditor();
-    flash(`Saved ${name}`);
-  }
-
-  function cancelEdit() {
-    if (editing?.saving) return;
-    const dirty = editing?.original != null && editorText.value !== editing.original;
-    if (dirty && !window.confirm("Discard your changes?")) return;
-    closeEditor();
-  }
-
-  function closeEditor() {
-    editing = null;
-    editorEl.hidden = true;
-    el.focus({ preventScroll: true });
-  }
-
-  editorText.addEventListener("input", updateEditorButtons);
-  saveBtn.addEventListener("click", saveEdit);
-  cancelBtn.addEventListener("click", cancelEdit);
-  editorEl.addEventListener("keydown", (ev) => {
-    if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "s") {
-      ev.preventDefault(); // not the browser's "Save page"
-      saveEdit();
-    } else if (ev.key === "Escape") {
-      cancelEdit();
-    } else {
-      return;
-    }
-    ev.stopPropagation(); // keep the widget's own Escape handling out of it
-  });
 
   // --- Data browser ("Query data"): the panel is in query.js ---
 

@@ -223,13 +223,14 @@ class TestListing:
         explorer = make("/", fs=memfs, max_browser_items=2)
         explorer._current_dir = "/data"
         version = explorer._listing["version"]
-        opened = explorer.request({"type": "edit_open", "path": "/data/a.md"})
         explorer.request(
             {
-                "type": "edit_save",
+                "type": "jupyterlab_save",
+                "rid": 1,
+                "filesystem": explorer._filesystem,
                 "path": "/data/a.md",
-                "text": "longer",
-                "version": opened["version"],
+                "content": "longer",
+                "format": "text",
             }
         )
         assert explorer._listing["version"] != version
@@ -581,67 +582,9 @@ class TestStatesFile:
 def test_menu_info(mem_explorer):
     reply = mem_explorer.request({"type": "menu_info", "path": "/data/a.csv"})
     assert reply["formats"] == ["csv", "text"]
-    assert reply["editable"] is True
     assert [r["library"] for r in reply["recipes"]] == ["polars", "pandas", "pyspark"]
     folder = mem_explorer.request({"type": "menu_info", "path": "/data/table"})
     assert folder["formats"] == ["delta"]
-    assert folder["editable"] is False
-
-
-class TestEditor:
-    def test_open_and_save(self, mem_explorer):
-        opened = mem_explorer.request({"type": "edit_open", "path": "/data/notes.md"})
-        assert opened["text"] == "# Notes\n"
-        saved = mem_explorer.request(
-            {
-                "type": "edit_save",
-                "path": "/data/notes.md",
-                "text": "new",
-                "version": opened["version"],
-            }
-        )
-        assert "error" not in saved
-        assert mem_explorer._fs.cat_file("/data/notes.md") == b"new"
-
-    def test_save_updates_the_size_listed(self, mem_explorer):
-        mem_explorer._current_dir = "/data"
-        opened = mem_explorer.request({"type": "edit_open", "path": "/data/notes.md"})
-        mem_explorer.request(
-            {
-                "type": "edit_save",
-                "path": "/data/notes.md",
-                "text": "longer text",
-                "version": opened["version"],
-            }
-        )
-        sizes = {e["name"]: e["size"] for e in entries(mem_explorer)}
-        assert sizes == {"a.csv": 8, "notes.md": 11, "table": None}
-
-    def test_refuses_to_overwrite_changes_made_elsewhere(self, mem_explorer):
-        opened = mem_explorer.request({"type": "edit_open", "path": "/data/notes.md"})
-        mem_explorer._fs.pipe_file("/data/notes.md", b"changed elsewhere")
-        saved = mem_explorer.request(
-            {
-                "type": "edit_save",
-                "path": "/data/notes.md",
-                "text": "mine",
-                "version": opened["version"],
-            }
-        )
-        assert "has changed since it was opened" in saved["error"]
-        assert mem_explorer._fs.cat_file("/data/notes.md") == b"changed elsewhere"
-
-    def test_keeps_windows_line_endings(self, mem_explorer):
-        mem_explorer._fs.pipe_file("/w.txt", b"a\r\nb\r\n")
-        mem_explorer._write_text("/w.txt", "a\nc\n")
-        assert mem_explorer._fs.cat_file("/w.txt") == b"a\r\nc\r\n"
-
-    def test_binary_file(self, mem_explorer):
-        mem_explorer._fs.pipe_file("/bin", b"\xff\xfe")
-        assert (
-            "not UTF-8"
-            in mem_explorer.request({"type": "edit_open", "path": "/bin"})["error"]
-        )
 
 
 def test_download(mem_explorer):

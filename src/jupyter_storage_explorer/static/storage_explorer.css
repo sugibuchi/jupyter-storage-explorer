@@ -1,4 +1,4 @@
-/* StorageExplorer: toolbar, tree and list, preview panel, menus and editor.
+/* StorageExplorer: toolbar, tree and list, preview panel, menus and dialogs.
    Joined after common.css and query.css (see _static.py). */
 .jse-toolbar {
   display: flex;
@@ -338,40 +338,6 @@
   left: 0;
   height: 6px;
   cursor: row-resize;
-}
-
-.jse-editor {
-  width: min(900px, calc(100% - 32px));
-  height: calc(100% - 32px);
-}
-
-.jse-editor-text {
-  flex: 1;
-  min-height: 0;
-  margin: 0;
-  padding: 8px 10px;
-  border: none;
-  outline: none;
-  resize: none;
-  background: var(--jse-bg);
-  color: var(--jse-fg);
-  font-family: var(--jp-code-font-family, monospace);
-  font-size: var(--jp-code-font-size, 13px);
-  white-space: pre;
-  tab-size: 4;
-}
-
-.jse-editor-msg {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--jse-fg-muted);
-}
-
-.jse-editor-msg.jse-error-text {
-  color: var(--jse-error);
-  white-space: normal;
 }
 
 .jse-placeholder {
