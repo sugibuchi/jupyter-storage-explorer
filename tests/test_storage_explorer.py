@@ -1199,7 +1199,7 @@ class TestCreateFolder:
             ("", "enter a name"),
             ("   ", "enter a name"),
             (" x", "no spaces at the start or the end"),
-            ("..", "'..' is not a folder name"),
+            ("..", "'..' is not a name"),
             ("a/b", "a name, without / or \\"),
             ("a\\b", "a name, without / or \\"),
             ("a\tb", "no control characters"),
@@ -1221,6 +1221,69 @@ class TestCreateFolder:
             "created": "new",
             "hidden": True,
         }
+
+
+class TestRename:
+    """ "Rename": a move within the item's folder; folders only in unsafe mode."""
+
+    @pytest.fixture
+    def explorer(self, memfs):
+        memfs.pipe(
+            {"/data/sub/deep/y.txt": b"y", "/data/a.csv": b"a", "/data/b.csv": b"b"}
+        )
+        return make("/", fs=memfs)
+
+    def rename(self, explorer, path, name, unsafe=False):
+        return without_ids(
+            explorer.request(
+                {
+                    "type": "rename",
+                    "rid": 1,
+                    "path": path,
+                    "name": name,
+                    "unsafe": unsafe,
+                }
+            )
+        )
+
+    def test_a_file(self, explorer):
+        explorer._current_dir = "/data"
+        explorer._selected = ["/data/a.csv"]
+        assert self.rename(explorer, "/data/a.csv", "c.csv") == {
+            "renamed": ["c.csv"],
+            "errors": [],
+        }
+        assert explorer._fs.cat_file("/data/c.csv") == b"a"
+        assert not explorer._fs.exists("/data/a.csv")
+        assert {e["name"] for e in entries(explorer)} == {"sub", "b.csv", "c.csv"}
+        assert explorer._selected == []
+
+    def test_a_folder_in_unsafe_mode(self, explorer):
+        explorer._current_dir = "/data/sub/deep"
+        reply = self.rename(explorer, "/data/sub", "renamed", unsafe=True)
+        assert reply == {"renamed": ["renamed"], "errors": []}
+        assert explorer._fs.cat_file("/data/renamed/deep/y.txt") == b"y"
+        # The list follows the folder it showed, and the tree the new name.
+        assert explorer._current_dir == "/data/renamed/deep"
+        assert "renamed" in [d["name"] for d in explorer._tree["/data"]]
+        assert "sub" not in [d["name"] for d in explorer._tree["/data"]]
+
+    @pytest.mark.parametrize(
+        ("path", "name", "unsafe", "error"),
+        [
+            ("/data/sub", "other", False, "folders are renamed only in unsafe mode"),
+            ("/", "other", True, "the top folder is not renamed"),
+            ("/data/a.csv", "b.csv", False, "b.csv already exists"),
+            ("/data/a.csv", "sub", False, "sub already exists"),
+            ("/data/a.csv", "a.csv", False, "that is its name already"),
+            ("/data/a.csv", "x/y.csv", False, "a name, without / or \\"),
+            ("/data/a.csv", "..", False, "'..' is not a name"),
+        ],
+    )
+    def test_refused(self, explorer, path, name, unsafe, error):
+        assert self.rename(explorer, path, name, unsafe) == {"error": error}
+        assert explorer._fs.cat_file("/data/a.csv") == b"a"
+        assert explorer._fs.exists("/data/sub/deep/y.txt")
 
 
 class TestProperties:

@@ -108,7 +108,7 @@ overridable: by default through a temporary file, so a failure leaves no partial
 each file, so a cancel leaves each file in one place. Tests use fsspec's `AsyncFileSystemWrapper` around a memory
 filesystem as an async one. Object stores (S3, GCS) have no empty folders, which matters for creating folders.
 
-**Jobs.** Move, delete, paste, uploads (from JupyterLab's file browser, and the storage half of uploads from the
+**Jobs.** Move, rename (a move within the folder, `FileTasks.rename`), delete, paste, uploads (from JupyterLab's file browser, and the storage half of uploads from the
 computer) and both downloads to JupyterLab run in the background (`jobs.py`). Each is planned by a `FileTasks` method
 (`file_tasks.py`, no widget involved) on the main thread: checks, conflicts to ask about (returned as a dict), else a
 `Task` whose `work(progress)` runs in the `JobRunner`'s worker thread (one job at a time) and records what it changed
@@ -136,7 +136,7 @@ folders at a time), reporting files found, leaving unlistable folders in `errors
 misses subfolders) and returning what was found, `complete` False, on a cancel. `_infos.mtime` gives the
 modification time whichever key a filesystem uses, for the list too.
 
-**Unsafe mode.** Folder operations (move, copy or cut and paste, delete) are offered only while the "Unsafe mode" slider in
+**Unsafe mode.** Folder operations (move, copy or cut and paste, rename, delete) are offered only while the "Unsafe mode" slider in
 the toolbar is on (trait `_unsafe_mode`). In the frontend, every operation calls `takeUnsafe()` as it starts, which
 turns it off (one operation at a time), and sends whether it was on with its request (`"unsafe"`); the kernel refuses
 folders without it (the methods' `folders=` parameter).

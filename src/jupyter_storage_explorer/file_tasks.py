@@ -286,6 +286,46 @@ class FileTasks:
                 moves.append((path, target, True))
         return moves, errors
 
+    # --- Rename: a move within the item's folder ---
+
+    def rename(self, path: str, name: str, folders: bool = False) -> Plan:
+        """Rename ``path`` to ``name`` (a name, not a path) with the operations'
+        ``move``, e.g. a rename in one step on Azure Data Lake Gen2.
+
+        Result: {"renamed": [name], "errors"}. Or, before any job, {"error":
+        reason}: a name that cannot be used or is taken (nothing is replaced),
+        or a folder without ``folders``, or the top folder.
+        """
+        if (error := _paths.name_error(name)) is not None:
+            return {"error": error}
+        parent = _paths.parent(path, self.fs)
+        target = _paths.join(parent, name)
+        if _paths.norm(target) == _paths.norm(path):
+            return {"error": "that is its name already"}
+        is_dir = self.fs.isdir(path)
+        if is_dir and not folders:
+            return {"error": "folders are renamed only in unsafe mode"}
+        if is_dir and _paths.norm(path) == _paths.norm(self.root):
+            return {"error": "the top folder is not renamed"}
+        if self.fs.exists(target):
+            return {"error": f"{name} already exists"}
+        fs, ops = self.fs, self.ops
+        task = Task("move", f"Renaming {_paths.basename(path)} to {name}", fs)
+
+        def work(progress: Progress) -> dict[str, Any]:
+            failed: list[str] = []
+
+            def rename(item: tuple[str, str, bool]) -> None:
+                ops.move(fs, path, fs, target, progress)
+                task.record(moved=(path, target), changed=[parent], added_to=parent)
+
+            size = self.measure(fs, path) if is_dir else (1, 0)
+            stop = _do_each(progress, [(path, target, is_dir)], [size], rename, failed)
+            return _outcome(stop, renamed=[name] if task.moved else [], errors=failed)
+
+        task.work = work
+        return task
+
     # --- Delete ---
 
     def delete(self, paths: Sequence[str], folders: bool = False) -> Plan:

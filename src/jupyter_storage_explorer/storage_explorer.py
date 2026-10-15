@@ -317,7 +317,7 @@ class StorageExplorer(anywidget.AnyWidget):
     _filesystem_names = traitlets.List(traitlets.Unicode()).tag(sync=True)
     _filesystem = traitlets.Unicode().tag(sync=True)
     # The "Unsafe mode" switch in the toolbar: while on, risky operations
-    # are offered (today: moving, copying, pasting and deleting folders). The
+    # are offered (today: moving, copying, pasting, renaming and deleting folders). The
     # frontend turns it off when any operation starts, and sends with each
     # request whether it was on ("unsafe").
     _unsafe_mode = traitlets.Bool(False).tag(sync=True)
@@ -565,6 +565,7 @@ class StorageExplorer(anywidget.AnyWidget):
             "list": lambda c, _: self._reply(c, self._list_page(c)),
             "job_cancel": lambda c, _: self._cancel_job(c),
             "move": lambda c, _: self._reply(c, self._move_request(c)),
+            "rename": lambda c, _: self._reply(c, self._rename_request(c)),
             "download_to_server": lambda c, _: self._reply(
                 c, self._download_to_server_request(c)
             ),
@@ -1383,7 +1384,7 @@ class StorageExplorer(anywidget.AnyWidget):
             return {"errors": [f"{type(exc).__name__}: {exc}"]}
 
     # --- Move: files (and, in unsafe mode, folders) dragged onto a folder;
-    # delete: chosen with "Delete" in the right-click menu ---
+    # rename and delete: chosen in the right-click menu ---
 
     def _move_request(self, content: dict[str, Any]) -> dict[str, Any]:
         return self._plan_request(
@@ -1404,6 +1405,17 @@ class StorageExplorer(anywidget.AnyWidget):
     ) -> dict[str, Any]:
         """Move files into folder ``dest``, now (see ``FileTasks.move``)."""
         return self._run_now(self._tasks().move(paths, dest, if_exists, folders))
+
+    def _rename_request(self, content: dict[str, Any]) -> dict[str, Any]:
+        return self._plan_request(
+            lambda: self._tasks().rename(
+                content["path"], content["name"], folders=bool(content.get("unsafe"))
+            )
+        )
+
+    def _rename(self, path: str, name: str, folders: bool = False) -> dict[str, Any]:
+        """Rename an item, now (see ``FileTasks.rename``)."""
+        return self._run_now(self._tasks().rename(path, name, folders))
 
     def _delete_request(self, content: dict[str, Any]) -> dict[str, Any]:
         return self._plan_request(
@@ -1595,7 +1607,7 @@ class StorageExplorer(anywidget.AnyWidget):
         not show, as on object stores (S3, Google Cloud Storage), which have no
         empty folders; or {"error": reason}.
         """
-        if (error := _paths.folder_name_error(name)) is not None:
+        if (error := _paths.name_error(name)) is not None:
             return {"error": error}
         path = _paths.join(dest, name)
         if self._exists(path):
