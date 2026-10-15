@@ -95,8 +95,14 @@ const FILE_ICON_SVGS = {
 };
 
 // JupyterLab's default file types (@jupyterlab/docregistry, and the HTML
-// viewer's): extension -> icon. Others get the plain file icon.
+// viewer's): extension -> icon, plus the tables JupyterLab does not know
+// (Excel, Parquet), with its CSV icon. Others get the plain file icon.
 const FILE_ICON_EXTENSIONS = {
+  ".xlsx": "spreadsheet",
+  ".xlsm": "spreadsheet",
+  ".xls": "spreadsheet",
+  ".parquet": "spreadsheet",
+  ".parq": "spreadsheet",
   ".ipynb": "notebook",
   ".md": "markdown",
   ".pdf": "pdf",

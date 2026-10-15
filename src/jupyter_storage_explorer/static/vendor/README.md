@@ -20,5 +20,5 @@ The SVG paths of `ICON_PATHS` in `../icons.js` (menus, buttons) are from
 are. Apache License 2.0, https://www.apache.org/licenses/LICENSE-2.0.
 
 `FILE_ICON_SVGS` there (the tree and list) are JupyterLab's file icons, copied from JupyterLab 4.6.4
-(`@jupyterlab/ui-components`), and `FILE_ICON_EXTENSIONS` its default file types' extensions. BSD-3-Clause,
+(`@jupyterlab/ui-components`), and `FILE_ICON_EXTENSIONS` its default file types' extensions (plus Excel and Parquet files, with its CSV icon). BSD-3-Clause,
 Copyright (c) 2015-2026 Project Jupyter Contributors, https://github.com/jupyterlab/jupyterlab/blob/main/LICENSE.
