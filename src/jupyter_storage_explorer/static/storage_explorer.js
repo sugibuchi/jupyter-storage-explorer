@@ -590,7 +590,7 @@ function render({ model, el }) {
 
   // --- Menu items filled in by the kernel: "Preview as" and "Python code" ---
 
-  // For the open menu: {path, previewAsRow, previewAsSub, codeSub},
+  // For the open menu: {path, previewRow, previewAsRow, previewAsSub, codeRow, codeSub},
   // the elements to fill when the kernel's "menu_info" reply arrives.
   let menuInfo = null;
 
@@ -1661,8 +1661,12 @@ function render({ model, el }) {
 
   function onMenuInfo(msg) {
     if (menuInfo?.path !== msg.path) return;
-    const { path, previewRow, previewAsRow, previewAsSub, codeSub } = menuInfo;
-    if (!msg.error && msg.query && previewRow) previewRow.querySelector(".jse-menu-label").textContent = "Query data";
+    const { path, previewRow, previewAsRow, previewAsSub, codeRow, codeSub } = menuInfo;
+    // A folder's rows, hidden until now: shown if it has a format (an error
+    // shows in "Python code").
+    if (msg.error || msg.formats.length) codeRow.hidden = false;
+    if (!msg.error && msg.formats.length) previewRow.hidden = false;
+    if (!msg.error && msg.query) previewRow.querySelector(".jse-menu-label").textContent = "Query data";
     // "Preview as" only appears when the item matches more than one format.
     if (!msg.error && msg.formats.length > 1) {
       const items = msg.formats.map((format) => ({ label: `Preview as ${formatLabel(format)}`, action: () => openPreview(path, format) }));
@@ -1702,38 +1706,45 @@ function render({ model, el }) {
     const withUrls = targets.every(hasUrl);
 
     // Groups of items, joined by separators; groups left empty are dropped.
-    const open = [
-      {
-        label: "Preview",
-        icon: "eye",
-        disabled: !data,
-        // Relabelled "Query data" when the kernel says it opens in the data browser.
-        ref: (row) => info && (info.previewRow = row),
-        action: () => openPreview(single.path),
-      },
-    ];
-    if (info) {
-      open.push({
-        label: "Preview as",
-        icon: "eye",
-        hidden: true,
-        ref: (row) => (info.previewAsRow = row),
-        submenu: (sub) => (info.previewAsSub = sub),
-      });
-    }
-    if (withOpen && folder) open.push({ label: "Open", icon: "folder", action: () => navigate(folder.path) });
+    // Opening comes first, as in JupyterLab's file browser.
+    const open = [];
     if (single && canOpenInJupyterLab(single)) {
       open.push({ label: "Open in JupyterLab", icon: "open-in-new", action: () => openInJupyterLab(single.path) });
     }
-    open.push({
-      label: "Python code",
-      icon: "code",
-      disabled: !data,
-      submenu: (sub) => {
-        sub.replaceChildren(...menuRows([{ label: "Loading…", disabled: true }]));
-        info.codeSub = sub;
-      },
-    });
+    if (withOpen && folder) open.push({ label: "Open", icon: "folder", action: () => navigate(folder.path) });
+    if (info) {
+      // Only for what has a format: a file's is in the listing; whether a
+      // folder has one (a Delta table, a Parquet dataset) only the kernel
+      // tells (onMenuInfo), so its rows appear then.
+      const hasFormat = !isFolder(data) && Boolean(data.format);
+      open.push(
+        {
+          label: "Preview",
+          icon: "eye",
+          hidden: !hasFormat,
+          // Relabelled "Query data" when the kernel says it opens in the data browser.
+          ref: (row) => (info.previewRow = row),
+          action: () => openPreview(single.path),
+        },
+        {
+          label: "Preview as",
+          icon: "eye",
+          hidden: true,
+          ref: (row) => (info.previewAsRow = row),
+          submenu: (sub) => (info.previewAsSub = sub),
+        },
+        {
+          label: "Python code",
+          icon: "code",
+          hidden: !hasFormat,
+          ref: (row) => (info.codeRow = row),
+          submenu: (sub) => {
+            sub.replaceChildren(...menuRows([{ label: "Loading…", disabled: true }]));
+            info.codeSub = sub;
+          },
+        },
+      );
+    }
     // Locations are copied only as URLs: fsspec's paths can differ from the
     // storage's own notion of a path (e.g. abfs's "container/key"). Files'
     // URLs also come with "Copy" below, so "Copy URL" is for folders, which
