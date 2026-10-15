@@ -203,7 +203,7 @@ function render({ model, el }) {
   const tbody = h("tbody");
   const listEl = h("div", { className: "jse-list" }, h("table", {}, h("thead", {}, headRow), tbody));
   const statusEl = h("div", { className: "jse-status" });
-  // "Unsafe mode", at the right end of the status bar (see takeUnsafe): a
+  // "Unsafe mode", at the right end of the toolbar (see takeUnsafe): a
   // slider. The checkbox is hidden but still focusable (Space toggles it);
   // the track and knob are drawn by CSS.
   const unsafeInput = h("input", { type: "checkbox", role: "switch", className: "jse-switch-input" });
@@ -220,9 +220,11 @@ function render({ model, el }) {
     h("span", { className: "jse-switch", ariaHidden: "true" }),
     unsafeLabel,
   );
-  // The status bar: messages on the left (hidden with the preview panel open), the switch on the right.
-  const statusBarEl = h("div", { className: "jse-status-bar" }, statusEl, unsafeEl);
-  // The list's filter and pager (pages of PAGE_SIZE items; see renderList), in the toolbar.
+  // The status bar: messages on the left (hidden with the preview panel open), Preview on the right.
+  const statusBarEl = h("div", { className: "jse-status-bar" }, statusEl, previewBtn);
+  // Tree and list; its height is the `height` trait until resized by dragging.
+  // Above each pane, a bar: the filesystem chooser for the tree; for the list,
+  // its filter and the pager (pages of PAGE_SIZE items; see renderList).
   const PAGE_SIZE = 100;
   let listPage = 0;
   // Set while typing in the list's filter: in large folders, the kernel is
@@ -240,8 +242,13 @@ function render({ model, el }) {
   const nextPageBtn = h("button", { className: "jse-btn", title: "Next page", textContent: "▶" });
   const pageLabel = h("span", { className: "jse-page-label" });
   const pagerEl = h("div", { className: "jse-pager", hidden: true }, prevPageBtn, pageLabel, nextPageBtn);
-  // Tree and list; its height is the `height` trait until resized by dragging.
-  const panesEl = h("div", { className: "jse-panes" }, treeEl, listEl);
+  // Each pane is a column, its bar on top, so the bars follow the tree's width when it is resized.
+  const panesEl = h(
+    "div",
+    { className: "jse-panes" },
+    h("div", { className: "jse-pane jse-tree-pane" }, h("div", { className: "jse-pane-bar" }, fsSelect), treeEl),
+    h("div", { className: "jse-pane jse-list-pane" }, h("div", { className: "jse-pane-bar" }, listFilter.el, pagerEl), listEl),
+  );
   // Bottom edge of the widget: resizes the last area (preview panel or tree and list).
   const grip = h("div", { className: "jse-grip", title: "Drag to resize" });
   // Preview panel below the tree and list; the splitter on its top edge moves
@@ -317,7 +324,7 @@ function render({ model, el }) {
   // each, above the status bar; see "Jobs" below.
   const jobsEl = h("div", { className: "jse-jobs", hidden: true });
   el.replaceChildren(
-    h("div", { className: "jse-toolbar" }, fsSelect, bookmarkBtn, upBtn, refreshBtn, pathEl, listFilter.el, pagerEl, previewBtn),
+    h("div", { className: "jse-toolbar" }, bookmarkBtn, upBtn, refreshBtn, pathEl, unsafeEl),
     panesEl,
     previewEl,
     jobsEl,

@@ -1,9 +1,7 @@
 /* StorageExplorer: toolbar, tree and list, preview panel, menus and editor.
    Joined after common.css and query.css (see _static.py). */
-/* Wraps when narrow: the filter, pager and Preview go to a second line. */
 .jse-toolbar {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: 4px;
   padding: 4px 6px;
@@ -11,8 +9,10 @@
   background: var(--jse-bg-alt);
 }
 
+/* Above the tree, as wide as it. */
 .jse-fs-select {
-  max-width: 200px;
+  flex: 1;
+  min-width: 0;
   padding: 2px 4px;
   border: 1px solid var(--jse-border);
   border-radius: 3px;
@@ -30,11 +30,10 @@
   color: var(--jse-accent);
 }
 
-/* Takes the toolbar's free width; below 120px, the toolbar wraps instead. Right
-   to left, so a long path is cut at its start (…/folder shown); the crumbs
-   themselves are left to right (.jse-crumbs). */
+/* Right to left, so a long path is cut at its start (…/folder shown); the
+   crumbs themselves are left to right (.jse-crumbs). */
 .jse-path {
-  flex: 1 1 120px;
+  flex: 1;
   min-width: 0;
   margin-left: 6px;
   overflow: hidden;
@@ -76,16 +75,41 @@
   flex: 1 1 0;
 }
 
-/* The list's filter, between the path and the pager: the path takes what is left. */
-.jse-toolbar .jse-filter {
-  flex: 0 1 240px;
-  min-width: 120px;
+/* Each pane is a column: its bar (the filesystem chooser for the tree; the
+   filter and pager for the list) on top, then the tree or list. The tree's
+   pane is as wide as the tree, which can be resized from its corner. */
+.jse-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.jse-tree-pane {
+  flex: none;
+  max-width: 70%;
+  border-right: 1px solid var(--jse-border);
+}
+
+.jse-list-pane {
+  flex: 1;
+  min-width: 0;
+}
+
+.jse-pane-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
+  padding: 2px 6px;
+  border-bottom: 1px solid var(--jse-border);
+  background: var(--jse-bg-alt);
 }
 
 .jse-pager {
   display: flex;
   align-items: center;
   gap: 4px;
+  margin-left: auto;
   color: var(--jse-fg-muted);
   font-size: 0.9em;
   white-space: nowrap;
@@ -95,11 +119,9 @@
   display: none;
 }
 
-/* As wide as set by dragging its corner. */
 .jse-tree {
-  flex: none;
-  max-width: 70%;
-  border-right: 1px solid var(--jse-border);
+  flex: 1;
+  min-height: 0;
   width: 260px;
   min-width: 120px;
   overflow: auto;
@@ -137,7 +159,7 @@
 
 .jse-list {
   flex: 1;
-  min-width: 0;
+  min-height: 0;
   overflow: auto;
 }
 
@@ -519,7 +541,7 @@
 }
 
 /* The status bar: messages on the left (.jse-status, without its own border
-   here), the "Unsafe mode" slider on the right. */
+   here), Preview on the right. */
 .jse-status-bar {
   display: flex;
   align-items: center;
@@ -533,12 +555,16 @@
   border-top: none;
 }
 
+.jse-status-bar > .jse-btn {
+  margin: 2px 6px 2px auto; /* stays right when the message is hidden */
+}
+
+/* At the toolbar's right end. */
 .jse-unsafe {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-left: auto; /* stays right when the message is hidden */
-  padding: 2px 8px;
+  padding: 2px 4px 2px 8px;
   color: var(--jse-fg-muted);
   font-size: 0.9em;
   white-space: nowrap;
