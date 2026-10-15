@@ -126,6 +126,18 @@ class TestListing:
         assert all(isinstance(t, int) for t in listing["mtimes"] if t is not None)
         assert "url" not in listing and "urls" not in listing
 
+    def test_creation_times_for_tooltips(self, mem_explorer, tmp_path):
+        # The memory filesystem lists files with "created"; folders without.
+        mem_explorer._current_dir = "/data"
+        listing = mem_explorer._listing
+        ctimes = dict(zip(listing["names"], listing["ctimes"], strict=True))
+        assert isinstance(ctimes["a.csv"], int)
+        assert ctimes["table"] is None
+        # Local files: fsspec's "created" (st_ctime).
+        (tmp_path / "x.txt").write_bytes(b"x")
+        local = Explorer(str(tmp_path))
+        assert local._listing["ctimes"] == [int((tmp_path / "x.txt").stat().st_ctime)]
+
     def test_urls_on_request(self, mem_explorer):
         reply = mem_explorer.request(
             {"type": "urls", "rid": 1, "paths": ["/data/a.csv", "/data"]}

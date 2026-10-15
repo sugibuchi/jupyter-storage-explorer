@@ -140,23 +140,23 @@ Rows in the explorer carry attributes you can style with CSS:
 - **Files** (list): `data-file-format`, the format name: `parquet`, `csv`, `json`, `json-lines`, `excel`, `markdown`,
   `text`, `image`. Files of no known format, or without a URL, have none.
 
-The icons are emoji (📁 for folders, 📄 for files). To change one, hide it (`font-size: 0`) and show another in its
-`::before`. Run the CSS in a notebook cell, before or after the explorer. This example shows the top folder as 🗄️, the
-folders in it as 🗃️ (deeper ones keep 📁), and gives data files their own icons:
+The icons are JupyterLab's file browser's, as SVG images (`.jse-icon svg`), chosen by the file's extension. To change
+one, hide its image and show something else in its `::before`, e.g. an emoji. Run the CSS in a notebook cell,
+before or after the explorer. This example shows the top folder as 🗄️, the folders in it as 🗃️ (deeper ones keep the
+folder icon), and gives data files their own icons:
 
 ```python
 from IPython.display import HTML
 
 HTML("""<style>
 /* Folders: an emoji per depth */
-.jse-browser :is([data-depth="0"], [data-depth="1"]) .jse-icon { font-size: 0; }
-.jse-browser :is([data-depth="0"], [data-depth="1"]) .jse-icon::before { font-size: 14px; }
+.jse-browser :is([data-depth="0"], [data-depth="1"]) .jse-icon svg { display: none; }
 .jse-browser [data-depth="0"] .jse-icon::before { content: "🗄️"; }
 .jse-browser [data-depth="1"] .jse-icon::before { content: "🗃️"; }
 
 /* Files: an emoji per format */
-.jse-browser [data-file-format] .jse-icon { font-size: 0; }
-.jse-browser [data-file-format] .jse-icon::before { font-size: 14px; content: "📄"; }
+.jse-browser [data-file-format] .jse-icon svg { display: none; }
+.jse-browser [data-file-format] .jse-icon::before { content: "📄"; }
 .jse-browser [data-file-format="csv"] .jse-icon::before,
 .jse-browser [data-file-format="excel"] .jse-icon::before { content: "📊"; }
 .jse-browser [data-file-format="parquet"] .jse-icon::before { content: "🧱"; }

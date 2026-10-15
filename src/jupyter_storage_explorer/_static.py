@@ -18,7 +18,7 @@ def esm(widget: str) -> str:
     here; the shared files only define functions and constants, and the
     widget's file exports it.
     """
-    return _join("common.js", "query.js", f"{widget}.js")
+    return _join("icons.js", "common.js", "query.js", f"{widget}.js")
 
 
 def css(widget: str) -> str:

@@ -3,10 +3,10 @@
 .jse-toolbar {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   padding: 4px 6px;
   border-bottom: 1px solid var(--jse-border);
-  background: var(--jse-bg-alt);
+  background: var(--jse-bar-bg);
 }
 
 /* Above the tree, as wide as it. */
@@ -23,11 +23,6 @@
 
 .jse-fs-select[hidden] {
   display: none;
-}
-
-/* Filled star: the folder shown is bookmarked. */
-.jse-bookmark-btn.jse-on {
-  color: var(--jse-accent);
 }
 
 /* Right to left, so a long path is cut at its start (…/folder shown); the
@@ -102,7 +97,7 @@
   min-height: 26px;
   padding: 2px 6px;
   border-bottom: 1px solid var(--jse-border);
-  background: var(--jse-bg-alt);
+  background: var(--jse-bar-bg);
 }
 
 .jse-pager {
@@ -110,7 +105,6 @@
   align-items: center;
   gap: 4px;
   margin-left: auto;
-  color: var(--jse-fg-muted);
   font-size: 0.9em;
   white-space: nowrap;
 }
@@ -132,7 +126,7 @@
 .jse-node {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   padding: 2px 6px 2px 4px;
   white-space: nowrap;
   cursor: pointer;
@@ -154,18 +148,28 @@
 }
 
 .jse-node.jse-active {
-  background: var(--jse-accent-bg);
+  background: var(--jse-selected-bg);
+  color: var(--jse-selected-fg);
 }
 
 .jse-twisty {
-  display: inline-block;
-  width: 12px;
-  text-align: center;
-  color: var(--jse-fg-muted);
+  display: inline-flex;
+  flex: none;
+  width: 16px;
+  color: var(--jse-icon);
 }
 
 .jse-icon {
-  margin-right: 4px;
+  display: inline-flex;
+  margin-right: 6px;
+  color: var(--jse-icon);
+  vertical-align: middle;
+}
+
+/* The sort order, after a column's name. */
+.jse-list th .jse-svg {
+  margin-left: 2px;
+  color: var(--jse-icon);
 }
 
 .jse-list {
@@ -182,7 +186,8 @@
 .jse-list th {
   position: sticky;
   top: 0;
-  background: var(--jse-bg-alt);
+  z-index: 1;
+  background: var(--jse-bar-bg);
   border-bottom: 1px solid var(--jse-border);
   padding: 4px 8px;
   text-align: left;
@@ -207,7 +212,26 @@
 }
 
 .jse-list tbody tr.jse-selected {
-  background: var(--jse-accent-bg);
+  background: var(--jse-selected-bg);
+  color: var(--jse-selected-fg);
+}
+
+/* Dates and arrows in the selected row's colour, as in JupyterLab. */
+.jse-list tbody tr.jse-selected td.jse-col-mtime,
+.jse-node.jse-active .jse-twisty {
+  color: inherit;
+}
+
+/* File icons (fileIcon in icons.js) in selected rows, as JupyterLab's file
+   browser shows them: white, their light parts in the selection's colour. */
+.jse-list tbody tr.jse-selected .jse-file-svg .jp-icon-selectable[fill],
+.jse-node.jse-active .jse-file-svg .jp-icon-selectable[fill] {
+  fill: var(--jse-selected-fg);
+}
+
+.jse-list tbody tr.jse-selected .jse-file-svg .jp-icon-selectable-inverse[fill],
+.jse-node.jse-active .jse-file-svg .jp-icon-selectable-inverse[fill] {
+  fill: var(--jse-selected-bg);
 }
 
 .jse-col-name {
@@ -297,12 +321,23 @@
   object-position: left top;
 }
 
+/* The preview panel's top edge (its border), dragged to resize: it takes no
+   room, its handle (::after) lies across the edge. */
 .jse-splitter {
+  position: relative;
   flex: none;
-  height: 5px;
+  height: 0;
+}
+
+.jse-splitter::after {
+  content: "";
+  position: absolute;
+  z-index: 5; /* above the areas it lies over, below dialogs and menus */
+  top: -3px;
+  right: 0;
+  left: 0;
+  height: 6px;
   cursor: row-resize;
-  background: var(--jse-bg-alt);
-  border-bottom: 1px solid var(--jse-border);
 }
 
 .jse-editor {
@@ -491,8 +526,8 @@
   z-index: 20; /* above the preview dialog */
   min-width: 150px;
   padding: 4px 0;
-  border: 1px solid var(--jse-border);
-  border-radius: 4px;
+  border: 1px solid var(--jp-border-color1, #bdbdbd);
+  border-radius: 0;
   background: var(--jse-bg);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
@@ -502,9 +537,24 @@
 }
 
 .jse-menu-item {
-  padding: 4px 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 14px 4px 8px;
   cursor: pointer;
   white-space: nowrap;
+}
+
+.jse-menu-icon {
+  display: inline-flex;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--jse-icon);
+}
+
+.jse-menu-label {
+  flex: 1;
 }
 
 .jse-menu-item:hover:not(.jse-disabled) {
@@ -519,9 +569,7 @@
 
 .jse-menu-item.jse-has-sub {
   position: relative;
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
+  padding-right: 4px;
 }
 
 .jse-menu .jse-menu-item[hidden] {
@@ -529,7 +577,9 @@
 }
 
 .jse-sub-arrow {
-  color: var(--jse-fg-muted);
+  display: inline-flex;
+  margin-left: 8px;
+  color: var(--jse-icon);
 }
 
 .jse-submenu {
@@ -553,7 +603,7 @@
   background: var(--jse-border);
 }
 
-.jse-splitter:hover {
+.jse-splitter:hover::after {
   background: var(--jse-accent-bg);
 }
 
@@ -572,8 +622,8 @@
   border-top: none;
 }
 
-.jse-status-bar > .jse-btn {
-  margin: 2px 6px 2px auto; /* stays right when the message is hidden */
+.jse-status-bar > .jse-link {
+  margin: 2px 8px 2px auto; /* stays right when the message is hidden */
 }
 
 /* At the toolbar's right end. */
@@ -584,6 +634,7 @@
   padding: 2px 4px 2px 8px;
   color: var(--jse-fg-muted);
   font-size: 0.9em;
+  font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
   user-select: none;
@@ -632,7 +683,6 @@
 /* On: risky operations are allowed for the next operation. */
 .jse-unsafe.jse-on {
   color: var(--jse-error);
-  font-weight: 600;
 }
 
 .jse-unsafe.jse-on .jse-switch {
@@ -724,7 +774,7 @@
   gap: 4px;
   padding: 4px 8px;
   border-top: 1px solid var(--jse-border);
-  background: var(--jse-bg-alt);
+  background: var(--jse-bar-bg);
 }
 
 .jse-jobs[hidden] {

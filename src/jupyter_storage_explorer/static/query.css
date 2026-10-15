@@ -57,32 +57,18 @@
 .jse-query-status {
   min-width: 9em;
   text-align: center;
-  color: var(--jse-fg-muted);
 }
 
-/* "Live | In memory" at the right of the toolbar: two joined buttons, the
-   current mode filled in. */
+/* "Live | In memory" at the right of the toolbar: two buttons, the current
+   mode filled in. */
 .jse-query-mode {
   display: inline-flex;
   flex: none;
+  gap: 2px;
   margin-left: 6px;
 }
 
-.jse-query-mode .jse-query-mode-btn {
-  border-radius: 0;
-}
-
-.jse-query-mode .jse-query-mode-btn:first-child {
-  border-radius: 3px 0 0 3px;
-}
-
-.jse-query-mode .jse-query-mode-btn:last-child {
-  border-left: none;
-  border-radius: 0 3px 3px 0;
-}
-
 .jse-query-mode .jse-query-mode-btn.jse-on {
-  border-color: var(--jse-accent);
   background: var(--jse-accent-bg);
 }
 
@@ -142,33 +128,36 @@
   text-decoration: underline;
 }
 
+/* The funnel: light grey when the column has no filter, dark when it has one. */
 .jse-query-filter {
   display: inline-flex;
   align-items: center;
-  padding: 1px 2px;
-  border: 1px solid transparent;
-  border-radius: 3px;
+  padding: 1px;
+  border: none;
+  border-radius: var(--jp-border-radius, 2px);
   background: none;
-  color: var(--jse-fg-muted);
+  color: var(--jse-fg-faint);
   cursor: pointer;
 }
 
-.jse-query-filter:hover {
-  border-color: var(--jse-border);
-  color: var(--jse-fg);
+.jse-query-filter .jse-svg {
+  width: 14px;
+  height: 14px;
 }
 
-/* An outline when there is no filter; filled in the accent colour when there is. */
-.jse-query-filter svg :is(path, circle) {
-  fill: none;
+.jse-query-filter:hover {
+  background: var(--jse-hover);
+  color: var(--jse-icon);
 }
 
 .jse-query-filter.jse-active {
-  color: var(--jse-accent);
+  color: var(--jse-fg);
 }
 
-.jse-query-filter.jse-active svg :is(path, circle) {
-  fill: currentColor;
+/* The sort order, after a column's name. */
+.jse-query-name .jse-svg {
+  margin-left: 2px;
+  color: var(--jse-icon);
 }
 
 .jse-query-dtype {

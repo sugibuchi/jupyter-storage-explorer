@@ -668,7 +668,8 @@ class StorageExplorer(anywidget.AnyWidget):
         """The listing of directory ``path`` (its ``infos`` from ``_ls``) for ``_listing``.
 
         One list per column, an item per entry: "names", "is_dir" (0 or 1),
-        "sizes" (None for folders), "mtimes" (whole seconds, or None), and
+        "sizes" (None for folders), "mtimes" and "ctimes" (modification and
+        creation times, for tooltips: whole seconds, or None), and
         "format", an index into "formats", whose first name is "" (none; all
         folders). Paths are not sent: an entry's is "dir" joined with its name,
         unless "paths" (otherwise None) gives them all, for a filesystem that
@@ -682,6 +683,7 @@ class StorageExplorer(anywidget.AnyWidget):
             "is_dir": [],
             "sizes": [],
             "mtimes": [],
+            "ctimes": [],
             "formats": [""],
             "format": [],
             "paths": None,
@@ -700,6 +702,8 @@ class StorageExplorer(anywidget.AnyWidget):
             listing["sizes"].append(entry["size"])
             mtime = entry["mtime"]
             listing["mtimes"].append(None if mtime is None else int(mtime))
+            ctime = _infos.ctime(info)
+            listing["ctimes"].append(None if ctime is None else int(ctime))
             listing["format"].append(format_index[fmt])
             paths.append(entry["path"])
             if self._url(entry["path"]) is None:
