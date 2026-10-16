@@ -1,6 +1,6 @@
 # Scripts for the docs' pictures
 
-These scripts take the screenshots in `docs/figs/` and `launcher/figs/`, and make the demo GIF. Each one starts a
+These scripts take the screenshots in `docs/figs/` and `launcher/figs/`, and make the demo GIFs. Each one starts a
 JupyterLab server of its own and drives it in the installed Microsoft Edge with Playwright.
 
 ```bash
@@ -9,20 +9,22 @@ uv run --group docs docs/scripts/using.py      # one script's pictures
 ```
 
 Each script prints the size of each picture in CSS pixels. That is the `<img width="...">` the docs show it at, as
-the pictures are taken at 2× (`data-explorer.png`, `launcher.png` and `demo.gif` are taken at 1×).
+the pictures are taken at 2× (`data-explorer.png`, `launcher.png` and the GIFs are taken at 1×).
 
-| Script             | Makes                                                                   |
-|--------------------|-------------------------------------------------------------------------|
-| `hero.py`          | `docs/figs/storage-explorer.png`                                        |
-| `using.py`         | `docs/figs/using-*.png` ("Using the explorer")                          |
-| `unsafe.py`        | `docs/figs/unsafe-mode.png`                                             |
-| `browser.py`       | `docs/figs/browser-*.png` ("Using the data browser")                    |
-| `data_explorer.py` | `docs/figs/data-explorer.png`                                           |
-| `launcher_item.py` | `launcher/figs/launcher.png`                                            |
-| `demo_gif.py`      | `docs/figs/demo.gif`                                                    |
-| `make_all.py`      | All of the above, on one server                                         |
-| `_lab.py`          | The server (in a temporary folder, with its own settings) and helpers   |
-| `demo_data.py`     | The demo storage: a made-up sales data lake                             |
+| Script                 | Makes                                                                 |
+|------------------------|-----------------------------------------------------------------------|
+| `hero.py`              | `docs/figs/storage-explorer.png`                                      |
+| `using.py`             | `docs/figs/using-*.png` ("Using the explorer")                        |
+| `unsafe.py`            | `docs/figs/unsafe-mode.png`                                           |
+| `browser.py`           | `docs/figs/browser-*.png` ("Using the data browser")                  |
+| `data_explorer.py`     | `docs/figs/data-explorer.png`                                         |
+| `launcher_item.py`     | `launcher/figs/launcher.png`                                          |
+| `demo_gif.py`          | `docs/figs/demo.gif`                                                  |
+| `data_explorer_gif.py` | `docs/figs/data-explorer.gif`                                         |
+| `make_all.py`          | All of the above, on one server                                       |
+| `_lab.py`              | The server (in a temporary folder, with its own settings) and helpers |
+| `_film.py`             | The GIFs' frames, and a mouse pointer drawn in the page               |
+| `demo_data.py`         | The demo storage: a made-up sales data lake                           |
 
 The explorers show the demo storage from fsspec's memory filesystem (`memory:///sales-lake`), so the pictures show no
 path of your computer. Notebook widgets and launcher tabs alike get it: the server's Jupyter config folder has a

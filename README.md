@@ -16,7 +16,7 @@ This package also provides the **`DataExplorer`** widget, which lets you browse 
 dataframe of pandas, polars, Spark, DuckDB and more. Page through, sort and filter it in the widget, then get the
 result back in code.
 
-![DataExplorer showing a Delta Lake table in a notebook](https://raw.githubusercontent.com/sugibuchi/jupyter-storage-explorer/main/docs/figs/data-explorer.png)
+![DataExplorer in a notebook: a Parquet file paged through, columns hidden, filtered and sorted](https://raw.githubusercontent.com/sugibuchi/jupyter-storage-explorer/main/docs/figs/data-explorer.gif)
 
 ## Highlights
 
