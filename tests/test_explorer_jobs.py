@@ -7,14 +7,15 @@ from typing import Any
 import pytest
 from explorers import Explorer, entries, make, without_ids
 
-from jupyter_storage_explorer import _paths, jobs
+from jupyter_storage_explorer import _paths
 from jupyter_storage_explorer._explorer import jobs as following
-from jupyter_storage_explorer.filesystems import (
+from jupyter_storage_explorer._jobs import runner as jobs
+from jupyter_storage_explorer.fs_operations import (
     AsyncFsspecOperations,
     AtomicMoveOperation,
     FsspecOperations,
 )
-from jupyter_storage_explorer.operations import FileSystemOperations
+from jupyter_storage_explorer.fs_operations.base import FileSystemOperations
 
 
 class Watch(FileSystemOperations):
@@ -149,7 +150,7 @@ class TestFollowingJobs:
 
 
 class TestJobs:
-    """Move, delete, paste and downloads run as jobs (see jobs.py); without a
+    """Move, delete, paste and downloads run as jobs (see runner.py); without a
     kernel loop, at once."""
 
     def test_job_messages(self, mem_explorer):

@@ -7,7 +7,7 @@ from typing import Any
 
 from explorers import Explorer, entries, make
 
-from jupyter_storage_explorer import _jupyterlab_files
+from jupyter_storage_explorer._explorer import jupyterlab_files
 
 
 class TestOpenInJupyterLab:
@@ -94,5 +94,5 @@ class TestOpenInJupyterLab:
         )
 
     def test_too_large(self, mem_explorer, memfs, monkeypatch):
-        monkeypatch.setattr(_jupyterlab_files, "MAX_BYTES", 3)
+        monkeypatch.setattr(jupyterlab_files, "MAX_BYTES", 3)
         assert "too large" in self.get(mem_explorer, "/data/a.csv")["error"]

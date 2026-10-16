@@ -10,6 +10,7 @@ from typing import Any
 from jupyter_storage_explorer import _paths
 from jupyter_storage_explorer._explorer.common import error_text
 from jupyter_storage_explorer._json import jsonable
+from jupyter_storage_explorer._query.data_query import DataQuery
 from jupyter_storage_explorer.data_explorer import DataExplorer
 from jupyter_storage_explorer.formats import (
     DataFormat,
@@ -18,7 +19,6 @@ from jupyter_storage_explorer.formats import (
     Target,
     matching_formats,
 )
-from jupyter_storage_explorer.query import DataQuery
 
 
 def _section(preview: Preview) -> dict[str, Any]:

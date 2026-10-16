@@ -19,7 +19,7 @@ import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from jupyter_storage_explorer.operations import OperationCancelled, Progress
+from jupyter_storage_explorer.fs_operations.base import OperationCancelled, Progress
 
 if TYPE_CHECKING:
     from collections.abc import Callable

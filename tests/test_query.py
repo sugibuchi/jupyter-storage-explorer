@@ -1,4 +1,4 @@
-"""query.py: the data browser's settings, filters, paging and remembered settings."""
+"""_query/: the data browser's settings, filters, paging and remembered settings."""
 
 from __future__ import annotations
 
@@ -12,17 +12,17 @@ import polars as pl
 import pytest
 from sqlframe.duckdb import DuckDBSession
 
-from jupyter_storage_explorer import query as query_module
+from jupyter_storage_explorer._explorer.states import ExplorerStates
 from jupyter_storage_explorer._json import jsonable
-from jupyter_storage_explorer.query import (
-    DEFAULT_SETTINGS,
-    DataQuery,
+from jupyter_storage_explorer._query import data_query
+from jupyter_storage_explorer._query.data_query import DataQuery
+from jupyter_storage_explorer._query.filters import (
     build_query,
     check_filter,
     columns_info,
     normalize_settings,
 )
-from jupyter_storage_explorer.states import ExplorerStates
+from jupyter_storage_explorer._query.settings import DEFAULT_SETTINGS
 
 DF = pl.DataFrame(
     {
@@ -246,7 +246,7 @@ class TestDataQuery:
     def test_paging_without_offsets(self, monkeypatch):
         # pandas, without polars to query it with: rows are read up to the
         # window's end and the first ones dropped.
-        monkeypatch.setattr(query_module.Polars, "is_installed", lambda self: False)
+        monkeypatch.setattr(data_query.Polars, "is_installed", lambda self: False)
         query = DataQuery(DF.to_pandas(), "k", ExplorerStates())
         assert query.lf.implementation.is_pandas()
         reply = query.handle({"type": "query_rows", "offset": 1, "window": 2})
@@ -254,7 +254,7 @@ class TestDataQuery:
         assert reply["more"] is True
 
     def test_missing_values_from_pandas(self, monkeypatch):
-        monkeypatch.setattr(query_module.Polars, "is_installed", lambda self: False)
+        monkeypatch.setattr(data_query.Polars, "is_installed", lambda self: False)
         data = DF.to_pandas(use_pyarrow_extension_array=True)
         query = DataQuery(data, "k", ExplorerStates())
         reply = query.handle({"type": "query_rows", "offset": 3, "window": 1})
@@ -421,7 +421,7 @@ class TestModes:
 
         def fetch(lf, offset, length):
             reads.append((offset, length))
-            return query_module.fetch_rows(lf, offset, length)
+            return data_query.fetch_rows(lf, offset, length)
 
         query = mode_query(lambda: duckdb.from_arrow(BIG.to_arrow()), fetch=fetch)
         assert query.mode_state()["live_limit"] == 20  # max_memory_rows

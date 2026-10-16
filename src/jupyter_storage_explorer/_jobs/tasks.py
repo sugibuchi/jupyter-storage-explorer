@@ -4,8 +4,8 @@ Each is planned by a ``FileTasks`` method on the kernel's main thread: checks
 (folders only in unsafe mode, never into themselves, ...) and the files that
 already exist, to ask the user about. The result is a reply for the
 frontend (e.g. {"conflicts": [...]}), or a ``Task`` to run: its
-``work(progress)`` does the operation in a job's worker thread (see jobs.py)
-through the operations objects (see operations.py), and records what it
+``work(progress)`` does the operation in a job's worker thread (see runner.py)
+through the operations objects (see fs_operations/base.py), and records what it
 changed on the task (files moved or removed, folders whose listing changed),
 for the explorer to show as the job goes and once it has ended.
 
@@ -24,8 +24,9 @@ from typing import TYPE_CHECKING, Any, TypeVar
 
 from fsspec.implementations.local import LocalFileSystem
 
-from jupyter_storage_explorer import _paths, properties
-from jupyter_storage_explorer.operations import (
+from jupyter_storage_explorer import _paths
+from jupyter_storage_explorer._jobs import properties
+from jupyter_storage_explorer.fs_operations.base import (
     OperationCancelled,
     Progress,
     same_filesystem,
@@ -36,7 +37,7 @@ if TYPE_CHECKING:
 
     from fsspec import AbstractFileSystem
 
-    from jupyter_storage_explorer.operations import OperationChain
+    from jupyter_storage_explorer.fs_operations.base import OperationChain
 
 
 @dataclasses.dataclass

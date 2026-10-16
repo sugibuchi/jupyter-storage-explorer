@@ -1,4 +1,4 @@
-"""Filtering, sorting and paging large folders in the kernel (listing.py)."""
+"""Filtering, sorting and paging large folders in the kernel (_explorer/listing.py)."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from jupyter_storage_explorer.listing import Listing, name_key
+from jupyter_storage_explorer._explorer.listing import Listing, name_key
 
 
 def columns(items: list[tuple[str, bool, int | None, int | None]]) -> dict[str, Any]:

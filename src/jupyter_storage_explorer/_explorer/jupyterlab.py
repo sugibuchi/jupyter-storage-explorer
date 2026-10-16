@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from jupyter_storage_explorer import _jupyterlab_files
+from jupyter_storage_explorer._explorer import jupyterlab_files
 from jupyter_storage_explorer._explorer.common import (
     error_text,
     within_top,
@@ -35,20 +35,20 @@ class JupyterLabFilesMixin:
 
     def _jupyterlab_get(self, content: dict[str, Any]) -> dict[str, Any]:
         """Answer "jupyterlab_get": {"model": the file's contents model} (see
-        _jupyterlab_files.contents_model), or {"error"}."""
+        jupyterlab_files.contents_model), or {"error"}."""
         try:
             fs, path = self._jupyterlab_file(content)
             info = self._info(path, fs)
             if info.get("type") == "directory":
                 raise ValueError("folders cannot be opened in JupyterLab")
             size = info.get("size")
-            if size is not None and size > _jupyterlab_files.MAX_BYTES:
+            if size is not None and size > jupyterlab_files.MAX_BYTES:
                 raise ValueError(
                     f"too large to open in JupyterLab "
-                    f"(over {_jupyterlab_files.MAX_BYTES // (1024 * 1024)} MB)"
+                    f"(over {jupyterlab_files.MAX_BYTES // (1024 * 1024)} MB)"
                 )
             data = self._read_bytes(path, fs)
-            model = _jupyterlab_files.contents_model(
+            model = jupyterlab_files.contents_model(
                 path,
                 data,
                 info,
@@ -70,11 +70,11 @@ class JupyterLabFilesMixin:
         try:
             fs, path = self._jupyterlab_file(content)
             current = self._read_bytes(path, fs) if self._exists(path, fs) else None
-            data = _jupyterlab_files.saved_bytes(
+            data = jupyterlab_files.saved_bytes(
                 content.get("content"), content.get("format"), current
             )
             self._write_bytes(path, data, fs)
-            model = _jupyterlab_files.contents_model(
+            model = jupyterlab_files.contents_model(
                 path,
                 data,
                 self._info(path, fs),

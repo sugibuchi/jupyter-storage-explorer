@@ -7,7 +7,7 @@ import pytest
 from explorers import make
 
 from jupyter_storage_explorer import _paths
-from jupyter_storage_explorer.incoming import format_size
+from jupyter_storage_explorer._jobs.incoming import format_size
 
 
 def test_download(mem_explorer):

@@ -10,9 +10,9 @@ import pytest
 from jupyter_storage_explorer_launcher import launcher
 from jupyter_storage_explorer_launcher.launcher import LauncherError, load_settings
 
-from jupyter_storage_explorer.filesystems import FsspecOperations
 from jupyter_storage_explorer.formats import default_formats
-from jupyter_storage_explorer.operations import FileSystemOperations
+from jupyter_storage_explorer.fs_operations import FsspecOperations
+from jupyter_storage_explorer.fs_operations.base import FileSystemOperations
 
 if TYPE_CHECKING:
     import pathlib
@@ -107,7 +107,7 @@ class TestMerging:
             tmp_path,
             "system",
             """
-            from jupyter_storage_explorer.filesystems import FsspecOperations
+            from jupyter_storage_explorer.fs_operations import FsspecOperations
             from jupyter_storage_explorer.formats import Csv
 
             def formats():
@@ -121,7 +121,7 @@ class TestMerging:
             tmp_path,
             "user",
             """
-            from jupyter_storage_explorer.operations import FileSystemOperations
+            from jupyter_storage_explorer.fs_operations.base import FileSystemOperations
             from jupyter_storage_explorer.formats import Json
 
             def formats():

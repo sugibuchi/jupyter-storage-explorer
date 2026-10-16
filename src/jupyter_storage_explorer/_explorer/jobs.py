@@ -10,17 +10,17 @@ from typing import TYPE_CHECKING, Any
 
 from jupyter_storage_explorer import _paths
 from jupyter_storage_explorer._explorer.common import error_text
+from jupyter_storage_explorer._jobs.tasks import FileTasks, Plan, Task
+from jupyter_storage_explorer._jobs.transfer_policy import jupyterlab_url
 from jupyter_storage_explorer._urls import default_url
-from jupyter_storage_explorer.file_tasks import FileTasks, Plan, Task
-from jupyter_storage_explorer.operations import same_filesystem
-from jupyter_storage_explorer.transfer_policy import jupyterlab_url
+from jupyter_storage_explorer.fs_operations.base import same_filesystem
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
 
     from fsspec import AbstractFileSystem
 
-    from jupyter_storage_explorer.jobs import Job
+    from jupyter_storage_explorer._jobs.runner import Job
 
 
 # While a job runs, what it has changed is shown at most this often (seconds):
@@ -49,8 +49,8 @@ class JobsMixin:
     as they run and once they have ended."""
 
     # --- Jobs: move, delete, paste, upload and download run in the
-    # background. Each is planned by FileTasks (file_tasks.py), its work runs
-    # in a job's worker thread (jobs.py), and back on the main thread, _follow
+    # background. Each is planned by FileTasks (_jobs/tasks.py), its work runs
+    # in a job's worker thread (_jobs/runner.py), and back on the main thread, _follow
     # shows what it has changed so far as it runs, and _finish all it changed
     # once it has ended ---
 
