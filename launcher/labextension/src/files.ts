@@ -5,7 +5,7 @@
 // They are served by a drive of this extension: JupyterLab asks drives for
 // the files whose paths start with their name ("StorageExplorer:..."). This
 // drive asks the explorer that opened the file (an anywidget, see
-// storage_explorer.js) to read or save it, through the explorer's kernel, so
+// static/storage_explorer/jupyterlab.js) to read or save it, through the explorer's kernel, so
 // no server setup or credentials are needed beyond the explorer's own.
 //
 // The drive only serves the files explorers opened on this page, under the
@@ -22,7 +22,7 @@ import { Contents, ServerConnection } from '@jupyterlab/services';
 import { ISignal, Signal } from '@lumino/signaling';
 
 const DRIVE_NAME = 'StorageExplorer';
-// Where explorers find this extension (see storage_explorer.js).
+// Where explorers find this extension (see static/storage_explorer/jupyterlab.js).
 const REGISTRY = Symbol.for('jupyter-storage-explorer.jupyterlab');
 const REFUSED = 'Files of Storage Explorer are opened, renamed and deleted in the explorer.';
 
@@ -33,7 +33,7 @@ interface IGetOptions {
   content: boolean;
 }
 
-// A file an explorer opens (see storage_explorer.js): it reads and saves it
+// A file an explorer opens (see static/storage_explorer/jupyterlab.js): it reads and saves it
 // through its kernel, resolving with a contents model, or rejecting.
 interface IExplorerFile {
   explorer: string; // the explorer's id

@@ -2,7 +2,7 @@
 // downloaded to the Jupyter server, into the folder dropped on (a folder row)
 // or the one the browser shows, after asking the user.
 //
-// The explorer (an anywidget, see storage_explorer.js) marks its drags with
+// The explorer (an anywidget, see static/storage_explorer/transfers.js) marks its drags with
 // DOWNLOAD_MIME and puts the drag, with a `download` function that asks its
 // kernel to copy the files, in a page-wide registry: drag data can only be
 // text. The file browser handles native drops itself (uploads from the
@@ -27,7 +27,7 @@ interface IDownloadResult {
   errors?: string[];
 }
 
-// The drag the explorer registers (see storage_explorer.js).
+// The drag the explorer registers (see static/storage_explorer/transfers.js).
 interface IExplorerDrag {
   names: string[];
   // `dest`: a folder relative to the Jupyter server's.

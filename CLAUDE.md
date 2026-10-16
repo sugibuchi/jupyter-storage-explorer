@@ -27,10 +27,10 @@ run each filter on polars, pandas, PyArrow, DuckDB and sqlframe (the PySpark API
 it does Spark; real Spark needs Java, so it is not tested). The widget tests subclass the
 widget to capture `send()` and drive it through `_on_custom_msg`, as the frontend would.
 
-The JavaScript has no unit tests. CI checks its formatting (Prettier, width 160, `.prettierrc.json`) and its syntax: the
-modules joined as the kernel does (`_static.esm("storage_explorer")`, also `"data_explorer"`) through `node --check`
-(locally `uv run node --check`). Check
-behaviour with the smoke test, `uv run --group docs tests/browser/smoke.py` (or some checks by name): it runs
+The JavaScript has no unit tests. CI checks its formatting (Prettier, width 160, `.prettierrc.json`), and
+`uv run tests/browser/check_js.py` each widget's module joined as the kernel does (`_static.esm`): its syntax
+(`node --check`) and, with ESLint, names used but defined in no file, or defined but unused. Check behaviour with the
+smoke test, `uv run --group docs tests/browser/smoke.py` (or some checks by name): it runs
 JupyterLab with the demo data of `docs/scripts/` (`_lab.py`, `demo_data.py`) and clicks through the main features in
 the installed Edge with Playwright, leaving `tests/browser/smoke-<check>.png` for a failed check. Run it after any
 change to `static/` or the extension, and add a check for a new feature there. For a one-off look, write a Playwright
@@ -87,8 +87,14 @@ browser is in `traitlets` tagged `sync=True` (underscore-prefixed). Everything e
 operations, whose results have lists, `{"errors": [...]}`, as jobs' do. Values sent go through `_json.jsonable`.
 
 **Frontend.** Plain ES modules in `static/`, no bundler. anywidget cannot import neighbouring files, so `_static.esm()`
-concatenates `common.js` + `query.js` + `<widget>.js` (shared files only define functions/constants; the widget file
-has the `export`), and likewise for CSS. Third-party code is vendored in `static/vendor/`. The anywidget `model` only
+concatenates `icons.js` + `common.js` + `query.js` + the widget's parts (`static/<widget>/*.js`, if any) + `<widget>.js`
+(all but the last only define functions/constants; the widget file has the `render` and the `export`), and likewise for
+CSS (without parts). The storage explorer's parts are one feature each (`tree.js`, `list.js`, `preview.js`,
+`item_menu.js`, `operations.js` (with the clipboard), `transfers.js` (drag and drop, uploads, downloads),
+`jupyterlab.js`, `properties.js`, `toolbar.js` (with unsafe mode and bookmarks), `jobs.js`, `overlays.js` (busy screen,
+modal, menus), `sections.js` (preview sections), `util.js`): a `createX(x)` returning its elements and functions. `x`
+is the explorer, made in `render()`: what the features share (`model`, `el`, `request`, `ask`, `flash`, `navigate`,
+...) and the features themselves (`x.list`, `x.preview`, ...), used when needed, not when made, so order rarely matters. Third-party code is vendored in `static/vendor/`. The anywidget `model` only
 supports `get`/`set`/`save_changes`/`on`/`off`/`send`; Backbone methods like `previous()` throw inside `set` and silently
 break sync.
 
@@ -134,7 +140,7 @@ it has ended (`_finish`). Work functions must not touch traits or
 `send`; they report to the `Progress` and stop when `progress.check()` raises `OperationCancelled`. A drop from
 JupyterLab's file browser is a copy from the kernel's local disk (`FileTasks.upload`); files from the computer arrive in
 pieces (`incoming.py`), and the last piece starts `FileTasks.upload_file`. Path helpers are in `_paths.py`. Requests answer `{"job": id}`; the kernel sends
-`{"type": "job", ...}` as the job runs and with its result when it ends, and the frontend's `jobResult()` waits for
+`{"type": "job", ...}` as the job runs and with its result when it ends, and the frontend's `x.jobs.result()` waits for
 that. The main thread is reached through the kernel's asyncio loop (`call_soon_threadsafe`); without a running loop
 (tests), jobs run synchronously, so tests see the result at once.
 
@@ -150,7 +156,7 @@ misses subfolders) and returning what was found, `complete` False, on a cancel. 
 modification time whichever key a filesystem uses, for the list too.
 
 **Unsafe mode.** Folder operations (move, copy or cut and paste, rename, delete) are offered only while the "Unsafe mode" slider in
-the toolbar is on (trait `_unsafe_mode`). In the frontend, every operation calls `takeUnsafe()` as it starts, which
+the toolbar is on (trait `_unsafe_mode`). In the frontend, every operation calls `x.unsafe.take()` as it starts, which
 turns it off (one operation at a time), and sends whether it was on with its request (`"unsafe"`); the kernel refuses
 folders without it (the methods' `folders=` parameter).
 
@@ -195,7 +201,7 @@ handled by the kernel instead (`listing.py`): `_listing` then only gives their s
 asks for pages (`"list"`), filtering the rows shown while it waits; sorting and filters there follow the browser's as
 closely as Python allows (natural order ignoring case and accents; Python's `re`). Filters (the list's; *Select columns*) use
 `createFilter` in `common.js`: text or a regular expression, always case-insensitive. The list's is cleared when
-another folder's listing arrives (`renderList`), not on the click, so the previous folder's items never show unfiltered.
+another folder's listing arrives (the list's `render`), not on the click, so the previous folder's items never show unfiltered.
 
 **Formats** (`formats/`). Each `DataFormat` subclass (`base.py`) declares `name`, `label`, `priority`, `extensions` and
 which package sets can read it (`preferred_requirements` for previews and code, `code_only_requirements` such as PySpark

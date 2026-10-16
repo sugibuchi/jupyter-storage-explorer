@@ -50,13 +50,10 @@ jobs:
       - name: Install the project
         run: uv sync --no-install-package jupyter-storage-explorer-launcher
 
-      # Each widget's module as the kernel joins it (see _static.py), parsed by Node.
-      - name: JavaScript syntax check
-        run: |
-          for widget in storage_explorer data_explorer; do
-            uv run --no-sync python -c "from jupyter_storage_explorer import _static; print(_static.esm('$widget'))" > "$RUNNER_TEMP/$widget.mjs"
-            node --check "$RUNNER_TEMP/$widget.mjs"
-          done
+      # Each widget's module as the kernel joins it: its syntax, and names
+      # undefined or unused (ESLint).
+      - name: JavaScript check
+        run: uv run --no-sync tests/browser/check_js.py
 
       - name: Test with coverage
         run: uv run --no-sync pytest --cov --cov-report=term --cov-report=xml:coverage.xml

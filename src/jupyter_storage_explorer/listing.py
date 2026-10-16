@@ -3,7 +3,7 @@
 The file list normally does this in the browser, from the whole listing.
 Folders with more items than ``StorageExplorer``'s ``max_browser_items`` are
 handled here instead, and the browser receives one page at a time. The
-results follow the browser's (see ``renderList`` in storage_explorer.js) as
+results follow the browser's (see ``createList`` in static/storage_explorer/list.js) as
 closely as Python allows.
 """
 
