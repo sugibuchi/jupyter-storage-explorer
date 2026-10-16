@@ -21,7 +21,7 @@ def make(lab: Lab) -> None:
         page.wait_for_timeout(1500)
         tree, row, _ = _lab.explorer_helpers(page)
         for folder in ("curated", "customers", "landing", "events"):
-            tree(folder).click()
+            tree(folder).dblclick()  # shown in the list, and expanded
             page.wait_for_timeout(1200)
         row("events_2026-09-30.jsonl").click()
         page.wait_for_timeout(1000)

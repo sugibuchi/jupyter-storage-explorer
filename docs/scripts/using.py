@@ -28,7 +28,7 @@ def make(lab: Lab) -> None:
         list_bar = page.locator(".jse-list-pane .jse-pane-bar").first
 
         # Browse: a folder open, two items selected.
-        tree("curated").click()
+        tree("curated").dblclick()
         page.wait_for_timeout(1500)
         row("customers").click()
         row("orders.parquet").click(modifiers=["Control"])
@@ -38,7 +38,7 @@ def make(lab: Lab) -> None:
         shot(page, FIGS / "using-browse.png", area)
 
         # Filter: a regular expression on the list.
-        tree("landing").click()
+        tree("landing").dblclick()
         page.wait_for_timeout(1200)
         tree("orders").click()
         page.wait_for_timeout(1500)

@@ -132,7 +132,7 @@ def make(lab: Lab) -> None:
             return tree(name).get_by_text(name, exact=True)
 
         # A Delta Lake table, queried.
-        film.click(label("curated"))
+        film.click(label("curated"), double=True)
         page.wait_for_timeout(1000)
         film.snap(700)
         film.click(row("customers"))
