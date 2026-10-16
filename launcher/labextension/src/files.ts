@@ -40,7 +40,11 @@ interface IExplorerFile {
   storage: string; // the storage's name in it
   path: string; // the file's path in the storage
   get(options: IGetOptions): Promise<Contents.IModel>;
-  save(options: { contentType: string | null; format: string | null; content: unknown }): Promise<Contents.IModel>;
+  save(options: {
+    contentType: string | null;
+    format: string | null;
+    content: unknown;
+  }): Promise<Contents.IModel>;
 }
 
 class StorageDrive implements Contents.IDrive {

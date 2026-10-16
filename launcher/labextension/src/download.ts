@@ -88,7 +88,9 @@ async function download(
     Notification.success(`Downloaded ${describeFiles(copied)} to ${where}`, { autoClose: 5000 });
   }
   if (skipped.length) {
-    Notification.info(`Skipped ${describeFiles(skipped)}: already in ${where}`, { autoClose: 5000 });
+    Notification.info(`Skipped ${describeFiles(skipped)}: already in ${where}`, {
+      autoClose: 5000
+    });
   }
   for (const error of errors) {
     Notification.error(`Download failed: ${error}`);
@@ -112,7 +114,8 @@ function acceptDownloads(browser: FileBrowser, app: JupyterFrontEnd): void {
 
   // The folder under the pointer: a folder row, else the folder shown.
   const target = (ev: DragEvent): { dir: string; el: HTMLElement } => {
-    const row = ev.target instanceof Element ? ev.target.closest<HTMLElement>('.jp-DirListing-item') : null;
+    const row =
+      ev.target instanceof Element ? ev.target.closest<HTMLElement>('.jp-DirListing-item') : null;
     if (row && listing.contentNode.contains(row)) {
       const index = Array.prototype.indexOf.call(listing.contentNode.children, row);
       const item = Array.from(listing.sortedItems())[index];
@@ -158,7 +161,9 @@ function acceptDownloads(browser: FileBrowser, app: JupyterFrontEnd): void {
       ev.preventDefault();
       ev.stopPropagation();
       highlight(null);
-      const drag = (globalThis as Record<symbol, unknown>)[DRAG_REGISTRY] as IExplorerDrag | undefined;
+      const drag = (globalThis as Record<symbol, unknown>)[DRAG_REGISTRY] as
+        | IExplorerDrag
+        | undefined;
       if (!drag) {
         return;
       }

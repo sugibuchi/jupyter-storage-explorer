@@ -1,8 +1,8 @@
-# Prettier formats the widgets' frontend only (see .prettierrc.json): not the
-# vendored libraries, nor the extension (launcher/labextension/), which keeps
-# its own style.
+# Prettier formats the widgets' frontend and the launcher's extension, each in
+# its own style (see .prettierrc.json); not the vendored libraries.
 *
 !*/
 !src/jupyter_storage_explorer/static/**/*.js
 !src/jupyter_storage_explorer/static/**/*.css
+!launcher/labextension/src/**/*.ts
 src/jupyter_storage_explorer/static/vendor/

@@ -56,15 +56,17 @@ IntelliJ's notebook view runs the widgets too, but dragging files in or out of t
 ```bash
 uv run pytest                                        # the Python side
 uvx ruff check src launcher/src tests docs/scripts   # lint
-uv run npx --yes prettier@3.3.3 --check .            # the widgets' JavaScript and CSS formatting
+uv run npx --yes prettier@3.3.3 --check .            # formatting: the widgets' JS and CSS, the extension's TS
 uv run tests/browser/check_js.py                     # their JavaScript: syntax, names undefined or unused
 uv run --group docs tests/browser/smoke.py           # the widgets in a real JupyterLab
 ```
 
-CI runs the first four. The JavaScript has no unit tests: `tests/browser/smoke.py` clicks through the widgets' main
-features (browsing, previews, the data browser, file operations, uploads and downloads, the launcher's extension) in a
-JupyterLab of its own, with the installed Microsoft Edge. CI does not run it: run it after changing `static/` or the
-extension. Give check names to run only those; a failed check leaves a screenshot, `tests/browser/smoke-<check>.png`.
+CI runs the first four, and compiles the extension's TypeScript. The JavaScript has no unit tests:
+`tests/browser/smoke.py` clicks through the widgets' main features (browsing, previews, the data browser, file
+operations, uploads and downloads, the launcher's extension and its tab, reopened after a page reload and replaced after
+a kernel restart) in a JupyterLab of its own, with the installed Microsoft Edge. CI does not run it: run it after
+changing `static/` or the extension. Give check names to run only those; a failed check leaves a screenshot,
+`tests/browser/smoke-<check>.png`.
 
 ## How the code fits together
 
@@ -74,8 +76,8 @@ extension. Give check names to run only those; a failed check leaves a screensho
 - **Its frontend** is a file per feature in `static/storage_explorer/` (the list, tree, preview, menus, operations,
   transfers, ...), each a `createX(x)` sharing the explorer `x` made in `storage_explorer.js`; the kernel joins them
   into one module with the shared `common.js` and `query.js` (`_static.py`), as anywidget cannot import files.
-- **File operations** are planned by `FileTasks` (`_jobs/tasks.py`), run as jobs in a worker thread (`_jobs/runner.py`), and
-  done by a chain of `FileSystemOperations` objects (`fs_operations/`), which users can extend.
+- **File operations** are planned by `FileTasks` (`_jobs/tasks.py`), run as jobs in a worker thread (`_jobs/runner.py`),
+  and done by a chain of `FileSystemOperations` objects (`fs_operations/`), which users can extend.
 - **The data browser** is `DataQuery` (`_query/`), on any dataframe narwhals supports; `DataExplorer` shows it alone.
 - **Formats** (`formats/`) detect, preview, scan and generate code for each kind of file.
 

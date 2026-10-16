@@ -548,14 +548,72 @@ def query_in_new_tab(x: Explorer) -> None:
 # --- The launcher's tab ---
 
 
-def launcher_tab(lab: Lab, page: Page) -> None:
+# Checks given the server and the page, each on a page of its own.
+LAB_CHECKS: dict[str, Callable[[Lab, Page], None]] = {}
+
+
+def lab_check(fn: Callable[[Lab, Page], None]) -> Callable[[Lab, Page], None]:
+    LAB_CHECKS[fn.__name__] = fn
+    return fn
+
+
+def open_launcher_tab(lab: Lab, page: Page) -> Locator:
+    """A new launcher tab, once its explorer shows the lake: its explorer."""
     page.goto(lab.url())
     page.locator(".jp-LauncherCard", has_text="Storage Explorer").first.click()
-    tab = page.locator(".jse-launcher-panel .jse-browser")
-    expect(tab.locator(".jse-tree .jse-node").first).to_contain_text(
-        "sales-lake", timeout=90_000
-    )
+    return launcher_explorer(page)
+
+
+def launcher_explorer(page: Page, panel: str = ".jse-launcher-panel") -> Locator:
+    tab = page.locator(f"{panel} .jse-browser")
+    expect(tab.locator(".jse-tree .jse-node").first).to_be_visible(timeout=90_000)
+    return tab
+
+
+def tab_go(page: Page, tab: Locator, storage: str, folder: str) -> None:
+    """Show ``folder`` of ``storage`` in a launcher tab's explorer."""
+    tab.locator(".jse-fs-select").select_option(storage)
+    tab.locator(".jse-tree .jse-node").filter(
+        has=page.get_by_text(folder, exact=True)
+    ).first.click()
+    expect(tab.locator(".jse-crumb").last).to_have_text(folder)
+
+
+@lab_check
+def launcher_tab(lab: Lab, page: Page) -> None:
+    tab = open_launcher_tab(lab, page)
+    expect(tab.locator(".jse-tree .jse-node").first).to_contain_text("sales-lake")
     expect(tab.locator(".jse-fs-select")).to_be_visible()
+
+
+@lab_check
+def launcher_tab_reload(lab: Lab, page: Page) -> None:
+    # The tab reopens where it was after a page reload: the storage shown, and
+    # each storage's folder (index.ts saves them with the workspace).
+    tab = open_launcher_tab(lab, page)
+    tab_go(page, tab, "Sales lake", "pipelines")
+    tab_go(page, tab, "Scratch", "exports")
+    page.wait_for_timeout(3000)  # the workspace saved
+    page.goto(re.sub(r"([?&])reset&?", r"\1", page.url))  # the same workspace, kept
+    tab = launcher_explorer(page)
+    expect(tab.locator(".jse-fs-select")).to_have_value("Scratch")
+    expect(tab.locator(".jse-crumb").last).to_have_text("exports")
+    tab.locator(".jse-fs-select").select_option("Sales lake")
+    expect(tab.locator(".jse-crumb").last).to_have_text("pipelines")
+
+
+@lab_check
+def launcher_tab_restart(lab: Lab, page: Page) -> None:
+    # A kernel restart loses the explorer: a new tab replaces the tab, where it was.
+    tab = open_launcher_tab(lab, page)
+    tab_go(page, tab, "Sales lake", "pipelines")
+    old = page.locator(".jse-launcher-panel").first.get_attribute("id")
+    page.locator(".lm-MenuBar-itemLabel", has_text="Kernel").click()
+    page.locator(".lm-Menu-itemLabel", has_text="Restart Kernel…").first.click()
+    page.locator(".jp-Dialog-footer .jp-Dialog-button", has_text="Restart").click()
+    tab = launcher_explorer(page, f'.jse-launcher-panel:not([id="{old}"])')
+    expect(tab.locator(".jse-crumb").last).to_have_text("pipelines")
+    expect(page.locator(".jse-launcher-panel")).to_have_count(1)
 
 
 # --- Helpers ---
@@ -595,11 +653,11 @@ def wait_for(condition: Callable[[], bool], what: str, timeout: float = 15) -> N
 
 
 def main(names: list[str]) -> int:
-    unknown = set(names) - {*CHECKS, "launcher_tab"}
+    unknown = set(names) - {*CHECKS, *LAB_CHECKS}
     if unknown:
         print(f"unknown checks: {', '.join(sorted(unknown))}")
         return 2
-    chosen = [n for n in [*CHECKS, "launcher_tab"] if not names or n in names]
+    chosen = [n for n in [*CHECKS, *LAB_CHECKS] if not names or n in names]
     failed = []
     with _lab.lab() as lab, lab.page(1400, 1000, scale=1) as page:
         page.set_default_timeout(20_000)
@@ -607,8 +665,9 @@ def main(names: list[str]) -> int:
         for name in chosen:
             start = time.monotonic()
             try:
-                if name == "launcher_tab":
-                    launcher_tab(lab, page)
+                if name in LAB_CHECKS:
+                    LAB_CHECKS[name](lab, page)
+                    x = None  # the page has left the notebook
                 else:
                     x = x or Explorer(lab, page)
                     CHECKS[name](x)
