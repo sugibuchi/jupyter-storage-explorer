@@ -2,31 +2,29 @@
 
 from __future__ import annotations
 
-import base64
-import dataclasses
-import functools
-import math
 import os
-import time
 import uuid
-import weakref
-from typing import TYPE_CHECKING, Any, NamedTuple
+from typing import TYPE_CHECKING, Any
 
 import anywidget
 import traitlets
-from fsspec.core import url_to_fs
 
 from jupyter_storage_explorer import (
-    _infos,
-    _jupyterlab_files,
     _paths,
     _static,
-    properties,
 )
-from jupyter_storage_explorer._json import jsonable
+from jupyter_storage_explorer._explorer.bookmarks import BookmarksMixin
+from jupyter_storage_explorer._explorer.common import (
+    explorers,
+    open_storage,
+    within_top,
+)
+from jupyter_storage_explorer._explorer.folders import FoldersMixin
+from jupyter_storage_explorer._explorer.jobs import JobsMixin
+from jupyter_storage_explorer._explorer.jupyterlab import JupyterLabFilesMixin
+from jupyter_storage_explorer._explorer.previews import PreviewsMixin
+from jupyter_storage_explorer._explorer.requests import FileRequestsMixin
 from jupyter_storage_explorer._urls import default_location, default_url
-from jupyter_storage_explorer.data_explorer import DataExplorer
-from jupyter_storage_explorer.file_tasks import FileTasks, Plan, Task
 from jupyter_storage_explorer.filesystems import (
     AsyncFsspecOperations,
     AtomicMoveOperation,
@@ -34,30 +32,16 @@ from jupyter_storage_explorer.filesystems import (
 )
 from jupyter_storage_explorer.formats import (
     DataFormat,
-    MediaPreview,
-    Preview,
     PreviewLimits,
-    Recipe,
-    Target,
     Text,
     explorer_formats,
-    matching_formats,
 )
-from jupyter_storage_explorer.formats import detect as detect_format
 from jupyter_storage_explorer.incoming import IncomingFiles
 from jupyter_storage_explorer.jobs import JobRunner
 from jupyter_storage_explorer.listing import Listing
-from jupyter_storage_explorer.operations import (
-    OperationChain,
-    same_filesystem,
-)
-from jupyter_storage_explorer.query import DataQuery
+from jupyter_storage_explorer.operations import OperationChain
 from jupyter_storage_explorer.states import ExplorerStates, explorer_states
-from jupyter_storage_explorer.transfer_policy import (
-    TransferPolicy,
-    computer_url,
-    jupyterlab_url,
-)
+from jupyter_storage_explorer.transfer_policy import TransferPolicy
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
@@ -65,8 +49,9 @@ if TYPE_CHECKING:
     import narwhals as nw
     from fsspec import AbstractFileSystem
 
-    from jupyter_storage_explorer.jobs import Job
+    from jupyter_storage_explorer.data_explorer import DataExplorer
     from jupyter_storage_explorer.operations import FileSystemOperations
+    from jupyter_storage_explorer.query import DataQuery
 
     # A request's handler: the reply to its content (see _requests).
     _Handler = Callable[[dict[str, Any]], dict[str, Any]]
@@ -75,97 +60,19 @@ if TYPE_CHECKING:
 # only these names are served.
 _VENDOR_FILES = frozenset({"marked.esm.js", "purify.es.mjs"})
 
-# Largest file that can be downloaded: it passes through kernel memory and the
-# notebook's connection in one message.
-_MAX_DOWNLOAD_BYTES = 100 * 1024 * 1024
 
-# While a job runs, what it has changed is shown at most this often (seconds):
-# items gone leave the list at once, without asking the storage; new items
-# show by listing their folder again, a request (for large folders on object
-# stores, several), so less often.
-_FOLLOW_INTERVAL = 1.0
-_RELIST_INTERVAL = 3.0
-
-# The explorers in this kernel, by _explorer_id: files copied in one of them
-# are pasted from its own filesystem object (with its credentials), not
-# found again from their URLs. Explorers in other kernels are not here.
-_explorers: weakref.WeakValueDictionary[str, StorageExplorer] = (
-    weakref.WeakValueDictionary()
-)
-
-
-class _Storage(NamedTuple):
-    """One of an explorer's storages: its filesystem, and its top folder."""
-
-    fs: AbstractFileSystem
-    root: str
-
-
-def _open(
-    path: str | None, fs: AbstractFileSystem | None, storage_options: Mapping[str, Any]
-) -> _Storage:
-    """A storage from a URL or path, or from an existing filesystem (and a
-    path in it to start at)."""
-    if fs is None:
-        fs, root = url_to_fs("." if path is None else path, **storage_options)
-    elif storage_options:
-        raise TypeError(
-            "storage options cannot be combined with an existing filesystem"
-        )
-    else:
-        root = fs._strip_protocol(fs.root_marker if path is None else path)
-    # Top-level paths strip to "" on some backends (e.g. memory), which does
-    # not match the "/..." names they list.
-    return _Storage(fs, root or fs.root_marker)
-
-
-def _within_top(path: str, root: str) -> bool:
-    """Whether ``path`` is in top folder ``root`` (any relative path when
-    the root is "", as for DirFileSystems), without ".." parts."""
-    if ".." in path.split("/"):
-        return False
-    return root == "" or _paths.inside(path, root)
-
-
-@dataclasses.dataclass
-class _Followed:
-    """How much of a running task's changes the explorer has shown (see
-    ``StorageExplorer._follow``): counts of its records shown, and when."""
-
-    moved: int = 0
-    removed: int = 0
-    moved_away: int = 0
-    additions: int = 0
-    shown_at: float = -math.inf
-    listed_at: float = -math.inf
-
-
-def _error_text(exc: Exception) -> str:
-    """An error for users: the explorer's own refusals (ValueError) as they
-    are, others with their type, e.g. "FileNotFoundError: ..."."""
-    return str(exc) if isinstance(exc, ValueError) else f"{type(exc).__name__}: {exc}"
-
-
-def _entry(info: dict[str, Any]) -> dict[str, Any]:
-    is_dir = info.get("type") == "directory"
-    return {
-        "name": _paths.basename(info["name"]),
-        "path": _paths.norm(info["name"]),
-        "type": "directory" if is_dir else "file",
-        "size": None if is_dir else info.get("size"),
-        "mtime": _infos.mtime(info),
-    }
-
-
-def _section(preview: Preview) -> dict[str, Any]:
-    """A preview section as JSON for the frontend; media bytes are base64-encoded."""
-    data = {f.name: getattr(preview, f.name) for f in dataclasses.fields(preview)}
-    if isinstance(preview, MediaPreview) and preview.data is not None:
-        data["data"] = base64.b64encode(preview.data).decode("ascii")
-    return {"kind": preview.kind, **jsonable(data)}
-
-
-class StorageExplorer(anywidget.AnyWidget):
+# Its features are mixins (in _explorer/), each a group of the methods below
+# working on the state the class sets up; what the class keeps is that state,
+# the messages' routing, the locations (_url, _locate) and the fsspec calls.
+class StorageExplorer(
+    FoldersMixin,
+    PreviewsMixin,
+    BookmarksMixin,
+    JupyterLabFilesMixin,
+    JobsMixin,
+    FileRequestsMixin,
+    anywidget.AnyWidget,
+):
     """Browse any fsspec-supported storage with a directory tree and a file list.
 
     Preview opens a preview below the list; tables open in a data browser
@@ -408,13 +315,13 @@ class StorageExplorer(anywidget.AnyWidget):
             if not filesystems:
                 raise ValueError("filesystems must not be empty")
             self._filesystems = {
-                name: _open(value, None, {})
+                name: open_storage(value, None, {})
                 if isinstance(value, str)
-                else _open(None, value, {})
+                else open_storage(None, value, {})
                 for name, value in filesystems.items()
             }
         else:
-            self._filesystems = {"default": _open(path, fs, storage_options)}
+            self._filesystems = {"default": open_storage(path, fs, storage_options)}
         self._remembered: dict[str, str] = {}
         name = next(iter(self._filesystems))
         self._fs: AbstractFileSystem = self._filesystems[name].fs
@@ -432,7 +339,7 @@ class StorageExplorer(anywidget.AnyWidget):
             ),
         )
         self.on_msg(self._on_custom_msg)
-        _explorers[self._explorer_id] = self
+        explorers[self._explorer_id] = self
         self._filesystem = name  # shows its top level (see _on_filesystem)
         if states_error:
             self._error = states_error
@@ -505,7 +412,7 @@ class StorageExplorer(anywidget.AnyWidget):
             for name, folder in folders.items()
             if name in self._filesystems
             and isinstance(folder, str)
-            and _within_top(folder, self._filesystems[name].root)
+            and within_top(folder, self._filesystems[name].root)
         }
         if filesystem not in self._filesystems:
             filesystem = self._filesystem
@@ -628,238 +535,12 @@ class StorageExplorer(anywidget.AnyWidget):
             "source": (_static.STATIC / "vendor" / name).read_text(encoding="utf-8")
         }
 
-    # --- File list and tree ---
+    # --- The folder shown and the selection, set by the frontend (here, as
+    # traitlets' observers must be on the class itself, not on a mixin) ---
 
     @traitlets.observe("_current_dir")
     def _on_current_dir(self, change: dict[str, Any]) -> None:
         self._list(change["new"])
-
-    def _list(self, path: str) -> None:
-        # Make sure the tree can be expanded down to the current directory.
-        for ancestor in self._ancestors(path):
-            if ancestor not in self._tree:
-                self._load_children(ancestor)
-        try:
-            infos = self._ls(path)
-        except Exception as exc:
-            self._error = f"Cannot list {path}: {exc}"
-            self._show_listing(self._make_listing(path, []))
-            self._selected = []
-            self._current_format = ""
-            self._current_query = False
-            return
-        self._error = ""
-        self._set_children(path, infos)
-        self._show_listing(self._make_listing(path, infos))
-        self._selected = []
-        fmt = self._directory_format(path, infos)
-        self._current_format = fmt.name if fmt is not None else ""
-        self._current_query = fmt is not None and fmt.can_query()
-
-    def _ancestors(self, path: str) -> list[str]:
-        """Directories from the root down to (but excluding) ``path``."""
-        if not path.startswith(self._root):
-            return []
-        out, cur = [], self._root
-        for segment in filter(None, path[len(self._root) :].split("/")):
-            out.append(cur)
-            cur = _paths.join(cur, segment)
-        return out
-
-    def _load_children(self, path: str) -> None:
-        try:
-            infos = self._ls(path)
-        except Exception as exc:
-            self._error = f"Cannot list {path}: {exc}"
-            infos = []
-        self._set_children(path, infos)
-
-    def _set_children(self, path: str, infos: list[dict[str, Any]]) -> None:
-        dirs = []
-        for info in infos:
-            if info.get("type") == "directory":
-                child = _paths.norm(info["name"])
-                dirs.append({"name": _paths.basename(child), "path": child})
-                if self._url(child) is None:
-                    dirs[-1]["no_url"] = True
-        dirs.sort(key=lambda d: d["name"].lower())
-        self._tree = {**self._tree, path: dirs}
-
-    def _make_listing(self, path: str, infos: list[dict[str, Any]]) -> dict[str, Any]:
-        """The listing of directory ``path`` (its ``infos`` from ``_ls``) for ``_listing``.
-
-        One list per column, an item per entry: "names", "is_dir" (0 or 1),
-        "sizes" (None for folders), "mtimes" and "ctimes" (modification and
-        creation times, for tooltips: whole seconds, or None), and
-        "format", an index into "formats", whose first name is "" (none; all
-        folders). Paths are not sent: an entry's is "dir" joined with its name,
-        unless "paths" (otherwise None) gives them all, for a filesystem that
-        names them differently. URLs are not sent either, as most are never
-        used: the frontend asks for them ("urls") when copying; "no_url" lists
-        the indexes of the entries without one (see _url).
-        """
-        listing: dict[str, Any] = {
-            "dir": path,
-            "names": [],
-            "is_dir": [],
-            "sizes": [],
-            "mtimes": [],
-            "ctimes": [],
-            "formats": [""],
-            "format": [],
-            "paths": None,
-            "no_url": [],
-        }
-        format_index = {"": 0}
-        paths = []
-        for i, info in enumerate(infos):
-            entry = _entry(info)
-            fmt = self._file_format(info)
-            if fmt not in format_index:
-                format_index[fmt] = len(listing["formats"])
-                listing["formats"].append(fmt)
-            listing["names"].append(entry["name"])
-            listing["is_dir"].append(int(entry["type"] == "directory"))
-            listing["sizes"].append(entry["size"])
-            mtime = entry["mtime"]
-            listing["mtimes"].append(None if mtime is None else int(mtime))
-            ctime = _infos.ctime(info)
-            listing["ctimes"].append(None if ctime is None else int(ctime))
-            listing["format"].append(format_index[fmt])
-            paths.append(entry["path"])
-            if self._url(entry["path"]) is None:
-                listing["no_url"].append(i)
-        if any(
-            p != _paths.join(path, n)
-            for p, n in zip(paths, listing["names"], strict=True)
-        ):
-            listing["paths"] = paths
-        return listing
-
-    def _show_listing(self, columns: dict[str, Any]) -> None:
-        """Keep the current directory's ``columns`` (see _make_listing) and show them."""
-        self._full_listing = Listing(columns)
-        self._send_listing()
-
-    def _send_listing(self) -> None:
-        """Send the current directory's listing, or for a large folder only its
-        size, the frontend then asking for pages ("list")."""
-        listing = self._full_listing
-        self._listing_version += 1
-        limit = self._max_browser_items
-        if limit is not None and len(listing) > limit:
-            self._listing = {
-                "dir": listing.dir,
-                "query": True,
-                "total": len(listing),
-                "version": self._listing_version,
-            }
-        else:
-            self._listing = listing.columns
-
-    def _list_page(self, content: dict[str, Any]) -> dict[str, Any]:
-        """A page of a large folder's items: the "list" request (see Listing.query).
-
-        {"stale": true} if the folder shown has changed since the frontend asked.
-        """
-        listing = self._full_listing
-        if content.get("dir") != listing.dir or content.get("version") != (
-            self._listing.get("version")
-        ):
-            return {"stale": True}
-        return listing.query(
-            text=content.get("text") or "",
-            regex=bool(content.get("regex")),
-            sort=content.get("sort", "name"),
-            asc=content.get("asc", True),
-            page=int(content.get("page", 0)),
-            page_size=int(content.get("page_size", 100)),
-        )
-
-    def _listed_paths(self) -> list[str]:
-        """Paths of the current directory's items, in listing order."""
-        columns = self._full_listing.columns
-        if columns["paths"] is not None:
-            return columns["paths"]
-        return [_paths.join(columns["dir"], name) for name in columns["names"]]
-
-    def _refresh(self) -> None:
-        """Drop cached listings and reload the current directory."""
-        self._invalidate_cache()
-        self._tree = {}
-        self._list(self._current_dir)
-
-    def _refresh_dir(self, path: str) -> None:
-        """Show changes made to directory ``path`` in the list and tree."""
-        self._invalidate_cache(path)
-        if path == self._current_dir:
-            self._list(path)
-        elif path in self._tree:
-            self._load_children(path)
-
-    def _forget(self, path: str, moved_to: str | None = None) -> None:
-        """Let the widget follow folder or file ``path``, moved to ``moved_to`` or deleted.
-
-        Closes a preview of it or of something in it, drops its folders from the
-        tree, and if the list shows it (or a folder in it), shows the same
-        folder where it was moved to, or the deleted folder's parent.
-        """
-        if _paths.inside(self._preview.get("path") or "", path):
-            self._close_preview()
-        self._tree = {k: v for k, v in self._tree.items() if not _paths.inside(k, path)}
-        if _paths.inside(self._current_dir, path):
-            self._current_dir = (
-                _paths.parent(path, self._fs)
-                if moved_to is None
-                else moved_to + _paths.norm(self._current_dir)[len(_paths.norm(path)) :]
-            )
-
-    def _update_entry(self, path: str) -> None:
-        """Refresh the size and modification time shown for ``path`` in the list."""
-        paths = self._listed_paths()
-        if path in paths:
-            entry = _entry(self._info(path))
-            mtime = None if entry["mtime"] is None else int(entry["mtime"])
-            self._full_listing.update(paths.index(path), entry["size"], mtime)
-            self._send_listing()
-
-    def _file_format(self, info: dict[str, Any]) -> str:
-        """The format name of a listed file, e.g. "json-lines".
-
-        Shown as the row's ``data-file-format``. Empty for folders (detecting
-        them would mean listing each one), files without a URL and
-        unrecognised files.
-        """
-        path = _paths.norm(info["name"])
-        if info.get("type") == "directory" or (url := self._url(path)) is None:
-            return ""
-        target = Target(fs=self._fs, path=path, url=url, info=info)
-        try:
-            fmt = detect_format(target, self._formats)
-        except Exception:
-            return ""  # detection is best-effort
-        return fmt.name if fmt is not None else ""
-
-    def _directory_format(
-        self, path: str, infos: list[dict[str, Any]]
-    ) -> DataFormat | None:
-        """The format of directory ``path`` given its listing, if any."""
-        url = self._url(path)
-        if url is None:
-            return None
-        # The listing is all directory formats need, so skip fetching the
-        # directory's own info.
-        target = Target(
-            fs=self._fs,
-            path=path,
-            url=url,
-            info={"name": path, "type": "directory"},
-            children=infos,
-        )
-        try:
-            return detect_format(target, self._formats)
-        except Exception:
-            return None  # detection is best-effort; a failure just means no preview
 
     @traitlets.observe("_selected")
     def _on_selected(self, change: dict[str, Any]) -> None:
@@ -940,753 +621,6 @@ class StorageExplorer(anywidget.AnyWidget):
         """
         others = [fs for fs, _ in self._filesystems.values() if fs is not self._fs]
         return default_location(url, [self._fs, *others])
-
-    # --- Preview, data browser ("Query data") and the right-click menu ---
-
-    def _detect(self, path: str) -> tuple[Target | None, list[DataFormat]]:
-        """The target at ``path`` and the formats matching it, best first.
-
-        (None, []) if ``path`` has no URL: it is then not treated as data.
-        """
-        url = self._url(path)
-        if url is None:
-            return None, []
-        info = self._info(path)
-        children = self._ls(path) if info.get("type") == "directory" else None
-        target = Target(fs=self._fs, path=path, url=url, info=info, children=children)
-        return target, matching_formats(target, self._formats)
-
-    def _open_preview(self, path: str, format: str | None = None) -> None:
-        """Preview the file or directory at ``path`` in the preview panel.
-
-        ``format`` names one of the formats matching it (e.g. "text" for a JSON
-        file); by default the best match is used.
-        """
-        base = {
-            "path": path,
-            "name": _paths.basename(path),
-            "format": None,
-            "sections": [],
-            "error": "",
-        }
-        # Shown while the (possibly remote) reads below run.
-        self._preview = {**base, "loading": True}
-        try:
-            target, formats = self._detect(path)
-            if target is None:
-                raise ValueError(f"{path} has no URL, so it cannot be previewed")
-            if format is not None:
-                formats = [f for f in formats if f.name == format]
-                if not formats:
-                    raise ValueError(f"{path} cannot be previewed as {format}")
-            if formats:
-                fmt = formats[0]
-                base["format"] = fmt.name
-                if fmt.can_query():
-                    base["query"] = self._open_query(path, fmt, target)
-                else:
-                    base["sections"] = [
-                        _section(s) for s in fmt.preview(target, self._preview_limits)
-                    ]
-        except Exception as exc:
-            base["error"] = _error_text(exc)
-        self._preview = base
-
-    def _close_preview(self) -> None:
-        self._queries.clear()
-        self._preview = {}
-
-    def _open_query(self, path: str, fmt: DataFormat, target: Target) -> dict[str, Any]:
-        """Open ``path`` in the data browser: its columns and remembered settings.
-
-        The frontend then asks for rows with "query_rows".
-        """
-        data = self._new_query(fmt, target)
-        self._queries[path] = data
-        return data.opening()
-
-    def _new_query(self, fmt: DataFormat, target: Target) -> DataQuery:
-        """The data browser's query of ``target`` read as ``fmt``.
-
-        Settings are remembered by URL, so they follow the data across
-        explorers and tabs, with the mode last chosen for it.
-        """
-        scan = functools.partial(fmt.scan, target.url, target.is_dir)
-        state = self._states.query(target.url)
-        mode = state.mode if state is not None else "auto"
-        fetch = self._fetch_rows
-        try:
-            return DataQuery(scan, target.url, self._states, mode=mode, fetch=fetch)
-        except ValueError:
-            if mode != "live":
-                raise
-            # "live" chosen when the format scanned lazily, and no longer does.
-            return DataQuery(scan, target.url, self._states, fetch=fetch)
-
-    # --- Query data in a new tab: a DataExplorer of the same query, which the
-    # launcher's JupyterLab extension shows in a tab of its own ---
-
-    def _query_tab_request(self, content: dict[str, Any]) -> dict[str, Any]:
-        """Answer "query_tab": open ``path`` (as ``format``, else its best
-        format) in a new ``DataExplorer``, kept until the tab closes
-        ("query_tab_closed"). {"model_id", "title", "url"} or {"error"}."""
-        path = content.get("path")
-        try:
-            target, formats = self._detect(path)
-            if target is None:
-                raise ValueError(f"{path} has no URL, so it cannot be queried")
-            if content.get("format"):
-                formats = [f for f in formats if f.name == content["format"]]
-            if not formats or not formats[0].can_query():
-                raise ValueError(f"{_paths.basename(path)} cannot be queried")
-            explorer = DataExplorer._of_query(
-                self._new_query(formats[0], target),
-                self._states,
-                target.url,
-                title=_paths.basename(path),
-                label=formats[0].label,
-                height="fill",
-            )
-        except Exception as exc:
-            return {"error": _error_text(exc)}
-        self._query_tabs[explorer.model_id] = explorer
-        return {
-            "model_id": explorer.model_id,
-            "title": _paths.basename(path),
-            "url": target.url,
-        }
-
-    def _query_tab_closed(self, model_id: str) -> None:
-        """The tab of a "query_tab" closed: its DataExplorer is no longer kept."""
-        explorer = self._query_tabs.pop(model_id, None)
-        if explorer is not None:
-            explorer.close()
-
-    def _query_request(self, content: dict[str, Any]) -> dict[str, Any]:
-        """Answer the data browser's requests ("query_rows", "query_check",
-        "query_save", "query_reload", "query_mode") on the data previewed."""
-        data = self._queries.get(content["path"])
-        if data is None:
-            return {"error": "the data is no longer open; preview it again"}
-        return data.handle(content) or {}
-
-    def _recipes(self, path: str) -> list[Recipe]:
-        """Ways to load ``path`` in the notebook, from its best-matching format.
-
-        Empty if its format is unknown or it has no URL.
-        """
-        target, formats = self._detect(path)
-        if target is None or not formats:
-            return []
-        return formats[0].recipes(target)
-
-    def _menu_info(self, path: str) -> dict[str, Any]:
-        """Answer "menu_info", the right-click menu's: {"formats": names of
-        those matching ("Preview as"), "recipes": load code ("Python code"),
-        "query": whether it opens in the data browser}, or {"error"}."""
-        try:
-            target, formats = self._detect(path)
-            recipes = formats[0].recipes(target) if formats else []
-        except Exception as exc:
-            return {"error": _error_text(exc)}
-        return {
-            "formats": [f.name for f in formats],
-            "recipes": [dataclasses.asdict(r) for r in recipes],
-            "query": bool(formats) and formats[0].can_query(),
-        }
-
-    # --- Bookmarks: folders, kept in the explorer states (states.py), so
-    # shared with the explorers using the same states ---
-
-    def _bookmark_list(self) -> dict[str, Any]:
-        """{"bookmarks": [{"filesystem", "path", "url", "label"}]}: those of this
-        explorer's storages, within their top folders, labelled "[storage]
-        path" and in alphabetical order of storage, then path (ignoring case)."""
-        bookmarks = [
-            {
-                "filesystem": b.filesystem,
-                "path": b.path,
-                "url": b.url,
-                "label": f"[{b.filesystem}] {b.path}",
-            }
-            for b in self._states.bookmarks
-            if b.filesystem in self._filesystems
-            and _within_top(b.path, self._filesystems[b.filesystem].root)
-        ]
-        bookmarks.sort(key=lambda b: (b["filesystem"].casefold(), b["path"].casefold()))
-        return {"bookmarks": bookmarks}
-
-    def _add_bookmark(self, path: str) -> dict[str, Any]:
-        """Bookmark folder ``path`` of the storage shown; the bookmarks, or {"error"}."""
-        if not _within_top(path, self._root) or not self._exists_folder(path):
-            return {"error": f"{path} is not a folder of this storage"}
-        self._states.add_bookmark(self._filesystem, path, self._url(path))
-        return self._bookmark_list()
-
-    def _remove_bookmark(self, filesystem: str, path: str) -> dict[str, Any]:
-        self._states.remove_bookmark(filesystem, path)
-        return self._bookmark_list()
-
-    def _open_bookmark(self, filesystem: str, path: str) -> dict[str, Any]:
-        """Show bookmarked folder ``path`` of storage ``filesystem``: {} or {"error"}."""
-        storage = self._filesystems.get(filesystem)
-        if storage is None or not _within_top(path, storage.root):
-            return {"error": f"{path} is not in this explorer's storages"}
-        try:
-            exists = self._isdir(path, storage.fs)
-        except Exception as exc:
-            return {"error": _error_text(exc)}
-        if not exists:
-            return {"error": f"{path} no longer exists"}
-        if filesystem == self._filesystem:
-            self._current_dir = path
-        else:
-            self._remembered[filesystem] = path
-            self._filesystem = filesystem  # shows the folder remembered
-        return {}
-
-    # --- Open in JupyterLab: its own editors and viewers, through the launcher's drive ---
-
-    def _jupyterlab_file(
-        self, content: dict[str, Any]
-    ) -> tuple[AbstractFileSystem, str]:
-        """The storage and path of a file opened in JupyterLab: by the storage's
-        name, as the file may stay open there while another storage is shown."""
-        storage = self._filesystems.get(content.get("filesystem"))
-        path = content.get("path")
-        if (
-            storage is None
-            or not isinstance(path, str)
-            or not _within_top(path, storage.root)
-        ):
-            raise ValueError("not a file of this explorer's storages")
-        return storage.fs, path
-
-    def _jupyterlab_get(self, content: dict[str, Any]) -> dict[str, Any]:
-        """Answer "jupyterlab_get": {"model": the file's contents model} (see
-        _jupyterlab_files.contents_model), or {"error"}."""
-        try:
-            fs, path = self._jupyterlab_file(content)
-            info = self._info(path, fs)
-            if info.get("type") == "directory":
-                raise ValueError("folders cannot be opened in JupyterLab")
-            size = info.get("size")
-            if size is not None and size > _jupyterlab_files.MAX_BYTES:
-                raise ValueError(
-                    f"too large to open in JupyterLab "
-                    f"(over {_jupyterlab_files.MAX_BYTES // (1024 * 1024)} MB)"
-                )
-            data = self._read_bytes(path, fs)
-            model = _jupyterlab_files.contents_model(
-                path,
-                data,
-                info,
-                type_=content.get("contentType"),
-                format_=content.get("format"),
-                content=content.get("content", True),
-            )
-        except Exception as exc:
-            return {"error": _error_text(exc)}
-        return {"model": model}
-
-    def _jupyterlab_save(self, content: dict[str, Any]) -> dict[str, Any]:
-        """Answer "jupyterlab_save": write the content JupyterLab saves to the
-        file; {"model": its contents model, without content} or {"error"}.
-
-        JupyterLab itself checks, with the hash, that the file has not been
-        changed elsewhere since it was opened, before saving.
-        """
-        try:
-            fs, path = self._jupyterlab_file(content)
-            current = self._read_bytes(path, fs) if self._exists(path, fs) else None
-            data = _jupyterlab_files.saved_bytes(
-                content.get("content"), content.get("format"), current
-            )
-            self._write_bytes(path, data, fs)
-            model = _jupyterlab_files.contents_model(
-                path,
-                data,
-                self._info(path, fs),
-                type_=content.get("contentType"),
-                format_=content.get("format"),
-                content=False,
-            )
-        except Exception as exc:
-            return {"error": _error_text(exc)}
-        if content.get("filesystem") == self._filesystem:
-            self._update_entry(path)
-            if self._preview.get("path") == path:
-                self._open_preview(path, self._preview.get("format"))
-        return {"model": model}
-
-    # --- Download to local: the browser saves the files on the user's computer ---
-
-    def _download(self, paths: list[str]) -> None:
-        """Send each file to the browser, which saves it; one message per file."""
-        for path in paths:
-            reply: dict[str, Any] = {
-                "type": "download",
-                "path": path,
-                "name": _paths.basename(path),
-            }
-            try:
-                refused = self._transfer_policy.error(
-                    self._location(self._fs, path),
-                    computer_url(_paths.basename(path)),
-                )
-                if refused is not None:
-                    raise PermissionError(refused)
-                info = self._info(path)
-                if info.get("type") == "directory":
-                    raise ValueError("folders cannot be downloaded")
-                size = info.get("size")
-                if size is not None and size > _MAX_DOWNLOAD_BYTES:
-                    raise ValueError(
-                        f"too large to download (over {_MAX_DOWNLOAD_BYTES // (1024 * 1024)} MB)"
-                    )
-                data = self._read_bytes(path)
-            except Exception as exc:
-                reply["error"] = f"{_paths.basename(path)}: {exc}"
-                self.send(reply)
-            else:
-                self.send(reply, [data])
-
-    # --- Jobs: move, delete, paste, upload and download run in the
-    # background. Each is planned by FileTasks (file_tasks.py), its work runs
-    # in a job's worker thread (jobs.py), and back on the main thread, _follow
-    # shows what it has changed so far as it runs, and _finish all it changed
-    # once it has ended ---
-
-    def _tasks(self, urls: Mapping[tuple[int, str], str] | None = None) -> FileTasks:
-        """Plans operations on the filesystem shown, within the policy.
-
-        ``urls``: the URLs of files pasted, as copied, by (id of their
-        filesystem, normalized path), for the policy (see ``_transfer_error``).
-        """
-        return FileTasks(
-            self._fs,
-            self._root,
-            self._operations,
-            check=functools.partial(self._transfer_error, urls=urls or {}),
-        )
-
-    def _transfer_error(
-        self,
-        source_fs: AbstractFileSystem | None,
-        source: str,
-        target_fs: AbstractFileSystem | None,
-        target: str,
-        urls: Mapping[tuple[int, str], str],
-    ) -> str | None:
-        """Why the policy refuses copying or moving ``source`` to ``target``, or
-        None. A filesystem None is JupyterLab's side (see ``FileTasks``)."""
-        if not self._transfer_policy.rules:
-            return None
-        source_url = urls.get((id(source_fs), _paths.norm(source)))
-        if source_url is None:
-            source_url = self._location(source_fs, source)
-        return self._transfer_policy.error(
-            source_url, self._location(target_fs, target)
-        )
-
-    def _location(self, fs: AbstractFileSystem | None, path: str) -> str:
-        """``path``'s URL for the policy: ``_url``'s on the filesystem shown,
-        else (another storage, files without a URL) ``default_url``'s; for
-        fs None, the Jupyter server's disk through JupyterLab's file browser,
-        ``jupyterlab_url``'s."""
-        if fs is None:
-            return jupyterlab_url(path)
-        if same_filesystem(fs, self._fs) and (url := self._url(path)) is not None:
-            return url
-        return default_url(fs, path)
-
-    def _start(self, plan: Plan) -> dict[str, Any]:
-        """Run ``plan`` as a job: {"job": its id}; or the reply as it is if
-        there is nothing to run (e.g. {"conflicts": [...]} to ask about)."""
-        if isinstance(plan, dict):
-            return plan
-        followed = _Followed()
-        job = self._jobs.submit(
-            plan.kind,
-            plan.title,
-            plan.work,
-            finish=lambda job: self._finish(plan),
-            update=lambda job: self._follow(plan, followed),
-        )
-        return {"job": job.id}
-
-    def _finish(self, task: Task) -> None:
-        """After ``task``, whatever its outcome: follow what it moved or
-        removed, and show the folders it changed."""
-        if task.cleanup is not None:
-            task.cleanup()
-        for fs, path in task.moved_away:
-            self._moved_away(fs, path)
-        if not same_filesystem(task.fs, self._fs):
-            task.fs.invalidate_cache()  # the user has switched filesystems
-            return
-        for source, target in task.moved:
-            self._forget(source, moved_to=target)
-        for path in task.removed:
-            self._forget(path)
-        for folder in task.changed:
-            self._refresh_dir(folder)
-
-    def _follow(self, task: Task, followed: _Followed) -> None:
-        """While ``task`` runs, show what it has changed since last time
-        (``followed``): items moved or deleted leave the list and the tree at
-        once (they are only dropped, so this asks the storage nothing);
-        folders that got new items are listed again, less often (see
-        ``_FOLLOW_INTERVAL``, ``_RELIST_INTERVAL``). ``_finish`` shows
-        everything once it has ended."""
-        now = time.monotonic()
-        if now - followed.shown_at < _FOLLOW_INTERVAL:
-            return
-        followed.shown_at = now
-        changes = task.changes()
-        shown = same_filesystem(task.fs, self._fs)  # else the user switched
-        gone: list[tuple[str, str | None]] = []
-        for fs, path in changes.moved_away[followed.moved_away :]:
-            if same_filesystem(fs, self._fs):
-                gone.append((path, None))
-            else:
-                fs.invalidate_cache(_paths.parent(path, fs))
-        if shown:
-            gone += changes.moved[followed.moved :]
-            gone += [(path, None) for path in changes.removed[followed.removed :]]
-        followed.moved_away = len(changes.moved_away)
-        followed.moved = len(changes.moved)
-        followed.removed = len(changes.removed)
-        if gone:
-            self._show_gone(gone)
-        if (
-            shown
-            and changes.additions > followed.additions
-            and now - followed.listed_at >= _RELIST_INTERVAL
-        ):
-            followed.additions = changes.additions
-            followed.listed_at = now
-            for folder in changes.added_to:
-                self._invalidate_cache(folder)
-                if folder == self._current_dir:
-                    self._relist_current()
-                elif folder in self._tree:
-                    self._load_children(folder)
-
-    def _show_gone(self, gone: Sequence[tuple[str, str | None]]) -> None:
-        """Drop items moved (to the path paired with them) or deleted (None)
-        from the list, the selection and the tree, without listing again."""
-        for path, moved_to in gone:
-            self._invalidate_cache(_paths.parent(path, self._fs))
-            self._forget(path, moved_to=moved_to)  # e.g. leaves a folder deleted
-        paths = {_paths.norm(path) for path, _ in gone}
-        rows = {
-            i for i, p in enumerate(self._listed_paths()) if _paths.norm(p) in paths
-        }
-        if rows:
-            self._full_listing = self._full_listing.without(rows)
-            self._send_listing()
-        if any(_paths.norm(p) in paths for p in self._selected):
-            self._selected = [p for p in self._selected if _paths.norm(p) not in paths]
-        tree = {
-            folder: [d for d in dirs if _paths.norm(d["path"]) not in paths]
-            for folder, dirs in self._tree.items()
-        }
-        if tree != self._tree:
-            self._tree = tree
-
-    def _relist_current(self) -> None:
-        """List the folder shown again, keeping the selection (unlike _list,
-        for a folder newly shown): items appear while a job adds them."""
-        path = self._current_dir
-        try:
-            infos = self._ls(path)
-        except Exception:
-            return  # the job's end lists it again, and reports errors
-        self._set_children(path, infos)
-        self._show_listing(self._make_listing(path, infos))
-        listed = {_paths.norm(p) for p in self._listed_paths()}
-        kept = [p for p in self._selected if _paths.norm(p) in listed]
-        if kept != list(self._selected):
-            self._selected = kept
-
-    def _moved_away(self, fs: AbstractFileSystem, path: str) -> None:
-        """Follow ``path`` of ``fs``, cut and pasted into another filesystem.
-
-        If ``fs`` is shown, as if deleted; else (another of this explorer's
-        storages, or another explorer's, whose frontend tells it: see
-        ``_sources_changed``) its cached listing is dropped.
-        """
-        parent = _paths.parent(path, fs)
-        if not same_filesystem(fs, self._fs):
-            fs.invalidate_cache(parent)
-            return
-        self._forget(path)
-        self._refresh_dir(parent)
-
-    def _sources_changed(self, filesystem: str, paths: Sequence[str]) -> None:
-        """Answer "changed": files of storage ``filesystem`` were cut here and
-        pasted in another explorer, which may have moved some (or all) away."""
-        storage = self._filesystems.get(filesystem)
-        if storage is None:
-            return
-        fs = storage.fs
-        parents = {_paths.parent(p, fs) for p in paths}
-        if fs is not self._fs:
-            for parent in parents:
-                fs.invalidate_cache(parent)
-            return
-        for parent in parents:
-            self._invalidate_cache(parent)
-        for path in paths:
-            if not self._exists(path):
-                self._forget(path)
-        for parent in parents:
-            self._refresh_dir(parent)
-
-    def _send_job(self, job: Job) -> None:
-        """Tell the frontend how ``job`` is doing (see Job.snapshot)."""
-        self.send({"type": "job", **job.snapshot()})
-
-    def _cancel_job(self, content: dict[str, Any]) -> None:
-        job_id = content.get("id", "")
-        if not self._jobs.cancel(job_id):
-            self._scans.cancel(job_id)
-
-    def _plan_request(self, plan: Callable[[], Plan]) -> dict[str, Any]:
-        """Answer a request for an operation: start ``plan()``, or say why not."""
-        try:
-            return self._start(plan())
-        except Exception as exc:
-            return {"errors": [_error_text(exc)]}
-
-    # --- Move: files (and, in unsafe mode, folders) dragged onto a folder;
-    # rename and delete: chosen in the right-click menu ---
-
-    def _move_request(self, content: dict[str, Any]) -> dict[str, Any]:
-        return self._plan_request(
-            lambda: self._tasks().move(
-                content["paths"],
-                content["dest"],
-                content.get("if_exists", "ask"),
-                folders=bool(content.get("unsafe")),
-            )
-        )
-
-    def _rename_request(self, content: dict[str, Any]) -> dict[str, Any]:
-        return self._plan_request(
-            lambda: self._tasks().rename(
-                content["path"], content["name"], folders=bool(content.get("unsafe"))
-            )
-        )
-
-    def _delete_request(self, content: dict[str, Any]) -> dict[str, Any]:
-        return self._plan_request(
-            lambda: self._tasks().delete(
-                content["paths"], folders=bool(content.get("unsafe"))
-            )
-        )
-
-    # --- Paste: files (and, in unsafe mode, folders) copied with "Copy" or
-    # "Cut" (in any explorer, any storage), into a folder ---
-
-    def _paste_request(self, content: dict[str, Any]) -> dict[str, Any]:
-        """Answer "paste": files copied (or with "cut", cut) in the explorer
-        ``content["explorer"]``, from its storage ``content["filesystem"]``."""
-        return self._plan_request(
-            lambda: self._paste_plan(
-                content["files"],
-                content["dest"],
-                content.get("if_exists", "ask"),
-                explorer=content.get("explorer"),
-                filesystem=content.get("filesystem"),
-                folders=bool(content.get("unsafe")),
-                cut=bool(content.get("cut")),
-            )
-        )
-
-    def _paste_plan(
-        self,
-        files: Sequence[dict[str, Any]],
-        dest: str,
-        if_exists: str,
-        *,
-        explorer: str | None,
-        filesystem: str | None,
-        folders: bool,
-        cut: bool,
-    ) -> Plan:
-        """Plan pasting ``files`` ({"path", "url"}, as copied) into ``dest``
-        (see ``FileTasks.paste``)."""
-        sources, errors, urls = self._paste_sources(files, explorer, filesystem, cut)
-        return self._tasks(urls).paste(
-            sources, dest, if_exists, folders=folders, cut=cut, errors=errors
-        )
-
-    def _paste_sources(
-        self,
-        files: Sequence[dict[str, Any]],
-        explorer: str | None,
-        filesystem: str | None,
-        cut: bool = False,
-    ) -> tuple[
-        list[tuple[AbstractFileSystem, str]], list[str], dict[tuple[int, str], str]
-    ]:
-        """The (filesystem, path) of files copied in explorer ``explorer``, from
-        its storage ``filesystem``, errors for those not found, and their URLs
-        as copied (by their explorer's ``_url``), for the policy (see
-        ``_tasks``).
-
-        If that explorer is in this kernel, its filesystem object is used, as
-        it is (credentials included). Otherwise it is in another kernel and
-        only the files' URLs tell where they are (see ``_locate``).
-        """
-        source = _explorers.get(explorer or "")
-        entry = None if source is None else source._filesystems.get(filesystem or "")
-        sources, errors, urls = [], [], {}
-        for file in files:
-            path, url = file.get("path"), file.get("url")
-            try:
-                if entry is not None:
-                    fs, root = entry
-                    if cut and _paths.norm(path) == _paths.norm(root):
-                        raise ValueError("the top folder is not moved")
-                elif url is None:
-                    raise ValueError("its location is unknown")
-                else:
-                    fs, path = self._locate(url)
-            except Exception as exc:
-                errors.append(f"{_paths.basename(path or url or '')}: {exc}")
-                continue
-            sources.append((fs, path))
-            if url is not None:
-                urls[id(fs), _paths.norm(path)] = url
-        return sources, errors, urls
-
-    # --- Upload: files (and, in unsafe mode, folders) dragged in from
-    # JupyterLab's file browser, which the kernel copies itself ---
-
-    def _upload_request(self, content: dict[str, Any]) -> dict[str, Any]:
-        """Answer "upload": ``paths`` are relative to JupyterLab's server folder ``root``."""
-        base = os.path.expanduser(content["root"])
-        sources = [os.path.join(base, *p.split("/")) for p in content["paths"]]
-        return self._plan_request(
-            lambda: self._tasks().upload(
-                sources,
-                content["dest"],
-                content.get("if_exists", "ask"),
-                folders=bool(content.get("unsafe")),
-            )
-        )
-
-    # --- Upload from the user's computer: the browser sends files in pieces
-    # (see incoming.py); the last one starts a job copying the whole file ---
-
-    def _upload_check(self, dest: str, names: list[str]) -> dict[str, Any]:
-        """Which of ``names`` already exist in ``dest``."""
-        return {
-            "conflicts": [
-                n for n in names if self._exists(_paths.join(dest, _paths.safe_name(n)))
-            ]
-        }
-
-    def _upload_chunk(
-        self, content: dict[str, Any], buffers: list[Any]
-    ) -> dict[str, Any]:
-        """Add one piece of a file; the last one starts a job copying the file
-        to the storage: {"job": id}. The frontend stops sending a file after
-        an error ({"error": ...})."""
-        upload_id = content["id"]
-        try:
-            name = _paths.safe_name(content["name"])
-            target = _paths.join(content["dest"], name)
-            refused = self._transfer_policy.error(
-                computer_url(name), self._location(self._fs, target)
-            )
-            if refused is not None:
-                raise PermissionError(refused)
-            piece = bytes(buffers[0]) if buffers else None
-            self._incoming.add(upload_id, piece, target, self._fs)
-            if not content["last"]:
-                return {}
-            incoming = self._incoming.pop(upload_id)
-        except Exception as exc:
-            self._incoming.discard(upload_id)
-            return {"error": f"{_paths.basename(content['name'])}: {exc}"}
-        tasks = FileTasks(incoming.fs, self._root, self._operations)
-        return self._start(tasks.upload_file(incoming.path, incoming.target))
-
-    # --- Create a folder: "Create a folder" in the right-click menu ---
-
-    def _create_folder_request(self, content: dict[str, Any]) -> dict[str, Any]:
-        try:
-            return self._create_folder(content["dest"], content["name"])
-        except Exception as exc:
-            return {"error": _error_text(exc)}
-
-    def _create_folder(self, dest: str, name: str) -> dict[str, Any]:
-        """Create folder ``name`` (a name, not a path) in folder ``dest``, with
-        the operations' ``mkdir`` (quick: not a job).
-
-        Returns {"created": name}, with "hidden": True when the new folder does
-        not show, as on object stores (S3, Google Cloud Storage), which have no
-        empty folders; or {"error": reason}.
-        """
-        if (error := _paths.name_error(name)) is not None:
-            return {"error": error}
-        path = _paths.join(dest, name)
-        if self._exists(path):
-            return {"error": f"{name} already exists"}  # the dialog shows where
-        self._operations.mkdir(self._fs, path)
-        self._refresh_dir(dest)
-        return {"created": name, "hidden": not self._isdir(path)}
-
-    # --- Properties: "Properties" in the right-click menu ---
-
-    def _properties_request(self, content: dict[str, Any]) -> dict[str, Any]:
-        """Answer "properties": for a single file, {"file": its properties}
-        (see ``properties.file_properties``); otherwise {"job": id} of a job
-        counting the files and folders (see ``FileTasks.properties``), on the
-        runner of its own. Or {"error": reason}."""
-        paths = content["paths"]
-        try:
-            if len(paths) == 1:
-                info = self._info(paths[0])
-                if info.get("type") != "directory":
-                    url = self._url(_paths.norm(info["name"]))
-                    return {"file": properties.file_properties(info, url)}
-            task = self._tasks().properties(paths)
-        except Exception as exc:
-            return {"error": _error_text(exc)}
-        job = self._scans.submit(task.kind, task.title, task.work)
-        return {"job": job.id}
-
-    # --- Download to the Jupyter server: "Download to JupyterLab", and files
-    # dropped on JupyterLab's file browser ---
-
-    def _download_to_jupyterlab_request(
-        self, content: dict[str, Any]
-    ) -> dict[str, Any]:
-        """Answer "download_to_jupyterlab": copy into ``download_to_jupyterlab_path``."""
-        return self._plan_request(
-            lambda: self._tasks().download(
-                content["paths"],
-                self._download_to_jupyterlab_path,
-                content.get("if_exists", "ask"),
-            )
-        )
-
-    def _download_to_server_request(self, content: dict[str, Any]) -> dict[str, Any]:
-        """Answer "download_to_server": ``dest`` is relative to the server's folder ``root``."""
-        dest = os.path.join(
-            os.path.expanduser(content["root"]),
-            *filter(None, content["dest"].split("/")),
-        )
-        return self._plan_request(
-            lambda: self._tasks().download(
-                content["paths"], dest, content.get("if_exists", "ask")
-            )
-        )
 
     # --- File operations: wrappers of fsspec calls on the filesystem shown
     # (``self._fs``) for listing, reading and writing; the methods above go

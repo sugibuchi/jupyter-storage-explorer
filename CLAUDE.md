@@ -25,7 +25,9 @@ Tests cover the Python side only. Fixtures in `tests/conftest.py`: `memfs` (a cl
 the data browser) needs real local files (`tmp_path`), as polars cannot read `memory://`. The data browser's tests
 run each filter on polars, pandas, PyArrow, DuckDB and sqlframe (the PySpark API on DuckDB, which narwhals queries as
 it does Spark; real Spark needs Java, so it is not tested). The widget tests subclass the
-widget to capture `send()` and drive it through `_on_custom_msg`, as the frontend would.
+widget to capture `send()` and drive it through `_on_custom_msg`, as the frontend would: `StorageExplorer`'s in
+`tests/test_explorer_*.py`, a file per feature (as its mixins), on the harness of `tests/explorers.py` (`Explorer`,
+`make`, `entries`, ...) and the fixtures `mem_explorer` and `local` of `conftest.py`.
 
 The JavaScript has no unit tests. CI checks its formatting (Prettier, width 160, `.prettierrc.json`), and
 `uv run tests/browser/check_js.py` each widget's module joined as the kernel does (`_static.esm`): its syntax
@@ -83,8 +85,17 @@ browser is in `traitlets` tagged `sync=True` (underscore-prefixed). Everything e
 `type` in `_on_custom_msg`: requests (`{"type": ..., "rid": ...}`, handled by `_requests()`) are answered with
 `{"type": "reply", "rid": ..., ...}`; notices (`_notices()`) are not, their effects showing in the traits (or, for
 "download", in a message per file, its bytes attached). Uploads carry file pieces in binary `buffers`. A reply's error is
-`{"error": text}` (`_error_text`: the explorer's own refusals, ValueErrors, without their type), except for file
+`{"error": text}` (`error_text`: the explorer's own refusals, ValueErrors, without their type), except for file
 operations, whose results have lists, `{"errors": [...]}`, as jobs' do. Values sent go through `_json.jsonable`.
+
+`StorageExplorer` (`storage_explorer.py`) keeps its state (set up in `__init__`), the messages' routing, the
+traitlets observers (they must be on the class itself), the locations (`_url`, `_locate`) and the fsspec calls. Its
+features are mixins in `_explorer/`, listed before `AnyWidget` in its bases, which only hold methods: `FoldersMixin`
+(`folders.py`: the list and the tree), `PreviewsMixin` (`previews.py`: previews, the data browser, query tabs, the
+right-click menu's formats), `BookmarksMixin`, `JupyterLabFilesMixin` (`jupyterlab.py`), `JobsMixin` (`jobs.py`:
+running file operations as jobs, following what they change) and `FileRequestsMixin` (`requests.py`: the requests for
+file operations). What they share is in `_explorer/common.py` (`Storage`, `open_storage`, `within_top`, `error_text`,
+`explorers`).
 
 **Frontend.** Plain ES modules in `static/`, no bundler. anywidget cannot import neighbouring files, so `_static.esm()`
 concatenates `icons.js` + `common.js` + `query.js` + the widget's parts (`static/<widget>/*.js`, if any) + `<widget>.js`
@@ -94,8 +105,8 @@ CSS (without parts). The storage explorer's parts are one feature each (`tree.js
 `jupyterlab.js`, `properties.js`, `toolbar.js` (with unsafe mode and bookmarks), `jobs.js`, `overlays.js` (busy screen,
 modal, menus), `sections.js` (preview sections), `util.js`): a `createX(x)` returning its elements and functions. `x`
 is the explorer, made in `render()`: what the features share (`model`, `el`, `request`, `ask`, `flash`, `navigate`,
-...) and the features themselves (`x.list`, `x.preview`, ...), used when needed, not when made, so order rarely matters. Third-party code is vendored in `static/vendor/`. The anywidget `model` only
-supports `get`/`set`/`save_changes`/`on`/`off`/`send`; Backbone methods like `previous()` throw inside `set` and silently
+...) and the features themselves (`x.list`, `x.preview`, ...), used when needed, not when made, so order rarely
+matters. Third-party code is vendored in `static/vendor/`. The anywidget `model` only supports `get`/`set`/`save_changes`/`on`/`off`/`send`; Backbone methods like `previous()` throw inside `set` and silently
 break sync.
 
 **Storage.** Everything is an fsspec filesystem; `StorageExplorer` can hold several named ones (`filesystems=`).
@@ -105,8 +116,7 @@ with it `_locate` (`_urls.default_location`), the reverse, used only to paste fi
 explorer's own filesystem with the URL's protocol (Azure: its account), else one fsspec opens; URLs that do not tell
 the storage (`abfs://container/...`, `dir://`) are refused, not guessed.
 
-**File operations.** `StorageExplorer`'s methods are grouped in sections (UI logic first, one section per operation),
-ending with a *File operations* block: the only methods that call fsspec on the filesystem shown (`self._fs`) for
+**File operations.** `StorageExplorer` ends with a *File operations* block: the only methods that call fsspec on the filesystem shown (`self._fs`) for
 listing, reading and writing, e.g. `_ls`, `_info`, `_exists`, `_isdir`, `_read_bytes`, `_write_bytes`. Other methods go
 through them, never through fsspec directly. Moving, copying, deleting, downloading and creating folders go through
 the operations objects instead (`operations.py`, the `operations=` argument): a chain of `FileSystemOperations`, each
