@@ -1,5 +1,7 @@
 # Jupyter Storage Explorer
 
+*Explore your data lake without leaving Jupyter: built for data professionals*
+
 [![PyPI - Version](https://img.shields.io/pypi/v/jupyter-storage-explorer?color=blue)](https://pypi.org/project/jupyter-storage-explorer/)
 [![codecov](https://codecov.io/gh/sugibuchi/jupyter-storage-explorer/graph/badge.svg?token=TFA12UL1IQ)](https://codecov.io/gh/sugibuchi/jupyter-storage-explorer)
 
