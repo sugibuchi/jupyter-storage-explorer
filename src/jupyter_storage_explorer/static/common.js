@@ -80,6 +80,14 @@ function createConfirm() {
   return { el, ask, answer };
 }
 
+// The buttons of a confirmation: Cancel, and `label`, answering true.
+function confirmButtons(label) {
+  return [
+    { label: "Cancel", value: null },
+    { label, value: true, primary: true },
+  ];
+}
+
 // A one-line filter: a text field with a clear button (✕, while it has
 // text), and a ".*" toggle for regular expressions. Matching is always
 // case-insensitive. onChange() is called as it changes. test(text) tells

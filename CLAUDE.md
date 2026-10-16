@@ -15,6 +15,7 @@ uv run pytest tests/test_query.py -k range   # one file / matching tests
 uv run pytest --cov                  # with coverage of src/jupyter_storage_explorer (CI uploads it to Codecov)
 uvx ruff check src launcher/src tests docs/scripts  # lint (ruff is not a dev dependency; config in pyproject.toml)
 uvx ruff format src launcher/src tests docs/scripts # format
+uv run npx --yes prettier@3.3.3 --write .   # format static/'s JS and CSS (only those: .prettierignore)
 uv run jupyter lab                   # try the widgets in a browser (see notebooks/)
 uv run notebooks/make_samples.py     # regenerate the sample data the notebooks use
 ```
@@ -26,8 +27,9 @@ run each filter on polars, pandas, PyArrow, DuckDB and sqlframe (the PySpark API
 it does Spark; real Spark needs Java, so it is not tested). The widget tests subclass the
 widget to capture `send()` and drive it through `_on_custom_msg`, as the frontend would.
 
-The JavaScript has no unit tests and CI does not check it. Check its syntax by joining it as the kernel does and
-running `uv run node --check` on the result (`_static.esm("storage_explorer")`, also `"data_explorer"`). Check
+The JavaScript has no unit tests. CI checks its formatting (Prettier, width 160, `.prettierrc.json`) and its syntax: the
+modules joined as the kernel does (`_static.esm("storage_explorer")`, also `"data_explorer"`) through `node --check`
+(locally `uv run node --check`). Check
 behaviour with the smoke test, `uv run --group docs tests/browser/smoke.py` (or some checks by name): it runs
 JupyterLab with the demo data of `docs/scripts/` (`_lab.py`, `demo_data.py`) and clicks through the main features in
 the installed Edge with Playwright, leaving `tests/browser/smoke-<check>.png` for a failed check. Run it after any

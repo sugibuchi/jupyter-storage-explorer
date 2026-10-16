@@ -375,31 +375,58 @@
 /* Syntax highlighting of text previews: Pygments' token classes, coloured
    with JupyterLab's code colours (so they follow its theme, dark included),
    with fallbacks for other frontends. */
-.jse-highlight .k, .jse-highlight .kc, .jse-highlight .kd, .jse-highlight .kn,
-.jse-highlight .kp, .jse-highlight .kr, .jse-highlight .ow {
+.jse-highlight .k,
+.jse-highlight .kc,
+.jse-highlight .kd,
+.jse-highlight .kn,
+.jse-highlight .kp,
+.jse-highlight .kr,
+.jse-highlight .ow {
   color: var(--jp-mirror-editor-keyword-color, #008000);
   font-weight: bold;
 }
 
-.jse-highlight .kt, .jse-highlight .nb, .jse-highlight .bp {
+.jse-highlight .kt,
+.jse-highlight .nb,
+.jse-highlight .bp {
   color: var(--jp-mirror-editor-builtin-color, #008000);
 }
 
-.jse-highlight .s, .jse-highlight .sa, .jse-highlight .sb, .jse-highlight .sc,
-.jse-highlight .dl, .jse-highlight .sd, .jse-highlight .s1, .jse-highlight .s2,
-.jse-highlight .se, .jse-highlight .sh, .jse-highlight .si, .jse-highlight .sx,
-.jse-highlight .sr, .jse-highlight .ss {
+.jse-highlight .s,
+.jse-highlight .sa,
+.jse-highlight .sb,
+.jse-highlight .sc,
+.jse-highlight .dl,
+.jse-highlight .sd,
+.jse-highlight .s1,
+.jse-highlight .s2,
+.jse-highlight .se,
+.jse-highlight .sh,
+.jse-highlight .si,
+.jse-highlight .sx,
+.jse-highlight .sr,
+.jse-highlight .ss {
   color: var(--jp-mirror-editor-string-color, #ba2121);
 }
 
-.jse-highlight .c, .jse-highlight .ch, .jse-highlight .cm, .jse-highlight .c1,
-.jse-highlight .cs, .jse-highlight .cpf {
+.jse-highlight .c,
+.jse-highlight .ch,
+.jse-highlight .cm,
+.jse-highlight .c1,
+.jse-highlight .cs,
+.jse-highlight .cpf {
   color: var(--jp-mirror-editor-comment-color, #408080);
   font-style: italic;
 }
 
-.jse-highlight .m, .jse-highlight .mb, .jse-highlight .mf, .jse-highlight .mh,
-.jse-highlight .mi, .jse-highlight .mo, .jse-highlight .il, .jse-highlight .kc {
+.jse-highlight .m,
+.jse-highlight .mb,
+.jse-highlight .mf,
+.jse-highlight .mh,
+.jse-highlight .mi,
+.jse-highlight .mo,
+.jse-highlight .il,
+.jse-highlight .kc {
   color: var(--jp-mirror-editor-number-color, #080);
 }
 
@@ -412,15 +439,23 @@
   color: var(--jp-mirror-editor-keyword-color, #008000);
 }
 
-.jse-highlight .na, .jse-highlight .nv, .jse-highlight .vg, .jse-highlight .vi {
+.jse-highlight .na,
+.jse-highlight .nv,
+.jse-highlight .vg,
+.jse-highlight .vi {
   color: var(--jp-mirror-editor-variable-color, #19177c);
 }
 
-.jse-highlight .nf, .jse-highlight .nc, .jse-highlight .fm {
+.jse-highlight .nf,
+.jse-highlight .nc,
+.jse-highlight .fm {
   color: var(--jp-mirror-editor-def-color, #0000ff);
 }
 
-.jse-highlight .cp, .jse-highlight .nd, .jse-highlight .gh, .jse-highlight .gu {
+.jse-highlight .cp,
+.jse-highlight .nd,
+.jse-highlight .gh,
+.jse-highlight .gu {
   color: var(--jp-mirror-editor-meta-color, #aa22ff);
 }
 

@@ -1,0 +1,8 @@
+{
+  "overrides": [
+    {
+      "files": "src/jupyter_storage_explorer/static/**",
+      "options": { "printWidth": 160, "endOfLine": "auto" }
+    }
+  ]
+}
