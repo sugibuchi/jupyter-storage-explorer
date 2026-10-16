@@ -96,10 +96,10 @@ file browser; **Save** writes it back to the storage. Files JupyterLab cannot sh
 
 ### Preview
 
-**Preview** below the list (with nothing selected: the current folder, e.g. a Delta Lake table), or right-click →
-**Preview**; **Preview as** chooses another format. Double-clicking a file previews it when JupyterLab cannot
-[open it](#open-files), e.g. Parquet or Excel. Tables open in the [data browser](#query-data). While the panel is
-open, clicking a file previews it. **Close preview** below the list, or Esc, closes it.
+The **Preview** link at the bottom right of the list (with nothing selected: the current folder, e.g. a Delta Lake
+table), or right-click → **Preview**; **Preview as** chooses another format. Double-clicking a file previews it when
+JupyterLab cannot [open it](#open-files), e.g. Parquet or Excel. Tables open in the [data browser](#query-data). While
+the panel is open, clicking a file previews it. The same link, then **Close preview**, or Esc, closes it.
 
 <img src="figs/using-preview.png" width="562" alt="Preview in the status bar, and Preview as in the right-click menu of a Markdown file">
 
