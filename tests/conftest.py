@@ -5,7 +5,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 import fsspec
+import polars as pl
 import pytest
+from explorers import Explorer, make
 from fsspec.implementations.memory import MemoryFileSystem
 
 from jupyter_storage_explorer.formats.base import Target
@@ -42,3 +44,20 @@ def make_target(memfs: MemoryFileSystem) -> Callable[..., Target]:
         )
 
     return make
+
+
+@pytest.fixture
+def mem_explorer(memfs) -> Explorer:
+    memfs.pipe_file("/data/a.csv", b"x,y\n1,2\n")
+    memfs.pipe_file("/data/notes.md", b"# Notes\n")
+    memfs.pipe_file("/data/table/_delta_log/0.json", b"{}")
+    memfs.pipe_file("/other/b.txt", b"b")
+    return make("/", fs=memfs)
+
+
+@pytest.fixture
+def local(tmp_path) -> Explorer:
+    """An explorer of a local folder, as polars reads local paths."""
+    pl.DataFrame({"a": [1, 2, 3]}).write_parquet(tmp_path / "data.parquet")
+    (tmp_path / "notes.txt").write_bytes(b"hello\n")
+    return make(str(tmp_path))
