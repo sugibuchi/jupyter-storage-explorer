@@ -10,7 +10,7 @@ the folder JupyterLab's file browser shows.
 
 It also lets you drag files from any Storage Explorer, in its tab or in a notebook, onto JupyterLab's file browser to
 download them there, and open them in JupyterLab's own editors and viewers, saving them back to their storage (right-click
-→ **Open in JupyterLab**).
+→ **Open in JupyterLab**), and opens their data browser in a tab of its own (**Query data in new tab**).
 
 ```bash
 pip install jupyter-storage-explorer-launcher

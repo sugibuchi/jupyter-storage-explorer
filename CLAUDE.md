@@ -67,7 +67,11 @@ explorer of exactly its own version (`launcher/hatch_build.py` sets its dependen
   server; `files.ts`, "Open in JupyterLab": a JupyterLab drive (`StorageExplorer:<storage>/<path>`, not shown in the
   file browser) serving only the files explorers opened on the page, read and saved through the explorer's kernel
   (`"jupyterlab_get"`, `"jupyterlab_save"`; contents models in `_jupyterlab_files.py`, whose hash lets JupyterLab
-  detect changes made elsewhere before saving). Anything else (typed paths, new files, renames) is refused.
+  detect changes made elsewhere before saving). Anything else (typed paths, new files, renames) is refused. And
+  `queryTabs.ts`, "Query data in new tab": the kernel opens a `DataExplorer` of the same query
+  (`DataExplorer._of_query`, settings remembered by URL as the preview's) and keeps it in `_query_tabs` until the tab
+  closes (`"query_tab"`, `"query_tab_closed"`); the tab renders it with the output renderers of the notebook or console
+  holding the explorer (ipywidgets ties widgets to that kernel connection), and closes with it or a kernel restart.
 
 ## Architecture
 
@@ -158,8 +162,9 @@ browser (uploads from it, both downloads to the server) pass filesystem None to 
 **Between explorers and with JupyterLab.** Drag data can only be text, so the frontend shares objects page-wide under
 `Symbol.for(...)` keys on `globalThis`: `"jupyter-storage-explorer.clipboard"` (Copy or Cut, for Paste in any explorer)
 and `"jupyter-storage-explorer.drag"` (the current file drag, with a `download` function, read by the launcher's
-`download.ts`); the launcher's `files.ts` puts its `open(file)` under `"jupyter-storage-explorer.jupyterlab"`, which
-the explorer offers ("Open in JupyterLab") only when it is there. Explorers on a page may be in different kernels (notebooks). The clipboard names the explorer and
+`download.ts`); the launcher's `files.ts` and `queryTabs.ts` put their functions (`canOpen`, `open`, `openWidget`)
+under `"jupyter-storage-explorer.jupyterlab"`, which the explorer offers ("Open in JupyterLab", "Query data in new
+tab") only when they are there. Explorers on a page may be in different kernels (notebooks). The clipboard names the explorer and
 storage copied from: an explorer of the same kernel is found in `_explorers` (by `_explorer_id`) and its filesystem
 object used as it is (`_paste_sources`); otherwise the files' URLs are read back with `_locate`. After pasting files
 cut in another explorer, the frontend dispatches a `"jupyter-storage-explorer:changed"` event on `globalThis`, so that

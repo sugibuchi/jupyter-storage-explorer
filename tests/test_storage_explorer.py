@@ -1179,6 +1179,38 @@ class TestCreateFolder:
         }
 
 
+class TestQueryTab:
+    """ "Query data" in a new tab: a DataExplorer of the same query."""
+
+    def test_opened_with_the_remembered_settings_and_closed(self, local):
+        path = path_of(local, "data.parquet")
+        url = local._url(path)
+        local._states.remember_query(url, QuerySettings(sort="a", descending=True))
+        reply = local.request({"type": "query_tab", "rid": 1, "path": path})
+        assert reply["title"] == "data.parquet" and reply["url"] == url
+        tab = local._query_tabs[reply["model_id"]]
+        assert tab.height == "fill"
+        assert tab.settings.to_dict()["sort"] == {"column": "a", "descending": True}
+        # Its settings are remembered by URL, as the preview's.
+        tab._data.handle(
+            {
+                "type": "query_save",
+                "rid": 2,
+                "settings": {"sort": None, "hidden": ["a"]},
+            }
+        )
+        assert local._states.query(url).settings.to_dict()["hidden"] == ["a"]
+        local.message({"type": "query_tab_closed", "model_id": reply["model_id"]})
+        assert reply["model_id"] not in local._query_tabs
+
+    def test_refused_for_what_cannot_be_queried(self, local):
+        reply = local.request(
+            {"type": "query_tab", "rid": 1, "path": path_of(local, "notes.txt")}
+        )
+        assert reply["error"] == "notes.txt cannot be queried"
+        assert not local._query_tabs
+
+
 class TestOpenInJupyterLab:
     """The requests of the launcher's drive ("Open in JupyterLab"), through the explorer."""
 

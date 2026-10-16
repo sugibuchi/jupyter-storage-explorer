@@ -67,6 +67,13 @@
   border-radius: 0;
 }
 
+/* "Query data in new tab" (queryTabs.ts): the data browser fills the tab, as
+   the explorer does its own. */
+.jse-query-tab .jse-widget {
+  border: none;
+  border-radius: 0;
+}
+
 /* The output of launcher.py's style(): a <style> element, which applies even
    when hidden. */
 .jse-launcher-panel .jp-OutputArea-child:has(.jp-RenderedHTMLCommon > style:only-child) {

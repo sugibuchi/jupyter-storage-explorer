@@ -147,6 +147,7 @@ class DataExplorer(anywidget.AnyWidget):
         # Settings live in this explorer only: a dataframe has no location to
         # remember them by, unlike files in StorageExplorer.
         self._states = ExplorerStates()
+        self._key = _KEY
         if settings is not None:
             self._states.remember_query(_KEY, _query_settings(settings))
         try:
@@ -167,6 +168,28 @@ class DataExplorer(anywidget.AnyWidget):
                 f"PyArrow, DuckDB, Spark, ...) or a function returning one, not "
                 f"{type(data).__name__}"
             ) from exc
+        self._start(title, height)
+
+    @classmethod
+    def _of_query(
+        cls,
+        data: DataQuery,
+        states: ExplorerStates,
+        key: str,
+        *,
+        title: str,
+        height: str,
+    ) -> DataExplorer:
+        """A data explorer of a query opened elsewhere: StorageExplorer's
+        "Query data" in a tab of its own, whose settings stay remembered under
+        ``key`` (the data's URL) in ``states``, as its previews' are."""
+        explorer = cls.__new__(cls)
+        explorer._states, explorer._key, explorer._data = states, key, data
+        explorer._start(title, height)
+        return explorer
+
+    def _start(self, title: str | None, height: str) -> None:
+        """Set the widget up, once ``_states``, ``_key`` and ``_data`` are."""
         library = self._data.implementation.value
         super().__init__(
             title=title if title is not None else self._data.type_name,
@@ -219,7 +242,7 @@ class DataExplorer(anywidget.AnyWidget):
             A copy, as changed by the user in the widget, e.g. to open other
             data with them, or to keep them in code with ``to_json()``.
         """
-        state = self._states.query(_KEY)
+        state = self._states.query(self._key)
         remembered = state.settings.to_dict() if state is not None else None
         return QuerySettings.from_dict(
             normalize_settings(remembered, self._data.schema)
