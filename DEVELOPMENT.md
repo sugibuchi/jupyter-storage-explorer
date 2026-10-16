@@ -19,6 +19,7 @@ together with the same version (from the git tags). The launcher requires the ex
 | `launcher/labextension/`                                       | The JupyterLab extension (TypeScript).                                       |
 | `launcher/src/jupyter_storage_explorer_launcher/labextension/` | The extension built from `launcher/labextension/` (git-ignored).             |
 | `notebooks/`                                                   | Demo notebooks and `make_samples.py`, which writes the sample data they use. |
+| `tests/browser/`                                               | The smoke test of the widgets in a browser (see Tests).                      |
 | `docs/scripts/`                                                | Scripts making the docs' screenshots and the demo GIFs.                      |
 
 All Python commands go through [uv](https://docs.astral.sh/uv/). Node.js, needed only to build the extension, comes
@@ -42,6 +43,19 @@ uv run jupyter lab
 ```
 
 IntelliJ's notebook view runs the widgets too, but dragging files in or out of them only works in a browser.
+
+## Tests
+
+```bash
+uv run pytest                                        # the Python side
+uvx ruff check src launcher/src tests docs/scripts   # lint
+uv run --group docs tests/browser/smoke.py           # the widgets in a real JupyterLab
+```
+
+The JavaScript has no unit tests. `tests/browser/smoke.py` clicks through the widgets' main features (browsing,
+previews, the data browser, file operations, uploads and downloads, the launcher's extension) in a JupyterLab of its
+own, with the installed Microsoft Edge. CI does not run it: run it after changing `static/` or the extension. Give
+check names to run only those; a failed check leaves a screenshot, `tests/browser/smoke-<check>.png`.
 
 ## The JupyterLab extension
 

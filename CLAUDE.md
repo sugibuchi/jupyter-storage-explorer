@@ -9,7 +9,8 @@ All Python goes through uv (never call `python`/`pip` directly). Node.js comes w
 
 ```bash
 uv sync                              # both workspace packages, editable, with dev dependencies
-uv run pytest                        # all tests (tests/)
+uv run pytest                        # all Python tests (tests/)
+uv run --group docs tests/browser/smoke.py   # the widgets in a real JupyterLab (see below)
 uv run pytest tests/test_query.py -k range   # one file / matching tests
 uv run pytest --cov                  # with coverage of src/jupyter_storage_explorer (CI uploads it to Codecov)
 uvx ruff check src launcher/src tests docs/scripts  # lint (ruff is not a dev dependency; config in pyproject.toml)
@@ -25,14 +26,14 @@ run each filter on polars, pandas, PyArrow, DuckDB and sqlframe (the PySpark API
 it does Spark; real Spark needs Java, so it is not tested). The widget tests subclass the
 widget to capture `send()` and drive it through `_on_custom_msg`, as the frontend would.
 
-The JavaScript is not covered by tests or CI. Check its syntax by joining it as the kernel does and running
-`uv run node --check` on the result (`_static.esm("storage_explorer")`, also `"data_explorer"`). Check behaviour in a
-real browser: `uv run jupyter lab --no-browser`, then a Playwright script run with
-`uv run --with playwright python script.py`, using the installed Edge (`p.chromium.launch(channel="msedge")`), so no
-browser download. In such scripts: write a temporary notebook under `notebooks/` with a new name each run (a reused
-name reuses its kernel, which keeps the old JavaScript), open it in a reset workspace
-(`/lab/workspaces/<name>/tree/notebooks/<file>?reset&token=...`), and delete it afterwards. Drag and drop in the widgets
-only works in a browser, not in IntelliJ's notebook view.
+The JavaScript has no unit tests and CI does not check it. Check its syntax by joining it as the kernel does and
+running `uv run node --check` on the result (`_static.esm("storage_explorer")`, also `"data_explorer"`). Check
+behaviour with the smoke test, `uv run --group docs tests/browser/smoke.py` (or some checks by name): it runs
+JupyterLab with the demo data of `docs/scripts/` (`_lab.py`, `demo_data.py`) and clicks through the main features in
+the installed Edge with Playwright, leaving `tests/browser/smoke-<check>.png` for a failed check. Run it after any
+change to `static/` or the extension, and add a check for a new feature there. For a one-off look, write a Playwright
+script on `_lab` the same way (a new notebook each time: a reused name reuses its kernel, which keeps the old
+JavaScript). Drag and drop in the widgets only works in a browser, not in IntelliJ's notebook view.
 
 Python and `src/jupyter_storage_explorer/static/` changes need no build: restart the kernel. The launcher's JupyterLab
 extension (`launcher/labextension/`, TypeScript) is built by hand: `uv run jlpm install` / `uv run jlpm build` there,
