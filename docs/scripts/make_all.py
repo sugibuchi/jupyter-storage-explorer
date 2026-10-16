@@ -1,4 +1,4 @@
-"""Make every picture of the docs and the demo GIF, on one JupyterLab server.
+"""Make every picture of the docs and the demo GIFs, on one JupyterLab server.
 
 uv run --group docs docs/scripts/make_all.py
 """
@@ -9,9 +9,9 @@ import _lab
 import browser
 import data_explorer
 import data_explorer_gif
-import demo_gif
 import hero
 import launcher_item
+import storage_explorer_gif
 import unsafe
 import using
 
@@ -22,7 +22,7 @@ SCRIPTS = (
     browser,
     data_explorer,
     launcher_item,
-    demo_gif,
+    storage_explorer_gif,
     data_explorer_gif,
 )
 

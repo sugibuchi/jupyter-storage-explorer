@@ -231,7 +231,7 @@ storage options (`spark_url()` rewrites `abfs`/`s3` to `abfss`/`s3a`).
 - Images and links to other files in the READMEs are absolute URLs (`raw.githubusercontent.com/.../main/...` for
   images, `github.com/.../blob/main/...` for files): PyPI shows the README but cannot resolve relative paths. `docs/`
   is read on GitHub only, so it uses relative paths. Screenshots are in `docs/figs/` (the launcher's in
-  `launcher/figs/`), taken at 2× and shown at their CSS size with `<img width="...">`. They and the demo GIF are made
+  `launcher/figs/`), taken at 2× and shown at their CSS size with `<img width="...">`. They and the demo GIFs are made
   by `docs/scripts/` (`uv run --group docs docs/scripts/make_all.py`, or one script; see its README): each starts
   JupyterLab in a temporary folder with its own settings, and explorers show a made-up data lake in fsspec's memory
   filesystem (`demo_data.py`), so no local path appears. Change or add a script there rather than taking pictures by

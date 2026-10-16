@@ -1,4 +1,4 @@
-"""The demo storage the screenshots and the demo GIF show: a small sales data
+"""The demo storage the screenshots and the demo GIFs show: a small sales data
 lake of a coffee roaster, with realistic but made-up content.
 
 The explorers show it from fsspec's memory filesystem ("memory:///sales-lake"),

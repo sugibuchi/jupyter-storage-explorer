@@ -1,10 +1,10 @@
-"""docs/figs/demo.gif, in the README: Storage Explorer opened from JupyterLab's
-launcher, a Delta Lake table queried in the data browser, a folder's list
-filtered as the user types, and a Markdown file edited in JupyterLab's own
-editor, saved back to the storage and previewed in the explorer. Made with
-``_film.Film``.
+"""docs/figs/storage-explorer.gif, in the README: Storage Explorer opened from
+JupyterLab's launcher, a Delta Lake table queried in the data browser, a
+folder's list filtered as the user types, and a Markdown file edited in
+JupyterLab's own editor, saved back to the storage and previewed in the
+explorer. Made with ``_film.Film``.
 
-uv run --group docs docs/scripts/demo_gif.py
+uv run --group docs docs/scripts/storage_explorer_gif.py
 """
 
 from __future__ import annotations
@@ -101,7 +101,7 @@ def make(lab: Lab) -> None:
         changes.wait_for(timeout=10000)
         film.snap(4000)
 
-        path = _lab.FIGS / "demo.gif"
+        path = _lab.FIGS / "storage-explorer.gif"
         film.save(str(path))
         print(f"{path.relative_to(_lab.REPO).as_posix()}: {WIDTH} x {HEIGHT}, {len(film.frames)} frames, "
               f"{path.stat().st_size / 1e6:.1f} MB")  # fmt: skip
