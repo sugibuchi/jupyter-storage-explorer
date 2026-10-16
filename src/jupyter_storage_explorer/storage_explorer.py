@@ -10,7 +10,7 @@ import os
 import time
 import uuid
 import weakref
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 import anywidget
 import traitlets
@@ -23,6 +23,7 @@ from jupyter_storage_explorer import (
     _static,
     properties,
 )
+from jupyter_storage_explorer._json import jsonable
 from jupyter_storage_explorer._urls import default_location, default_url
 from jupyter_storage_explorer.data_explorer import DataExplorer
 from jupyter_storage_explorer.file_tasks import FileTasks, Plan, Task
@@ -43,13 +44,11 @@ from jupyter_storage_explorer.formats import (
     matching_formats,
 )
 from jupyter_storage_explorer.formats import detect as detect_format
-from jupyter_storage_explorer.formats.base import jsonable
 from jupyter_storage_explorer.incoming import IncomingFiles
 from jupyter_storage_explorer.jobs import JobRunner
 from jupyter_storage_explorer.listing import Listing
 from jupyter_storage_explorer.operations import (
     OperationChain,
-    Progress,
     same_filesystem,
 )
 from jupyter_storage_explorer.query import DataQuery
@@ -68,6 +67,9 @@ if TYPE_CHECKING:
 
     from jupyter_storage_explorer.jobs import Job
     from jupyter_storage_explorer.operations import FileSystemOperations
+
+    # A request's handler: the reply to its content (see _requests).
+    _Handler = Callable[[dict[str, Any]], dict[str, Any]]
 
 # JavaScript libraries the frontend may ask for (see static/vendor/README.md);
 # only these names are served.
@@ -92,10 +94,18 @@ _explorers: weakref.WeakValueDictionary[str, StorageExplorer] = (
 )
 
 
+class _Storage(NamedTuple):
+    """One of an explorer's storages: its filesystem, and its top folder."""
+
+    fs: AbstractFileSystem
+    root: str
+
+
 def _open(
     path: str | None, fs: AbstractFileSystem | None, storage_options: Mapping[str, Any]
-) -> tuple[AbstractFileSystem, str]:
-    """A filesystem and the path to start at, from a URL/path or an existing filesystem."""
+) -> _Storage:
+    """A storage from a URL or path, or from an existing filesystem (and a
+    path in it to start at)."""
     if fs is None:
         fs, root = url_to_fs("." if path is None else path, **storage_options)
     elif storage_options:
@@ -106,7 +116,7 @@ def _open(
         root = fs._strip_protocol(fs.root_marker if path is None else path)
     # Top-level paths strip to "" on some backends (e.g. memory), which does
     # not match the "/..." names they list.
-    return fs, root or fs.root_marker
+    return _Storage(fs, root or fs.root_marker)
 
 
 def _within_top(path: str, root: str) -> bool:
@@ -158,11 +168,13 @@ def _section(preview: Preview) -> dict[str, Any]:
 class StorageExplorer(anywidget.AnyWidget):
     """Browse any fsspec-supported storage with a directory tree and a file list.
 
-    Double-clicking a file (or Preview) opens a preview below the list;
-    tables open in a data browser ("Query data"). The right-click menu offers
-    "Python code" to load the data, "Edit" for text files, downloads, "Copy",
+    Preview opens a preview below the list; tables open in a data browser
+    ("Query data"). Double-clicking a file opens it in JupyterLab's own
+    editors and viewers, with the launcher's extension, else previews it. The
+    right-click menu offers "Python code" to load the data, downloads, "Copy",
     "Cut" and "Paste" (also between storages and explorers, in this notebook
-    or others), "Delete" and "Create a folder".
+    or others), "Rename", "Delete", "Create a folder", "Properties" and
+    bookmarks.
     Files dragged from JupyterLab's file browser or the user's computer are
     uploaded; files dragged onto a folder are moved there. Folders are moved,
     copied and deleted only in "Unsafe mode" (the slider in the toolbar),
@@ -405,7 +417,7 @@ class StorageExplorer(anywidget.AnyWidget):
             self._filesystems = {"default": _open(path, fs, storage_options)}
         self._remembered: dict[str, str] = {}
         name = next(iter(self._filesystems))
-        self._fs: AbstractFileSystem = self._filesystems[name][0]
+        self._fs: AbstractFileSystem = self._filesystems[name].fs
         super().__init__(
             _height=height,
             _format_labels={f.name: f.label for f in self._formats},
@@ -493,7 +505,7 @@ class StorageExplorer(anywidget.AnyWidget):
             for name, folder in folders.items()
             if name in self._filesystems
             and isinstance(folder, str)
-            and _within_top(folder, self._filesystems[name][1])
+            and _within_top(folder, self._filesystems[name].root)
         }
         if filesystem not in self._filesystems:
             filesystem = self._filesystem
@@ -545,72 +557,68 @@ class StorageExplorer(anywidget.AnyWidget):
     def _on_custom_msg(
         self, _widget: Any, content: dict[str, Any], buffers: Any
     ) -> None:
-        """Handle a message from the frontend, by its "type"."""
-        handler = self._message_handlers().get(content.get("type"))
-        if handler is not None:
-            handler(content, buffers or [])
+        """Handle a message from the frontend, by its "type": a request, which
+        is answered with a "reply" of the same "rid", or a notice, which is
+        not (its effects show in the traits, or in messages of their own)."""
+        kind = content.get("type")
+        if (request := self._requests(buffers or []).get(kind)) is not None:
+            self.send({"type": "reply", "rid": content["rid"], **request(content)})
+        elif (notice := self._notices().get(kind)) is not None:
+            notice(content)
 
-    def _message_handlers(
-        self,
-    ) -> dict[str, Callable[[dict[str, Any], list[Any]], None]]:
-        """Message type -> handler(content, buffers). Requests the frontend waits
-        for (those with a "rid") are answered with ``_reply``."""
+    def _requests(self, buffers: list[Any]) -> dict[str, _Handler]:
+        """Request type -> handler(content), giving the reply. ``buffers``: the
+        message's binary pieces (a file's piece, for "upload_chunk")."""
         return {
-            "expand": lambda c, _: self._load_children(c["path"]),
-            "refresh": lambda c, _: self._refresh(),
-            "preview": lambda c, _: self._open_preview(c["path"], c.get("format")),
-            "menu_info": lambda c, _: self._send_menu_info(c["path"]),
-            "jupyterlab_get": lambda c, _: self._reply(c, self._jupyterlab_get(c)),
-            "jupyterlab_save": lambda c, _: self._reply(c, self._jupyterlab_save(c)),
-            "download": lambda c, _: self._download(c["paths"]),
-            "upload": lambda c, _: self._reply(c, self._upload_request(c)),
-            "upload_check": lambda c, _: self._reply(
-                c, self._upload_check(c["dest"], c["names"])
-            ),
-            "upload_chunk": lambda c, b: self._reply(c, self._upload_chunk(c, b)),
-            "vendor": lambda c, _: self._reply(c, self._vendor_source(c["name"])),
+            "menu_info": lambda c: self._menu_info(c["path"]),
+            "vendor": lambda c: self._vendor_source(c["name"]),
             # The listing has no URLs (see _make_listing): asked for when copying.
-            "urls": lambda c, _: self._reply(
-                c, {"urls": [self._url(p) for p in c["paths"]]}
+            "urls": lambda c: {"urls": [self._url(p) for p in c["paths"]]},
+            "list": self._list_page,
+            # The data browser (see DataQuery.handle).
+            "query_rows": self._query_request,
+            "query_check": self._query_request,
+            "query_save": self._query_request,
+            "query_reload": self._query_request,
+            "query_mode": self._query_request,
+            "query_tab": self._query_tab_request,
+            # Bookmarks.
+            "bookmarks": lambda c: self._bookmark_list(),
+            "bookmark_add": lambda c: self._add_bookmark(c["path"]),
+            "bookmark_remove": lambda c: self._remove_bookmark(
+                c["filesystem"], c["path"]
             ),
-            "list": lambda c, _: self._reply(c, self._list_page(c)),
-            "job_cancel": lambda c, _: self._cancel_job(c),
-            "move": lambda c, _: self._reply(c, self._move_request(c)),
-            "rename": lambda c, _: self._reply(c, self._rename_request(c)),
-            "download_to_server": lambda c, _: self._reply(
-                c, self._download_to_server_request(c)
-            ),
-            "delete": lambda c, _: self._reply(c, self._delete_request(c)),
-            "paste": lambda c, _: self._reply(c, self._paste_request(c)),
-            # Files cut here were pasted in another explorer (told by its frontend).
-            "changed": lambda c, _: self._sources_changed(c["filesystem"], c["paths"]),
-            "create_folder": lambda c, _: self._reply(
-                c, self._create_folder_request(c)
-            ),
-            "download_to_jupyterlab": lambda c, _: self._reply(
-                c, self._download_to_jupyterlab_request(c)
-            ),
-            "properties": lambda c, _: self._reply(c, self._properties_request(c)),
-            "query_rows": lambda c, _: self._reply(c, self._query_request(c)),
-            "query_check": lambda c, _: self._reply(c, self._query_request(c)),
-            "query_save": lambda c, _: self._reply(c, self._query_request(c)),
-            "query_reload": lambda c, _: self._reply(c, self._query_request(c)),
-            "query_mode": lambda c, _: self._reply(c, self._query_request(c)),
-            "query_tab": lambda c, _: self._reply(c, self._query_tab_request(c)),
-            "query_tab_closed": lambda c, _: self._query_tab_closed(c["model_id"]),
-            "bookmarks": lambda c, _: self._reply(c, self._bookmark_list()),
-            "bookmark_add": lambda c, _: self._reply(c, self._add_bookmark(c["path"])),
-            "bookmark_remove": lambda c, _: self._reply(
-                c, self._remove_bookmark(c["filesystem"], c["path"])
-            ),
-            "bookmark_open": lambda c, _: self._reply(
-                c, self._open_bookmark(c["filesystem"], c["path"])
-            ),
+            "bookmark_open": lambda c: self._open_bookmark(c["filesystem"], c["path"]),
+            # Open in JupyterLab.
+            "jupyterlab_get": self._jupyterlab_get,
+            "jupyterlab_save": self._jupyterlab_save,
+            # File operations: most start a job (see _start).
+            "move": self._move_request,
+            "rename": self._rename_request,
+            "delete": self._delete_request,
+            "paste": self._paste_request,
+            "create_folder": self._create_folder_request,
+            "properties": self._properties_request,
+            "upload": self._upload_request,
+            "upload_check": lambda c: self._upload_check(c["dest"], c["names"]),
+            "upload_chunk": lambda c: self._upload_chunk(c, buffers),
+            "download_to_jupyterlab": self._download_to_jupyterlab_request,
+            "download_to_server": self._download_to_server_request,
         }
 
-    def _reply(self, content: dict[str, Any], result: dict[str, Any]) -> None:
-        """Answer a request the frontend waits for, matched by its "rid"."""
-        self.send({"type": "reply", "rid": content["rid"], **result})
+    def _notices(self) -> dict[str, Callable[[dict[str, Any]], None]]:
+        """Notice type -> handler(content)."""
+        return {
+            "expand": lambda c: self._load_children(c["path"]),
+            "refresh": lambda c: self._refresh(),
+            "preview": lambda c: self._open_preview(c["path"], c.get("format")),
+            # Answered with one "download" message per file, its bytes attached.
+            "download": lambda c: self._download(c["paths"]),
+            "job_cancel": self._cancel_job,
+            # Files cut here were pasted in another explorer (told by its frontend).
+            "changed": lambda c: self._sources_changed(c["filesystem"], c["paths"]),
+            "query_tab_closed": lambda c: self._query_tab_closed(c["model_id"]),
+        }
 
     def _vendor_source(self, name: str) -> dict[str, Any]:
         """Source of a bundled library, e.g. marked for Markdown previews."""
@@ -981,7 +989,7 @@ class StorageExplorer(anywidget.AnyWidget):
                         _section(s) for s in fmt.preview(target, self._preview_limits)
                     ]
         except Exception as exc:
-            base["error"] = f"{type(exc).__name__}: {exc}"
+            base["error"] = _error_text(exc)
         self._preview = base
 
     def _close_preview(self) -> None:
@@ -1055,7 +1063,8 @@ class StorageExplorer(anywidget.AnyWidget):
             explorer.close()
 
     def _query_request(self, content: dict[str, Any]) -> dict[str, Any]:
-        """Answer the data browser's "query_rows", "query_check" or "query_save"."""
+        """Answer the data browser's requests ("query_rows", "query_check",
+        "query_save", "query_reload", "query_mode") on the data previewed."""
         data = self._queries.get(content["path"])
         if data is None:
             return {"error": "the data is no longer open; preview it again"}
@@ -1071,22 +1080,20 @@ class StorageExplorer(anywidget.AnyWidget):
             return []
         return formats[0].recipes(target)
 
-    def _send_menu_info(self, path: str) -> None:
-        """Answer the right-click menu's request: matching formats ("Preview as")
-        and load code ("Python code")."""
-        reply: dict[str, Any] = {"type": "menu_info", "path": path}
+    def _menu_info(self, path: str) -> dict[str, Any]:
+        """Answer "menu_info", the right-click menu's: {"formats": names of
+        those matching ("Preview as"), "recipes": load code ("Python code"),
+        "query": whether it opens in the data browser}, or {"error"}."""
         try:
             target, formats = self._detect(path)
-            reply["formats"] = [f.name for f in formats]
-            reply["recipes"] = (
-                [dataclasses.asdict(r) for r in formats[0].recipes(target)]
-                if formats
-                else []
-            )
-            reply["query"] = bool(formats) and formats[0].can_query()
+            recipes = formats[0].recipes(target) if formats else []
         except Exception as exc:
-            reply["error"] = f"{type(exc).__name__}: {exc}"
-        self.send(reply)
+            return {"error": _error_text(exc)}
+        return {
+            "formats": [f.name for f in formats],
+            "recipes": [dataclasses.asdict(r) for r in recipes],
+            "query": bool(formats) and formats[0].can_query(),
+        }
 
     # --- Bookmarks: folders, kept in the explorer states (states.py), so
     # shared with the explorers using the same states ---
@@ -1104,7 +1111,7 @@ class StorageExplorer(anywidget.AnyWidget):
             }
             for b in self._states.bookmarks
             if b.filesystem in self._filesystems
-            and _within_top(b.path, self._filesystems[b.filesystem][1])
+            and _within_top(b.path, self._filesystems[b.filesystem].root)
         ]
         bookmarks.sort(key=lambda b: (b["filesystem"].casefold(), b["path"].casefold()))
         return {"bookmarks": bookmarks}
@@ -1123,12 +1130,12 @@ class StorageExplorer(anywidget.AnyWidget):
     def _open_bookmark(self, filesystem: str, path: str) -> dict[str, Any]:
         """Show bookmarked folder ``path`` of storage ``filesystem``: {} or {"error"}."""
         storage = self._filesystems.get(filesystem)
-        if storage is None or not _within_top(path, storage[1]):
+        if storage is None or not _within_top(path, storage.root):
             return {"error": f"{path} is not in this explorer's storages"}
         try:
-            exists = self._isdir(path, storage[0])
+            exists = self._isdir(path, storage.fs)
         except Exception as exc:
-            return {"error": f"{type(exc).__name__}: {exc}"}
+            return {"error": _error_text(exc)}
         if not exists:
             return {"error": f"{path} no longer exists"}
         if filesystem == self._filesystem:
@@ -1150,10 +1157,10 @@ class StorageExplorer(anywidget.AnyWidget):
         if (
             storage is None
             or not isinstance(path, str)
-            or not _within_top(path, storage[1])
+            or not _within_top(path, storage.root)
         ):
             raise ValueError("not a file of this explorer's storages")
-        return storage[0], path
+        return storage.fs, path
 
     def _jupyterlab_get(self, content: dict[str, Any]) -> dict[str, Any]:
         """Answer "jupyterlab_get": {"model": the file's contents model} (see
@@ -1308,15 +1315,6 @@ class StorageExplorer(anywidget.AnyWidget):
         )
         return {"job": job.id}
 
-    def _run_now(self, plan: Plan) -> dict[str, Any]:
-        """Run ``plan`` in this thread, without a job (e.g. from Python): its result."""
-        if isinstance(plan, dict):
-            return plan
-        try:
-            return plan.work(Progress())
-        finally:
-            self._finish(plan)
-
     def _finish(self, task: Task) -> None:
         """After ``task``, whatever its outcome: follow what it moved or
         removed, and show the folders it changed."""
@@ -1429,10 +1427,10 @@ class StorageExplorer(anywidget.AnyWidget):
     def _sources_changed(self, filesystem: str, paths: Sequence[str]) -> None:
         """Answer "changed": files of storage ``filesystem`` were cut here and
         pasted in another explorer, which may have moved some (or all) away."""
-        entry = self._filesystems.get(filesystem)
-        if entry is None:
+        storage = self._filesystems.get(filesystem)
+        if storage is None:
             return
-        fs = entry[0]
+        fs = storage.fs
         parents = {_paths.parent(p, fs) for p in paths}
         if fs is not self._fs:
             for parent in parents:
@@ -1460,7 +1458,7 @@ class StorageExplorer(anywidget.AnyWidget):
         try:
             return self._start(plan())
         except Exception as exc:
-            return {"errors": [f"{type(exc).__name__}: {exc}"]}
+            return {"errors": [_error_text(exc)]}
 
     # --- Move: files (and, in unsafe mode, folders) dragged onto a folder;
     # rename and delete: chosen in the right-click menu ---
@@ -1475,16 +1473,6 @@ class StorageExplorer(anywidget.AnyWidget):
             )
         )
 
-    def _move(
-        self,
-        paths: Sequence[str],
-        dest: str,
-        if_exists: str = "ask",
-        folders: bool = False,
-    ) -> dict[str, Any]:
-        """Move files into folder ``dest``, now (see ``FileTasks.move``)."""
-        return self._run_now(self._tasks().move(paths, dest, if_exists, folders))
-
     def _rename_request(self, content: dict[str, Any]) -> dict[str, Any]:
         return self._plan_request(
             lambda: self._tasks().rename(
@@ -1492,20 +1480,12 @@ class StorageExplorer(anywidget.AnyWidget):
             )
         )
 
-    def _rename(self, path: str, name: str, folders: bool = False) -> dict[str, Any]:
-        """Rename an item, now (see ``FileTasks.rename``)."""
-        return self._run_now(self._tasks().rename(path, name, folders))
-
     def _delete_request(self, content: dict[str, Any]) -> dict[str, Any]:
         return self._plan_request(
             lambda: self._tasks().delete(
                 content["paths"], folders=bool(content.get("unsafe"))
             )
         )
-
-    def _delete(self, paths: Sequence[str], folders: bool = False) -> dict[str, Any]:
-        """Delete files, now (see ``FileTasks.delete``)."""
-        return self._run_now(self._tasks().delete(paths, folders))
 
     # --- Paste: files (and, in unsafe mode, folders) copied with "Copy" or
     # "Cut" (in any explorer, any storage), into a folder ---
@@ -1522,30 +1502,6 @@ class StorageExplorer(anywidget.AnyWidget):
                 filesystem=content.get("filesystem"),
                 folders=bool(content.get("unsafe")),
                 cut=bool(content.get("cut")),
-            )
-        )
-
-    def _paste(
-        self,
-        files: Sequence[dict[str, Any]],
-        dest: str,
-        if_exists: str = "ask",
-        *,
-        explorer: str | None = None,
-        filesystem: str | None = None,
-        folders: bool = False,
-        cut: bool = False,
-    ) -> dict[str, Any]:
-        """Paste files into folder ``dest``, now (see ``_paste_plan``)."""
-        return self._run_now(
-            self._paste_plan(
-                files,
-                dest,
-                if_exists,
-                explorer=explorer,
-                filesystem=filesystem,
-                folders=folders,
-                cut=cut,
             )
         )
 
@@ -1623,16 +1579,6 @@ class StorageExplorer(anywidget.AnyWidget):
             )
         )
 
-    def _upload_files(
-        self,
-        sources: Sequence[str],
-        dest: str,
-        if_exists: str = "ask",
-        folders: bool = False,
-    ) -> dict[str, Any]:
-        """Copy local files into folder ``dest``, now (see ``FileTasks.upload``)."""
-        return self._run_now(self._tasks().upload(sources, dest, if_exists, folders))
-
     # --- Upload from the user's computer: the browser sends files in pieces
     # (see incoming.py); the last one starts a job copying the whole file ---
 
@@ -1676,7 +1622,7 @@ class StorageExplorer(anywidget.AnyWidget):
         try:
             return self._create_folder(content["dest"], content["name"])
         except Exception as exc:
-            return {"error": f"{type(exc).__name__}: {exc}"}
+            return {"error": _error_text(exc)}
 
     def _create_folder(self, dest: str, name: str) -> dict[str, Any]:
         """Create folder ``name`` (a name, not a path) in folder ``dest``, with
@@ -1711,7 +1657,7 @@ class StorageExplorer(anywidget.AnyWidget):
                     return {"file": properties.file_properties(info, url)}
             task = self._tasks().properties(paths)
         except Exception as exc:
-            return {"error": f"{type(exc).__name__}: {exc}"}
+            return {"error": _error_text(exc)}
         job = self._scans.submit(task.kind, task.title, task.work)
         return {"job": job.id}
 
@@ -1741,12 +1687,6 @@ class StorageExplorer(anywidget.AnyWidget):
                 content["paths"], dest, content.get("if_exists", "ask")
             )
         )
-
-    def _copy_to_folder(
-        self, paths: Sequence[str], dest: str, if_exists: str = "ask"
-    ) -> dict[str, Any]:
-        """Copy files into ``dest`` on the kernel's machine, now (see ``FileTasks.download``)."""
-        return self._run_now(self._tasks().download(paths, dest, if_exists))
 
     # --- File operations: wrappers of fsspec calls on the filesystem shown
     # (``self._fs``) for listing, reading and writing; the methods above go
@@ -1782,16 +1722,6 @@ class StorageExplorer(anywidget.AnyWidget):
         fs = fs or self._fs
         fs.pipe_file(path, data)
         fs.invalidate_cache(path)
-
-    def _put_file(
-        self, local_path: str, path: str, fs: AbstractFileSystem | None = None
-    ) -> None:
-        """Copy the local file ``local_path`` to ``path``; streams, so any size works.
-
-        ``fs``: another filesystem than the one shown, e.g. the one an upload
-        started on, as the user may switch filesystems meanwhile.
-        """
-        (fs or self._fs).put_file(local_path, path)
 
     def _invalidate_cache(self, path: str | None = None) -> None:
         """Forget cached listings (of ``path``, else all), so changes made elsewhere show."""

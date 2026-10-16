@@ -13,7 +13,7 @@ import pytest
 from sqlframe.duckdb import DuckDBSession
 
 from jupyter_storage_explorer import query as query_module
-from jupyter_storage_explorer.formats.base import jsonable
+from jupyter_storage_explorer._json import jsonable
 from jupyter_storage_explorer.query import (
     DEFAULT_SETTINGS,
     DataQuery,

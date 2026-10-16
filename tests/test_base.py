@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import datetime as dt
-import decimal
 import types
 
 import polars
@@ -18,7 +16,7 @@ from jupyter_storage_explorer.formats import (
     format_args,
     matching_formats,
 )
-from jupyter_storage_explorer.formats.base import jsonable, snippet_options, spark_url
+from jupyter_storage_explorer.formats.base import snippet_options, spark_url
 from jupyter_storage_explorer.formats.requirements import Polars
 
 
@@ -90,15 +88,6 @@ class TestSnippetOptions:
         assert snippet_options(options) == {
             "client_kwargs": {"endpoint_url": "http://x"}
         }
-
-
-def test_jsonable():
-    assert jsonable(float("nan")) == "nan"
-    assert jsonable(dt.date(2025, 1, 2)) == "2025-01-02"
-    assert jsonable(decimal.Decimal("1.50")) == "1.50"
-    assert jsonable({1: (2, 3)}) == {"1": [2, 3]}
-    assert jsonable(polars.Series([1, 2]).to_numpy()) == [1, 2]
-    assert jsonable(b"x") == "b'x'"
 
 
 class TestRequirement:

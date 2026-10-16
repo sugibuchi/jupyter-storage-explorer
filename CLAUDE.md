@@ -77,9 +77,12 @@ explorer of exactly its own version (`launcher/hatch_build.py` sets its dependen
 ## Architecture
 
 **Widgets.** `storage_explorer.py` and `data_explorer.py` are `anywidget.AnyWidget` subclasses. State shared with the
-browser is in `traitlets` tagged `sync=True` (underscore-prefixed). Everything else is custom messages: the frontend
-sends `{"type": ..., "rid": ...}`, `_on_custom_msg` dispatches by `type` via `_message_handlers()`, and answers come back
-as `{"type": "reply", "rid": ..., ...}` (uploads carry file pieces in binary `buffers`).
+browser is in `traitlets` tagged `sync=True` (underscore-prefixed). Everything else is custom messages, dispatched by
+`type` in `_on_custom_msg`: requests (`{"type": ..., "rid": ...}`, handled by `_requests()`) are answered with
+`{"type": "reply", "rid": ..., ...}`; notices (`_notices()`) are not, their effects showing in the traits (or, for
+"download", in a message per file, its bytes attached). Uploads carry file pieces in binary `buffers`. A reply's error is
+`{"error": text}` (`_error_text`: the explorer's own refusals, ValueErrors, without their type), except for file
+operations, whose results have lists, `{"errors": [...]}`, as jobs' do. Values sent go through `_json.jsonable`.
 
 **Frontend.** Plain ES modules in `static/`, no bundler. anywidget cannot import neighbouring files, so `_static.esm()`
 concatenates `common.js` + `query.js` + `<widget>.js` (shared files only define functions/constants; the widget file
@@ -96,7 +99,7 @@ the storage (`abfs://container/...`, `dir://`) are refused, not guessed.
 
 **File operations.** `StorageExplorer`'s methods are grouped in sections (UI logic first, one section per operation),
 ending with a *File operations* block: the only methods that call fsspec on the filesystem shown (`self._fs`) for
-listing, reading and writing, e.g. `_ls`, `_info`, `_exists`, `_isdir`, `_read_bytes`, `_put_file`. Other methods go
+listing, reading and writing, e.g. `_ls`, `_info`, `_exists`, `_isdir`, `_read_bytes`, `_write_bytes`. Other methods go
 through them, never through fsspec directly. Moving, copying, deleting, downloading and creating folders go through
 the operations objects instead (`operations.py`, the `operations=` argument): a chain of `FileSystemOperations`, each
 method tried in order until one does not raise `FileSystemOperations.NotSupported` (its own exception, so that a

@@ -11,7 +11,7 @@ from azure.core import MatchConditions
 from azure.storage.filedatalake.aio import DataLakeServiceClient
 from fsspec.asyn import sync
 
-from jupyter_storage_explorer.filesystems._common import file_name
+from jupyter_storage_explorer import _paths
 from jupyter_storage_explorer.operations import FileSystemOperations, same_filesystem
 
 if TYPE_CHECKING:
@@ -69,7 +69,7 @@ class AzureDataLakeGen2Operation(FileSystemOperations):
         new_container, new_key = _split(target)
         if not key or not new_key:
             raise self.NotSupported  # containers: adlfs's own
-        progress.working_on(file_name(source))
+        progress.working_on(_paths.basename(source))
         is_dir = fs.isdir(source)
         sync(
             fs.loop,
