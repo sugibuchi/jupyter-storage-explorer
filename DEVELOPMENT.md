@@ -17,15 +17,16 @@ together with the same version (from the git tags). The launcher requires the ex
 | `src/jupyter_storage_explorer/_explorer/`                      | `StorageExplorer`'s features, as mixins of the class.                        |
 | `src/jupyter_storage_explorer/static/`                         | The widgets' JavaScript and CSS, loaded at run time (no build step).         |
 | `src/jupyter_storage_explorer/static/storage_explorer/`        | The storage explorer's JavaScript, a file per feature, joined at run time.   |
-| `launcher/src/jupyter_storage_explorer_launcher/`              | `launch()`, which merges the `storage-explorer/launcher.py` files (layers).   |
+| `launcher/src/jupyter_storage_explorer_launcher/`              | `launch()`, which merges the `storage-explorer/launcher.py` files (layers).  |
 | `launcher/labextension/`                                       | The JupyterLab extension (TypeScript).                                       |
 | `launcher/src/jupyter_storage_explorer_launcher/labextension/` | The extension built from `launcher/labextension/` (git-ignored).             |
 | `notebooks/`                                                   | Demo notebooks and `make_samples.py`, which writes the sample data they use. |
-| `tests/browser/`                                               | The smoke test of the widgets in a browser (see Tests).                      |
+| `tests/browser/`                                               | Checks of the widgets' JavaScript, and their smoke test in a browser.        |
 | `docs/scripts/`                                                | Scripts making the docs' screenshots and the demo GIFs.                      |
 
-All Python commands go through [uv](https://docs.astral.sh/uv/). Node.js, needed only to build the extension, comes
-with the dev dependencies (`nodejs-wheel`), so `uv run node` and `uv run jlpm` work without installing it.
+All Python commands go through [uv](https://docs.astral.sh/uv/). Node.js, for the extension and the JavaScript's checks,
+comes with the dev dependencies (`nodejs-wheel`), so `uv run node`, `uv run npx` and `uv run jlpm` work without
+installing it.
 
 ## Setup
 
@@ -56,10 +57,25 @@ uv run tests/browser/check_js.py                     # their JavaScript: syntax,
 uv run --group docs tests/browser/smoke.py           # the widgets in a real JupyterLab
 ```
 
-The JavaScript has no unit tests; CI runs the first four. `tests/browser/smoke.py` clicks through the widgets' main features (browsing,
-previews, the data browser, file operations, uploads and downloads, the launcher's extension) in a JupyterLab of its
-own, with the installed Microsoft Edge. CI does not run it: run it after changing `static/` or the extension. Give
-check names to run only those; a failed check leaves a screenshot, `tests/browser/smoke-<check>.png`.
+CI runs the first four. The JavaScript has no unit tests: `tests/browser/smoke.py` clicks through the widgets' main
+features (browsing, previews, the data browser, file operations, uploads and downloads, the launcher's extension) in a
+JupyterLab of its own, with the installed Microsoft Edge. CI does not run it: run it after changing `static/` or the
+extension. Give check names to run only those; a failed check leaves a screenshot, `tests/browser/smoke-<check>.png`.
+
+## How the code fits together
+
+- **`StorageExplorer`** (`storage_explorer.py`) holds the widget's state and routes the frontend's messages
+  (`_requests()`, answered with a reply, and `_notices()`); each feature is a mixin of it in `_explorer/` (the list and
+  tree, previews, bookmarks, JupyterLab's files, jobs, file operations).
+- **Its frontend** is a file per feature in `static/storage_explorer/` (the list, tree, preview, menus, operations,
+  transfers, ...), each a `createX(x)` sharing the explorer `x` made in `storage_explorer.js`; the kernel joins them
+  into one module with the shared `common.js` and `query.js` (`_static.py`), as anywidget cannot import files.
+- **File operations** are planned by `FileTasks` (`file_tasks.py`), run as jobs in a worker thread (`jobs.py`), and
+  done by a chain of `FileSystemOperations` objects (`operations.py`, `filesystems/`), which users can extend.
+- **The data browser** is `DataQuery` (`query.py`), on any dataframe narwhals supports; `DataExplorer` shows it alone.
+- **Formats** (`formats/`) detect, preview, scan and generate code for each kind of file.
+
+CLAUDE.md describes each part in more detail.
 
 ## The JupyterLab extension
 
@@ -94,8 +110,9 @@ git push origin vX.Y.Z
    them on GitHub afterwards if needed), and publishes it to PyPI.
 2. **Release launcher** (`.github/workflows/release-launcher.yaml`), run when the first has succeeded (so the package
    the launcher depends on is on PyPI), builds the JupyterLab extension and `jupyter-storage-explorer-launcher` for the
-   same tag, checks them (version X.Y.Z, the wheel has the extension and requires `jupyter-storage-explorer==X.Y.Z`), adds them to the GitHub release and publishes
-   them to PyPI. To retry it, run it by hand for the tag: *Actions ▸ Release launcher ▸ Run workflow*.
+   same tag, checks them (version X.Y.Z, the wheel has the extension and requires `jupyter-storage-explorer==X.Y.Z`),
+   adds them to the GitHub release and publishes them to PyPI. To retry it, run it by hand for the tag:
+   *Actions ▸ Release launcher ▸ Run workflow*.
 
 ### Release notes
 
