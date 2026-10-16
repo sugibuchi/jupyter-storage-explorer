@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from jupyter_storage_explorer import _infos, _paths
-from jupyter_storage_explorer.formats.base import jsonable
+from jupyter_storage_explorer._json import jsonable
 from jupyter_storage_explorer.operations import Measurement, OperationCancelled
 
 if TYPE_CHECKING:

@@ -30,7 +30,7 @@ from typing import TYPE_CHECKING, Any
 
 import narwhals as nw
 
-from jupyter_storage_explorer.formats.base import jsonable
+from jupyter_storage_explorer._json import jsonable
 from jupyter_storage_explorer.formats.requirements import Polars
 
 if TYPE_CHECKING:

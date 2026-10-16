@@ -12,8 +12,8 @@ from typing import TYPE_CHECKING, Any
 from fsspec.asyn import AsyncFileSystem, sync
 from fsspec.implementations.dirfs import DirFileSystem
 
+from jupyter_storage_explorer import _paths
 from jupyter_storage_explorer.filesystems._common import (
-    file_name,
     measure_by_folder,
     measure_file,
     measure_found,
@@ -108,14 +108,14 @@ class AsyncFsspecOperations(FileSystemOperations):
                 await self._move_file_async(source_fs, path, target_fs, dest, progress)
 
         if not sync(loop, source_fs._isdir, source):
-            progress.working_on(file_name(source))
+            progress.working_on(_paths.basename(source))
             sync(loop, move_file, source, target)
             return
 
         async def move_one(item: tuple[str, str, int]) -> None:
             path, dest, size = item
             progress.check()
-            progress.working_on(file_name(path))
+            progress.working_on(_paths.basename(path))
             await move_file(path, dest)
             # Transfers between filesystems report their bytes as they go.
             progress.advance(files=1, bytes=size if same else 0)
@@ -142,14 +142,14 @@ class AsyncFsspecOperations(FileSystemOperations):
                 await self._copy_file_async(source_fs, path, target_fs, dest, progress)
 
         if not sync(loop, source_fs._isdir, source):
-            progress.working_on(file_name(source))
+            progress.working_on(_paths.basename(source))
             sync(loop, copy_file, source, target)
             return
 
         async def copy_one(item: tuple[str, str, int]) -> None:
             path, dest, size = item
             progress.check()
-            progress.working_on(file_name(path))
+            progress.working_on(_paths.basename(path))
             await copy_file(path, dest)
             progress.advance(files=1, bytes=size if same else 0)
 
@@ -159,7 +159,7 @@ class AsyncFsspecOperations(FileSystemOperations):
     def delete(self, fs: AbstractFileSystem, path: str, progress: Progress) -> None:
         loop = _loop_of(fs)
         if not sync(loop, fs._isdir, path):
-            progress.working_on(file_name(path))
+            progress.working_on(_paths.basename(path))
             sync(loop, fs._rm_file, path)
             return
         files = sync(loop, fs._find, path, detail=True)
@@ -167,7 +167,7 @@ class AsyncFsspecOperations(FileSystemOperations):
         for start in range(0, len(names), self.delete_batch):
             progress.check()
             batch = names[start : start + self.delete_batch]
-            progress.working_on(file_name(batch[-1]))
+            progress.working_on(_paths.basename(batch[-1]))
             sync(loop, fs._rm, batch)
             progress.advance(
                 files=len(batch), bytes=sum(files[n].get("size") or 0 for n in batch)
@@ -180,14 +180,14 @@ class AsyncFsspecOperations(FileSystemOperations):
         self, fs: AbstractFileSystem, path: str, local_path: str, progress: Progress
     ) -> None:
         loop = _loop_of(fs)
-        progress.working_on(file_name(path))
+        progress.working_on(_paths.basename(path))
         sync(loop, fs._get_file, path, local_path, callback=progress.callback())
 
     def upload(
         self, local_path: str, fs: AbstractFileSystem, path: str, progress: Progress
     ) -> None:
         loop = _loop_of(fs)
-        progress.working_on(file_name(path))
+        progress.working_on(_paths.basename(path))
         sync(loop, fs._put_file, local_path, path, callback=progress.callback())
 
     def mkdir(self, fs: AbstractFileSystem, path: str) -> None:

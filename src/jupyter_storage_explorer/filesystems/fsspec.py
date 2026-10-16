@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING, Any
 
 from fsspec.implementations.dirfs import DirFileSystem
 
+from jupyter_storage_explorer import _paths
 from jupyter_storage_explorer.filesystems._common import (
-    file_name,
     measure_by_folder,
     measure_file,
     measure_found,
@@ -76,14 +76,14 @@ class FsspecOperations(FileSystemOperations):
                 self._move_file(source_fs, path, target_fs, dest, progress)
 
         if not source_fs.isdir(source):
-            progress.working_on(file_name(source))
+            progress.working_on(_paths.basename(source))
             move_file(source, target)
             return
         for path, dest, size in prepare_folder_copy(
             source_fs, source, target_fs, target
         ):
             progress.check()
-            progress.working_on(file_name(path))
+            progress.working_on(_paths.basename(path))
             move_file(path, dest)
             # Transfers between filesystems report their bytes as they go.
             progress.advance(files=1, bytes=size if same else 0)
@@ -106,20 +106,20 @@ class FsspecOperations(FileSystemOperations):
                 self._copy_file(source_fs, path, target_fs, dest, progress)
 
         if not source_fs.isdir(source):
-            progress.working_on(file_name(source))
+            progress.working_on(_paths.basename(source))
             copy_file(source, target)
             return
         for path, dest, size in prepare_folder_copy(
             source_fs, source, target_fs, target
         ):
             progress.check()
-            progress.working_on(file_name(path))
+            progress.working_on(_paths.basename(path))
             copy_file(path, dest)
             progress.advance(files=1, bytes=size if same else 0)
 
     def delete(self, fs: AbstractFileSystem, path: str, progress: Progress) -> None:
         if not fs.isdir(path):
-            progress.working_on(file_name(path))
+            progress.working_on(_paths.basename(path))
             fs.rm_file(path)
             return
         files = fs.find(path, detail=True)
@@ -127,7 +127,7 @@ class FsspecOperations(FileSystemOperations):
         for start in range(0, len(names), self.DELETE_BATCH):
             progress.check()
             batch = names[start : start + self.DELETE_BATCH]
-            progress.working_on(file_name(batch[-1]))
+            progress.working_on(_paths.basename(batch[-1]))
             fs.rm(batch)
             progress.advance(
                 files=len(batch), bytes=sum(files[n].get("size") or 0 for n in batch)
@@ -139,13 +139,13 @@ class FsspecOperations(FileSystemOperations):
     def download(
         self, fs: AbstractFileSystem, path: str, local_path: str, progress: Progress
     ) -> None:
-        progress.working_on(file_name(path))
+        progress.working_on(_paths.basename(path))
         fs.get_file(path, local_path, callback=progress.callback())
 
     def upload(
         self, local_path: str, fs: AbstractFileSystem, path: str, progress: Progress
     ) -> None:
-        progress.working_on(file_name(path))
+        progress.working_on(_paths.basename(path))
         fs.put_file(local_path, path, callback=progress.callback())
 
     def mkdir(self, fs: AbstractFileSystem, path: str) -> None:
@@ -195,7 +195,7 @@ class AtomicMoveOperation(FileSystemOperations):
     ) -> None:
         if not same_filesystem(source_fs, target_fs) or not self._renames(source_fs):
             raise self.NotSupported
-        progress.working_on(file_name(source))
+        progress.working_on(_paths.basename(source))
         source_fs.mv(source, target, recursive=source_fs.isdir(source))
 
     def _renames(self, fs: AbstractFileSystem) -> bool:

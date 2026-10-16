@@ -580,10 +580,12 @@ class TestStatesFile:
 
 
 def test_menu_info(mem_explorer):
-    reply = mem_explorer.request({"type": "menu_info", "path": "/data/a.csv"})
+    reply = mem_explorer.request({"type": "menu_info", "rid": 1, "path": "/data/a.csv"})
     assert reply["formats"] == ["csv", "text"]
     assert [r["library"] for r in reply["recipes"]] == ["polars", "pandas", "pyspark"]
-    folder = mem_explorer.request({"type": "menu_info", "path": "/data/table"})
+    folder = mem_explorer.request(
+        {"type": "menu_info", "rid": 1, "path": "/data/table"}
+    )
     assert folder["formats"] == ["delta"]
 
 
@@ -778,7 +780,7 @@ class TestFollowingJobs:
         explorer = make(filesystems={"mem": memfs, "local": str(tmp_path)})
         task = explorer._tasks().delete(["/d/f1.txt", "/d/f2.txt"])
         explorer._filesystem = "local"  # the user switches while it is planned
-        explorer._run_now(task)  # no error, the local list untouched
+        explorer._start(task)  # no error, the local list untouched
         assert [e["name"] for e in entries(explorer)] == ["f1.txt"]
 
 

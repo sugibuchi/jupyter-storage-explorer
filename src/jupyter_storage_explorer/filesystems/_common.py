@@ -5,6 +5,7 @@ from __future__ import annotations
 import collections
 from typing import TYPE_CHECKING, Any
 
+from jupyter_storage_explorer import _paths
 from jupyter_storage_explorer.operations import (
     Measurement,
     OperationCancelled,
@@ -17,11 +18,6 @@ if TYPE_CHECKING:
     from fsspec import AbstractFileSystem
 
     from jupyter_storage_explorer.operations import Progress
-
-
-def file_name(path: str) -> str:
-    """The last part of ``path``, shown as the file being worked on."""
-    return path.rstrip("/").rsplit("/", 1)[-1]
 
 
 def measure_found(path: str, found: dict[str, dict[str, Any]]) -> Measurement:
@@ -61,7 +57,7 @@ def measure_by_folder(
         while pending:
             progress.check()
             folders = [pending.popleft() for _ in range(min(batch, len(pending)))]
-            progress.working_on(file_name(folders[0]) or folders[0])
+            progress.working_on(_paths.basename(folders[0]))
             for folder, listing in zip(folders, list_folders(folders), strict=True):
                 if isinstance(listing, OSError):
                     measurement.errors.append(f"{folder}: {listing}")

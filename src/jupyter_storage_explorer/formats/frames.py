@@ -7,7 +7,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from jupyter_storage_explorer.formats.base import TablePreview, jsonable
+from jupyter_storage_explorer._json import jsonable
+from jupyter_storage_explorer.formats.base import TablePreview
 
 
 def rows_note(

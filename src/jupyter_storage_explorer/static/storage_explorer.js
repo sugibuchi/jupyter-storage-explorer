@@ -595,15 +595,16 @@ function render({ model, el }) {
   // the elements to fill when the kernel's "menu_info" reply arrives.
   let menuInfo = null;
 
+  // The rows are set (by the menu's `ref`s) before the reply arrives.
   function requestMenuInfo(path) {
-    menuInfo = { path };
-    model.send({ type: "menu_info", path });
-    return menuInfo;
+    const info = { path };
+    menuInfo = info;
+    request({ type: "menu_info", path }).then((reply) => onMenuInfo(info, reply));
+    return info;
   }
 
   function onCustomMsg(msg, buffers) {
-    if (msg.type === "menu_info") onMenuInfo(msg);
-    else if (msg.type === "download") onDownload(msg, buffers);
+    if (msg.type === "download") onDownload(msg, buffers);
     else if (msg.type === "reply") onReply(msg);
     else if (msg.type === "job") onJob(msg);
   }
@@ -1680,16 +1681,17 @@ function render({ model, el }) {
     return model.get("_format_labels")[name] ?? name;
   }
 
-  function onMenuInfo(msg) {
-    if (menuInfo?.path !== msg.path) return;
-    const { path, previewRow, previewAsRow, previewAsSub, codeRow, codeSub } = menuInfo;
+  // `info`: the menu the request was for; ignored once another has opened.
+  function onMenuInfo(info, msg) {
+    if (menuInfo !== info) return;
+    const { path, previewRow, previewAsRow, previewAsSub, codeRow, codeSub } = info;
     // A folder's rows, hidden until now: shown if it has a format (an error
     // shows in "Python code").
     if (msg.error || msg.formats.length) codeRow.hidden = false;
     if (!msg.error && msg.formats.length) previewRow.hidden = false;
     if (!msg.error && msg.query) {
       previewRow.querySelector(".jse-menu-label").textContent = "Query data";
-      menuInfo.queryTabRow.hidden = !canOpenQueryTab();
+      info.queryTabRow.hidden = !canOpenQueryTab();
     }
     // "Preview as" only appears when the item matches more than one format.
     if (!msg.error && msg.formats.length > 1) {

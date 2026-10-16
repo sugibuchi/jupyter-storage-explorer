@@ -3,11 +3,8 @@
 from __future__ import annotations
 
 import abc
-import datetime as dt
-import decimal
 import importlib
 import importlib.util
-import math
 import re
 import types
 from collections.abc import Mapping
@@ -127,28 +124,6 @@ class TablePreview(Preview):
     columns: list[str]
     rows: list[list[Any]]
     dtypes: list[str] | None = None
-
-
-def jsonable(value: Any) -> Any:
-    """A cell value the frontend can receive: dates, decimals, numpy scalars etc. become JSON types."""
-    if value is None or isinstance(value, (bool, int, str)):
-        return value
-    # pandas' missing values (pd.NA, pd.NaT), without importing pandas.
-    if type(value).__name__ in ("NAType", "NaTType"):
-        return None
-    if isinstance(value, float):
-        return value if math.isfinite(value) else str(value)
-    if isinstance(value, (list, tuple)):
-        return [jsonable(v) for v in value]
-    if isinstance(value, dict):
-        return {str(k): jsonable(v) for k, v in value.items()}
-    if isinstance(value, (dt.date, dt.time)):
-        return value.isoformat()
-    if isinstance(value, decimal.Decimal):
-        return str(value)
-    if callable(getattr(value, "tolist", None)):  # numpy scalar or array
-        return jsonable(value.tolist())
-    return str(value)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -422,22 +397,13 @@ class DataFormat(abc.ABC):
         ``(Polars, DeltaLake)``; empty if the format cannot be queried.
     """
 
-    # Identifier, lower case with "-" between words, e.g. "delta": used to
-    # choose a format, and in CSS ([data-file-format]).
+    # See the class docstring.
     name: ClassVar[str]
-    label: ClassVar[str]  # shown to the user, e.g. "Delta Lake table"
-    # When several formats match (a Delta table is also a directory of Parquet
-    # files), the one with the highest priority wins.
+    label: ClassVar[str]
     priority: ClassVar[int] = 0
-    extensions: ClassVar[tuple[str, ...]] = ()  # lower case, e.g. (".parquet",)
-    # Sets of packages that can read this format, most preferred first,
-    # e.g. ((Polars, DeltaLake), (Pandas,)). Each set yields one recipe.
+    extensions: ClassVar[tuple[str, ...]] = ()
     preferred_requirements: ClassVar[tuple[Requirements, ...]] = ()
-    # Sets of packages that only appear in recipes (load code), after those of
-    # ``preferred_requirements``; previews never use them, e.g. ((PySpark,),).
     code_only_requirements: ClassVar[tuple[Requirements, ...]] = ()
-    # Packages needed to query the data interactively (the data browser,
-    # "Query data"), e.g. (Polars, DeltaLake). Empty: the format cannot be queried.
     query_requirements: ClassVar[Requirements] = ()
 
     def matches(self, target: Target) -> bool:
