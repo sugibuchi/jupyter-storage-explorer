@@ -15,6 +15,8 @@ It also integrates every Storage Explorer, in its tab or in a notebook, with Jup
   to the storage.
 - **Query data in a tab**: open the data browser in a tab of its own.
 
+## Installation
+
 ```bash
 pip install jupyter-storage-explorer-launcher
 ```
