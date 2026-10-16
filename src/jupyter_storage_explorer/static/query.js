@@ -578,10 +578,7 @@ function createQueryPanel(host, path, data) {
         ),
         h("div", { className: "jse-query-cols" }, ...boxes.map(({ label }) => label), none),
       ],
-      [
-        { label: "Cancel", value: null },
-        { label: "Apply", value: true, primary: true },
-      ],
+      confirmButtons("Apply"),
     );
     filter.focus();
     const choice = await asked;

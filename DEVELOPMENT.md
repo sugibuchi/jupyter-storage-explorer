@@ -49,10 +49,11 @@ IntelliJ's notebook view runs the widgets too, but dragging files in or out of t
 ```bash
 uv run pytest                                        # the Python side
 uvx ruff check src launcher/src tests docs/scripts   # lint
+uv run npx --yes prettier@3.3.3 --check .            # the widgets' JavaScript and CSS formatting
 uv run --group docs tests/browser/smoke.py           # the widgets in a real JupyterLab
 ```
 
-The JavaScript has no unit tests. `tests/browser/smoke.py` clicks through the widgets' main features (browsing,
+The JavaScript has no unit tests; CI checks its formatting and syntax. `tests/browser/smoke.py` clicks through the widgets' main features (browsing,
 previews, the data browser, file operations, uploads and downloads, the launcher's extension) in a JupyterLab of its
 own, with the installed Microsoft Edge. CI does not run it: run it after changing `static/` or the extension. Give
 check names to run only those; a failed check leaves a screenshot, `tests/browser/smoke-<check>.png`.

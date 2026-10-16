@@ -2,6 +2,11 @@
 // preview panel below them. Joined after common.js and query.js (see _static.py).
 
 const join = (parent, name) => (!parent || parent.endsWith("/") ? parent + name : `${parent}/${name}`);
+// The last part of a path or URL, e.g. "b.csv" for "a/b.csv" (and "b" for "a/b/").
+function basename(path) {
+  const trimmed = path.replace(/\/+$/, "");
+  return trimmed.slice(trimmed.lastIndexOf("/") + 1);
+}
 // Some filesystems (e.g. DirFileSystem) use "" as their top-level path.
 const rootLabel = (root) => root || "/";
 
@@ -429,6 +434,52 @@ function render({ model, el }) {
     return out;
   }
 
+  // The status bar's message about a job's result, e.g. "Moved 3 items;
+  // skipped 1 existing; Failed: b.csv: ...", or "Nothing moved". `done`: the
+  // names done, shown as one name or a count after `verb` ("Moved"), or as
+  // `doneText`; `noun`: as in "Move cancelled" (see jobOutcome).
+  function resultMessage(result, { verb, noun, done = [], doneText }) {
+    const parts = [];
+    if (done.length) parts.push(doneText ?? `${verb} ${done.length === 1 ? done[0] : `${done.length} items`}`);
+    if (result.skipped?.length) parts.push(`skipped ${result.skipped.length} existing`);
+    parts.push(...(result.errors ?? []).map((e) => `Failed: ${e}`));
+    parts.push(...jobOutcome(result, parts, noun));
+    return parts.join("; ") || `Nothing ${verb.toLowerCase()}`;
+  }
+
+  // A confirmation's lines: a question and a note under it, e.g. "Move
+  // a.csv?" and "To /data".
+  const question = (text, note) => [h("div", { textContent: text }), h("div", { className: "jse-note", textContent: note })];
+
+  // Resolves with "overwrite", "skip", or null (cancel).
+  function askConflicts(conflicts, dest) {
+    return ask(question(`${describeFiles(conflicts)} already ${conflicts.length === 1 ? "exists" : "exist"}.`, `In ${dest}`), [
+      { label: "Cancel", value: null },
+      { label: "Skip existing", value: "skip" },
+      { label: "Overwrite", value: "overwrite", primary: true },
+    ]);
+  }
+
+  // An operation the kernel runs as a job, once the user confirms it (`lines`,
+  // and the `button` to press): sends `content`, showing `text` while the
+  // widget waits, and if files exist where they go (the reply's "conflicts",
+  // in folder `dest`), sends it again with the user's choice of overwriting or
+  // skipping them. Resolves with the job's result (see jobResult), or null if
+  // the user cancelled ("<noun> cancelled" when asked about the files).
+  async function runOperation({ lines, button, text, content, dest, noun }) {
+    if (!(await ask(lines, confirmButtons(button)))) return null;
+    let reply = await busy(text, () => request({ ...content, if_exists: "ask" }));
+    if (reply.conflicts) {
+      const choice = await askConflicts(reply.conflicts, dest);
+      if (!choice) {
+        flash(`${noun} cancelled`);
+        return null;
+      }
+      reply = await busy(text, () => request({ ...content, if_exists: choice }));
+    }
+    return jobResult(reply);
+  }
+
   // --- "Unsafe mode": while on, risky operations are offered (today:
   // moving, copying, pasting, renaming and deleting folders). Any operation turns it
   // off as it starts, risky or not, so it allows one operation at a time. The
@@ -624,79 +675,51 @@ function render({ model, el }) {
     dropHighlight?.classList.add("jse-drop-target");
   }
 
-  function acceptsDrag(ev) {
-    return Boolean(ev.mimeData?.hasData?.(CONTENTS_MIME));
+  // Drops on the panes of one kind of drag, the drags that `accepts(ev)`:
+  // `target(ev)` tells where one would go, {el, dir} (el is highlighted), or
+  // null where it cannot be dropped; `drop(ev, target)` takes a drop there.
+  // `prefix`: "lm-" for Lumino's drags (JupyterLab's file browser), "" for
+  // the browser's own.
+  function onDrops(prefix, { accepts, target, drop }) {
+    const on = (type, handle) =>
+      panesEl.addEventListener(prefix + type, (ev) => {
+        if (!accepts(ev)) return;
+        ev.stopPropagation(); // keep the notebook from handling it too
+        handle(ev);
+      });
+    on("dragenter", (ev) => ev.preventDefault()); // the panes may take it
+    on("dragover", (ev) => {
+      const at = target(ev);
+      highlightDrop(at?.el ?? null);
+      if (at) ev.preventDefault(); // else it cannot be dropped here
+    });
+    on("dragleave", (ev) => {
+      if (!(ev.relatedTarget instanceof Node && panesEl.contains(ev.relatedTarget))) highlightDrop(null);
+    });
+    on("drop", (ev) => {
+      ev.preventDefault(); // otherwise the browser opens a file dropped
+      highlightDrop(null);
+      const at = target(ev);
+      if (at) drop(ev, at);
+    });
   }
 
-  panesEl.addEventListener("lm-dragenter", (ev) => {
-    if (!acceptsDrag(ev)) return;
-    ev.preventDefault(); // makes the widget a drop target
-    ev.stopPropagation();
-  });
-  panesEl.addEventListener("lm-dragover", (ev) => {
-    if (!acceptsDrag(ev)) return;
-    ev.preventDefault();
-    ev.stopPropagation();
-    // JupyterLab only offers "move"; accepting it is safe, as the dragging side
-    // never deletes anything itself. The kernel copies; the original stays.
-    ev.dropAction = ev.proposedAction;
-    highlightDrop(dropTarget(ev).el);
-  });
-  panesEl.addEventListener("lm-dragleave", (ev) => {
-    if (!acceptsDrag(ev)) return;
-    ev.preventDefault();
-    ev.stopPropagation();
-    if (!(ev.relatedTarget instanceof Node && panesEl.contains(ev.relatedTarget))) highlightDrop(null);
-  });
-  panesEl.addEventListener("lm-drop", (ev) => {
-    if (!acceptsDrag(ev)) return;
-    ev.preventDefault();
-    ev.stopPropagation();
-    highlightDrop(null);
-    if (ev.proposedAction === "none") {
-      ev.dropAction = "none";
-      return;
-    }
-    ev.dropAction = ev.proposedAction;
-    confirmUpload(ev.mimeData.getData(CONTENTS_MIME), dropTarget(ev).dir);
+  onDrops("lm-", {
+    accepts: (ev) => Boolean(ev.mimeData?.hasData?.(CONTENTS_MIME)),
+    target(ev) {
+      // JupyterLab only offers "move"; accepting it is safe, as the dragging side
+      // never deletes anything itself. The kernel copies; the original stays.
+      ev.dropAction = ev.proposedAction;
+      return dropTarget(ev);
+    },
+    drop(ev, at) {
+      if (ev.proposedAction !== "none") confirmUpload(ev.mimeData.getData(CONTENTS_MIME), at.dir);
+    },
   });
 
-  // The two upload dialogs, shared by drops from JupyterLab and from the computer.
-
-  function askUpload(names, dest) {
-    return ask(
-      [h("div", { textContent: `Upload ${describeFiles(names)}?` }), h("div", { className: "jse-note", textContent: `To ${dest}` })],
-      [
-        { label: "Cancel", value: null },
-        { label: "Upload", value: true, primary: true },
-      ],
-    );
-  }
-
-  // Resolves with "overwrite", "skip", or null (cancel).
-  function askConflicts(conflicts, dest) {
-    return ask(
-      [
-        h("div", { textContent: `${describeFiles(conflicts)} already ${conflicts.length === 1 ? "exists" : "exist"}.` }),
-        h("div", { className: "jse-note", textContent: `In ${dest}` }),
-      ],
-      [
-        { label: "Cancel", value: null },
-        { label: "Skip existing", value: "skip" },
-        { label: "Overwrite", value: "overwrite", primary: true },
-      ],
-    );
-  }
-
-  // `result`: a job's result, for its "cancelled" or failure (see jobOutcome).
-  function uploadSummary(copied, skipped, errors, result = {}) {
-    const parts = [];
-    if (copied.length) parts.push(`Uploaded ${copied.length === 1 ? copied[0] : `${copied.length} items`}`);
-    if (skipped.length) parts.push(`skipped ${skipped.length} existing`);
-    parts.push(...errors.map((e) => `Failed: ${e}`));
-    parts.push(...jobOutcome(result, parts, "Upload"));
-    flash(parts.join("; ") || "Nothing uploaded");
-  }
+  // The upload dialog, for drops from JupyterLab and from the computer.
+  const askUpload = (names, dest) => ask(question(`Upload ${describeFiles(names)}?`, `To ${dest}`), confirmButtons("Upload"));
+  const uploadMessage = (result, done) => resultMessage(result, { verb: "Uploaded", noun: "Upload", done });
 
   // From JupyterLab's file browser: the kernel copies the files (and, in
   // unsafe mode, folders) itself, as a job.
@@ -707,21 +730,16 @@ function render({ model, el }) {
       flash("Cannot upload: JupyterLab did not say where its files are");
       return;
     }
-    const names = paths.map((p) => p.slice(p.lastIndexOf("/") + 1));
-    if (!(await askUpload(names, dest))) return;
-    const content = { type: "upload", root, paths, dest, unsafe: folders };
-    const text = `Uploading ${describeFiles(names)}…`;
-    let reply = await busy(text, () => request({ ...content, if_exists: "ask" }));
-    if (reply.conflicts) {
-      const choice = await askConflicts(reply.conflicts, dest);
-      if (!choice) {
-        flash("Upload cancelled");
-        return;
-      }
-      reply = await busy(text, () => request({ ...content, if_exists: choice }));
-    }
-    const result = await jobResult(reply);
-    uploadSummary(result.copied ?? [], result.skipped ?? [], result.errors ?? [], result);
+    const names = paths.map(basename);
+    const result = await runOperation({
+      lines: question(`Upload ${describeFiles(names)}?`, `To ${dest}`),
+      button: "Upload",
+      text: `Uploading ${describeFiles(names)}…`,
+      content: { type: "upload", root, paths, dest, unsafe: folders },
+      dest,
+      noun: "Upload",
+    });
+    if (result) flash(uploadMessage(result, result.copied));
   }
 
   // --- Upload from the computer (native drag and drop): the browser sends
@@ -766,25 +784,19 @@ function render({ model, el }) {
       else files.push(file);
     }
     if (!files.length) {
-      uploadSummary([], [], errors);
+      flash(uploadMessage({ errors }, []));
       return;
     }
     if (localUploadBusy) {
       flash("Another upload is still running");
       return;
     }
-    if (
-      !(await askUpload(
-        files.map((f) => f.name),
-        dest,
-      ))
-    )
-      return;
+    const names = files.map((f) => f.name);
+    if (!(await askUpload(names, dest))) return;
     localUploadBusy = true;
     const copied = [];
     const skipped = [];
     try {
-      const names = files.map((f) => f.name);
       const { conflicts = [] } = await busy("Checking…", () => request({ type: "upload_check", dest, names }));
       let toSend = files;
       if (conflicts.length) {
@@ -829,34 +841,17 @@ function render({ model, el }) {
     } finally {
       localUploadBusy = false;
     }
-    uploadSummary(copied, skipped, errors);
+    flash(uploadMessage({ skipped, errors }, copied));
   }
 
-  const hasFiles = (ev) => Array.from(ev.dataTransfer?.types ?? []).includes("Files");
-
-  panesEl.addEventListener("dragenter", (ev) => {
-    if (!hasFiles(ev)) return;
-    ev.preventDefault();
-    ev.stopPropagation();
-  });
-  panesEl.addEventListener("dragover", (ev) => {
-    if (!hasFiles(ev)) return;
-    ev.preventDefault(); // allows the drop
-    ev.stopPropagation();
-    ev.dataTransfer.dropEffect = "copy";
-    highlightDrop(dropTarget(ev).el);
-  });
-  panesEl.addEventListener("dragleave", (ev) => {
-    if (!hasFiles(ev)) return;
-    if (!(ev.relatedTarget instanceof Node && panesEl.contains(ev.relatedTarget))) highlightDrop(null);
-  });
-  panesEl.addEventListener("drop", (ev) => {
-    if (!hasFiles(ev)) return;
-    ev.preventDefault(); // otherwise the browser opens the file
-    ev.stopPropagation(); // keep the notebook from handling it too
-    highlightDrop(null);
+  onDrops("", {
+    accepts: (ev) => Array.from(ev.dataTransfer?.types ?? []).includes("Files"),
+    target(ev) {
+      ev.dataTransfer.dropEffect = "copy";
+      return dropTarget(ev);
+    },
     // The DataTransfer is only readable during this event, so collect the files now.
-    uploadLocalFiles(droppedFiles(ev.dataTransfer), dropTarget(ev).dir);
+    drop: (ev, at) => uploadLocalFiles(droppedFiles(ev.dataTransfer), at.dir),
   });
 
   // --- Move: drag files (and, in unsafe mode, folders) in the list onto a folder (list or tree) ---
@@ -864,7 +859,6 @@ function render({ model, el }) {
   // Our own drag data type, so moves are told apart from uploads:
   // {paths, folders: whether unsafe mode was on when the drag started}.
   const MOVE_MIME = "application/x-jse-move";
-  const isMoveDrag = (ev) => Array.from(ev.dataTransfer?.types ?? []).includes(MOVE_MIME);
 
   // Entries a drag starting on `entry` moves: the selected ones if it is
   // selected, else just it. Folders only with `folders` (unsafe mode).
@@ -892,34 +886,19 @@ function render({ model, el }) {
     ev.dataTransfer.effectAllowed = "copyMove";
   }
 
-  // Only a folder (row or tree node) is a target; the list itself is the folder they are in.
-  function moveTarget(ev) {
-    const node = ev.target instanceof Element ? ev.target.closest("[data-drop-dir]") : null;
-    return node && panesEl.contains(node) ? node : null;
-  }
-
-  panesEl.addEventListener("dragover", (ev) => {
-    if (!isMoveDrag(ev)) return;
-    ev.stopPropagation();
-    const node = moveTarget(ev);
-    highlightDrop(node);
-    if (!node) return; // not preventing the default refuses the drop here
-    ev.preventDefault();
-    ev.dataTransfer.dropEffect = "move";
-  });
-  panesEl.addEventListener("dragleave", (ev) => {
-    if (!isMoveDrag(ev)) return;
-    if (!(ev.relatedTarget instanceof Node && panesEl.contains(ev.relatedTarget))) highlightDrop(null);
-  });
-  panesEl.addEventListener("drop", (ev) => {
-    if (!isMoveDrag(ev)) return;
-    ev.preventDefault();
-    ev.stopPropagation();
-    highlightDrop(null);
-    const node = moveTarget(ev);
-    if (!node) return;
-    const { paths, folders } = JSON.parse(ev.dataTransfer.getData(MOVE_MIME));
-    confirmMove(paths, node.dataset.dropDir, folders);
+  onDrops("", {
+    accepts: (ev) => Array.from(ev.dataTransfer?.types ?? []).includes(MOVE_MIME),
+    // Only a folder (row or tree node) is a target; the list itself is the folder they are in.
+    target(ev) {
+      const at = dropTarget(ev);
+      if (at.el === listEl) return null;
+      ev.dataTransfer.dropEffect = "move";
+      return at;
+    },
+    drop(ev, at) {
+      const { paths, folders } = JSON.parse(ev.dataTransfer.getData(MOVE_MIME));
+      confirmMove(paths, at.dir, folders);
+    },
   });
   panesEl.addEventListener("dragend", () => highlightDrop(null));
 
@@ -933,7 +912,7 @@ function render({ model, el }) {
 
   // Adds the download to a drag of `paths` starting in the list.
   function startDownloadDrag(ev, paths) {
-    const names = paths.map((p) => p.slice(p.lastIndexOf("/") + 1));
+    const names = paths.map(basename);
     ev.dataTransfer.setData(DOWNLOAD_MIME, JSON.stringify(names));
     const drag = {
       names,
@@ -964,34 +943,16 @@ function render({ model, el }) {
       flash("Already in that folder");
       return;
     }
-    const names = toMove.map((p) => p.slice(p.lastIndexOf("/") + 1));
-    const ok = await ask(
-      [h("div", { textContent: `Move ${describeFiles(names)}?` }), h("div", { className: "jse-note", textContent: `To ${dest}` })],
-      [
-        { label: "Cancel", value: null },
-        { label: "Move", value: true, primary: true },
-      ],
-    );
-    if (!ok) return;
-    const content = { type: "move", paths: toMove, dest, unsafe: folders };
-    const text = `Moving ${describeFiles(names)}…`;
-    let reply = await busy(text, () => request({ ...content, if_exists: "ask" }));
-    if (reply.conflicts) {
-      const choice = await askConflicts(reply.conflicts, dest);
-      if (!choice) {
-        flash("Move cancelled");
-        return;
-      }
-      reply = await busy(text, () => request({ ...content, if_exists: choice }));
-    }
-    const result = await jobResult(reply);
-    const { moved = [], skipped = [], errors = [] } = result;
-    const parts = [];
-    if (moved.length) parts.push(`Moved ${moved.length === 1 ? moved[0] : `${moved.length} items`}`);
-    if (skipped.length) parts.push(`skipped ${skipped.length} existing`);
-    parts.push(...errors.map((e) => `Failed: ${e}`));
-    parts.push(...jobOutcome(result, parts, "Move"));
-    flash(parts.join("; ") || "Nothing moved");
+    const names = toMove.map(basename);
+    const result = await runOperation({
+      lines: question(`Move ${describeFiles(names)}?`, `To ${dest}`),
+      button: "Move",
+      text: `Moving ${describeFiles(names)}…`,
+      content: { type: "move", paths: toMove, dest, unsafe: folders },
+      dest,
+      noun: "Move",
+    });
+    if (result) flash(resultMessage(result, { verb: "Moved", noun: "Move", done: result.moved }));
   }
 
   // --- Delete: files (and, in unsafe mode, folders) chosen with "Delete" in the right-click menu ---
@@ -1004,24 +965,16 @@ function render({ model, el }) {
       return;
     }
     const paths = targets.map((t) => t.path);
-    const names = paths.map((p) => p.slice(p.lastIndexOf("/") + 1));
+    const names = paths.map(basename);
     const note = targets.some(isFolder) ? "Folders are deleted with everything in them. This cannot be undone." : "This cannot be undone.";
-    const ok = await ask(
-      [h("div", { textContent: `Delete ${describeFiles(names)}?` }), h("div", { className: "jse-note", textContent: note })],
-      [
-        { label: "Cancel", value: null },
-        { label: "Delete", value: true, primary: true },
-      ],
-    );
-    if (!ok) return;
-    const reply = await busy(`Deleting ${describeFiles(names)}…`, () => request({ type: "delete", paths, unsafe: folders }));
-    const result = await jobResult(reply);
-    const { deleted = [], errors = [] } = result;
-    const parts = [];
-    if (deleted.length) parts.push(`Deleted ${deleted.length === 1 ? deleted[0] : `${deleted.length} items`}`);
-    parts.push(...errors.map((e) => `Failed: ${e}`));
-    parts.push(...jobOutcome(result, parts, "Delete"));
-    flash(parts.join("; ") || "Nothing deleted");
+    const result = await runOperation({
+      lines: question(`Delete ${describeFiles(names)}?`, note),
+      button: "Delete",
+      text: `Deleting ${describeFiles(names)}…`,
+      content: { type: "delete", paths, unsafe: folders },
+      noun: "Delete",
+    });
+    if (result) flash(resultMessage(result, { verb: "Deleted", noun: "Delete", done: result.deleted }));
   }
 
   // --- Open in JupyterLab: its own editors and viewers ---
@@ -1173,7 +1126,7 @@ function render({ model, el }) {
       folders: hasFolders,
       files: targets.map(({ path }, i) => {
         const url = urls[i];
-        return { path, url, name: url.slice(url.replace(/\/$/, "").lastIndexOf("/") + 1) };
+        return { path, url, name: basename(url) };
       }),
     };
     const what = `${cut ? "Cut" : "Copied"} ${targets.length === 1 ? globalThis[CLIPBOARD].files[0].name : `${targets.length} items`}`;
@@ -1199,41 +1152,23 @@ function render({ model, el }) {
 
   async function confirmPaste(clip, dest) {
     const folders = takeUnsafe();
-    const [Verb, verb, noun] = clip.cut ? ["Move", "move", "Move"] : ["Paste", "paste", "Paste"];
+    const [noun, verb, doing] = clip.cut ? ["Move", "Moved", "Moving"] : ["Paste", "Pasted", "Pasting"];
     if (clip.folders && !folders) {
-      flash(`Turn on unsafe mode to ${verb} folders`);
+      flash(`Turn on unsafe mode to ${noun.toLowerCase()} folders`);
       return;
     }
     const names = clip.files.map((f) => f.name);
-    const ok = await ask(
-      [h("div", { textContent: `${Verb} ${describeFiles(names)}?` }), h("div", { className: "jse-note", textContent: `Into ${dest}` })],
-      [
-        { label: "Cancel", value: null },
-        { label: Verb, value: true, primary: true },
-      ],
-    );
-    if (!ok) return;
-    const content = { type: "paste", explorer: clip.explorer, filesystem: clip.filesystem, files: clip.files, dest, unsafe: folders, cut: clip.cut };
-    const text = `${clip.cut ? "Moving" : "Pasting"} ${describeFiles(names)}…`;
-    let reply = await busy(text, () => request({ ...content, if_exists: "ask" }));
-    if (reply.conflicts) {
-      const choice = await askConflicts(reply.conflicts, dest);
-      if (!choice) {
-        flash(`${noun} cancelled`);
-        return;
-      }
-      reply = await busy(text, () => request({ ...content, if_exists: choice }));
-    }
-    const result = await jobResult(reply);
+    const result = await runOperation({
+      lines: question(`${noun} ${describeFiles(names)}?`, `Into ${dest}`),
+      button: noun,
+      text: `${doing} ${describeFiles(names)}…`,
+      content: { type: "paste", explorer: clip.explorer, filesystem: clip.filesystem, files: clip.files, dest, unsafe: folders, cut: clip.cut },
+      dest,
+      noun,
+    });
+    if (!result) return;
     if (clip.cut) cutPasted(clip, result);
-    const { skipped = [], errors = [] } = result;
-    const done = (clip.cut ? result.moved : result.pasted) ?? [];
-    const parts = [];
-    if (done.length) parts.push(`${clip.cut ? "Moved" : "Pasted"} ${done.length === 1 ? done[0] : `${done.length} items`}`);
-    if (skipped.length) parts.push(`skipped ${skipped.length} existing`);
-    parts.push(...errors.map((e) => `Failed: ${e}`));
-    parts.push(...jobOutcome(result, parts, noun));
-    flash(parts.join("; ") || `Nothing ${clip.cut ? "moved" : "pasted"}`);
+    flash(resultMessage(result, { verb, noun, done: clip.cut ? result.moved : result.pasted }));
   }
 
   // After pasting files cut: they are no longer where they were cut, so the
@@ -1267,100 +1202,75 @@ function render({ model, el }) {
     return null;
   }
 
-  // Asks for the new folder's name (a name, not a path) and creates it in
-  // folder `dest`. A name that cannot be used is explained in the dialog,
-  // which stays open until a folder is created or it is cancelled.
-  async function createFolder(dest) {
-    takeUnsafe(); // an operation, though not a risky one
-    const input = h("input", { type: "text", className: "jse-name-input", placeholder: "Folder name", spellcheck: false });
+  // Asks for a name (not a path) in a dialog of `lines` above the field,
+  // which stays open, explaining what is wrong, until `submit(name)` takes
+  // the name (resolving with null; else with why not), or it is cancelled.
+  // `value`: the name to start with, of which the first `selected`
+  // characters are selected.
+  async function askName({ lines, button, placeholder = "", value = "", selected = value.length, submit }) {
+    const input = h("input", { type: "text", className: "jse-name-input", placeholder, value, spellcheck: false });
     const problem = h("div", { className: "jse-note jse-error-text" });
     input.addEventListener("keydown", (ev) => {
       if (ev.key !== "Enter") return;
       ev.preventDefault();
       answer(true);
     });
-    for (;;) {
-      const asked = ask(
-        [h("div", { textContent: "Create a folder" }), h("div", { className: "jse-note", textContent: `In ${dest}` }), input, problem],
-        [
-          { label: "Cancel", value: null },
-          { label: "Create", value: true, primary: true },
-        ],
-      );
+    for (let first = true; ; first = false) {
+      const asked = ask([...lines, input, problem], confirmButtons(button));
       input.focus();
-      input.select();
+      if (first) input.setSelectionRange(0, selected);
+      else input.select();
       if (!(await asked)) return;
       const name = input.value;
-      const error = nameError(name);
-      if (error) {
-        problem.textContent = error;
-        continue;
-      }
-      const reply = await busy(`Creating ${name}…`, () => request({ type: "create_folder", dest, name }));
-      if (reply.error) {
-        problem.textContent = reply.error; // e.g. "x already exists" (the name as it is)
-        continue;
-      }
-      flash(reply.hidden ? `Created ${name}: it shows once a file is put in it (this storage has no empty folders)` : `Created ${name}`);
-      return;
+      const error = nameError(name) ?? (await submit(name));
+      if (!error) return;
+      problem.textContent = error;
     }
+  }
+
+  // Asks for the new folder's name and creates it in folder `dest`.
+  async function createFolder(dest) {
+    takeUnsafe(); // an operation, though not a risky one
+    await askName({
+      lines: question("Create a folder", `In ${dest}`),
+      button: "Create",
+      placeholder: "Folder name",
+      async submit(name) {
+        const reply = await busy(`Creating ${name}…`, () => request({ type: "create_folder", dest, name }));
+        if (reply.error) return reply.error; // e.g. "x already exists" (the name as it is)
+        flash(reply.hidden ? `Created ${name}: it shows once a file is put in it (this storage has no empty folders)` : `Created ${name}`);
+        return null;
+      },
+    });
   }
 
   // --- Rename: "Rename" in the right-click menu, a file (or, in unsafe mode, a folder) ---
 
   // Asks for the new name, with the current one to edit (a file's without its
   // extension selected), and renames `target` ({path, type}) in its folder: a
-  // move, as a job. A name that cannot be used, or is taken, is explained in
-  // the dialog, which stays open until the item is renamed or it is cancelled.
+  // move, as a job. A name taken is explained in the dialog.
   async function renameItem(target) {
     const folders = takeUnsafe();
     if (isFolder(target) && !folders) {
       flash("Turn on unsafe mode to rename folders");
       return;
     }
-    const old = target.path.slice(target.path.lastIndexOf("/") + 1);
-    const input = h("input", { type: "text", className: "jse-name-input", value: old, spellcheck: false });
-    const problem = h("div", { className: "jse-note jse-error-text" });
-    input.addEventListener("keydown", (ev) => {
-      if (ev.key !== "Enter") return;
-      ev.preventDefault();
-      answer(true);
-    });
+    const old = basename(target.path);
     const dot = old.lastIndexOf(".");
-    const stem = !isFolder(target) && dot > 0 ? dot : old.length;
-    let first = true;
-    for (;;) {
-      const asked = ask(
-        [h("div", { textContent: `Rename ${old}` }), input, problem],
-        [
-          { label: "Cancel", value: null },
-          { label: "Rename", value: true, primary: true },
-        ],
-      );
-      input.focus();
-      if (first) input.setSelectionRange(0, stem);
-      first = false;
-      if (!(await asked)) return;
-      const name = input.value;
-      if (name === old) return;
-      const error = nameError(name);
-      if (error) {
-        problem.textContent = error;
-        continue;
-      }
-      const reply = await busy(`Renaming ${old}…`, () => request({ type: "rename", path: target.path, name, unsafe: folders }));
-      if (reply.error || reply.errors) {
-        problem.textContent = reply.error ?? reply.errors.join("; ");
-        continue;
-      }
-      const result = await jobResult(reply);
-      const { renamed = [], errors = [] } = result;
-      const parts = renamed.length ? [`Renamed ${old} to ${name}`] : [];
-      parts.push(...errors.map((e) => `Failed: ${e}`));
-      parts.push(...jobOutcome(result, parts, "Rename"));
-      flash(parts.join("; ") || "Nothing renamed");
-      return;
-    }
+    await askName({
+      lines: [h("div", { textContent: `Rename ${old}` })],
+      button: "Rename",
+      value: old,
+      selected: !isFolder(target) && dot > 0 ? dot : old.length,
+      async submit(name) {
+        if (name === old) return null;
+        const reply = await busy(`Renaming ${old}…`, () => request({ type: "rename", path: target.path, name, unsafe: folders }));
+        if (reply.error || reply.errors) return reply.error ?? reply.errors.join("; ");
+        const result = await jobResult(reply);
+        flash(resultMessage(result, { verb: "Renamed", noun: "Rename", done: result.renamed, doneText: `Renamed ${old} to ${name}` }));
+        return null;
+      },
+    });
   }
 
   // --- Properties: "Properties" in the right-click menu. A file's are read
@@ -1396,7 +1306,7 @@ function render({ model, el }) {
   // targets: [{path, type}].
   async function showProperties(targets) {
     const paths = targets.map((t) => t.path);
-    const name = (p) => p.slice(p.lastIndexOf("/") + 1) || rootLabel(p);
+    const name = (p) => basename(p) || rootLabel(p);
     const what = paths.length === 1 ? name(paths[0]) : `${paths.length} items`;
     const reply = await busy(`Reading the properties of ${what}…`, () => request({ type: "properties", paths }));
     if (reply.error) {
@@ -1538,33 +1448,18 @@ function render({ model, el }) {
   async function downloadToJupyterLab(paths) {
     takeUnsafe(); // an operation, though not on folders
     const dest = model.get("_download_to_jupyterlab_path");
-    const names = paths.map((p) => p.slice(p.lastIndexOf("/") + 1));
-    const confirmed = await ask(
-      [h("div", { textContent: `Download ${describeFiles(names)} to JupyterLab?` }), h("div", { className: "jse-note", textContent: `To ${dest}` })],
-      [
-        { label: "Cancel", value: null },
-        { label: "Download", value: true, primary: true },
-      ],
-    );
-    if (!confirmed) return;
-    const text = `Downloading ${describeFiles(names)} to JupyterLab…`;
-    let reply = await busy(text, () => request({ type: "download_to_jupyterlab", paths, if_exists: "ask" }));
-    if (reply.conflicts) {
-      const choice = await askConflicts(reply.conflicts, dest);
-      if (!choice) {
-        flash("Download cancelled");
-        return;
-      }
-      reply = await busy(text, () => request({ type: "download_to_jupyterlab", paths, if_exists: choice }));
-    }
-    const result = await jobResult(reply);
-    const { copied = [], skipped = [], errors = [] } = result;
-    const parts = [];
-    if (copied.length) parts.push(`Downloaded ${describeFiles(copied)} to ${dest}`);
-    if (skipped.length) parts.push(`skipped ${skipped.length} existing`);
-    parts.push(...errors.map((e) => `Failed: ${e}`));
-    parts.push(...jobOutcome(result, parts, "Download"));
-    flash(parts.join("; ") || "Nothing downloaded");
+    const names = paths.map(basename);
+    const result = await runOperation({
+      lines: question(`Download ${describeFiles(names)} to JupyterLab?`, `To ${dest}`),
+      button: "Download",
+      text: `Downloading ${describeFiles(names)} to JupyterLab…`,
+      content: { type: "download_to_jupyterlab", paths },
+      dest,
+      noun: "Download",
+    });
+    if (!result) return;
+    const copied = result.copied ?? [];
+    flash(resultMessage(result, { verb: "Downloaded", noun: "Download", done: copied, doneText: `Downloaded ${describeFiles(copied)} to ${dest}` }));
   }
 
   // --- Bookmarks: folders, kept by the kernel (its ExplorerStates, shared
@@ -1934,7 +1829,7 @@ function render({ model, el }) {
     const crumbs = h("span", { className: "jse-crumbs" });
     chain.forEach((path, i) => {
       if (i > 0) crumbs.append(h("span", { className: "jse-sep", textContent: "/" }));
-      const name = i === 0 ? rootLabel(path) : path.slice(path.lastIndexOf("/") + 1);
+      const name = i === 0 ? rootLabel(path) : basename(path);
       const crumb = h("span", { className: "jse-crumb", textContent: name, title: path });
       crumb.addEventListener("click", () => navigate(path));
       crumbs.append(crumb);
