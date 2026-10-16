@@ -37,6 +37,7 @@ coverage.xml
 .pyre/
 .pytype/
 .ruff_cache/
+tests/browser/smoke-*.png
 
 # --- JupyterLab extension (launcher/labextension/) ---
 node_modules/
