@@ -10,7 +10,7 @@ that library, e.g. the syntax of regular expressions.
 - filters.py: the settings checked against the data's columns, and the
   expressions applying them.
 - settings.py: ``QuerySettings``, written by users, and ``QueryState``, what
-  ``ExplorerStates`` (states.py) remembers of a dataset.
+  ``ExplorerStates`` (_explorer/states.py) remembers of a dataset.
 - data_query.py: ``DataQuery``, one dataset open in the data browser, and
   ``fetch_rows``.
 

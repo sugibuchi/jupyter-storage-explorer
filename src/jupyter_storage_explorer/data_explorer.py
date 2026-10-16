@@ -9,10 +9,10 @@ import anywidget
 import traitlets
 
 from jupyter_storage_explorer import _static
+from jupyter_storage_explorer._explorer.states import ExplorerStates
 from jupyter_storage_explorer._query.data_query import DataQuery
 from jupyter_storage_explorer._query.filters import normalize_settings
 from jupyter_storage_explorer._query.settings import QuerySettings
-from jupyter_storage_explorer.states import ExplorerStates
 
 if TYPE_CHECKING:
     from collections.abc import Callable

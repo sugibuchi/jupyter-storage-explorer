@@ -12,6 +12,7 @@ import polars as pl
 import pytest
 from sqlframe.duckdb import DuckDBSession
 
+from jupyter_storage_explorer._explorer.states import ExplorerStates
 from jupyter_storage_explorer._json import jsonable
 from jupyter_storage_explorer._query import data_query
 from jupyter_storage_explorer._query.data_query import DataQuery
@@ -22,7 +23,6 @@ from jupyter_storage_explorer._query.filters import (
     normalize_settings,
 )
 from jupyter_storage_explorer._query.settings import DEFAULT_SETTINGS
-from jupyter_storage_explorer.states import ExplorerStates
 
 DF = pl.DataFrame(
     {

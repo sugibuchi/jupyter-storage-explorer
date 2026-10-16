@@ -20,7 +20,7 @@ from jupyter_storage_explorer.formats.requirements import Polars
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from jupyter_storage_explorer.states import ExplorerStates
+    from jupyter_storage_explorer._explorer.states import ExplorerStates
 
 MODES = ("auto", "live", "memory")
 

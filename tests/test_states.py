@@ -1,4 +1,4 @@
-"""states.py: bookmarks and the data browser's recent queries, kept in memory or in a file."""
+"""_explorer/states.py: bookmarks and the data browser's recent queries, kept in memory or in a file."""
 
 from __future__ import annotations
 
@@ -6,14 +6,14 @@ import json
 
 import pytest
 
-from jupyter_storage_explorer._query.settings import QuerySettings
-from jupyter_storage_explorer.states import (
+from jupyter_storage_explorer._explorer.states import (
     Bookmark,
     ExplorerStates,
     QueryState,
     default_states,
     explorer_states,
 )
+from jupyter_storage_explorer._query.settings import QuerySettings
 
 SORTED = QuerySettings(sort="a", descending=True)
 

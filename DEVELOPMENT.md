@@ -13,7 +13,7 @@ together with the same version (from the git tags). The launcher requires the ex
 
 | Path                                                           | Contents                                                                     |
 |----------------------------------------------------------------|------------------------------------------------------------------------------|
-| `src/jupyter_storage_explorer/`                                | The widgets (`storage_explorer.py`, `data_explorer.py`) and `states.py`.     |
+| `src/jupyter_storage_explorer/`                                | The widgets: `storage_explorer.py`, `data_explorer.py`.                      |
 | `src/jupyter_storage_explorer/fs_operations/`                  | File operations: the interface users extend, and the default ones.           |
 | `src/jupyter_storage_explorer/formats/`                        | The formats files are previewed, queried and loaded as.                      |
 | `src/jupyter_storage_explorer/_explorer/`                      | `StorageExplorer`'s features, as mixins of the class.                        |

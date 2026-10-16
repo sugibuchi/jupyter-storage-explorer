@@ -6,7 +6,7 @@ import fsspec
 import pytest
 from explorers import Explorer, entries, make, path_of
 
-from jupyter_storage_explorer.states import ExplorerStates
+from jupyter_storage_explorer._explorer.states import ExplorerStates
 
 
 class TestListing:

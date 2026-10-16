@@ -6,7 +6,7 @@ from __future__ import annotations
 from typing import Any
 
 from jupyter_storage_explorer import StorageExplorer, _paths
-from jupyter_storage_explorer.states import ExplorerStates
+from jupyter_storage_explorer._explorer.states import ExplorerStates
 
 
 class Explorer(StorageExplorer):

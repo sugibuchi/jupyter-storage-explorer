@@ -61,9 +61,9 @@ explorer of exactly its own version (`launcher/hatch_build.py` sets its dependen
   dependencies are only anywidget, fsspec, narwhals, pygments, traitlets; polars, pandas, pyarrow, deltalake,
   fastexcel, openpyxl, Pillow, PySpark are all optional and probed at run time. The "abfs" extra adds adlfs and the
   Data Lake SDK, for `fs_operations/abfs.py`. Its top level has the widgets (`storage_explorer.py`,
-  `data_explorer.py`), `states.py` and small private helpers (`_paths`, `_urls`, `_infos`, `_json`, `_static`); the
+  `data_explorer.py`) and small private helpers (`_paths`, `_urls`, `_infos`, `_json`, `_static`); the
   rest is in packages: public, `fs_operations/` (`FileSystemOperations` in `base.py`, the default operations) and
-  `formats/`; private, `_explorer/` (`StorageExplorer`'s mixins, with `listing.py` and `jupyterlab_files.py`),
+  `formats/`; private, `_explorer/` (`StorageExplorer`'s mixins, with `states.py`, `listing.py` and `jupyterlab_files.py`),
   `_jobs/` (`tasks.py`: `FileTasks`; `runner.py`: `JobRunner`; `incoming.py`, `properties.py`,
   `transfer_policy.py`) and `_query/` (`filters.py`, `settings.py`: `QuerySettings`, `QueryState`; `data_query.py`:
   `DataQuery`, `fetch_rows`). Users import from the top level, `fs_operations` and `formats` only.
@@ -203,7 +203,7 @@ with `_locate`. After pasting files cut in another explorer, the frontend dispat
 `"jupyter-storage-explorer:changed"` event on `globalThis`, so that explorer asks its kernel to show what is left
 (`"changed"`, `_sources_changed`).
 
-**States** (`states.py`). `ExplorerStates` keeps what explorers remember: bookmarks (storage name, folder, and its URL
+**States** (`_explorer/states.py`). `ExplorerStates` keeps what explorers remember: bookmarks (storage name, folder, and its URL
 when bookmarked, as `_url` only resolves the storage shown) and the data browser's queries (URL, settings, mode
 chosen), the most recent first, at most `max_queries`. One in memory (`default_states`) is shared by the kernel's
 explorers unless `states=` gives another, or a file's path (`explorer_states`: one object per file in the kernel).
