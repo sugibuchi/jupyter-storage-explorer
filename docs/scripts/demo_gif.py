@@ -1,6 +1,7 @@
 """docs/figs/demo.gif, in the README: Storage Explorer opened from JupyterLab's
-launcher, a Delta Lake table queried in the data browser, and a CSV file
-opened in JupyterLab's own viewer.
+launcher, a Delta Lake table queried in the data browser, a folder's list
+filtered as the user types, and a Markdown file edited in JupyterLab's own
+editor, saved back to the storage and previewed in the explorer.
 
 The GIF is put together from screenshots taken after each step, each shown
 for as long as the script says, so its pace does not depend on how fast the
@@ -82,6 +83,13 @@ class Film:
             self.page.mouse.down(click_count=2)
             self.page.mouse.up(click_count=2)
 
+    def type(self, text: str, chunk: int = 1, ms: int = 90) -> None:
+        """Type ``text`` where the focus is, ``chunk`` characters a frame."""
+        for i in range(0, len(text), chunk):
+            self.page.keyboard.type(text[i : i + chunk])
+            self.page.wait_for_timeout(60)
+            self.snap(ms)
+
     def save(self, path: str) -> None:
         images = [Image.open(io.BytesIO(png)).convert("RGB") for png, _ in self.frames]
         # One palette for all frames, so colours do not flicker between them:
@@ -143,17 +151,44 @@ def make(lab: Lab) -> None:
         page.wait_for_timeout(1000)
         film.snap(1800)
 
-        # A CSV file, opened in JupyterLab's own viewer.
-        film.click(label("landing"))
-        page.wait_for_timeout(1000)
-        film.snap(500)
-        film.click(label("orders"))
+        # The list filtered as the user types.
+        film.click(label("pipelines"))
         page.wait_for_timeout(1000)
         film.snap(700)
-        film.click(row("orders_2026-09.csv"), double=True, dx=0.2)
-        page.wait_for_selector(".jp-CSVViewer, .jp-DataGrid", timeout=30000)
+        film.click(page.get_by_placeholder("Filter by name"))
+        film.type("md", ms=250)
+        film.snap(800)
+
+        # The Markdown file edited in JupyterLab's own editor, and saved back.
+        film.click(row("README.md"), double=True, dx=0.2)
+        editor = page.locator(".jp-FileEditor .cm-content").first
+        editor.wait_for(timeout=30000)
         page.wait_for_timeout(1500)
-        film.snap(3500)
+        film.snap(1000)
+        film.click(page.locator(".jp-FileEditor .cm-line").last)
+        page.keyboard.press("Control+End")
+        film.type(
+            "\n## Changes\n\n- 2026-10-16: reports/ refreshed on the 1st at 06:00 UTC",
+            chunk=3,
+            ms=60,
+        )
+        film.snap(600)
+        page.keyboard.press("Control+s")
+        page.wait_for_timeout(1500)
+        film.snap(1200)
+
+        # Back in the explorer, whose preview shows the file as saved.
+        film.click(page.locator(".lm-TabBar-tab", has_text="Storage Explorer").first)
+        page.wait_for_timeout(1000)
+        film.snap(1000)
+        changes = page.get_by_text("refreshed on the 1st").first
+        film.move(page.get_by_text("Owner: data platform team").first)
+        for _ in range(8):
+            page.mouse.wheel(0, 40)
+            page.wait_for_timeout(50)
+            film.snap(60)
+        changes.wait_for(timeout=10000)
+        film.snap(4000)
 
         path = _lab.FIGS / "demo.gif"
         film.save(str(path))
