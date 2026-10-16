@@ -12,8 +12,8 @@ uv sync                              # both workspace packages, editable, with d
 uv run pytest                        # all tests (tests/)
 uv run pytest tests/test_query.py -k range   # one file / matching tests
 uv run pytest --cov                  # with coverage of src/jupyter_storage_explorer (CI uploads it to Codecov)
-uvx ruff check src launcher/src tests  # lint (ruff is not a dev dependency; config in pyproject.toml)
-uvx ruff format src launcher/src tests # format
+uvx ruff check src launcher/src tests docs/scripts  # lint (ruff is not a dev dependency; config in pyproject.toml)
+uvx ruff format src launcher/src tests docs/scripts # format
 uv run jupyter lab                   # try the widgets in a browser (see notebooks/)
 uv run notebooks/make_samples.py     # regenerate the sample data the notebooks use
 ```
@@ -231,4 +231,8 @@ storage options (`spark_url()` rewrites `abfs`/`s3` to `abfss`/`s3a`).
 - Images and links to other files in the READMEs are absolute URLs (`raw.githubusercontent.com/.../main/...` for
   images, `github.com/.../blob/main/...` for files): PyPI shows the README but cannot resolve relative paths. `docs/`
   is read on GitHub only, so it uses relative paths. Screenshots are in `docs/figs/` (the launcher's in
-  `launcher/figs/`), taken at 2× and shown at their CSS size with `<img width="...">`.
+  `launcher/figs/`), taken at 2× and shown at their CSS size with `<img width="...">`. They and the demo GIF are made
+  by `docs/scripts/` (`uv run --group docs docs/scripts/make_all.py`, or one script; see its README): each starts
+  JupyterLab in a temporary folder with its own settings, and explorers show a made-up data lake in fsspec's memory
+  filesystem (`demo_data.py`), so no local path appears. Change or add a script there rather than taking pictures by
+  hand.

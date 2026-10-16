@@ -56,7 +56,7 @@ widths).
 At the top right: query the data itself, or its first 100,000 rows read into memory (faster, but filters and sorting
 apply to those rows only). Eager data, such as pandas', is always in memory.
 
-<img src="figs/browser-mode.png" width="217" alt="Live and In memory, with In memory on">
+<img src="figs/browser-mode.png" width="226" alt="Live and In memory, with In memory on">
 
 ## The result in code
 

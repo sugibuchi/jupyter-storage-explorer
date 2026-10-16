@@ -90,6 +90,10 @@ dev = [
     "pytest-cov>=7.1.0",
     "sqlframe>=4.4.0",
 ]
+docs = [
+    "pillow>=12.3.0",
+    "playwright>=1.64.0",
+]
 
 # Two packages, released together: jupyter-storage-explorer (this folder: the
 # widgets) and jupyter-storage-explorer-launcher (launcher/: the JupyterLab

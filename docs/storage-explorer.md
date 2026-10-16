@@ -109,7 +109,7 @@ Open in JupyterLab (to edit), Preview as, Query data in new tab, Python code to 
 Paste; Create a folder, Rename, Delete; Download to local or to JupyterLab; Properties, Add bookmark. Preview and Python
 code are offered for what has a format, e.g. not a plain folder.
 
-<img src="figs/using-right-click.png" width="384" alt="The right-click menu of a JSON Lines file">
+<img src="figs/using-right-click.png" width="385" alt="The right-click menu of a JSON Lines file">
 
 ### Properties
 
@@ -123,7 +123,7 @@ of files and folders, their total size, and the oldest and newest files.
 Right-click a folder → **Add bookmark**. ☆ lists them; click one to open it, right-click it for Copy URL and Delete
 bookmark.
 
-<img src="figs/using-bookmarks.png" width="245" alt="The bookmarks menu">
+<img src="figs/using-bookmarks.png" width="308" alt="The bookmarks menu">
 
 ### Copy, cut and paste
 

@@ -25,10 +25,10 @@ jobs:
       - uses: astral-sh/setup-uv@v10.3.0  # no major-version tags (e.g. v10) since v8
 
       - name: Ruff check
-        run: uvx ruff check src launcher/src tests
+        run: uvx ruff check src launcher/src tests docs/scripts
 
       - name: Ruff format check
-        run: uvx ruff format --check src launcher/src tests
+        run: uvx ruff format --check src launcher/src tests docs/scripts
 
   test:
     runs-on: ubuntu-latest

@@ -19,6 +19,7 @@ together with the same version (from the git tags). The launcher requires the ex
 | `launcher/labextension/`                                       | The JupyterLab extension (TypeScript).                                       |
 | `launcher/src/jupyter_storage_explorer_launcher/labextension/` | The extension built from `launcher/labextension/` (git-ignored).             |
 | `notebooks/`                                                   | Demo notebooks and `make_samples.py`, which writes the sample data they use. |
+| `docs/scripts/`                                                | Scripts making the docs' screenshots and the demo GIF.                       |
 
 All Python commands go through [uv](https://docs.astral.sh/uv/). Node.js, needed only to build the extension, comes
 with the dev dependencies (`nodejs-wheel`), so `uv run node` and `uv run jlpm` work without installing it.
@@ -130,6 +131,14 @@ last, so run `build:prod` just before it.
 The root `README.md` is the quick start and highlights, shown on PyPI too: links and images there are absolute URLs on
 GitHub, as PyPI cannot resolve relative paths. The details are in `docs/` (`storage-explorer.md`, `data-explorer.md`),
 read on GitHub only, which link to each other and to the repository's files with relative paths.
+
+The screenshots (`docs/figs/`, `launcher/figs/`) and the demo GIF are made by the scripts in
+[`docs/scripts/`](docs/scripts/README.md), with Playwright and the installed Microsoft Edge, from a made-up data lake in
+memory. Their packages are in the `docs` dependency group, which `uv sync` does not install:
+
+```bash
+uv run --group docs docs/scripts/make_all.py
+```
 
 ## Customizing icons
 
