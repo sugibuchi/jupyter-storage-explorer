@@ -14,15 +14,16 @@ uv run pytest tests/test_query.py -k range          # one file / matching tests
 uv run pytest --cov                                 # with coverage of src/jupyter_storage_explorer
 uvx ruff check src launcher/src tests docs/scripts  # lint (ruff is not a dev dependency; config in pyproject.toml)
 uvx ruff format src launcher/src tests docs/scripts # format
-uv run npx --yes prettier@3.3.3 --write .           # format static/'s JS and CSS (only those: .prettierignore)
+uv run npx --yes prettier@3.3.3 --write .           # format static/ and the extension's src/ (.prettierignore)
 uv run tests/browser/check_js.py                    # the joined JS modules: syntax, names undefined or unused
 uv run --group docs tests/browser/smoke.py          # the widgets in a real JupyterLab (see below)
 uv run jupyter lab                                  # try the widgets in a browser (see notebooks/)
 uv run notebooks/make_samples.py                    # regenerate the sample data the notebooks use
 ```
 
-CI (`.github/workflows/ci.yaml`) runs ruff, Prettier, `check_js.py` and pytest with coverage (uploaded to Codecov) on
-pull requests and pushes to `main`. Releases are tag-driven GitHub Actions (see DEVELOPMENT.md, also for the annotated
+CI (`.github/workflows/ci.yaml`) runs ruff, Prettier, `check_js.py`, pytest with coverage (uploaded to Codecov) and
+compiles the launcher's extension (`jlpm build:lib`: tsc; `yarn.lock` must be up to date) on pull requests and pushes
+to `main`. Releases are tag-driven GitHub Actions (see DEVELOPMENT.md, also for the annotated
 tag and the release notes' sections); the maintainer pushes the version tag. In the workflows, `astral-sh/setup-uv`
 must be pinned to a full version (e.g. `@v10.3.0`): since v8 it publishes no major-version tags.
 
@@ -48,8 +49,9 @@ smoke test, `tests/browser/smoke.py` (or some of its checks, by name): it runs J
 Playwright, leaving `tests/browser/smoke-<check>.png` for a failed check. Run it after any change to `static/` or the
 extension, and add a check for a new feature there. For a one-off look, write a Playwright script on `_lab` the same
 way (a new notebook each time: a reused name reuses its kernel, which keeps the old JavaScript). Drag and drop in the
-widgets only works in a browser, not in IntelliJ's notebook view. Check the launcher's tabs against a server you
-restart (stop and start its process).
+widgets only works in a browser, not in IntelliJ's notebook view. The smoke test reloads the page and restarts a
+launcher tab's kernel (`launcher_tab_reload`, `launcher_tab_restart`); check a server restart by hand (stop and start
+its process).
 
 ## Layout
 
@@ -58,15 +60,15 @@ explorer of exactly its own version (`launcher/hatch_build.py` sets its dependen
 
 - `jupyter-storage-explorer` (root, `src/jupyter_storage_explorer/`): the anywidget widgets `StorageExplorer` (files)
   and `DataExplorer` (a dataframe given by the user, any library narwhals supports, with `QuerySettings`). Runtime
-  dependencies are only anywidget, fsspec, narwhals, pygments, traitlets; polars, pandas, pyarrow, deltalake,
-  fastexcel, openpyxl, Pillow, PySpark are all optional and probed at run time. The "abfs" extra adds adlfs and the
-  Data Lake SDK, for `fs_operations/abfs.py`. Its top level has the widgets (`storage_explorer.py`,
-  `data_explorer.py`) and small private helpers (`_paths`, `_urls`, `_infos`, `_json`, `_static`); the
-  rest is in packages: public, `fs_operations/` (`FileSystemOperations` in `base.py`, the default operations) and
-  `formats/`; private, `_explorer/` (`StorageExplorer`'s mixins, with `states.py`, `listing.py` and `jupyterlab_files.py`),
-  `_jobs/` (`tasks.py`: `FileTasks`; `runner.py`: `JobRunner`; `incoming.py`, `properties.py`,
-  `transfer_policy.py`) and `_query/` (`filters.py`, `settings.py`: `QuerySettings`, `QueryState`; `data_query.py`:
-  `DataQuery`, `fetch_rows`). Users import from the top level, `fs_operations` and `formats` only.
+  dependencies are only anywidget, fsspec, narwhals, pygments, traitlets; polars, pandas, pyarrow, deltalake, fastexcel,
+  openpyxl, Pillow, PySpark are all optional and probed at run time. The "abfs" extra adds adlfs and the Data Lake SDK,
+  for `fs_operations/abfs.py`. Its top level has the widgets (`storage_explorer.py`, `data_explorer.py`) and small
+  private helpers (`_paths`, `_urls`, `_infos`, `_json`, `_static`); the rest is in packages: public, `fs_operations/`
+  (`FileSystemOperations` in `base.py`, the default operations) and `formats/`; private, `_explorer/`
+  (`StorageExplorer`'s mixins, with `states.py`, `listing.py` and `jupyterlab_files.py`), `_jobs/` (`tasks.py`:
+  `FileTasks`; `runner.py`: `JobRunner`; `incoming.py`, `properties.py`, `transfer_policy.py`) and `_query/`
+  (`filters.py`, `settings.py`: `QuerySettings`, `QueryState`; `data_query.py`: `DataQuery`, `fetch_rows`). Users import
+  from the top level, `fs_operations` and `formats` only.
 - `jupyter-storage-explorer-launcher` (`launcher/`): a JupyterLab launcher item opening a tab whose kernel runs
   `launch()`. It merges every `storage-explorer/launcher.py` in Jupyter's config paths as layers, system to user
   (their `filesystems()`, `formats()`, `format_options()`, `operations()`, `transfer_policy()`, `parameters()`,
@@ -80,8 +82,8 @@ explorer of exactly its own version (`launcher/hatch_build.py` sets its dependen
   - `download.ts`: files dragged from any explorer onto JupyterLab's file browser are downloaded to the Jupyter server.
   - `files.ts`, "Open in JupyterLab": a JupyterLab drive (`StorageExplorer:<storage>/<path>`, not shown in the file
     browser) serving only the files explorers opened on the page, read and saved through the explorer's kernel
-    (`"jupyterlab_get"`, `"jupyterlab_save"`; contents models in `_explorer/jupyterlab_files.py`, whose hash lets JupyterLab
-    detect changes made elsewhere before saving). Anything else (typed paths, new files, renames) is refused.
+    (`"jupyterlab_get"`, `"jupyterlab_save"`; contents models in `_explorer/jupyterlab_files.py`, whose hash lets
+    JupyterLab detect changes made elsewhere before saving). Anything else (typed paths, new files, renames) is refused.
   - `queryTabs.ts`, "Query data in new tab": the kernel opens a `DataExplorer` of the same query
     (`DataExplorer._of_query`, settings remembered by URL as the preview's) and keeps it in `_query_tabs` until the
     tab closes (`"query_tab"`, `"query_tab_closed"`); the tab renders it with the output renderers of the notebook or
@@ -149,20 +151,20 @@ Tests use fsspec's `AsyncFileSystemWrapper` around a memory filesystem as an asy
 no empty folders, which matters for creating folders.
 
 **Jobs.** Move, rename (a move within the folder), delete, paste, uploads (from JupyterLab's file browser, and the
-storage half of uploads from the computer) and both downloads to JupyterLab run in the background (`_jobs/runner.py`). Each
-is planned by a `FileTasks` method (`_jobs/tasks.py`, no widget involved) on the main thread: checks, conflicts to ask
-about (returned as a dict), else a `Task` whose `work(progress)` runs in the `JobRunner`'s worker thread (one job at a
-time) and records what it changed as each item is done (`Task.record`, under a lock). `JobsMixin` starts it
+storage half of uploads from the computer) and both downloads to JupyterLab run in the background (`_jobs/runner.py`).
+Each is planned by a `FileTasks` method (`_jobs/tasks.py`, no widget involved) on the main thread: checks, conflicts to
+ask about (returned as a dict), else a `Task` whose `work(progress)` runs in the `JobRunner`'s worker thread (one job at
+a time) and records what it changed as each item is done (`Task.record`, under a lock). `JobsMixin` starts it
 (`_plan_request`, `_start`) and shows those changes on the main thread: as the job goes (`_follow`, before progress
-reports: items gone are dropped from the list and tree without listing, at most every `_FOLLOW_INTERVAL`; folders
-with new items are listed again, keeping the selection, at most every `_RELIST_INTERVAL`), and all of them once it
-has ended (`_finish`). Work functions must not touch traits or `send`; they report to the `Progress` and stop when
-`progress.check()` raises `OperationCancelled`. A drop from JupyterLab's file browser is a copy from the kernel's
-local disk (`FileTasks.upload`); files from the computer arrive in pieces (`_jobs/incoming.py`), and the last piece starts
-`FileTasks.upload_file`. Requests answer `{"job": id}`; the kernel sends `{"type": "job", ...}` as the job runs and
-with its result when it ends, which the frontend's `x.jobs.result()` waits for. The main thread is reached through
-the kernel's asyncio loop (`call_soon_threadsafe`); without a running loop (tests), jobs run synchronously, so tests
-see the result at once. Path helpers are in `_paths.py`.
+reports: items gone are dropped from the list and tree without listing, at most every `_FOLLOW_INTERVAL`; folders with
+new items are listed again, keeping the selection, at most every `_RELIST_INTERVAL`), and all of them once it has ended
+(`_finish`). Work functions must not touch traits or `send`; they report to the `Progress` and stop when
+`progress.check()` raises `OperationCancelled`. A drop from JupyterLab's file browser is a copy from the kernel's local
+disk (`FileTasks.upload`); files from the computer arrive in pieces (`_jobs/incoming.py`), and the last piece starts
+`FileTasks.upload_file`. Requests answer `{"job": id}`; the kernel sends `{"type": "job", ...}` as the job runs and with
+its result when it ends, which the frontend's `x.jobs.result()` waits for. The main thread is reached through the
+kernel's asyncio loop (`call_soon_threadsafe`); without a running loop (tests), jobs run synchronously, so tests see the
+result at once. Path helpers are in `_paths.py`.
 
 **Properties** (`_jobs/properties.py`). One file: its fsspec info, answered at once. Folders or several items:
 `FileTasks.properties` adds up the operations' `measure` of each item (`properties.scan`), as a job on a `JobRunner`
@@ -180,16 +182,16 @@ mode" slider in the toolbar is on (trait `_unsafe_mode`). In the frontend, every
 it starts, which turns it off (one operation at a time), and sends whether it was on with its request (`"unsafe"`);
 the kernel refuses folders without it (the methods' `folders=` parameter).
 
-**Transfer policy** (`_jobs/transfer_policy.py`). `transfer_policy=` rules (`TransferPolicy`: the first rule whose `src` and
-`dest` both `fullmatch` decides, default allow) apply to transfers only: copies and moves between filesystems, not
+**Transfer policy** (`_jobs/transfer_policy.py`). `transfer_policy=` rules (`TransferPolicy`: the first rule whose `src`
+and `dest` both `fullmatch` decides, default allow) apply to transfers only: copies and moves between filesystems, not
 within one (`same_filesystem`). They are checked in the kernel only, per item as it is planned: `FileTasks._refused`
-calls its `check` (the explorer's `_transfer_error`) from `_plan_copies` and `download`, and refused items become
-errors while the others go on. URLs come from `_location` (`_url` on the storage shown, else `default_url`; files
-pasted keep the URL they were copied with, from `_paste_sources`). Transfers with the user's computer use
-`computer_url(name)` (`browser:///<name>`): checked in `_download` and `_upload_chunk`. Transfers with JupyterLab's
-file browser (uploads from it, both downloads to the server) pass filesystem None to `check` for that side, which
-`_location` makes `jupyterlab_url(path)` (`jupyterlab://<absolute path>`), unlike the explorer's own local storage
-(plain paths). Not a security boundary.
+calls its `check` (the explorer's `_transfer_error`) from `_plan_copies` and `download`, and refused items become errors
+while the others go on. URLs come from `_location` (`_url` on the storage shown, else `default_url`; files pasted keep
+the URL they were copied with, from `_paste_sources`). Transfers with the user's computer use `computer_url(name)`
+(`browser:///<name>`): checked in `_download` and `_upload_chunk`. Transfers with JupyterLab's file browser (uploads
+from it, both downloads to the server) pass filesystem None to `check` for that side, which `_location` makes
+`jupyterlab_url(path)` (`jupyterlab://<absolute path>`), unlike the explorer's own local storage (plain paths). Not a
+security boundary.
 
 **Between explorers and with JupyterLab.** Drag data can only be text, so the frontend shares objects page-wide under
 `Symbol.for(...)` keys on `globalThis`: `"jupyter-storage-explorer.clipboard"` (Copy or Cut, for Paste in any
@@ -203,11 +205,11 @@ with `_locate`. After pasting files cut in another explorer, the frontend dispat
 `"jupyter-storage-explorer:changed"` event on `globalThis`, so that explorer asks its kernel to show what is left
 (`"changed"`, `_sources_changed`).
 
-**States** (`_explorer/states.py`). `ExplorerStates` keeps what explorers remember: bookmarks (storage name, folder, and its URL
-when bookmarked, as `_url` only resolves the storage shown) and the data browser's queries (URL, settings, mode
+**States** (`_explorer/states.py`). `ExplorerStates` keeps what explorers remember: bookmarks (storage name, folder, and
+its URL when bookmarked, as `_url` only resolves the storage shown) and the data browser's queries (URL, settings, mode
 chosen), the most recent first, at most `max_queries`. One in memory (`default_states`) is shared by the kernel's
-explorers unless `states=` gives another, or a file's path (`explorer_states`: one object per file in the kernel).
-With a path it is a JSON file shared with other kernels (each launcher tab is one; the launcher defaults to
+explorers unless `states=` gives another, or a file's path (`explorer_states`: one object per file in the kernel). With
+a path it is a JSON file shared with other kernels (each launcher tab is one; the launcher defaults to
 `<jupyter_config_dir>/storage-explorer/states.json`): read again when an explorer is created and before each change,
 then written whole, so kernels do not undo each other's changes; a file that cannot be read is never written over.
 `DataQuery` remembers through it; `DataExplorer` uses a private one. The frontend asks for the bookmarks when the
@@ -217,12 +219,12 @@ bookmarks (star) menu opens (`"bookmarks"`, ...), as other explorers may have ch
 the kernel sends; the selection survives filtering and paging. Folders can hold tens of thousands of items, so the
 listing (`_listing`, see `_make_listing`) is sent as columns, without paths or URLs: the frontend joins paths and asks
 for URLs (`"urls"`) when copying, and sorts once per listing, not per keystroke. Folders of more than
-`max_browser_items` are handled by the kernel instead (`_explorer/listing.py`): `_listing` then only gives their size and a
-version, and the frontend asks for pages (`"list"`), filtering the rows shown while it waits; sorting and filters
-there follow the browser's as closely as Python allows (natural order ignoring case and accents; Python's `re`).
-Filters (the list's; *Select columns*) use `createFilter` in `common.js`: text or a regular expression, always
-case-insensitive. The list's is cleared when another folder's listing arrives, not on the click, so the previous
-folder's items never show unfiltered.
+`max_browser_items` are handled by the kernel instead (`_explorer/listing.py`): `_listing` then only gives their size
+and a version, and the frontend asks for pages (`"list"`), filtering the rows shown while it waits; sorting and filters
+there follow the browser's as closely as Python allows (natural order ignoring case and accents; Python's `re`). Filters
+(the list's; *Select columns*) use `createFilter` in `common.js`: text or a regular expression, always case-insensitive.
+The list's is cleared when another folder's listing arrives, not on the click, so the previous folder's items never show
+unfiltered.
 
 **Formats** (`formats/`). Each `DataFormat` subclass (`base.py`) declares `name`, `label`, `priority`, `extensions` and
 which package sets can read it (`preferred_requirements` for previews and code, `code_only_requirements` such as
@@ -232,9 +234,9 @@ PySpark for code only, `query_requirements` for the data browser), and implement
 - `preview(target, limits)`: a list of `Preview` dataclasses (`TablePreview`, `TextPreview`, `TreePreview`,
   `MediaPreview`, `InstallPreview`...) that the frontend renders by `kind`; returns `install_hint()` when no package
   set is installed.
-- `scan(url, is_dir)`: a polars LazyFrame for the data browser. `_query/data_query.py`'s `DataQuery` does filters, sort and paging
-  as narwhals expressions, so it takes any dataframe narwhals supports, either on the data itself ("live") or on rows
-  read into memory (queried with polars); behaviour such as regex syntax then follows the data's library.
+- `scan(url, is_dir)`: a polars LazyFrame for the data browser. `_query/data_query.py`'s `DataQuery` does filters, sort
+  and paging as narwhals expressions, so it takes any dataframe narwhals supports, either on the data itself ("live") or
+  on rows read into memory (queried with polars); behaviour such as regex syntax then follows the data's library.
 - `load_code(target, requirements)`: the "Python code" snippet for one package set; `recipes()` adds the
   `%pip install`, setup and import lines. Packages are referenced through `Requirement` classes (`requirements.py`),
   whose `code_name()` reuses the name the user already imported (e.g. `pl`).

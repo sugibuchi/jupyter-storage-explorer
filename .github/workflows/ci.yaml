@@ -34,6 +34,21 @@ jobs:
       - name: Prettier check
         run: npx --yes prettier@3.3.3 --check .
 
+  # The launcher's JupyterLab extension, type-checked and compiled (tsc), installed
+  # as the release workflow does (Node.js from nodejs-wheel); yarn.lock must be up to date.
+  extension:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.3.0  # no major-version tags (e.g. v10) since v8
+
+      - name: Compile the JupyterLab extension
+        working-directory: launcher/labextension
+        run: |
+          uv run --no-project --with "jupyterlab>=4.6.4,<5" --with nodejs-wheel jlpm install --immutable
+          uv run --no-project --with "jupyterlab>=4.6.4,<5" --with nodejs-wheel jlpm build:lib
+
   test:
     runs-on: ubuntu-latest
     steps:

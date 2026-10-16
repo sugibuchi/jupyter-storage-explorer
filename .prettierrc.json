@@ -3,6 +3,10 @@
     {
       "files": "src/jupyter_storage_explorer/static/**",
       "options": { "printWidth": 160, "endOfLine": "auto" }
+    },
+    {
+      "files": "launcher/labextension/src/**",
+      "options": { "printWidth": 100, "singleQuote": true, "trailingComma": "none", "arrowParens": "avoid", "endOfLine": "auto" }
     }
   ]
 }
