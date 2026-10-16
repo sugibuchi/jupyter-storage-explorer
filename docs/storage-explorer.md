@@ -99,9 +99,9 @@ open, clicking a file previews it. **Close preview** below the list, or Esc, clo
 
 ### Right-click
 
-Open in JupyterLab (to edit), Preview as, Python code to load the data, Copy URL; Copy, Cut, Paste; Create a folder,
-Rename, Delete; Download to local or to JupyterLab; Properties, Add bookmark. Preview and Python code are offered for
-what has a format, e.g. not a plain folder.
+Open in JupyterLab (to edit), Preview as, Query data in new tab, Python code to load the data, Copy URL; Copy, Cut,
+Paste; Create a folder, Rename, Delete; Download to local or to JupyterLab; Properties, Add bookmark. Preview and Python
+code are offered for what has a format, e.g. not a plain folder.
 
 <img src="figs/using-right-click.png" width="384" alt="The right-click menu of a JSON Lines file">
 
@@ -180,6 +180,11 @@ It prevents mistakes; it is not a security boundary. For the launcher's tabs, us
 With [polars](https://pola.rs) installed (plus `deltalake` for Delta Lake, `fastexcel` for Excel), tables open in the
 data browser: page, sort, filter and choose columns, on the data itself (**Live**) or on its first 100,000 rows
 (**In memory**). It is `DataExplorer`'s browser; see [Using the data browser](data-explorer.md#using-the-data-browser).
+
+With the [launcher](../launcher/README.md) package, the button at the right of the preview's title, or right-click →
+**Query data in new tab**, opens the data browser in a JupyterLab tab of its own, with the same filters, sort and columns.
+Each tab is a query of its own: open several to compare tables side by side. The tabs close with the explorer's tab or
+notebook, or when its kernel restarts, and are not reopened after a page reload.
 
 polars reads the data with the credentials in the environment, not the explorer's options; see
 [Format options](#format-options) for its own.

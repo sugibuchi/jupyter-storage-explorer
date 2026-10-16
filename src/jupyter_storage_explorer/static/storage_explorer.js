@@ -590,7 +590,7 @@ function render({ model, el }) {
 
   // --- Menu items filled in by the kernel: "Preview as" and "Python code" ---
 
-  // For the open menu: {path, previewRow, previewAsRow, previewAsSub, codeRow, codeSub},
+  // For the open menu: {path, previewRow, queryTabRow, previewAsRow, previewAsSub, codeRow, codeSub},
   // the elements to fill when the kernel's "menu_info" reply arrives.
   let menuInfo = null;
 
@@ -1076,6 +1076,26 @@ function render({ model, el }) {
     const jupyterlab = globalThis[JUPYTERLAB];
     if (!jupyterlab || entry.type === "directory") return false;
     return jupyterlab.canOpen(entry.name) || model.get("_text_formats").includes(entry.format);
+  }
+
+  // "Query data" in a tab of its own: the kernel opens a DataExplorer of the
+  // same query ("query_tab"), which the extension shows with this widget's
+  // kernel connection (`openWidget`), and closes when the tab closes.
+  const canOpenQueryTab = () => Boolean(globalThis[JUPYTERLAB]?.openWidget);
+
+  async function openQueryTab(path, format = null) {
+    const reply = await request({ type: "query_tab", path, format });
+    if (reply.error) {
+      flash(`Cannot open a tab: ${reply.error}`);
+      return;
+    }
+    const closed = () => model.send({ type: "query_tab_closed", model_id: reply.model_id });
+    try {
+      await globalThis[JUPYTERLAB].openWidget({ modelId: reply.model_id, title: reply.title, caption: reply.url, owner: el, onClose: closed });
+    } catch (err) {
+      closed();
+      flash(`Cannot open a tab: ${err.message ?? err}`);
+    }
   }
 
   function openInJupyterLab(path) {
@@ -1666,7 +1686,10 @@ function render({ model, el }) {
     // shows in "Python code").
     if (msg.error || msg.formats.length) codeRow.hidden = false;
     if (!msg.error && msg.formats.length) previewRow.hidden = false;
-    if (!msg.error && msg.query) previewRow.querySelector(".jse-menu-label").textContent = "Query data";
+    if (!msg.error && msg.query) {
+      previewRow.querySelector(".jse-menu-label").textContent = "Query data";
+      menuInfo.queryTabRow.hidden = !canOpenQueryTab();
+    }
     // "Preview as" only appears when the item matches more than one format.
     if (!msg.error && msg.formats.length > 1) {
       const items = msg.formats.map((format) => ({ label: `Preview as ${formatLabel(format)}`, action: () => openPreview(path, format) }));
@@ -1725,6 +1748,14 @@ function render({ model, el }) {
           // Relabelled "Query data" when the kernel says it opens in the data browser.
           ref: (row) => (info.previewRow = row),
           action: () => openPreview(single.path),
+        },
+        {
+          // Shown when the kernel says it opens in the data browser.
+          label: "Query data in new tab",
+          icon: "open-in-new",
+          hidden: true,
+          ref: (row) => (info.queryTabRow = row),
+          action: () => openQueryTab(single.path),
         },
         {
           label: "Preview as",
@@ -2343,6 +2374,12 @@ function render({ model, el }) {
     previewHead.dataset.path = preview.path;
     previewHead.replaceChildren(h("span", { className: "jse-preview-name", textContent: preview.path, title: preview.path }));
     if (preview.format) previewHead.append(h("span", { className: "jse-badge", textContent: formatLabel(preview.format) }));
+    // The data browser, in a tab of its own (with the launcher's extension).
+    if (preview.query && canOpenQueryTab()) {
+      const tabBtn = iconButton("open-in-new", "Open in a new tab");
+      tabBtn.addEventListener("click", () => openQueryTab(preview.path, preview.format));
+      previewHead.append(h("span", { className: "jse-spacer" }), tabBtn);
+    }
 
     let body;
     if (preview.loading) {

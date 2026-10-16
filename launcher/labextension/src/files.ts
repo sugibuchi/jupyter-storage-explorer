@@ -157,7 +157,9 @@ export const filesPlugin: JupyterFrontEndPlugin<void> = {
     const contents = app.serviceManager.contents;
     const drive = new StorageDrive(contents.serverSettings);
     contents.addDrive(drive);
-    (globalThis as Record<symbol, unknown>)[REGISTRY] = {
+    // Shared with the other plugins' functions (queryTabs.ts).
+    const registry = ((globalThis as Record<symbol, any>)[REGISTRY] ??= {});
+    Object.assign(registry, {
       // Whether JupyterLab knows the type of a file of this name (e.g. CSV,
       // JSON, notebooks, images), so has an editor or viewer for it; the
       // explorer also opens the files it reads as text.
@@ -168,6 +170,6 @@ export const filesPlugin: JupyterFrontEndPlugin<void> = {
         const path = drive.add(file);
         await app.commands.execute('docmanager:open', { path: `${DRIVE_NAME}:${path}` });
       }
-    };
+    });
   }
 };

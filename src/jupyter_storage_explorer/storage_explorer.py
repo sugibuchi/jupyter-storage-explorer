@@ -24,6 +24,7 @@ from jupyter_storage_explorer import (
     properties,
 )
 from jupyter_storage_explorer._urls import default_location, default_url
+from jupyter_storage_explorer.data_explorer import DataExplorer
 from jupyter_storage_explorer.file_tasks import FileTasks, Plan, Task
 from jupyter_storage_explorer.filesystems import (
     AsyncFsspecOperations,
@@ -379,6 +380,9 @@ class StorageExplorer(anywidget.AnyWidget):
         self._listing_version = 0
         # Data browser: path -> the data being queried.
         self._queries: dict[str, DataQuery] = {}
+        # Data browsers in tabs of their own ("query_tab"): model id -> widget,
+        # kept here while the tab is open.
+        self._query_tabs: dict[str, DataExplorer] = {}
         self._formats = explorer_formats(formats, format_options)
         self._preview_limits = preview_limits or PreviewLimits()
         # Files being received from the user's computer (see incoming.py).
@@ -592,6 +596,8 @@ class StorageExplorer(anywidget.AnyWidget):
             "query_save": lambda c, _: self._reply(c, self._query_request(c)),
             "query_reload": lambda c, _: self._reply(c, self._query_request(c)),
             "query_mode": lambda c, _: self._reply(c, self._query_request(c)),
+            "query_tab": lambda c, _: self._reply(c, self._query_tab_request(c)),
+            "query_tab_closed": lambda c, _: self._query_tab_closed(c["model_id"]),
             "bookmarks": lambda c, _: self._reply(c, self._bookmark_list()),
             "bookmark_add": lambda c, _: self._reply(c, self._add_bookmark(c["path"])),
             "bookmark_remove": lambda c, _: self._reply(
@@ -987,21 +993,65 @@ class StorageExplorer(anywidget.AnyWidget):
 
         The frontend then asks for rows with "query_rows".
         """
-        # Settings are remembered by URL, so they follow the data across
-        # explorers, with the mode last chosen for it.
+        data = self._new_query(fmt, target)
+        self._queries[path] = data
+        return data.opening()
+
+    def _new_query(self, fmt: DataFormat, target: Target) -> DataQuery:
+        """The data browser's query of ``target`` read as ``fmt``.
+
+        Settings are remembered by URL, so they follow the data across
+        explorers and tabs, with the mode last chosen for it.
+        """
         scan = functools.partial(fmt.scan, target.url, target.is_dir)
         state = self._states.query(target.url)
         mode = state.mode if state is not None else "auto"
         fetch = self._fetch_rows
         try:
-            data = DataQuery(scan, target.url, self._states, mode=mode, fetch=fetch)
+            return DataQuery(scan, target.url, self._states, mode=mode, fetch=fetch)
         except ValueError:
             if mode != "live":
                 raise
             # "live" chosen when the format scanned lazily, and no longer does.
-            data = DataQuery(scan, target.url, self._states, fetch=fetch)
-        self._queries[path] = data
-        return data.opening()
+            return DataQuery(scan, target.url, self._states, fetch=fetch)
+
+    # --- Query data in a new tab: a DataExplorer of the same query, which the
+    # launcher's JupyterLab extension shows in a tab of its own ---
+
+    def _query_tab_request(self, content: dict[str, Any]) -> dict[str, Any]:
+        """Answer "query_tab": open ``path`` (as ``format``, else its best
+        format) in a new ``DataExplorer``, kept until the tab closes
+        ("query_tab_closed"). {"model_id", "title", "url"} or {"error"}."""
+        path = content.get("path")
+        try:
+            target, formats = self._detect(path)
+            if target is None:
+                raise ValueError(f"{path} has no URL, so it cannot be queried")
+            if content.get("format"):
+                formats = [f for f in formats if f.name == content["format"]]
+            if not formats or not formats[0].can_query():
+                raise ValueError(f"{_paths.basename(path)} cannot be queried")
+            explorer = DataExplorer._of_query(
+                self._new_query(formats[0], target),
+                self._states,
+                target.url,
+                title=_paths.basename(path),
+                height="fill",
+            )
+        except Exception as exc:
+            return {"error": _error_text(exc)}
+        self._query_tabs[explorer.model_id] = explorer
+        return {
+            "model_id": explorer.model_id,
+            "title": _paths.basename(path),
+            "url": target.url,
+        }
+
+    def _query_tab_closed(self, model_id: str) -> None:
+        """The tab of a "query_tab" closed: its DataExplorer is no longer kept."""
+        explorer = self._query_tabs.pop(model_id, None)
+        if explorer is not None:
+            explorer.close()
 
     def _query_request(self, content: dict[str, Any]) -> dict[str, Any]:
         """Answer the data browser's "query_rows", "query_check" or "query_save"."""
