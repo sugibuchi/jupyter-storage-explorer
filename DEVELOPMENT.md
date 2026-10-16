@@ -13,8 +13,12 @@ together with the same version (from the git tags). The launcher requires the ex
 
 | Path                                                           | Contents                                                                     |
 |----------------------------------------------------------------|------------------------------------------------------------------------------|
-| `src/jupyter_storage_explorer/`                                | The widgets, formats and the data browser.                                   |
+| `src/jupyter_storage_explorer/`                                | The widgets (`storage_explorer.py`, `data_explorer.py`) and `states.py`.     |
+| `src/jupyter_storage_explorer/fs_operations/`                  | File operations: the interface users extend, and the default ones.           |
+| `src/jupyter_storage_explorer/formats/`                        | The formats files are previewed, queried and loaded as.                      |
 | `src/jupyter_storage_explorer/_explorer/`                      | `StorageExplorer`'s features, as mixins of the class.                        |
+| `src/jupyter_storage_explorer/_jobs/`                          | File operations planned and run as jobs, without the widget.                 |
+| `src/jupyter_storage_explorer/_query/`                         | The data browser: filters, settings, and a dataset open in it.               |
 | `src/jupyter_storage_explorer/static/`                         | The widgets' JavaScript and CSS, loaded at run time (no build step).         |
 | `src/jupyter_storage_explorer/static/storage_explorer/`        | The storage explorer's JavaScript, a file per feature, joined at run time.   |
 | `launcher/src/jupyter_storage_explorer_launcher/`              | `launch()`, which merges the `storage-explorer/launcher.py` files (layers).  |
@@ -70,9 +74,9 @@ extension. Give check names to run only those; a failed check leaves a screensho
 - **Its frontend** is a file per feature in `static/storage_explorer/` (the list, tree, preview, menus, operations,
   transfers, ...), each a `createX(x)` sharing the explorer `x` made in `storage_explorer.js`; the kernel joins them
   into one module with the shared `common.js` and `query.js` (`_static.py`), as anywidget cannot import files.
-- **File operations** are planned by `FileTasks` (`file_tasks.py`), run as jobs in a worker thread (`jobs.py`), and
-  done by a chain of `FileSystemOperations` objects (`operations.py`, `filesystems/`), which users can extend.
-- **The data browser** is `DataQuery` (`query.py`), on any dataframe narwhals supports; `DataExplorer` shows it alone.
+- **File operations** are planned by `FileTasks` (`_jobs/tasks.py`), run as jobs in a worker thread (`_jobs/runner.py`), and
+  done by a chain of `FileSystemOperations` objects (`fs_operations/`), which users can extend.
+- **The data browser** is `DataQuery` (`_query/`), on any dataframe narwhals supports; `DataExplorer` shows it alone.
 - **Formats** (`formats/`) detect, preview, scan and generate code for each kind of file.
 
 CLAUDE.md describes each part in more detail.

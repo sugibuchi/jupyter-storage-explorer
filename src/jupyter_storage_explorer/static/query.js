@@ -3,7 +3,7 @@
 // QUERY_WINDOW rows at a time; pages of QUERY_PAGE rows are shown from that
 // window. The kernel also remembers the settings per dataset, and runs
 // queries on the data itself ("Live") or on rows read into memory ("In
-// memory"; see DataQuery in query.py).
+// memory"; see DataQuery in _query/data_query.py).
 
 const QUERY_WINDOW = 1000;
 const QUERY_PAGE = 100;

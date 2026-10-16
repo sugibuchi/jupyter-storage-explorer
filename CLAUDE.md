@@ -60,7 +60,13 @@ explorer of exactly its own version (`launcher/hatch_build.py` sets its dependen
   and `DataExplorer` (a dataframe given by the user, any library narwhals supports, with `QuerySettings`). Runtime
   dependencies are only anywidget, fsspec, narwhals, pygments, traitlets; polars, pandas, pyarrow, deltalake,
   fastexcel, openpyxl, Pillow, PySpark are all optional and probed at run time. The "abfs" extra adds adlfs and the
-  Data Lake SDK, for `filesystems/abfs.py`.
+  Data Lake SDK, for `fs_operations/abfs.py`. Its top level has the widgets (`storage_explorer.py`,
+  `data_explorer.py`), `states.py` and small private helpers (`_paths`, `_urls`, `_infos`, `_json`, `_static`); the
+  rest is in packages: public, `fs_operations/` (`FileSystemOperations` in `base.py`, the default operations) and
+  `formats/`; private, `_explorer/` (`StorageExplorer`'s mixins, with `listing.py` and `jupyterlab_files.py`),
+  `_jobs/` (`tasks.py`: `FileTasks`; `runner.py`: `JobRunner`; `incoming.py`, `properties.py`,
+  `transfer_policy.py`) and `_query/` (`filters.py`, `settings.py`: `QuerySettings`, `QueryState`; `data_query.py`:
+  `DataQuery`, `fetch_rows`). Users import from the top level, `fs_operations` and `formats` only.
 - `jupyter-storage-explorer-launcher` (`launcher/`): a JupyterLab launcher item opening a tab whose kernel runs
   `launch()`. It merges every `storage-explorer/launcher.py` in Jupyter's config paths as layers, system to user
   (their `filesystems()`, `formats()`, `format_options()`, `operations()`, `transfer_policy()`, `parameters()`,
@@ -74,7 +80,7 @@ explorer of exactly its own version (`launcher/hatch_build.py` sets its dependen
   - `download.ts`: files dragged from any explorer onto JupyterLab's file browser are downloaded to the Jupyter server.
   - `files.ts`, "Open in JupyterLab": a JupyterLab drive (`StorageExplorer:<storage>/<path>`, not shown in the file
     browser) serving only the files explorers opened on the page, read and saved through the explorer's kernel
-    (`"jupyterlab_get"`, `"jupyterlab_save"`; contents models in `_jupyterlab_files.py`, whose hash lets JupyterLab
+    (`"jupyterlab_get"`, `"jupyterlab_save"`; contents models in `_explorer/jupyterlab_files.py`, whose hash lets JupyterLab
     detect changes made elsewhere before saving). Anything else (typed paths, new files, renames) is refused.
   - `queryTabs.ts`, "Query data in new tab": the kernel opens a `DataExplorer` of the same query
     (`DataExplorer._of_query`, settings remembered by URL as the preview's) and keeps it in `_query_tabs` until the
@@ -124,17 +130,17 @@ the storage (`abfs://container/...`, `dir://`) are refused, not guessed.
 **File operations.** `StorageExplorer` ends with a *File operations* block: the only methods that call fsspec on the
 filesystem shown (`self._fs`) for listing, reading and writing (`_ls`, `_info`, `_exists`, `_isdir`, `_read_bytes`,
 `_write_bytes`); other methods go through them. Moving, copying, deleting, downloading and creating folders go through
-the operations objects instead (`operations.py`, the `operations=` argument): a chain of `FileSystemOperations`, each
+the operations objects instead (`fs_operations/`, the `operations=` argument): a chain of `FileSystemOperations`, each
 method tried in order until one does not raise `FileSystemOperations.NotSupported` (its own exception, so that a
 library's `NotImplementedError` is reported as an error). `operations=` are tried before
-`StorageExplorer.default_operations()`, from the `filesystems/` package: `AtomicMoveOperation` (only moves within a
+`StorageExplorer.default_operations()`, from the same package: `AtomicMoveOperation` (only moves within a
 filesystem whose `mv` renames a folder in one step: local, memory, or a `DirFileSystem` over them), then
 `AsyncFsspecOperations` (`async_fsspec.py`: async filesystems such as s3fs, their coroutines, many files at a time),
 then `FsspecOperations` (`fsspec.py`). Both of the latter walk folders themselves, moves included, to report progress
-file by file (helpers in `filesystems/_common.py`). Opt-in, not a default: `AzureDataLakeGen2Operation` (`abfs.py`,
+file by file (helpers in `fs_operations/_common.py`). Opt-in, not a default: `AzureDataLakeGen2Operation` (`abfs.py`,
 the "abfs" extra), which moves (renames) and creates folders on accounts with a hierarchical namespace with the async
 Data Lake SDK, connected from the adlfs filesystem's settings and run on its loop with `fsspec.asyn.sync`; tested with
-a fake client (`tests/test_abfs.py`); `filesystems/__init__.py` does not import it. `move` and `copy` take a source
+a fake client (`tests/test_abfs.py`); `fs_operations/__init__.py` does not import it. `move` and `copy` take a source
 and a target filesystem, the same one or not (`same_filesystem`: fsspec instances compare by their arguments).
 Between filesystems, single files go through `FileSystemOperations._copy_file` and `_move_file`
 (`_copy_file_async`/`_move_file_async` in the async class), overridable: by default through a temporary file, so a
@@ -143,8 +149,8 @@ Tests use fsspec's `AsyncFileSystemWrapper` around a memory filesystem as an asy
 no empty folders, which matters for creating folders.
 
 **Jobs.** Move, rename (a move within the folder), delete, paste, uploads (from JupyterLab's file browser, and the
-storage half of uploads from the computer) and both downloads to JupyterLab run in the background (`jobs.py`). Each
-is planned by a `FileTasks` method (`file_tasks.py`, no widget involved) on the main thread: checks, conflicts to ask
+storage half of uploads from the computer) and both downloads to JupyterLab run in the background (`_jobs/runner.py`). Each
+is planned by a `FileTasks` method (`_jobs/tasks.py`, no widget involved) on the main thread: checks, conflicts to ask
 about (returned as a dict), else a `Task` whose `work(progress)` runs in the `JobRunner`'s worker thread (one job at a
 time) and records what it changed as each item is done (`Task.record`, under a lock). `JobsMixin` starts it
 (`_plan_request`, `_start`) and shows those changes on the main thread: as the job goes (`_follow`, before progress
@@ -152,13 +158,13 @@ reports: items gone are dropped from the list and tree without listing, at most 
 with new items are listed again, keeping the selection, at most every `_RELIST_INTERVAL`), and all of them once it
 has ended (`_finish`). Work functions must not touch traits or `send`; they report to the `Progress` and stop when
 `progress.check()` raises `OperationCancelled`. A drop from JupyterLab's file browser is a copy from the kernel's
-local disk (`FileTasks.upload`); files from the computer arrive in pieces (`incoming.py`), and the last piece starts
+local disk (`FileTasks.upload`); files from the computer arrive in pieces (`_jobs/incoming.py`), and the last piece starts
 `FileTasks.upload_file`. Requests answer `{"job": id}`; the kernel sends `{"type": "job", ...}` as the job runs and
 with its result when it ends, which the frontend's `x.jobs.result()` waits for. The main thread is reached through
 the kernel's asyncio loop (`call_soon_threadsafe`); without a running loop (tests), jobs run synchronously, so tests
 see the result at once. Path helpers are in `_paths.py`.
 
-**Properties** (`properties.py`). One file: its fsspec info, answered at once. Folders or several items:
+**Properties** (`_jobs/properties.py`). One file: its fsspec info, answered at once. Folders or several items:
 `FileTasks.properties` adds up the operations' `measure` of each item (`properties.scan`), as a job on a `JobRunner`
 of its own (`_scans`, ids `scan-N`), so it never waits for a move; the frontend shows it in a blocking dialog with
 Cancel (not in the jobs above the status bar). It is not an operation: it does not take unsafe mode.
@@ -174,7 +180,7 @@ mode" slider in the toolbar is on (trait `_unsafe_mode`). In the frontend, every
 it starts, which turns it off (one operation at a time), and sends whether it was on with its request (`"unsafe"`);
 the kernel refuses folders without it (the methods' `folders=` parameter).
 
-**Transfer policy** (`transfer_policy.py`). `transfer_policy=` rules (`TransferPolicy`: the first rule whose `src` and
+**Transfer policy** (`_jobs/transfer_policy.py`). `transfer_policy=` rules (`TransferPolicy`: the first rule whose `src` and
 `dest` both `fullmatch` decides, default allow) apply to transfers only: copies and moves between filesystems, not
 within one (`same_filesystem`). They are checked in the kernel only, per item as it is planned: `FileTasks._refused`
 calls its `check` (the explorer's `_transfer_error`) from `_plan_copies` and `download`, and refused items become
@@ -211,7 +217,7 @@ bookmarks (star) menu opens (`"bookmarks"`, ...), as other explorers may have ch
 the kernel sends; the selection survives filtering and paging. Folders can hold tens of thousands of items, so the
 listing (`_listing`, see `_make_listing`) is sent as columns, without paths or URLs: the frontend joins paths and asks
 for URLs (`"urls"`) when copying, and sorts once per listing, not per keystroke. Folders of more than
-`max_browser_items` are handled by the kernel instead (`listing.py`): `_listing` then only gives their size and a
+`max_browser_items` are handled by the kernel instead (`_explorer/listing.py`): `_listing` then only gives their size and a
 version, and the frontend asks for pages (`"list"`), filtering the rows shown while it waits; sorting and filters
 there follow the browser's as closely as Python allows (natural order ignoring case and accents; Python's `re`).
 Filters (the list's; *Select columns*) use `createFilter` in `common.js`: text or a regular expression, always
@@ -226,7 +232,7 @@ PySpark for code only, `query_requirements` for the data browser), and implement
 - `preview(target, limits)`: a list of `Preview` dataclasses (`TablePreview`, `TextPreview`, `TreePreview`,
   `MediaPreview`, `InstallPreview`...) that the frontend renders by `kind`; returns `install_hint()` when no package
   set is installed.
-- `scan(url, is_dir)`: a polars LazyFrame for the data browser. `query.py`'s `DataQuery` does filters, sort and paging
+- `scan(url, is_dir)`: a polars LazyFrame for the data browser. `_query/data_query.py`'s `DataQuery` does filters, sort and paging
   as narwhals expressions, so it takes any dataframe narwhals supports, either on the data itself ("live") or on rows
   read into memory (queried with polars); behaviour such as regex syntax then follows the data's library.
 - `load_code(target, requirements)`: the "Python code" snippet for one package set; `recipes()` adds the

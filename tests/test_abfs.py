@@ -1,4 +1,4 @@
-"""filesystems/abfs.py: Azure Data Lake Storage Gen2, with a fake Data Lake client
+"""fs_operations/abfs.py: Azure Data Lake Storage Gen2, with a fake Data Lake client
 (no Azure account in tests)."""
 
 from __future__ import annotations
@@ -9,9 +9,9 @@ import pytest
 from adlfs import AzureBlobFileSystem
 from azure.core import MatchConditions
 
-from jupyter_storage_explorer.filesystems import abfs
-from jupyter_storage_explorer.filesystems.abfs import AzureDataLakeGen2Operation
-from jupyter_storage_explorer.operations import FileSystemOperations, Progress
+from jupyter_storage_explorer.fs_operations import abfs
+from jupyter_storage_explorer.fs_operations.abfs import AzureDataLakeGen2Operation
+from jupyter_storage_explorer.fs_operations.base import FileSystemOperations, Progress
 
 
 class FakeService:

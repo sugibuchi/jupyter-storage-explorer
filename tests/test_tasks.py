@@ -1,4 +1,4 @@
-"""file_tasks.py and incoming.py, without a widget."""
+"""_jobs/tasks.py and _jobs/incoming.py, without a widget."""
 
 from __future__ import annotations
 
@@ -7,10 +7,10 @@ import os
 import fsspec
 import pytest
 
-from jupyter_storage_explorer.file_tasks import FileTasks, Task
-from jupyter_storage_explorer.filesystems import FsspecOperations
-from jupyter_storage_explorer.incoming import IncomingFiles
-from jupyter_storage_explorer.operations import OperationChain, Progress
+from jupyter_storage_explorer._jobs.incoming import IncomingFiles
+from jupyter_storage_explorer._jobs.tasks import FileTasks, Task
+from jupyter_storage_explorer.fs_operations import FsspecOperations
+from jupyter_storage_explorer.fs_operations.base import OperationChain, Progress
 
 
 @pytest.fixture

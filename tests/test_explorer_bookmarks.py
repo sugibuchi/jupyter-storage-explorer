@@ -6,7 +6,8 @@ import polars as pl
 import pytest
 from explorers import Explorer, make, path_of
 
-from jupyter_storage_explorer.query import QuerySettings, fetch_rows
+from jupyter_storage_explorer._query.data_query import fetch_rows
+from jupyter_storage_explorer._query.settings import QuerySettings
 from jupyter_storage_explorer.states import ExplorerStates
 
 

@@ -1,5 +1,5 @@
 // "Properties" in the right-click menu. A file's are read at once; otherwise
-// the kernel counts the files and folders in a job (properties.py), while a
+// the kernel counts the files and folders in a job (_jobs/properties.py), while a
 // dialog blocks the widget, showing how far it has got, with Cancel. Not an
 // operation: unsafe mode stays as it is.
 

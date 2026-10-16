@@ -26,10 +26,15 @@ import json
 import os
 import pathlib
 import tempfile
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from jupyter_storage_explorer.query import DEFAULT_SETTINGS, MODES, QuerySettings
+from jupyter_storage_explorer._query.data_query import MODES
+from jupyter_storage_explorer._query.settings import (
+    DEFAULT_SETTINGS,
+    QuerySettings,
+    QueryState,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -58,26 +63,6 @@ class Bookmark:
     filesystem: str
     path: str
     url: str | None = None
-
-
-@dataclass(frozen=True)
-class QueryState:
-    """How the data browser last showed one dataset.
-
-    Attributes
-    ----------
-    url : str
-        The dataset's location.
-    settings : QuerySettings
-        Its filters, sort order, hidden columns and widths.
-    mode : {"auto", "live", "memory"}
-        Where its queries ran: "live" or "memory" if the user chose, else
-        "auto" (see ``DataExplorer``'s ``mode``).
-    """
-
-    url: str
-    settings: QuerySettings = field(default_factory=QuerySettings)
-    mode: str = "auto"
 
 
 class ExplorerStates:

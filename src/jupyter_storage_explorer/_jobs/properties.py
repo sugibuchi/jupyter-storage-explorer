@@ -1,9 +1,9 @@
 """Properties, "Properties" in the right-click menu: a file's fsspec info, or
 the totals of the files and folders in a selection.
 
-Totals come from the operations' ``measure`` (see operations.py), given a
+Totals come from the operations' ``measure`` (see fs_operations/base.py), given a
 ``Progress``: large trees take long, so the explorer runs ``scan`` as a job
-(see jobs.py), which shows the files found so far and can be cancelled.
+(see runner.py), which shows the files found so far and can be cancelled.
 Nothing here touches the widget.
 """
 
@@ -13,14 +13,14 @@ from typing import TYPE_CHECKING, Any
 
 from jupyter_storage_explorer import _infos, _paths
 from jupyter_storage_explorer._json import jsonable
-from jupyter_storage_explorer.operations import Measurement, OperationCancelled
+from jupyter_storage_explorer.fs_operations.base import Measurement, OperationCancelled
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from fsspec import AbstractFileSystem
 
-    from jupyter_storage_explorer.operations import OperationChain, Progress
+    from jupyter_storage_explorer.fs_operations.base import OperationChain, Progress
 
 
 def file_properties(info: dict[str, Any], url: str | None) -> dict[str, Any]:

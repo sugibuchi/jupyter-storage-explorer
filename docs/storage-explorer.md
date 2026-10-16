@@ -62,7 +62,7 @@ operations optimized for a particular storage. Pass them as `operations=[...]`.
 
 ```python
 from jupyter_storage_explorer import StorageExplorer
-from jupyter_storage_explorer.filesystems.abfs import AzureDataLakeGen2Operation
+from jupyter_storage_explorer.fs_operations.abfs import AzureDataLakeGen2Operation
 
 StorageExplorer(
     "abfs://lake@myaccount.dfs.core.windows.net/raw",
@@ -70,7 +70,7 @@ StorageExplorer(
 )
 ```
 
-To write your own, subclass `FileSystemOperations` (see [operations.py](../src/jupyter_storage_explorer/operations.py)).
+To write your own, subclass `FileSystemOperations` (see [fs_operations/base.py](../src/jupyter_storage_explorer/fs_operations/base.py)).
 
 ## Using the explorer
 

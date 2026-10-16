@@ -1,5 +1,5 @@
 // Jobs: moves, deletions, pastes, uploads and downloads run in the kernel's
-// background (jobs.py). A request starting one is answered {"job": id}; the
+// background (_jobs/runner.py). A request starting one is answered {"job": id}; the
 // kernel then sends {"type": "job", id, state, counts...} as it runs, and its
 // result when it ends. The widget stays usable meanwhile: each job is a row
 // with a progress bar and Cancel, above the status bar.

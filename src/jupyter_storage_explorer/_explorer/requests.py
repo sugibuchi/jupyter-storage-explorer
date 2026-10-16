@@ -5,16 +5,14 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING, Any
 
-from jupyter_storage_explorer import (
-    _paths,
-    properties,
-)
+from jupyter_storage_explorer import _paths
 from jupyter_storage_explorer._explorer.common import (
     error_text,
     explorers,
 )
-from jupyter_storage_explorer.file_tasks import FileTasks, Plan
-from jupyter_storage_explorer.transfer_policy import computer_url
+from jupyter_storage_explorer._jobs import properties
+from jupyter_storage_explorer._jobs.tasks import FileTasks, Plan
+from jupyter_storage_explorer._jobs.transfer_policy import computer_url
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -185,7 +183,7 @@ class FileRequestsMixin:
         )
 
     # --- Upload from the user's computer: the browser sends files in pieces
-    # (see incoming.py); the last one starts a job copying the whole file ---
+    # (see _jobs/incoming.py); the last one starts a job copying the whole file ---
 
     def _upload_check(self, dest: str, names: list[str]) -> dict[str, Any]:
         """Which of ``names`` already exist in ``dest``."""

@@ -13,14 +13,14 @@ from fsspec.asyn import AsyncFileSystem, sync
 from fsspec.implementations.dirfs import DirFileSystem
 
 from jupyter_storage_explorer import _paths
-from jupyter_storage_explorer.filesystems._common import (
+from jupyter_storage_explorer.fs_operations._common import (
     measure_by_folder,
     measure_file,
     measure_found,
     prepare_folder_copy,
     remove_emptied_folder,
 )
-from jupyter_storage_explorer.operations import (
+from jupyter_storage_explorer.fs_operations.base import (
     FileSystemOperations,
     OperationCancelled,
     same_filesystem,
@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 
     from fsspec import AbstractFileSystem
 
-    from jupyter_storage_explorer.operations import Measurement, Progress
+    from jupyter_storage_explorer.fs_operations.base import Measurement, Progress
 
 
 class AsyncFsspecOperations(FileSystemOperations):

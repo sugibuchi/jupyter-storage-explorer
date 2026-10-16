@@ -1,4 +1,4 @@
-"""Files opened in JupyterLab's editors: contents models and saved bytes (_jupyterlab_files.py)."""
+"""Files opened in JupyterLab's editors: contents models and saved bytes (_explorer/jupyterlab_files.py)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,10 @@ import json
 
 import pytest
 
-from jupyter_storage_explorer._jupyterlab_files import contents_model, saved_bytes
+from jupyter_storage_explorer._explorer.jupyterlab_files import (
+    contents_model,
+    saved_bytes,
+)
 
 INFO = {"name": "d/f", "type": "file", "size": 5, "mtime": 1_700_000_000.0}
 

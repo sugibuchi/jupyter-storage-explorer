@@ -9,10 +9,7 @@ from typing import TYPE_CHECKING, Any
 import anywidget
 import traitlets
 
-from jupyter_storage_explorer import (
-    _paths,
-    _static,
-)
+from jupyter_storage_explorer import _paths, _static
 from jupyter_storage_explorer._explorer.bookmarks import BookmarksMixin
 from jupyter_storage_explorer._explorer.common import (
     explorers,
@@ -22,26 +19,26 @@ from jupyter_storage_explorer._explorer.common import (
 from jupyter_storage_explorer._explorer.folders import FoldersMixin
 from jupyter_storage_explorer._explorer.jobs import JobsMixin
 from jupyter_storage_explorer._explorer.jupyterlab import JupyterLabFilesMixin
+from jupyter_storage_explorer._explorer.listing import Listing
 from jupyter_storage_explorer._explorer.previews import PreviewsMixin
 from jupyter_storage_explorer._explorer.requests import FileRequestsMixin
+from jupyter_storage_explorer._jobs.incoming import IncomingFiles
+from jupyter_storage_explorer._jobs.runner import JobRunner
+from jupyter_storage_explorer._jobs.transfer_policy import TransferPolicy
 from jupyter_storage_explorer._urls import default_location, default_url
-from jupyter_storage_explorer.filesystems import (
-    AsyncFsspecOperations,
-    AtomicMoveOperation,
-    FsspecOperations,
-)
 from jupyter_storage_explorer.formats import (
     DataFormat,
     PreviewLimits,
     Text,
     explorer_formats,
 )
-from jupyter_storage_explorer.incoming import IncomingFiles
-from jupyter_storage_explorer.jobs import JobRunner
-from jupyter_storage_explorer.listing import Listing
-from jupyter_storage_explorer.operations import OperationChain
+from jupyter_storage_explorer.fs_operations import (
+    AsyncFsspecOperations,
+    AtomicMoveOperation,
+    FsspecOperations,
+)
+from jupyter_storage_explorer.fs_operations.base import OperationChain
 from jupyter_storage_explorer.states import ExplorerStates, explorer_states
-from jupyter_storage_explorer.transfer_policy import TransferPolicy
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
@@ -49,9 +46,9 @@ if TYPE_CHECKING:
     import narwhals as nw
     from fsspec import AbstractFileSystem
 
+    from jupyter_storage_explorer._query.data_query import DataQuery
     from jupyter_storage_explorer.data_explorer import DataExplorer
-    from jupyter_storage_explorer.operations import FileSystemOperations
-    from jupyter_storage_explorer.query import DataQuery
+    from jupyter_storage_explorer.fs_operations.base import FileSystemOperations
 
     # A request's handler: the reply to its content (see _requests).
     _Handler = Callable[[dict[str, Any]], dict[str, Any]]
@@ -147,7 +144,7 @@ class StorageExplorer(
         File operations of your own, tried before ``default_operations()``,
         e.g. ``[MyOps()]`` for server-side copies: for each operation (move,
         copy, delete, ...), the first object that supports it does it (see
-        operations.py). To change the defaults themselves, override
+        ``jupyter_storage_explorer.fs_operations``). To change the defaults themselves, override
         ``default_operations`` in a subclass.
     transfer_policy : list of dict, optional
         Rules for the directions files may be transferred in, each
@@ -161,7 +158,7 @@ class StorageExplorer(
         (``re.fullmatch``; a pattern left out matches any) decides; without
         one, files go. Items refused are reported, the others done. Not a
         security boundary: it only keeps files from going where they are not
-        meant to by mistake (see transfer_policy.py).
+        meant to by mistake (see _jobs/transfer_policy.py).
     **storage_options
         Passed to fsspec with ``path``, e.g. ``anon=True`` or
         ``profile="analytics"``.
@@ -285,8 +282,8 @@ class StorageExplorer(
         except (OSError, ValueError) as exc:
             states_error = f"Bookmarks and queries not read again: {exc}"
         self._max_browser_items = max_browser_items
-        # How files are moved, copied, deleted and downloaded (see operations.py),
-        # and the jobs doing it in the background (see jobs.py).
+        # How files are moved, copied, deleted and downloaded (see fs_operations/),
+        # and the jobs doing it in the background (see _jobs/runner.py).
         self._operations = OperationChain(
             [*(operations or ()), *self.default_operations()]
         )
@@ -304,7 +301,7 @@ class StorageExplorer(
         self._query_tabs: dict[str, DataExplorer] = {}
         self._formats = explorer_formats(formats, format_options)
         self._preview_limits = preview_limits or PreviewLimits()
-        # Files being received from the user's computer (see incoming.py).
+        # Files being received from the user's computer (see _jobs/incoming.py).
         self._incoming = IncomingFiles(max_upload_bytes)
         # Name -> (filesystem, top-level path), and the folder each was left in.
         if filesystems is not None:
@@ -625,7 +622,7 @@ class StorageExplorer(
     # --- File operations: wrappers of fsspec calls on the filesystem shown
     # (``self._fs``) for listing, reading and writing; the methods above go
     # through them, never through fsspec directly. Moving, copying and
-    # deleting go through the operations objects instead (see operations.py) ---
+    # deleting go through the operations objects instead (see fs_operations/) ---
 
     def _ls(self, path: str) -> list[dict[str, Any]]:
         """The items in directory ``path`` (fsspec's ``ls(detail=True)`` entries)."""

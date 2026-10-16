@@ -11,9 +11,9 @@ import pytest
 
 from jupyter_storage_explorer import StorageExplorer, _paths
 from jupyter_storage_explorer._infos import mtime
-from jupyter_storage_explorer.jobs import JobRunner
-from jupyter_storage_explorer.operations import OperationChain, Progress
-from jupyter_storage_explorer.properties import file_properties, scan
+from jupyter_storage_explorer._jobs.properties import file_properties, scan
+from jupyter_storage_explorer._jobs.runner import JobRunner
+from jupyter_storage_explorer.fs_operations.base import OperationChain, Progress
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -45,7 +45,7 @@ def at(tree: Path, name: str) -> str:
 
 
 class TestScan:
-    """scan(): ``measure`` (see test_operations.py) of each item selected."""
+    """scan(): ``measure`` (see test_fs_operations.py) of each item selected."""
 
     fs = fsspec.filesystem("file")
     ops = OperationChain(StorageExplorer.default_operations())

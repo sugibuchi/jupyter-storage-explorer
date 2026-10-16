@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from jupyter_storage_explorer.query import QuerySettings
+from jupyter_storage_explorer._query.settings import QuerySettings
 from jupyter_storage_explorer.states import (
     Bookmark,
     ExplorerStates,

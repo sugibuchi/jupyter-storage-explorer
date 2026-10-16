@@ -13,7 +13,7 @@ operations its own way for some storage (e.g. server-side copies with the
 storage's own client) and leave the rest to them.
 
 Each method does its work synchronously (``StorageExplorer`` runs it in a
-worker thread, see jobs.py) and reports to a ``Progress``: bytes and files
+worker thread, see _jobs/runner.py) and reports to a ``Progress``: bytes and files
 done, the file being worked on, and through ``Progress.check`` whether the
 user cancelled, which raises ``OperationCancelled``.
 """

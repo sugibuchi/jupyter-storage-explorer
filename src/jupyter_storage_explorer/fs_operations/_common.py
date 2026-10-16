@@ -6,7 +6,7 @@ import collections
 from typing import TYPE_CHECKING, Any
 
 from jupyter_storage_explorer import _paths
-from jupyter_storage_explorer.operations import (
+from jupyter_storage_explorer.fs_operations.base import (
     Measurement,
     OperationCancelled,
     measure_file_info,
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
     from fsspec import AbstractFileSystem
 
-    from jupyter_storage_explorer.operations import Progress
+    from jupyter_storage_explorer.fs_operations.base import Progress
 
 
 def measure_found(path: str, found: dict[str, dict[str, Any]]) -> Measurement:

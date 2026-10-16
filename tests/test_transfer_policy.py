@@ -1,10 +1,10 @@
-"""transfer_policy.py: the rules of the directions files may be copied and moved in."""
+"""_jobs/transfer_policy.py: the rules of the directions files may be copied and moved in."""
 
 from __future__ import annotations
 
 import pytest
 
-from jupyter_storage_explorer.transfer_policy import (
+from jupyter_storage_explorer._jobs.transfer_policy import (
     TransferPolicy,
     computer_url,
     jupyterlab_url,

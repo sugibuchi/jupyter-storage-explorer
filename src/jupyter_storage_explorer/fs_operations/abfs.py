@@ -12,12 +12,15 @@ from azure.storage.filedatalake.aio import DataLakeServiceClient
 from fsspec.asyn import sync
 
 from jupyter_storage_explorer import _paths
-from jupyter_storage_explorer.operations import FileSystemOperations, same_filesystem
+from jupyter_storage_explorer.fs_operations.base import (
+    FileSystemOperations,
+    same_filesystem,
+)
 
 if TYPE_CHECKING:
     from fsspec import AbstractFileSystem
 
-    from jupyter_storage_explorer.operations import Progress
+    from jupyter_storage_explorer.fs_operations.base import Progress
 
 
 class AzureDataLakeGen2Operation(FileSystemOperations):
@@ -42,7 +45,7 @@ class AzureDataLakeGen2Operation(FileSystemOperations):
 
     Examples
     --------
-    >>> from jupyter_storage_explorer.filesystems.abfs import AzureDataLakeGen2Operation
+    >>> from jupyter_storage_explorer.fs_operations.abfs import AzureDataLakeGen2Operation
     >>> StorageExplorer(
     ...     "abfs://lake@myaccount.dfs.core.windows.net/raw",
     ...     operations=[AzureDataLakeGen2Operation()],

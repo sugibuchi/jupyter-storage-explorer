@@ -23,7 +23,7 @@ class Explorer(StorageExplorer):
         """Send a message as the frontend does; the last message sent back.
 
         For a request that started a job ({"job": id}), its result instead:
-        without a kernel loop, jobs run at once (see jobs.py), so the job has
+        without a kernel loop, jobs run at once (see _jobs/runner.py), so the job has
         ended by then.
         """
         self.message(content, buffers)
