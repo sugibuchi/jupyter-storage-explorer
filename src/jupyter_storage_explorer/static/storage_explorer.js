@@ -182,11 +182,12 @@ function render({ model, el }) {
   // Expanded tree folders, kept per filesystem so switching back restores them.
   const expandedByFs = new Map();
   let expanded = new Set();
-  // Set when switching to a filesystem not shown before: its root is expanded
-  // on the next render, like the first one's. Not left to onDirChange, as
-  // filesystems can share their root path (e.g. "" for DirFileSystems), and
-  // then neither _root nor _current_dir changes.
-  let expandRoot = false;
+  // Set at first and when switching to a filesystem not shown before: its
+  // root is expanded on the next render. Not left to onDirChange, which opens
+  // the folders above the current one only (none when it is the root), and as
+  // filesystems can share their root path (e.g. "" for DirFileSystems), when
+  // neither _root nor _current_dir changes.
+  let expandRoot = true;
   const pending = new Set(); // directories requested from the kernel but not yet in the tree
   const sort = { key: "name", asc: true };
 
@@ -1894,6 +1895,8 @@ function render({ model, el }) {
         ev.stopPropagation();
         toggle(dir.path);
       });
+      // Not a double-click on the row: the twisty's two clicks toggled already.
+      twisty.addEventListener("dblclick", (ev) => ev.stopPropagation());
 
       const row = h(
         "div",
@@ -1906,7 +1909,10 @@ function render({ model, el }) {
       row.dataset.dropDir = dir.path; // files dropped here are uploaded into this folder
       // For styling by depth, e.g. [data-depth="1"]: 0 is the root, 1 a top-level folder.
       row.dataset.depth = depth;
+      // A click selects the folder (shows it in the list); a double-click, or
+      // the twisty, opens or closes it in the tree, as in tree views elsewhere.
       row.addEventListener("click", () => navigate(dir.path));
+      row.addEventListener("dblclick", () => toggle(dir.path));
       row.addEventListener("contextmenu", (ev) => showMenu(ev, itemMenu([{ ...dir, type: "directory" }], false)));
 
       const wrap = h("div", {}, row);
@@ -2427,9 +2433,11 @@ function render({ model, el }) {
   });
 
   function onDirChange() {
+    // The folders leading to the current one are opened, so it shows in the
+    // tree; the current one is not (a double-click or its twisty opens it).
     // Only folders under the root belong to this filesystem's tree.
     if (model.get("_current_dir").startsWith(model.get("_root"))) {
-      for (const path of ancestors(model.get("_current_dir"))) expanded.add(path);
+      for (const path of ancestors(model.get("_current_dir")).slice(0, -1)) expanded.add(path);
     }
     renderTree();
     renderPath();

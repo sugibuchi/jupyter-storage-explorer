@@ -1189,7 +1189,8 @@ class TestQueryTab:
         reply = local.request({"type": "query_tab", "rid": 1, "path": path})
         assert reply["title"] == "data.parquet" and reply["url"] == url
         tab = local._query_tabs[reply["model_id"]]
-        assert tab.height == "fill"
+        # Labelled with the file's format, as in the preview, not its library.
+        assert (tab.height, tab.library) == ("fill", "Parquet")
         assert tab.settings.to_dict()["sort"] == {"column": "a", "descending": True}
         # Its settings are remembered by URL, as the preview's.
         tab._data.handle(

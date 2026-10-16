@@ -76,7 +76,8 @@ To write your own, subclass `FileSystemOperations` (see [operations.py](../src/j
 
 ### Browse
 
-Click folders in the tree or list; ↑ goes up, ⟳ refreshes, ◀ ▶ pages through the list. Ctrl+click (⌘+click) selects
+Click a folder in the tree to show it in the list; double-click it, or click ▸, to expand or collapse it. Double-click a
+folder in the list to go into it; ↑ goes up, ⟳ refreshes, ◀ ▶ pages through the list. Ctrl+click (⌘+click) selects
 several items. Hover over an item for its size, times, format and URL.
 
 <img src="figs/using-browse.png" width="830" alt="Browsing a folder, with two items selected">
