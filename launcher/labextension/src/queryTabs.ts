@@ -2,7 +2,7 @@
 // tab of its own.
 //
 // The explorer's kernel creates a DataExplorer widget of the same query and
-// tells its model id (see storage_explorer.js, `openQueryTab`). The tab shows
+// tells its model id (see static/storage_explorer/jupyterlab.js, `openQueryTab`). The tab shows
 // that widget with the output renderers of the notebook or console holding the
 // explorer, as JupyterLab's "Create New View for Output" does: ipywidgets ties
 // widgets to that document's kernel connection, so the tab cannot render them
@@ -16,7 +16,7 @@ import type { IRenderMimeRegistry } from '@jupyterlab/rendermime';
 import { spreadsheetIcon } from '@jupyterlab/ui-components';
 import type { Widget } from '@lumino/widgets';
 
-// Where explorers find this extension's functions (see storage_explorer.js).
+// Where explorers find this extension's functions (see static/storage_explorer/jupyterlab.js).
 const REGISTRY = Symbol.for('jupyter-storage-explorer.jupyterlab');
 const WIDGET_MIME = 'application/vnd.jupyter.widget-view+json';
 const TAB_CLASS = 'jse-query-tab';

@@ -48,7 +48,7 @@ def safe_name(name: str) -> str:
 
 def name_error(name: str) -> str | None:
     """Why ``name`` cannot name a new folder or a renamed item, or None if it
-    can. The same checks as the frontend's (see nameError in storage_explorer.js)."""
+    can. The same checks as the frontend's (see nameError in static/storage_explorer/operations.js)."""
     if not name.strip():
         return "enter a name"
     if name != name.strip():
