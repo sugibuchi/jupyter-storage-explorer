@@ -1,4 +1,4 @@
-"""docs/figs/storage-explorer.png, the README's first picture: a JSON Lines
+"""docs/figs/storage-explorer.png, the first picture of docs/storage-explorer.md: a JSON Lines
 file of web events open in the data browser, below the folders browsed.
 
 uv run --group docs docs/scripts/hero.py
