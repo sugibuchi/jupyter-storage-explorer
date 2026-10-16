@@ -1,7 +1,7 @@
 [project]
 name = "jupyter-storage-explorer"
 dynamic = ["version"]
-description = "A storage explorer for Jupyter: browse cloud storage and data lakes, preview Parquet, Delta Lake and more"
+description = "Explore your data lake without leaving Jupyter: built for data professionals"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
