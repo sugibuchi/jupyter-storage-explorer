@@ -27,11 +27,7 @@ function renderTable(section) {
     thead.append(h("tr", { className: "jse-dtypes" }, ...section.dtypes.map((t) => h("th", { textContent: t }))));
   }
   const body = section.rows.map((row) =>
-    h(
-      "tr",
-      {},
-      ...row.map((v) => h("td", { textContent: v == null ? "null" : cellText(v), className: v == null ? "jse-null" : "" })),
-    ),
+    h("tr", {}, ...row.map((v) => h("td", { textContent: v == null ? "null" : cellText(v), className: v == null ? "jse-null" : "" }))),
   );
   return h("div", { className: "jse-table-wrap" }, h("table", { className: "jse-data" }, thead, h("tbody", {}, ...body)));
 }
@@ -44,12 +40,7 @@ function renderJson(value, key, depth) {
   const isArray = Array.isArray(value);
   const entries = isArray ? value.map((v, i) => [i, v]) : Object.entries(value);
   const summary = `${label}${isArray ? `[${entries.length}]` : `{${entries.length}}`}`;
-  return h(
-    "details",
-    { open: depth < 2 },
-    h("summary", { textContent: summary }),
-    ...entries.map(([k, v]) => renderJson(v, k, depth + 1)),
-  );
+  return h("details", { open: depth < 2 }, h("summary", { textContent: summary }), ...entries.map(([k, v]) => renderJson(v, k, depth + 1)));
 }
 
 function renderMedia(section) {
@@ -69,9 +60,7 @@ function renderInstall(section) {
     { className: "jse-install" },
     h("div", { textContent: intro }),
     h("div", { className: "jse-note", textContent: "No kernel restart is needed." }),
-    ...section.options.map((option, i) =>
-      codeBlock(several ? `Option ${i + 1}: ${option.packages}` : option.packages, option.command),
-    ),
+    ...section.options.map((option, i) => codeBlock(several ? `Option ${i + 1}: ${option.packages}` : option.packages, option.command)),
   );
 }
 
@@ -129,8 +118,7 @@ const sectionRenderers = {
   markdown: renderMarkdown,
   table: renderTable,
   // Highlighted HTML comes from Pygments in the kernel, which escapes the text.
-  text: (s) =>
-    s.html ? h("pre", { className: "jse-text jse-highlight", innerHTML: s.html }) : h("pre", { className: "jse-text", textContent: s.text }),
+  text: (s) => (s.html ? h("pre", { className: "jse-text jse-highlight", innerHTML: s.html }) : h("pre", { className: "jse-text", textContent: s.text })),
   tree: (s) => h("div", { className: "jse-json" }, renderJson(s.value, null, 0)),
   media: renderMedia,
   install: renderInstall,
@@ -172,10 +160,7 @@ function codeBlock(title, code, hint) {
 // a Spark session), empty when nothing is needed.
 function recipeBlocks(recipe) {
   if (!recipe.install) return [codeBlock("Load", recipe.code)];
-  return [
-    codeBlock("1. Set up", recipe.install, "Not done in this kernel yet: run this once in a cell first."),
-    codeBlock("2. Load", recipe.code),
-  ];
+  return [codeBlock("1. Set up", recipe.install, "Not done in this kernel yet: run this once in a cell first."), codeBlock("2. Load", recipe.code)];
 }
 
 function render({ model, el }) {
@@ -260,22 +245,12 @@ function render({ model, el }) {
   const previewBody = h("div", { className: "jse-dialog-body" });
   const splitter = h("div", { className: "jse-splitter", title: "Drag to resize" });
   // tabIndex makes the panel focusable, so it receives Escape.
-  const previewEl = h(
-    "div",
-    { className: "jse-preview-panel", tabIndex: -1, hidden: true },
-    splitter,
-    previewHead,
-    previewBody,
-  );
+  const previewEl = h("div", { className: "jse-preview-panel", tabIndex: -1, hidden: true }, splitter, previewHead, previewBody);
   // Modal window for "Python code", centred over a backdrop that dims the widget.
   const closeBtn = iconButton("close", "Close (Esc)");
   const dialogHead = h("div", { className: "jse-dialog-head" });
   const dialogBody = h("div", { className: "jse-dialog-body" });
-  const dialogEl = h(
-    "div",
-    { className: "jse-dialog", tabIndex: -1, hidden: true },
-    h("div", { className: "jse-modal" }, dialogHead, dialogBody),
-  );
+  const dialogEl = h("div", { className: "jse-dialog", tabIndex: -1, hidden: true }, h("div", { className: "jse-modal" }, dialogHead, dialogBody));
   const menuEl = h("div", { className: "jse-menu", hidden: true });
 
   // Small confirmation dialog, e.g. "Upload sales.csv? [Cancel] [Upload]".
@@ -798,7 +773,13 @@ function render({ model, el }) {
       flash("Another upload is still running");
       return;
     }
-    if (!(await askUpload(files.map((f) => f.name), dest))) return;
+    if (
+      !(await askUpload(
+        files.map((f) => f.name),
+        dest,
+      ))
+    )
+      return;
     localUploadBusy = true;
     const copied = [];
     const skipped = [];
@@ -899,7 +880,8 @@ function render({ model, el }) {
   // onto JupyterLab's file browser. Starting a drag is an operation (see takeUnsafe).
   function startDrag(ev, entry) {
     const folders = takeUnsafe();
-    const items = draggedItems(entry, folders);    if (!items.length) {
+    const items = draggedItems(entry, folders);
+    if (!items.length) {
       ev.preventDefault(); // a folder, locked
       flash("Turn on unsafe mode to move folders");
       return;
@@ -1023,9 +1005,7 @@ function render({ model, el }) {
     }
     const paths = targets.map((t) => t.path);
     const names = paths.map((p) => p.slice(p.lastIndexOf("/") + 1));
-    const note = targets.some(isFolder)
-      ? "Folders are deleted with everything in them. This cannot be undone."
-      : "This cannot be undone.";
+    const note = targets.some(isFolder) ? "Folders are deleted with everything in them. This cannot be undone." : "This cannot be undone.";
     const ok = await ask(
       [h("div", { textContent: `Delete ${describeFiles(names)}?` }), h("div", { className: "jse-note", textContent: note })],
       [
@@ -1105,15 +1085,13 @@ function render({ model, el }) {
     // The storage shown now: the file stays in it while the explorer moves on.
     const filesystem = model.get("_filesystem");
     const ask = (type, options) => askKernel({ ...options, type, filesystem, path });
-    globalThis[JUPYTERLAB]
-      .open({
-        explorer: model.get("_explorer_id"),
-        storage: filesystem,
-        path,
-        get: (options) => ask("jupyterlab_get", options),
-        save: (options) => ask("jupyterlab_save", options),
-      })
-      .catch((err) => flash(`Cannot open in JupyterLab: ${err.message ?? err}`));
+    globalThis[JUPYTERLAB].open({
+      explorer: model.get("_explorer_id"),
+      storage: filesystem,
+      path,
+      get: (options) => ask("jupyterlab_get", options),
+      save: (options) => ask("jupyterlab_save", options),
+    }).catch((err) => flash(`Cannot open in JupyterLab: ${err.message ?? err}`));
   }
 
   // --- Copy, cut and paste: "Copy" (or "Cut") puts files (and, in unsafe
@@ -1323,11 +1301,7 @@ function render({ model, el }) {
         problem.textContent = reply.error; // e.g. "x already exists" (the name as it is)
         continue;
       }
-      flash(
-        reply.hidden
-          ? `Created ${name}: it shows once a file is put in it (this storage has no empty folders)`
-          : `Created ${name}`,
-      );
+      flash(reply.hidden ? `Created ${name}: it shows once a file is put in it (this storage has no empty folders)` : `Created ${name}`);
       return;
     }
   }
@@ -1374,9 +1348,7 @@ function render({ model, el }) {
         problem.textContent = error;
         continue;
       }
-      const reply = await busy(`Renaming ${old}…`, () =>
-        request({ type: "rename", path: target.path, name, unsafe: folders }),
-      );
+      const reply = await busy(`Renaming ${old}…`, () => request({ type: "rename", path: target.path, name, unsafe: folders }));
       if (reply.error || reply.errors) {
         problem.textContent = reply.error ?? reply.errors.join("; ");
         continue;
@@ -1504,7 +1476,10 @@ function render({ model, el }) {
     if (result.errors.length) {
       const count = result.errors.length;
       children.push(
-        h("div", { className: "jse-section-title jse-error-text jse-props-title", textContent: `Not counted: ${count} item${count > 1 ? "s" : ""} that could not be read` }),
+        h("div", {
+          className: "jse-section-title jse-error-text jse-props-title",
+          textContent: `Not counted: ${count} item${count > 1 ? "s" : ""} that could not be read`,
+        }),
         h("pre", { className: "jse-text", textContent: result.errors.join("\n") }),
       );
     }
@@ -1823,9 +1798,7 @@ function render({ model, el }) {
     const about = [{ label: "Properties", icon: "info", action: () => showProperties(targets) }];
     if (folder) about.push(bookmarkItem(folder.path));
 
-    return [open, clipboard, change, downloads, about]
-      .filter((group) => group.length)
-      .flatMap((group, i) => (i ? ["-", ...group] : group));
+    return [open, clipboard, change, downloads, about].filter((group) => group.length).flatMap((group, i) => (i ? ["-", ...group] : group));
   }
 
   const columns = [
@@ -1888,11 +1861,7 @@ function render({ model, el }) {
       const isOpen = expanded.has(dir.path);
       if (isOpen) requestChildren(dir.path);
 
-      const twisty = h(
-        "span",
-        { className: "jse-twisty" },
-        ...(children && children.length === 0 ? [] : [icon(isOpen ? "caret-down" : "caret-right")]),
-      );
+      const twisty = h("span", { className: "jse-twisty" }, ...(children && children.length === 0 ? [] : [icon(isOpen ? "caret-down" : "caret-right")]));
       twisty.addEventListener("click", (ev) => {
         ev.stopPropagation();
         toggle(dir.path);
@@ -2111,11 +2080,7 @@ function render({ model, el }) {
 
   function select(path, additive) {
     const current = model.get("_selected");
-    const next = !additive
-      ? [path]
-      : current.includes(path)
-        ? current.filter((p) => p !== path)
-        : [...current, path];
+    const next = !additive ? [path] : current.includes(path) ? current.filter((p) => p !== path) : [...current, path];
     model.set("_selected", next);
     model.save_changes();
     // While the preview panel is open, it follows a single selected file.
@@ -2184,12 +2149,7 @@ function render({ model, el }) {
       const tr = h(
         "tr",
         { className: selected.has(entry.path) ? "jse-selected" : "" },
-        h(
-          "td",
-          { className: "jse-col-name" },
-          h("span", { className: "jse-icon" }, fileIcon(entry.name, isDir)),
-          entry.name,
-        ),
+        h("td", { className: "jse-col-name" }, h("span", { className: "jse-icon" }, fileIcon(entry.name, isDir)), entry.name),
         h("td", { className: "jse-col-size", textContent: formatSize(entry.size) }),
         h("td", { className: "jse-col-mtime", textContent: formatTime(entry.mtime) }),
       );

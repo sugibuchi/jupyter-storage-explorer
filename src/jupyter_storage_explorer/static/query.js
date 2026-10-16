@@ -72,11 +72,7 @@ function radioGroup(choices, selected) {
   const name = `jse-radio-${Math.random().toString(36).slice(2)}`;
   const inputs = choices.map(([value]) => h("input", { type: "radio", name, value, checked: value === selected }));
   if (!inputs.some((i) => i.checked)) inputs[0].checked = true;
-  const el = h(
-    "div",
-    { className: "jse-query-radios" },
-    ...choices.map(([, label], i) => h("label", {}, inputs[i], h("span", { textContent: label }))),
-  );
+  const el = h("div", { className: "jse-query-radios" }, ...choices.map(([, label], i) => h("label", {}, inputs[i], h("span", { textContent: label }))));
   return { el, value: () => inputs.find((i) => i.checked).value };
 }
 
@@ -462,14 +458,7 @@ function createQueryPanel(host, path, data) {
     // Range: from and to, both included; either may be left empty.
     const minInput = field(initial?.min ?? "", "No minimum");
     const maxInput = field(initial?.max ?? "", "No maximum");
-    const rangeFields = h(
-      "div",
-      { className: "jse-query-range" },
-      h("span", { textContent: "From" }),
-      minInput,
-      h("span", { textContent: "to" }),
-      maxInput,
-    );
+    const rangeFields = h("div", { className: "jse-query-range" }, h("span", { textContent: "From" }), minInput, h("span", { textContent: "to" }), maxInput);
     const rangeNote = h("div", { className: "jse-note", textContent: "Both ends are included; leave one empty for no limit." });
     const caseBox = h("input", { type: "checkbox", checked: initial?.case_sensitive !== false });
     const caseLabel = h("label", { className: "jse-query-case" }, caseBox, h("span", { textContent: "Case sensitive" }));
@@ -581,7 +570,12 @@ function createQueryPanel(host, path, data) {
       [
         h("div", { className: "jse-section-title", textContent: "Select columns" }),
         filter.el,
-        h("div", { className: "jse-query-colbar" }, queryButton("Show all", () => setAll(true)), queryButton("Hide all", () => setAll(false))),
+        h(
+          "div",
+          { className: "jse-query-colbar" },
+          queryButton("Show all", () => setAll(true)),
+          queryButton("Hide all", () => setAll(false)),
+        ),
         h("div", { className: "jse-query-cols" }, ...boxes.map(({ label }) => label), none),
       ],
       [
