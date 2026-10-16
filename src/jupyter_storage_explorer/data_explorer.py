@@ -118,7 +118,8 @@ class DataExplorer(anywidget.AnyWidget):
     _esm = _static.esm("data_explorer")
     _css = _static.css("data_explorer")
 
-    # Shown above the table: the title, and the data's library.
+    # Shown above the table: the title, and the data's library (in a query
+    # tab of StorageExplorer, the file's format instead).
     title = traitlets.Unicode().tag(sync=True)
     library = traitlets.Unicode().tag(sync=True)
     # The data's columns, settings and mode: {"columns", "settings", "mode"}.
@@ -178,22 +179,25 @@ class DataExplorer(anywidget.AnyWidget):
         key: str,
         *,
         title: str,
+        label: str,
         height: str,
     ) -> DataExplorer:
         """A data explorer of a query opened elsewhere: StorageExplorer's
         "Query data" in a tab of its own, whose settings stay remembered under
-        ``key`` (the data's URL) in ``states``, as its previews' are."""
+        ``key`` (the data's URL) in ``states``, as its previews' are. ``label``
+        (the file's format, as the explorer's preview shows it) is shown
+        beside the title instead of the data's library."""
         explorer = cls.__new__(cls)
         explorer._states, explorer._key, explorer._data = states, key, data
-        explorer._start(title, height)
+        explorer._start(title, height, label)
         return explorer
 
-    def _start(self, title: str | None, height: str) -> None:
+    def _start(self, title: str | None, height: str, label: str | None = None) -> None:
         """Set the widget up, once ``_states``, ``_key`` and ``_data`` are."""
         library = self._data.implementation.value
         super().__init__(
             title=title if title is not None else self._data.type_name,
-            library=_LIBRARY_LABELS.get(library, library),
+            library=label or _LIBRARY_LABELS.get(library, library),
             query=self._data.opening(),
             height=height,
         )

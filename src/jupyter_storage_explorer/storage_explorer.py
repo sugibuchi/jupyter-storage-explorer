@@ -1036,6 +1036,7 @@ class StorageExplorer(anywidget.AnyWidget):
                 self._states,
                 target.url,
                 title=_paths.basename(path),
+                label=formats[0].label,
                 height="fill",
             )
         except Exception as exc:
