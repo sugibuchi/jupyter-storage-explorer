@@ -2,19 +2,19 @@
 // downloaded to the Jupyter server, into the folder dropped on (a folder row)
 // or the one the browser shows, after asking the user.
 //
-// The explorer (an anywidget, see static/storage_explorer/transfers.js) marks
-// its drags with a type starting with ITEMS_TYPE (followed by its id), and at
-// each drag start puts in a page-wide registry the drag's download, with a
-// `download` function that asks its kernel to copy the files (drag data can
-// only be text), or null when it has no files. The file browser handles native drops itself (uploads from the
-// computer), so these are caught first, on the listing, in the capture phase.
+// The explorer (an anywidget, see static/storage_explorer/transfers.js) gives
+// its drags of items ITEMS_TYPE, its value the items' JSON, and puts itself in
+// a page-wide map of explorers, with a `download` function that asks its
+// kernel to copy files (drag data can only be text). The file browser handles
+// native drops itself (uploads from the computer), so these are caught first,
+// on the listing, in the capture phase.
 
 import { JupyterFrontEnd, JupyterFrontEndPlugin } from '@jupyterlab/application';
 import { Dialog, Notification, showDialog } from '@jupyterlab/apputils';
 import { DirListing, FileBrowser, IFileBrowserFactory } from '@jupyterlab/filebrowser';
 
-const ITEMS_TYPE = 'application/x-jupyter-storage-explorer-from-';
-const DRAG_REGISTRY = Symbol.for('jupyter-storage-explorer.drag');
+const ITEMS_TYPE = 'application/x-jupyter-storage-explorer-items';
+const EXPLORERS = Symbol.for('jupyter-storage-explorer.explorers');
 // JupyterLab's classes for a highlighted folder row, and the whole listing.
 const DROP_TARGET_CLASS = 'jp-mod-dropTarget';
 const LISTING_DROP_CLASS = 'jp-mod-native-drop';
@@ -28,43 +28,46 @@ interface IDownloadResult {
   errors?: string[];
 }
 
-// The drag the explorer registers (see static/storage_explorer/transfers.js).
-interface IExplorerDrag {
-  names: string[];
+// An explorer on the page (see static/storage_explorer/transfers.js).
+interface IExplorer {
   // `dest`: a folder relative to the Jupyter server's.
-  download(dest: string, ifExists: IfExists): Promise<IDownloadResult>;
+  download(paths: string[], dest: string, ifExists: IfExists): Promise<IDownloadResult>;
+}
+
+// What the explorer's drags carry (more than this, which is all used here).
+interface IItems {
+  explorer: string;
+  files: { path: string; name: string }[];
 }
 
 function describeFiles(names: string[]): string {
   return names.length === 1 ? names[0] : `${names.length} files`;
 }
 
-// The current drag's download, if it is the explorer's and has files.
-const currentDrag = (): IExplorerDrag | undefined =>
-  ((globalThis as Record<symbol, unknown>)[DRAG_REGISTRY] as IExplorerDrag | null) ?? undefined;
-
 const isExplorerDrag = (ev: DragEvent): boolean =>
-  Array.from(ev.dataTransfer?.types ?? []).some(t => t.startsWith(ITEMS_TYPE)) &&
-  currentDrag() !== undefined;
+  Array.from(ev.dataTransfer?.types ?? []).includes(ITEMS_TYPE);
 
 // Asks, downloads, then asks again for files that already exist.
 async function download(
   browser: FileBrowser,
-  drag: IExplorerDrag,
+  explorer: IExplorer,
+  items: IItems,
   dir: string,
   localDir: string
 ): Promise<void> {
   const where = `/${localDir}`;
+  const names = items.files.map(f => f.name);
+  const paths = items.files.map(f => f.path);
   const confirm = await showDialog({
     title: 'Download to Jupyter',
-    body: `Download ${describeFiles(drag.names)} from Storage Explorer to ${where}?`,
+    body: `Download ${describeFiles(names)} from Storage Explorer to ${where}?`,
     buttons: [Dialog.cancelButton(), Dialog.okButton({ label: 'Download' })]
   });
   if (!confirm.button.accept) {
     return;
   }
   const run = async (ifExists: IfExists): Promise<IDownloadResult | null> => {
-    const result = await drag.download(localDir, ifExists);
+    const result = await explorer.download(paths, localDir, ifExists);
     if (!result.conflicts?.length) {
       return result;
     }
@@ -167,14 +170,20 @@ function acceptDownloads(browser: FileBrowser, app: JupyterFrontEnd): void {
       ev.preventDefault();
       ev.stopPropagation();
       highlight(null);
-      const drag = currentDrag();
-      if (!drag) {
+      const items = JSON.parse(ev.dataTransfer?.getData(ITEMS_TYPE) || 'null') as IItems | null;
+      const explorers = (globalThis as Record<symbol, unknown>)[EXPLORERS] as
+        | Map<string, IExplorer>
+        | undefined;
+      const explorer = items && explorers?.get(items.explorer);
+      if (!items || !explorer) {
+        // e.g. dragged from another browser window, whose kernel cannot be reached from here.
+        Notification.error('Download failed: the explorer the files come from is not on this page');
         return;
       }
       const { dir } = target(ev);
       // Without the drive prefix (e.g. "RTC:"): relative to the server's folder.
       const localDir = app.serviceManager.contents.localPath(dir);
-      download(browser, drag, dir, localDir).catch(error =>
+      download(browser, explorer, items, dir, localDir).catch(error =>
         Notification.error(`Download failed: ${error}`)
       );
     },

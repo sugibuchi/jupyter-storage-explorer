@@ -193,10 +193,15 @@ from it, both downloads to the server) pass filesystem None to `check` for that 
 `jupyterlab_url(path)` (`jupyterlab://<absolute path>`), unlike the explorer's own local storage (plain paths). Not a
 security boundary.
 
-**Between explorers and with JupyterLab.** Drag data can only be text, so the frontend shares objects page-wide under
-`Symbol.for(...)` keys on `globalThis`: `"jupyter-storage-explorer.clipboard"` (Copy or Cut, for Paste in any
-explorer) and `"jupyter-storage-explorer.drag"` (the current file drag, with a `download` function, read by the
-launcher's `download.ts`); the launcher's `files.ts` and `queryTabs.ts` put their functions (`canOpen`, `open`,
+**Between explorers and with JupyterLab.** Drags of items from the list carry one type,
+`application/x-jupyter-storage-explorer-items`, its value their JSON (the clipboard's items, and `unsafe`), readable
+on the drop only (from any page): a drop on the same explorer moves them, on another copies them as Paste does.
+Objects are shared page-wide under `Symbol.for(...)` keys on `globalThis`: `"jupyter-storage-explorer.clipboard"`
+(Copy or Cut, for Paste in any explorer), `"jupyter-storage-explorer.drag-source"` (the id of the explorer a drag of
+items started in, while it runs: targets tell their own drags from others' before the drop by it) and
+`"jupyter-storage-explorer.explorers"` (the explorers on the page by id, with the `download` the launcher's
+`download.ts` calls on a drop onto JupyterLab's file browser); the launcher's `files.ts` and `queryTabs.ts` put their
+functions (`canOpen`, `open`,
 `openWidget`) under `"jupyter-storage-explorer.jupyterlab"`, which the explorer offers ("Open in JupyterLab", "Query
 data in new tab") only when they are there. Explorers on a page may be in different kernels (notebooks). The
 clipboard names the explorer and storage copied from: an explorer of the same kernel is found in `explorers` (by

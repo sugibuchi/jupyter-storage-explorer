@@ -200,6 +200,7 @@ function render({ model, el }) {
   return () => {
     for (const [event, handler] of Object.entries(handlers)) model.off(event, handler);
     x.clipboard.dispose();
+    x.transfers.dispose();
     x.menu.hide();
     x.list.dispose();
     x.preview.dispose();

@@ -467,6 +467,26 @@ def download_by_drag(x: Explorer) -> None:
 
 
 @check
+def download_folder_by_drag(x: Explorer) -> None:
+    # A folder (unsafe mode) dropped on JupyterLab's file browser: not
+    # downloaded, and said so, as only the drop can tell what the drag holds.
+    x.storage("Sales lake")
+    x.el.locator(".jse-crumb", has_text="/sales-lake").click()
+    x.el.locator(".jse-unsafe").click()
+    x.row("reports").drag_to(x.page.locator(".jp-DirListing-content").first)
+    dialog = x.page.locator(".jp-Dialog")
+    expect(dialog).to_contain_text("Download reports from Storage Explorer")
+    dialog.get_by_role("button", name="Download").click()
+    # In JupyterLab's notifications (the bell in the status bar).
+    x.page.locator(".jp-Notification-Status").click()
+    expect(
+        x.page.get_by_text("reports: folders are not downloaded").first
+    ).to_be_visible()
+    x.page.locator(".jp-Notification-Status").click()
+    assert not (x.lab.root / "reports").exists()
+
+
+@check
 def upload_from_computer(x: Explorer) -> None:
     # A native drop of a file, as from the computer's file manager.
     x.top("Scratch")
