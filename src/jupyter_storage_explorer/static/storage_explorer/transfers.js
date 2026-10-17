@@ -10,6 +10,10 @@ const CONTENTS_MIME = "application/x-jupyter-icontents";
 // Our own drag data type, so moves are told apart from uploads:
 // {paths, folders: whether unsafe mode was on when the drag started}.
 const MOVE_MIME = "application/x-jse-move";
+// Drags from the list also carry this type, naming their explorer: a drop
+// target can read a drag's types only, until the drop, and must tell its own
+// explorer's drags (moves) from another's (copies, as Paste does).
+const fromExplorer = (id) => `application/x-jse-explorer-${id}`;
 // Drags of files onto JupyterLab's file browser: the launcher's JupyterLab
 // extension (jupyter-storage-explorer-launcher) handles drops of this type
 // there: it asks the user, then downloads with the drag's `download` from the
@@ -122,19 +126,23 @@ function createTransfers(x) {
       drop: (ev, at) => uploadFromComputer(droppedFiles(ev.dataTransfer), at.dir),
     });
 
-    // From the list: moved. Only a folder (row or tree node) is a target;
-    // the list itself is the folder they are in.
+    // From this explorer's list: moved, only onto a folder (row or tree node),
+    // as the list itself is the folder they are in. From another explorer's
+    // (another tab or notebook, maybe another kernel): copied, as Paste does,
+    // onto a folder or the folder shown.
     onDrops("", {
       accepts: (ev) => Array.from(ev.dataTransfer?.types ?? []).includes(MOVE_MIME),
       target(ev) {
+        const own = ev.dataTransfer.types.includes(fromExplorer(model.get("_explorer_id")));
         const at = dropTarget(ev);
-        if (at.el === x.list.el) return null;
-        ev.dataTransfer.dropEffect = "move";
+        if (own && at.el === x.list.el) return null;
+        ev.dataTransfer.dropEffect = own ? "move" : "copy";
         return at;
       },
       drop(ev, at) {
-        const { paths, folders } = JSON.parse(ev.dataTransfer.getData(MOVE_MIME));
-        x.operations.move(paths, at.dir, folders);
+        const drag = JSON.parse(ev.dataTransfer.getData(MOVE_MIME));
+        if (drag.explorer === model.get("_explorer_id")) x.operations.move(drag.paths, at.dir, drag.folders);
+        else x.clipboard.paste(drag.clip, at.dir, drag.folders);
       },
     });
     panes.addEventListener("dragend", () => highlight(null));
@@ -260,7 +268,18 @@ function createTransfers(x) {
       x.flash("Turn on unsafe mode to move folders");
       return;
     }
-    ev.dataTransfer.setData(MOVE_MIME, JSON.stringify({ paths: items.map((e) => e.path), folders }));
+    const explorer = model.get("_explorer_id");
+    // For another explorer, the items as a clipboard would hold them (see
+    // copyFiles): with their URLs, which another kernel finds them by.
+    const clip = {
+      explorer,
+      filesystem: model.get("_filesystem"),
+      cut: false,
+      folders: items.some(isFolder),
+      files: items.map((e) => ({ path: e.path, url: x.list.urlOf(e), name: e.name })),
+    };
+    ev.dataTransfer.setData(MOVE_MIME, JSON.stringify({ explorer, paths: items.map((e) => e.path), folders, clip }));
+    ev.dataTransfer.setData(fromExplorer(explorer), explorer);
     const files = items.filter((e) => !isFolder(e)).map((e) => e.path);
     if (files.length) startDownloadDrag(ev, files);
     ev.dataTransfer.effectAllowed = "copyMove";

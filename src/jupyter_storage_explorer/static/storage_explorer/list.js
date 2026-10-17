@@ -209,6 +209,12 @@ function createList(x) {
     return lines.join("\n");
   }
 
+  // An item's URL if the list has it already (asked for as its row was drawn), else null.
+  function urlOf(entry) {
+    const known = hasUrl(entry) ? tooltipUrls.get(`${model.get("_filesystem")}\n${entry.path}`) : null;
+    return typeof known === "string" ? known : null;
+  }
+
   function setTooltips(rows) {
     const filesystem = model.get("_filesystem");
     const key = (entry) => `${filesystem}\n${entry.path}`;
@@ -421,6 +427,7 @@ function createList(x) {
     renderStatus,
     flash,
     entriesAt,
+    urlOf,
     dispose: () => clearTimeout(flashTimer),
   };
 }
