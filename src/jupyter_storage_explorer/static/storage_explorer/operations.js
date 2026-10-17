@@ -217,8 +217,9 @@ function createClipboard(x) {
     return { label: clip.cut ? `Move ${what} here` : `Paste ${what}`, icon: "paste", action: () => paste(clip, dest) };
   }
 
-  async function paste(clip, dest) {
-    const folders = x.unsafe.take();
+  // Pastes `clip` (see copyFiles) into folder `dest`. `folders`: whether
+  // unsafe mode is on for it; taken now, unless given (a drag took it as it started).
+  async function paste(clip, dest, folders = x.unsafe.take()) {
     const [noun, verb, doing] = clip.cut ? ["Move", "Moved", "Moving"] : ["Paste", "Pasted", "Pasting"];
     if (clip.folders && !folders) {
       x.flash(`Turn on unsafe mode to ${noun.toLowerCase()} folders`);
@@ -258,6 +259,7 @@ function createClipboard(x) {
   return {
     copyFiles,
     pasteItem,
+    paste,
     dispose: () => globalThis.removeEventListener(CHANGED_EVENT, onChanged),
   };
 }

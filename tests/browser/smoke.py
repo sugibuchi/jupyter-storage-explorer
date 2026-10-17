@@ -467,6 +467,26 @@ def download_by_drag(x: Explorer) -> None:
 
 
 @check
+def download_folder_by_drag(x: Explorer) -> None:
+    # A folder (unsafe mode) dropped on JupyterLab's file browser: not
+    # downloaded, and said so, as only the drop can tell what the drag holds.
+    x.storage("Sales lake")
+    x.el.locator(".jse-crumb", has_text="/sales-lake").click()
+    x.el.locator(".jse-unsafe").click()
+    x.row("reports").drag_to(x.page.locator(".jp-DirListing-content").first)
+    dialog = x.page.locator(".jp-Dialog")
+    expect(dialog).to_contain_text("Download reports from Storage Explorer")
+    dialog.get_by_role("button", name="Download").click()
+    # In JupyterLab's notifications (the bell in the status bar).
+    x.page.locator(".jp-Notification-Status").click()
+    expect(
+        x.page.get_by_text("reports: folders are not downloaded").first
+    ).to_be_visible()
+    x.page.locator(".jp-Notification-Status").click()
+    assert not (x.lab.root / "reports").exists()
+
+
+@check
 def upload_from_computer(x: Explorer) -> None:
     # A native drop of a file, as from the computer's file manager.
     x.top("Scratch")
@@ -600,6 +620,43 @@ def launcher_tab_reload(lab: Lab, page: Page) -> None:
     expect(tab.locator(".jse-crumb").last).to_have_text("exports")
     tab.locator(".jse-fs-select").select_option("Sales lake")
     expect(tab.locator(".jse-crumb").last).to_have_text("pipelines")
+
+
+@lab_check
+def drag_between_tabs(lab: Lab, page: Page) -> None:
+    # Two launcher tabs side by side, each with its own kernel: a file dragged
+    # from one onto the other is copied there, as Paste does, by its URL.
+    first = open_launcher_tab(lab, page)
+    page.keyboard.press("Control+Shift+L")
+    page.locator(".jp-LauncherCard", has_text="Storage Explorer").first.click()
+    expect(page.locator(".jse-launcher-panel")).to_have_count(2, timeout=30_000)
+    page.locator(".lm-TabBar-tab", has_text="Storage Explorer").last.click(
+        button="right"
+    )
+    page.locator(".lm-Menu-itemLabel", has_text="Split Tab").first.hover()
+    page.get_by_role("menuitem", name="Right", exact=True).click()
+    second = launcher_explorer(page, ".jse-launcher-panel:nth-child(n)")
+    explorers = page.locator(".jse-launcher-panel .jse-browser")
+    expect(explorers).to_have_count(2, timeout=90_000)
+    first, second = explorers.all()
+    expect(second.locator(".jse-tree .jse-node").first).to_be_visible(timeout=90_000)
+    tab_go(page, second, "Scratch", "exports")
+    row = (
+        first.locator("tbody tr")
+        .filter(has=page.get_by_text("catalog.json", exact=True))
+        .first
+    )
+    expect(row).to_have_attribute("title", re.compile("URL: "))  # its URL known
+    row.drag_to(second.locator(".jse-list"), target_position={"x": 100, "y": 150})
+    dialog = second.locator(".jse-confirm:visible")
+    expect(dialog).to_contain_text("Paste catalog.json?")
+    dialog.get_by_role("button", name="Paste", exact=True).click()
+    expect(
+        second.locator("tbody tr").filter(
+            has=page.get_by_text("catalog.json", exact=True)
+        )
+    ).to_be_visible()
+    expect(row).to_be_visible()  # copied, not moved
 
 
 @lab_check

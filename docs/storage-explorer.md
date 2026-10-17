@@ -132,8 +132,9 @@ Between storages and between explorers, also in other notebooks.
 
 ### Drag and drop
 
-Drop files from JupyterLab's file browser or your computer to upload them; drag files onto a folder to move them, or
-onto JupyterLab's file browser to download them (needs [the launcher](../launcher/README.md)).
+Drop files from JupyterLab's file browser or your computer to upload them; drag files onto a folder to move them, onto
+another explorer (another tab or notebook) to copy them there, as Paste does, or onto JupyterLab's file browser to
+download them (needs [the launcher](../launcher/README.md)).
 
 ### Background operations
 

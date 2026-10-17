@@ -7,16 +7,22 @@
 // browser's native ones. Its data is a list of paths relative to the folder
 // the Jupyter server runs in.
 const CONTENTS_MIME = "application/x-jupyter-icontents";
-// Our own drag data type, so moves are told apart from uploads:
-// {paths, folders: whether unsafe mode was on when the drag started}.
-const MOVE_MIME = "application/x-jse-move";
-// Drags of files onto JupyterLab's file browser: the launcher's JupyterLab
-// extension (jupyter-storage-explorer-launcher) handles drops of this type
-// there: it asks the user, then downloads with the drag's `download` from the
-// page-wide registry, as drag data can only be text. Without the extension,
-// such drops do nothing.
-const DOWNLOAD_MIME = "application/x-jupyter-storage-explorer-download";
-const DRAG_REGISTRY = Symbol.for("jupyter-storage-explorer.drag");
+// Drags of items from the list carry this type, its value their JSON: the
+// items as Copy puts them on the clipboard (see copyFiles: {explorer,
+// filesystem, folders, files: [{path, url, name}]}), and "unsafe": whether
+// unsafe mode was on when the drag started. Readable on the drop only, but on
+// any page: a drag copies between browser windows too.
+const ITEMS_TYPE = "application/x-jupyter-storage-explorer-items";
+// While a drag of items runs, the id of the explorer it started in (set as it
+// starts, cleared as it ends): before the drop, targets on this page tell
+// their own explorer's drags (moves) from another's (copies, as Paste does)
+// by it. Drags from another page leave it unset: another explorer's.
+const DRAG_SOURCE = Symbol.for("jupyter-storage-explorer.drag-source");
+// The explorers on this page, by id: {download(paths, dest, ifExists)}, the
+// download to the Jupyter server that the launcher's JupyterLab extension
+// calls on a drop of items onto JupyterLab's file browser (download.ts), as
+// drag data can only be text. Without the extension, such drops do nothing.
+const EXPLORERS = Symbol.for("jupyter-storage-explorer.explorers");
 // Under the server's 10 MB limit for one message from the browser.
 const CHUNK_BYTES = 1024 * 1024;
 
@@ -48,6 +54,9 @@ function createTransfers(x) {
   const uploadMessage = (result, done) => resultMessage(result, { verb: "Uploaded", noun: "Upload", done });
   // The upload dialog, for drops from JupyterLab and from the computer.
   const askUpload = (names, dest) => x.ask(question(`Upload ${describeFiles(names)}?`, `To ${dest}`), confirmButtons("Upload"));
+  const explorer = model.get("_explorer_id");
+  const explorers = (globalThis[EXPLORERS] ??= new Map());
+  explorers.set(explorer, { download: downloadToServer });
 
   // --- Drops on the panes (`panes`: the tree's and the list's) ---
 
@@ -122,19 +131,30 @@ function createTransfers(x) {
       drop: (ev, at) => uploadFromComputer(droppedFiles(ev.dataTransfer), at.dir),
     });
 
-    // From the list: moved. Only a folder (row or tree node) is a target;
-    // the list itself is the folder they are in.
+    // From this explorer's list: moved, only onto a folder (row or tree node),
+    // as the list itself is the folder they are in. From another explorer's
+    // (another tab or notebook, maybe another kernel): copied, as Paste does,
+    // onto a folder or the folder shown.
     onDrops("", {
-      accepts: (ev) => Array.from(ev.dataTransfer?.types ?? []).includes(MOVE_MIME),
+      accepts: (ev) => Array.from(ev.dataTransfer?.types ?? []).includes(ITEMS_TYPE),
       target(ev) {
+        const own = globalThis[DRAG_SOURCE] === explorer;
         const at = dropTarget(ev);
-        if (at.el === x.list.el) return null;
-        ev.dataTransfer.dropEffect = "move";
+        if (own && at.el === x.list.el) return null;
+        ev.dataTransfer.dropEffect = own ? "move" : "copy";
         return at;
       },
       drop(ev, at) {
-        const { paths, folders } = JSON.parse(ev.dataTransfer.getData(MOVE_MIME));
-        x.operations.move(paths, at.dir, folders);
+        const { unsafe, ...items } = JSON.parse(ev.dataTransfer.getData(ITEMS_TYPE));
+        if (items.explorer === explorer) {
+          x.operations.move(
+            items.files.map((f) => f.path),
+            at.dir,
+            unsafe,
+          );
+        } else {
+          x.clipboard.paste({ ...items, cut: false }, at.dir, unsafe);
+        }
       },
     });
     panes.addEventListener("dragend", () => highlight(null));
@@ -250,8 +270,9 @@ function createTransfers(x) {
     return x.list.entriesAt(selected).filter(allowed);
   }
 
-  // A list row's drag: a move within the explorer, and for files a download
-  // onto JupyterLab's file browser. Starting a drag is an operation (see createUnsafe).
+  // A list row's drag: a move within the explorer, a copy onto another, and
+  // a download onto JupyterLab's file browser. Starting a drag is an
+  // operation (see createUnsafe).
   function startDrag(ev, entry) {
     const folders = x.unsafe.take();
     const items = draggedItems(entry, folders);
@@ -260,35 +281,40 @@ function createTransfers(x) {
       x.flash("Turn on unsafe mode to move folders");
       return;
     }
-    ev.dataTransfer.setData(MOVE_MIME, JSON.stringify({ paths: items.map((e) => e.path), folders }));
-    const files = items.filter((e) => !isFolder(e)).map((e) => e.path);
-    if (files.length) startDownloadDrag(ev, files);
+    // With their URLs, which another kernel finds them by (known from the list's tooltips).
+    const drag = {
+      explorer,
+      filesystem: model.get("_filesystem"),
+      folders: items.some(isFolder),
+      unsafe: folders,
+      files: items.map((e) => ({ path: e.path, url: x.list.urlOf(e), name: e.name })),
+    };
+    ev.dataTransfer.setData(ITEMS_TYPE, JSON.stringify(drag));
     ev.dataTransfer.effectAllowed = "copyMove";
+    globalThis[DRAG_SOURCE] = explorer;
+    // On the row, which gets the event even if the list has redrawn it meanwhile.
+    ev.target.addEventListener("dragend", endDrag, { once: true });
   }
 
-  // Adds the download onto JupyterLab's file browser to a drag of `paths`.
-  function startDownloadDrag(ev, paths) {
-    const names = paths.map(basename);
-    ev.dataTransfer.setData(DOWNLOAD_MIME, JSON.stringify(names));
-    const drag = {
-      names,
-      // `dest`: a folder relative to the Jupyter server's, as JupyterLab names
-      // it. Resolves with the kernel's reply: {conflicts} if files exist there
-      // and `ifExists` is "ask", else, once the download (a job) has ended,
-      // {copied, skipped, errors} (file names; a cancel or failure is an error).
-      async download(dest, ifExists = "ask") {
-        const root = serverRoot();
-        if (root == null) return { errors: ["JupyterLab did not say where its files are"] };
-        const reply = await x.busy.run(`Downloading ${describeFiles(names)} to JupyterLab…`, () =>
-          request({ type: "download_to_server", paths, root, dest, if_exists: ifExists }),
-        );
-        const result = await x.jobs.result(reply);
-        const outcome = jobOutcome(result, result.copied ?? [], "Download");
-        return { ...result, errors: [...(result.errors ?? []), ...outcome] };
-      },
-    };
-    // Replaced by the next drag; the extension only reads it on a drop of this type.
-    globalThis[DRAG_REGISTRY] = drag;
+  function endDrag() {
+    if (globalThis[DRAG_SOURCE] === explorer) globalThis[DRAG_SOURCE] = null;
+  }
+
+  // Copies files `paths` into `dest`, a folder relative to the Jupyter
+  // server's, as JupyterLab names it: files dropped onto its file browser
+  // (see EXPLORERS). Resolves with the kernel's reply: {conflicts} if files
+  // exist there and `ifExists` is "ask", else, once the download (a job) has
+  // ended, {copied, skipped, errors} (file names; folders, a cancel or a
+  // failure are errors).
+  async function downloadToServer(paths, dest, ifExists = "ask") {
+    const root = serverRoot();
+    if (root == null) return { errors: ["JupyterLab did not say where its files are"] };
+    const reply = await x.busy.run(`Downloading ${describeFiles(paths.map(basename))} to JupyterLab…`, () =>
+      request({ type: "download_to_server", paths, root, dest, if_exists: ifExists }),
+    );
+    const result = await x.jobs.result(reply);
+    const outcome = jobOutcome(result, result.copied ?? [], "Download");
+    return { ...result, errors: [...(result.errors ?? []), ...outcome] };
   }
 
   // --- Download to local: the kernel sends each file's bytes ("download"
@@ -347,5 +373,15 @@ function createTransfers(x) {
     x.flash(resultMessage(result, { verb: "Downloaded", noun: "Download", done: copied, doneText: `Downloaded ${describeFiles(copied)} to ${dest}` }));
   }
 
-  return { attach, startDrag, download, onDownload, downloadToJupyterLab };
+  return {
+    attach,
+    startDrag,
+    download,
+    onDownload,
+    downloadToJupyterLab,
+    dispose() {
+      explorers.delete(explorer);
+      endDrag();
+    },
+  };
 }
