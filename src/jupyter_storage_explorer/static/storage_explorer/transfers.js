@@ -7,18 +7,18 @@
 // browser's native ones. Its data is a list of paths relative to the folder
 // the Jupyter server runs in.
 const CONTENTS_MIME = "application/x-jupyter-icontents";
-// Drags of items from the list, told apart from uploads by this type: the
-// items as Copy puts them on the clipboard (see copyFiles: {explorer,
-// filesystem, folders, files: [{path, url, name}]}), and "unsafe": whether
-// unsafe mode was on when the drag started.
-const ITEMS_MIME = "application/x-jupyter-storage-explorer-items";
-// They also carry this type, naming their explorer: a drop target can read a
-// drag's types only, until the drop, and must tell its own explorer's drags
-// (moves) from another's (copies, as Paste does).
-const fromExplorer = (id) => `application/x-jupyter-storage-explorer-from-${id}`;
+// Drags of items from the list carry one type, ITEMS_TYPE and their
+// explorer's id: the items as Copy puts them on the clipboard (see copyFiles:
+// {explorer, filesystem, folders, files: [{path, url, name}]}), and "unsafe":
+// whether unsafe mode was on when the drag started. Until the drop, a target
+// can read a drag's types only: the type's name tells uploads from items, and
+// its own explorer's items (moves) from another's (copies, as Paste does).
+const ITEMS_TYPE = "application/x-jupyter-storage-explorer-from-";
+// The items type of a drag (`types`: its DataTransfer's), or undefined.
+const itemsType = (types) => Array.from(types ?? []).find((t) => t.startsWith(ITEMS_TYPE));
 // Drags of files onto JupyterLab's file browser: the launcher's JupyterLab
-// extension (jupyter-storage-explorer-launcher) takes drops of ITEMS_MIME
-// there while the page-wide registry holds the drag's download: it asks the
+// extension (jupyter-storage-explorer-launcher) takes drops of items there
+// while the page-wide registry holds the drag's download: it asks the
 // user, then downloads with its `download`, as drag data can only be text.
 // Each drag from the list sets the registry: null when it has no files.
 // Without the extension, such drops do nothing.
@@ -133,16 +133,16 @@ function createTransfers(x) {
     // (another tab or notebook, maybe another kernel): copied, as Paste does,
     // onto a folder or the folder shown.
     onDrops("", {
-      accepts: (ev) => Array.from(ev.dataTransfer?.types ?? []).includes(ITEMS_MIME),
+      accepts: (ev) => itemsType(ev.dataTransfer?.types) !== undefined,
       target(ev) {
-        const own = ev.dataTransfer.types.includes(fromExplorer(model.get("_explorer_id")));
+        const own = itemsType(ev.dataTransfer.types) === ITEMS_TYPE + model.get("_explorer_id");
         const at = dropTarget(ev);
         if (own && at.el === x.list.el) return null;
         ev.dataTransfer.dropEffect = own ? "move" : "copy";
         return at;
       },
       drop(ev, at) {
-        const { unsafe, ...items } = JSON.parse(ev.dataTransfer.getData(ITEMS_MIME));
+        const { unsafe, ...items } = JSON.parse(ev.dataTransfer.getData(itemsType(ev.dataTransfer.types)));
         if (items.explorer === model.get("_explorer_id")) {
           x.operations.move(
             items.files.map((f) => f.path),
@@ -286,10 +286,9 @@ function createTransfers(x) {
       unsafe: folders,
       files: items.map((e) => ({ path: e.path, url: x.list.urlOf(e), name: e.name })),
     };
-    ev.dataTransfer.setData(ITEMS_MIME, JSON.stringify(drag));
-    ev.dataTransfer.setData(fromExplorer(explorer), "");
+    ev.dataTransfer.setData(ITEMS_TYPE + explorer, JSON.stringify(drag));
     const files = items.filter((e) => !isFolder(e)).map((e) => e.path);
-    // Replaced by the next drag; the extension reads it on a drop of ITEMS_MIME.
+    // Replaced by the next drag; the extension reads it on a drop of items.
     globalThis[DRAG_REGISTRY] = files.length ? downloadDrag(files) : null;
     ev.dataTransfer.effectAllowed = "copyMove";
   }

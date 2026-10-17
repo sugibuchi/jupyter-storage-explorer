@@ -3,17 +3,17 @@
 // or the one the browser shows, after asking the user.
 //
 // The explorer (an anywidget, see static/storage_explorer/transfers.js) marks
-// its drags with ITEMS_MIME, and at each drag start puts in a page-wide
-// registry the drag's download, with a `download` function that asks its
-// kernel to copy the files (drag data can only be text), or null when it has
-// no files. The file browser handles native drops itself (uploads from the
+// its drags with a type starting with ITEMS_TYPE (followed by its id), and at
+// each drag start puts in a page-wide registry the drag's download, with a
+// `download` function that asks its kernel to copy the files (drag data can
+// only be text), or null when it has no files. The file browser handles native drops itself (uploads from the
 // computer), so these are caught first, on the listing, in the capture phase.
 
 import { JupyterFrontEnd, JupyterFrontEndPlugin } from '@jupyterlab/application';
 import { Dialog, Notification, showDialog } from '@jupyterlab/apputils';
 import { DirListing, FileBrowser, IFileBrowserFactory } from '@jupyterlab/filebrowser';
 
-const ITEMS_MIME = 'application/x-jupyter-storage-explorer-items';
+const ITEMS_TYPE = 'application/x-jupyter-storage-explorer-from-';
 const DRAG_REGISTRY = Symbol.for('jupyter-storage-explorer.drag');
 // JupyterLab's classes for a highlighted folder row, and the whole listing.
 const DROP_TARGET_CLASS = 'jp-mod-dropTarget';
@@ -44,7 +44,8 @@ const currentDrag = (): IExplorerDrag | undefined =>
   ((globalThis as Record<symbol, unknown>)[DRAG_REGISTRY] as IExplorerDrag | null) ?? undefined;
 
 const isExplorerDrag = (ev: DragEvent): boolean =>
-  Array.from(ev.dataTransfer?.types ?? []).includes(ITEMS_MIME) && currentDrag() !== undefined;
+  Array.from(ev.dataTransfer?.types ?? []).some(t => t.startsWith(ITEMS_TYPE)) &&
+  currentDrag() !== undefined;
 
 // Asks, downloads, then asks again for files that already exist.
 async function download(
