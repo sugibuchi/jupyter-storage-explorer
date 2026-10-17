@@ -17,11 +17,11 @@ const ITEMS_MIME = "application/x-jupyter-storage-explorer-items";
 // (moves) from another's (copies, as Paste does).
 const fromExplorer = (id) => `application/x-jupyter-storage-explorer-from-${id}`;
 // Drags of files onto JupyterLab's file browser: the launcher's JupyterLab
-// extension (jupyter-storage-explorer-launcher) handles drops of this type
-// there: it asks the user, then downloads with the drag's `download` from the
-// page-wide registry, as drag data can only be text. Without the extension,
-// such drops do nothing.
-const DOWNLOAD_MIME = "application/x-jupyter-storage-explorer-download";
+// extension (jupyter-storage-explorer-launcher) takes drops of ITEMS_MIME
+// there while the page-wide registry holds the drag's download: it asks the
+// user, then downloads with its `download`, as drag data can only be text.
+// Each drag from the list sets the registry: null when it has no files.
+// Without the extension, such drops do nothing.
 const DRAG_REGISTRY = Symbol.for("jupyter-storage-explorer.drag");
 // Under the server's 10 MB limit for one message from the browser.
 const CHUNK_BYTES = 1024 * 1024;
@@ -289,15 +289,15 @@ function createTransfers(x) {
     ev.dataTransfer.setData(ITEMS_MIME, JSON.stringify(drag));
     ev.dataTransfer.setData(fromExplorer(explorer), "");
     const files = items.filter((e) => !isFolder(e)).map((e) => e.path);
-    if (files.length) startDownloadDrag(ev, files);
+    // Replaced by the next drag; the extension reads it on a drop of ITEMS_MIME.
+    globalThis[DRAG_REGISTRY] = files.length ? downloadDrag(files) : null;
     ev.dataTransfer.effectAllowed = "copyMove";
   }
 
-  // Adds the download onto JupyterLab's file browser to a drag of `paths`.
-  function startDownloadDrag(ev, paths) {
+  // The download onto JupyterLab's file browser of a drag of files `paths`.
+  function downloadDrag(paths) {
     const names = paths.map(basename);
-    ev.dataTransfer.setData(DOWNLOAD_MIME, JSON.stringify(names));
-    const drag = {
+    return {
       names,
       // `dest`: a folder relative to the Jupyter server's, as JupyterLab names
       // it. Resolves with the kernel's reply: {conflicts} if files exist there
@@ -314,8 +314,6 @@ function createTransfers(x) {
         return { ...result, errors: [...(result.errors ?? []), ...outcome] };
       },
     };
-    // Replaced by the next drag; the extension only reads it on a drop of this type.
-    globalThis[DRAG_REGISTRY] = drag;
   }
 
   // --- Download to local: the kernel sends each file's bytes ("download"

@@ -2,17 +2,18 @@
 // downloaded to the Jupyter server, into the folder dropped on (a folder row)
 // or the one the browser shows, after asking the user.
 //
-// The explorer (an anywidget, see static/storage_explorer/transfers.js) marks its drags with
-// DOWNLOAD_MIME and puts the drag, with a `download` function that asks its
-// kernel to copy the files, in a page-wide registry: drag data can only be
-// text. The file browser handles native drops itself (uploads from the
+// The explorer (an anywidget, see static/storage_explorer/transfers.js) marks
+// its drags with ITEMS_MIME, and at each drag start puts in a page-wide
+// registry the drag's download, with a `download` function that asks its
+// kernel to copy the files (drag data can only be text), or null when it has
+// no files. The file browser handles native drops itself (uploads from the
 // computer), so these are caught first, on the listing, in the capture phase.
 
 import { JupyterFrontEnd, JupyterFrontEndPlugin } from '@jupyterlab/application';
 import { Dialog, Notification, showDialog } from '@jupyterlab/apputils';
 import { DirListing, FileBrowser, IFileBrowserFactory } from '@jupyterlab/filebrowser';
 
-const DOWNLOAD_MIME = 'application/x-jupyter-storage-explorer-download';
+const ITEMS_MIME = 'application/x-jupyter-storage-explorer-items';
 const DRAG_REGISTRY = Symbol.for('jupyter-storage-explorer.drag');
 // JupyterLab's classes for a highlighted folder row, and the whole listing.
 const DROP_TARGET_CLASS = 'jp-mod-dropTarget';
@@ -38,8 +39,12 @@ function describeFiles(names: string[]): string {
   return names.length === 1 ? names[0] : `${names.length} files`;
 }
 
+// The current drag's download, if it is the explorer's and has files.
+const currentDrag = (): IExplorerDrag | undefined =>
+  ((globalThis as Record<symbol, unknown>)[DRAG_REGISTRY] as IExplorerDrag | null) ?? undefined;
+
 const isExplorerDrag = (ev: DragEvent): boolean =>
-  Array.from(ev.dataTransfer?.types ?? []).includes(DOWNLOAD_MIME);
+  Array.from(ev.dataTransfer?.types ?? []).includes(ITEMS_MIME) && currentDrag() !== undefined;
 
 // Asks, downloads, then asks again for files that already exist.
 async function download(
@@ -161,9 +166,7 @@ function acceptDownloads(browser: FileBrowser, app: JupyterFrontEnd): void {
       ev.preventDefault();
       ev.stopPropagation();
       highlight(null);
-      const drag = (globalThis as Record<symbol, unknown>)[DRAG_REGISTRY] as
-        | IExplorerDrag
-        | undefined;
+      const drag = currentDrag();
       if (!drag) {
         return;
       }
