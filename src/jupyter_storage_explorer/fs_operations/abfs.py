@@ -12,9 +12,9 @@ from azure.storage.filedatalake.aio import DataLakeServiceClient
 from fsspec.asyn import sync
 
 from jupyter_storage_explorer import _paths
+from jupyter_storage_explorer.fs_mappers.chain import same_filesystem
 from jupyter_storage_explorer.fs_operations.base import (
     FileSystemOperations,
-    same_filesystem,
 )
 
 if TYPE_CHECKING:

@@ -666,23 +666,3 @@ class OperationChain:
             )
 
         return call
-
-
-def same_filesystem(a: AbstractFileSystem, b: AbstractFileSystem) -> bool:
-    """Whether two filesystem objects reach the same storage.
-
-    fsspec caches its filesystems by class and arguments, and compares them by
-    those (``fs1 == fs2``), so two objects made with the same arguments count
-    as one, e.g. an explorer's storage and the one a URL opens.
-
-    Parameters
-    ----------
-    a, b : AbstractFileSystem
-        The filesystems to compare.
-
-    Returns
-    -------
-    bool
-        True if a path of one is the same file on the other.
-    """
-    return a is b or a == b

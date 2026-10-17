@@ -10,6 +10,7 @@ operations report to; ``StorageExplorer`` calls a chain of such objects (its
 ``jupyter_storage_explorer.fs_operations.abfs``.
 """
 
+from jupyter_storage_explorer.fs_mappers.chain import same_filesystem
 from jupyter_storage_explorer.fs_operations.async_fsspec import AsyncFsspecOperations
 from jupyter_storage_explorer.fs_operations.base import (
     FileSystemOperations,
@@ -17,7 +18,6 @@ from jupyter_storage_explorer.fs_operations.base import (
     OperationCancelled,
     OperationChain,
     Progress,
-    same_filesystem,
 )
 from jupyter_storage_explorer.fs_operations.fsspec import (
     AtomicMoveOperation,

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import fsspec
 import pytest
-from explorers import make
+from explorers import make, storage
 
 from jupyter_storage_explorer import _paths
 from jupyter_storage_explorer._jobs.incoming import format_size
@@ -260,7 +260,7 @@ class TestTransferPolicy:
                 "type": "paste",
                 "rid": 1,
                 "explorer": explorer._explorer_id,
-                "filesystem": "default",
+                "filesystem": storage(explorer),
                 "files": [{"path": "/d/secret.txt"}],
                 "dest": "/d/sub",
                 "cut": cut,
@@ -284,7 +284,7 @@ class TestTransferPolicy:
                 "type": "paste",
                 "rid": 1,
                 "explorer": explorer._explorer_id,
-                "filesystem": "mem",
+                "filesystem": storage(explorer, "mem"),
                 "files": [{"path": "/d/secret.txt"}, {"path": "/d/ok.txt"}],
                 "dest": local,
             }
@@ -298,13 +298,16 @@ class TestTransferPolicy:
         policy = [{"rule": "deny", "src": r"s3://elsewhere/.*", "dest": ".*"}]
         explorer = make(str(tmp_path), transfer_policy=policy)
         # The URL copied in the other kernel's explorer, which its _url made.
-        explorer._locate = lambda url: (files, "/d/ok.txt")
+        explorer._mappers.locate = lambda url, protocol, identifier, filesystems: (
+            files,
+            "/d/ok.txt",
+        )
         reply = explorer.request(
             {
                 "type": "paste",
                 "rid": 1,
                 "explorer": "in another kernel",
-                "filesystem": "default",
+                "filesystem": {"name": "default", "protocol": "s3", "identifier": {}},
                 "files": [{"path": "ok.txt", "url": "s3://elsewhere/ok.txt"}],
                 "dest": explorer._root,
             }
@@ -414,7 +417,7 @@ class TestTransferPolicy:
                 "type": "paste",
                 "rid": 1,
                 "explorer": explorer._explorer_id,
-                "filesystem": "mem",
+                "filesystem": storage(explorer, "mem"),
                 "files": [{"path": "/d/ok.txt"}],
                 "dest": local,
             }

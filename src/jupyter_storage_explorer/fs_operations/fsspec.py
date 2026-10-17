@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 from fsspec.implementations.dirfs import DirFileSystem
 
 from jupyter_storage_explorer import _paths
+from jupyter_storage_explorer.fs_mappers.chain import same_filesystem
 from jupyter_storage_explorer.fs_operations._common import (
     measure_by_folder,
     measure_file,
@@ -16,7 +17,6 @@ from jupyter_storage_explorer.fs_operations._common import (
 )
 from jupyter_storage_explorer.fs_operations.base import (
     FileSystemOperations,
-    same_filesystem,
 )
 
 if TYPE_CHECKING:

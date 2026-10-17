@@ -115,6 +115,10 @@ class TestMerging:
 
             def operations():
                 return [FsspecOperations()]
+
+            def filesystem_mappers():
+                from jupyter_storage_explorer.fs_mappers import S3Mapper
+                return [S3Mapper()]
             """,
         )
         user = layer(
@@ -129,6 +133,10 @@ class TestMerging:
 
             def operations():
                 return [FileSystemOperations()]
+
+            def filesystem_mappers():
+                from jupyter_storage_explorer.fs_mappers import GCSMapper
+                return [GCSMapper()]
             """,
         )
         _, kwargs = load_settings([user, system]).explorer_arguments()
@@ -138,6 +146,8 @@ class TestMerging:
         # The explorer tries the defaults after them.
         kinds = [type(o) for o in kwargs["operations"]]
         assert kinds == [FileSystemOperations, FsspecOperations]
+        mappers = [type(m).__name__ for m in kwargs["filesystem_mappers"]]
+        assert mappers == ["GCSMapper", "S3Mapper"]
 
     def test_transfer_policy_later_layers_first(self, tmp_path):
         system = layer(

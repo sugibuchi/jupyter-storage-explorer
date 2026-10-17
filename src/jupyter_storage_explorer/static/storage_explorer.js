@@ -37,6 +37,9 @@ function render({ model, el }) {
       }
       return out;
     },
+    // The storage shown, as files copied or dragged name it: {name, protocol,
+    // identifier}, by which an explorer of another kernel finds them.
+    storage: () => ({ name: model.get("_filesystem"), ...model.get("_storage_identity") }),
     // The URLs of items ({path}), from the kernel: the listing does not carry them.
     async urlsOf(items) {
       const { urls } = await request({ type: "urls", paths: items.map((t) => t.path) });
