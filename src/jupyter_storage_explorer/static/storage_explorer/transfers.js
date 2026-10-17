@@ -9,7 +9,8 @@
 const CONTENTS_MIME = "application/x-jupyter-icontents";
 // Drags of items from the list carry this type, its value their JSON: the
 // items as Copy puts them on the clipboard (see copyFiles: {explorer,
-// filesystem, folders, files: [{path, url, name}]}), and "unsafe": whether
+// filesystem: {name, protocol, identifier}, folders, files: [{path, url,
+// name}]}), and "unsafe": whether
 // unsafe mode was on when the drag started. Readable on the drop only, but on
 // any page: a drag copies between browser windows too.
 const ITEMS_TYPE = "application/x-jupyter-storage-explorer-items";
@@ -284,7 +285,7 @@ function createTransfers(x) {
     // With their URLs, which another kernel finds them by (known from the list's tooltips).
     const drag = {
       explorer,
-      filesystem: model.get("_filesystem"),
+      filesystem: x.storage(),
       folders: items.some(isFolder),
       unsafe: folders,
       files: items.map((e) => ({ path: e.path, url: x.list.urlOf(e), name: e.name })),

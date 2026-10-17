@@ -12,8 +12,6 @@ from jupyter_storage_explorer import _paths
 from jupyter_storage_explorer._explorer.common import error_text
 from jupyter_storage_explorer._jobs.tasks import FileTasks, Plan, Task
 from jupyter_storage_explorer._jobs.transfer_policy import jupyterlab_url
-from jupyter_storage_explorer._urls import default_url
-from jupyter_storage_explorer.fs_operations.base import same_filesystem
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
@@ -65,6 +63,7 @@ class JobsMixin:
             self._root,
             self._operations,
             check=functools.partial(self._transfer_error, urls=urls or {}),
+            mappers=self._mappers,
         )
 
     def _transfer_error(
@@ -88,14 +87,14 @@ class JobsMixin:
 
     def _location(self, fs: AbstractFileSystem | None, path: str) -> str:
         """``path``'s URL for the policy: ``_url``'s on the filesystem shown,
-        else (another storage, files without a URL) ``default_url``'s; for
+        else (another storage, files without a URL) its mapper's, or fsspec's; for
         fs None, the Jupyter server's disk through JupyterLab's file browser,
         ``jupyterlab_url``'s."""
         if fs is None:
             return jupyterlab_url(path)
-        if same_filesystem(fs, self._fs) and (url := self._url(path)) is not None:
+        if (url := self._mappers.url_of(fs, path)) is not None:
             return url
-        return default_url(fs, path)
+        return fs.unstrip_protocol(path)
 
     def _start(self, plan: Plan) -> dict[str, Any]:
         """Run ``plan`` as a job: {"job": its id}; or the reply as it is if
@@ -119,7 +118,7 @@ class JobsMixin:
             task.cleanup()
         for fs, path in task.moved_away:
             self._moved_away(fs, path)
-        if not same_filesystem(task.fs, self._fs):
+        if not self._mappers.same_filesystem(task.fs, self._fs):
             task.fs.invalidate_cache()  # the user has switched filesystems
             return
         for source, target in task.moved:
@@ -141,10 +140,12 @@ class JobsMixin:
             return
         followed.shown_at = now
         changes = task.changes()
-        shown = same_filesystem(task.fs, self._fs)  # else the user switched
+        shown = self._mappers.same_filesystem(
+            task.fs, self._fs
+        )  # else the user switched
         gone: list[tuple[str, str | None]] = []
         for fs, path in changes.moved_away[followed.moved_away :]:
-            if same_filesystem(fs, self._fs):
+            if self._mappers.same_filesystem(fs, self._fs):
                 gone.append((path, None))
             else:
                 fs.invalidate_cache(_paths.parent(path, fs))
@@ -215,7 +216,7 @@ class JobsMixin:
         ``_sources_changed``) its cached listing is dropped.
         """
         parent = _paths.parent(path, fs)
-        if not same_filesystem(fs, self._fs):
+        if not self._mappers.same_filesystem(fs, self._fs):
             fs.invalidate_cache(parent)
             return
         self._forget(path)

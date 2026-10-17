@@ -30,6 +30,10 @@ final. Each file may have these functions, all optional:
     ``[FileSystemOperations, ...]``: file operations of your own, tried
     before ``StorageExplorer.default_operations()``; a later layer's come
     first.
+``filesystem_mappers()``
+    ``[FileSystemMapper, ...]``: how filesystems of your own are told apart
+    and their paths become URLs (see ``jupyter_storage_explorer.fs_mappers``),
+    tried before the defaults; a later layer's come first.
 ``transfer_policy()``
     ``[{"rule": "allow" or "deny", "src": regex, "dest": regex}, ...]``:
     the rules of the directions files may be transferred in (see
@@ -98,6 +102,7 @@ HOOKS = (
     "formats",
     "format_options",
     "operations",
+    "filesystem_mappers",
     "transfer_policy",
     "parameters",
     "style",
@@ -114,6 +119,7 @@ _NOT_PARAMETERS = frozenset(
         "formats",
         "format_options",
         "operations",
+        "filesystem_mappers",
         "transfer_policy",
     }
 )
@@ -135,6 +141,7 @@ class Settings:
     formats: list[Any] = dataclasses.field(default_factory=list)
     format_options: dict[str, Any] = dataclasses.field(default_factory=dict)
     operations: list[Any] = dataclasses.field(default_factory=list)
+    filesystem_mappers: list[Any] = dataclasses.field(default_factory=list)
     transfer_policy: list[Any] = dataclasses.field(default_factory=list)
     parameters: dict[str, Any] = dataclasses.field(default_factory=dict)
     style: str = ""
@@ -156,6 +163,8 @@ class Settings:
             kwargs["format_options"] = dict(self.format_options)
         if self.operations:
             kwargs["operations"] = list(self.operations)
+        if self.filesystem_mappers:
+            kwargs["filesystem_mappers"] = list(self.filesystem_mappers)
         if self.transfer_policy:
             kwargs["transfer_policy"] = list(self.transfer_policy)
         filesystems = {k: v for k, v in self.filesystems.items() if v is not None}
@@ -262,6 +271,7 @@ _MERGES = {
     "formats": "first",
     "format_options": "by name",
     "operations": "first",
+    "filesystem_mappers": "first",
     "transfer_policy": "first",
     "style": "joined",
 }

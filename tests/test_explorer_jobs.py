@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from explorers import Explorer, entries, make, without_ids
+from explorers import Explorer, entries, make, storage, without_ids
 
 from jupyter_storage_explorer import _paths
 from jupyter_storage_explorer._explorer import jobs as following
@@ -98,7 +98,7 @@ class TestFollowingJobs:
                 "type": "paste",
                 "rid": 1,
                 "explorer": explorer._explorer_id,
-                "filesystem": "default",
+                "filesystem": storage(explorer),
                 "files": [{"path": p} for p in ("/src/n1.txt", "/src/n2.txt")],
                 "dest": "/d",
             }
@@ -220,7 +220,7 @@ class TestJobs:
                 "type": "paste",
                 "rid": 1,
                 "explorer": explorer._explorer_id,
-                "filesystem": explorer._filesystem,
+                "filesystem": storage(explorer),
                 "files": [{"path": f"/d/{n}"} for n in ("a.txt", "b.txt", "c.txt")],
                 "dest": "/out",
             }
@@ -255,7 +255,7 @@ class TestJobs:
                 "type": "paste",
                 "rid": 1,
                 "explorer": explorer._explorer_id,
-                "filesystem": explorer._filesystem,
+                "filesystem": storage(explorer),
                 "files": [{"path": "/d/big"}],
                 "dest": "/out",
                 "unsafe": True,

@@ -26,10 +26,10 @@ from fsspec.implementations.local import LocalFileSystem
 
 from jupyter_storage_explorer import _paths
 from jupyter_storage_explorer._jobs import properties
+from jupyter_storage_explorer.fs_mappers.chain import MapperChain
 from jupyter_storage_explorer.fs_operations.base import (
     OperationCancelled,
     Progress,
-    same_filesystem,
 )
 
 if TYPE_CHECKING:
@@ -164,7 +164,8 @@ class FileTasks:
     transfer may not happen (the explorer's transfer policy, see
     transfer_policy.py), or returns None: items it refuses are left out,
     with that error. Transfers are copies and moves between filesystems:
-    within one (``same_filesystem``), e.g. moves, nothing is checked. A
+    within one (as ``mappers`` tell, default the default mappers), e.g.
+    moves, nothing is checked. A
     filesystem None is the Jupyter server's disk as JupyterLab's file
     browser shows it (uploads from it, downloads to it), with a local path:
     always a transfer.
@@ -180,11 +181,13 @@ class FileTasks:
             str | None,
         ]
         | None = None,
+        mappers: MapperChain | None = None,
     ) -> None:
         self.fs = fs
         self.root = root
         self.ops = operations
         self.check = check
+        self.same_filesystem = (mappers or MapperChain()).same_filesystem
 
     def _refused(
         self,
@@ -199,7 +202,7 @@ class FileTasks:
         if (
             source_fs is not None
             and target_fs is not None
-            and same_filesystem(source_fs, target_fs)
+            and self.same_filesystem(source_fs, target_fs)
         ):
             return None  # not a transfer
         return self.check(source_fs, source, target_fs, target)
@@ -398,7 +401,7 @@ class FileTasks:
         copies, errors = [], list(errors)
         for source_fs, source in sources:
             name = _paths.basename(source)
-            same = same_filesystem(source_fs, self.fs)
+            same = self.same_filesystem(source_fs, self.fs)
             if same and _paths.parent(source, self.fs) == _paths.norm(dest):
                 errors.append(f"{name}: already in that folder")
                 continue
@@ -482,7 +485,7 @@ class FileTasks:
                         # Renaming onto an existing file fails on some systems.
                         ops.delete(fs, plan.target, progress)
                     ops.move(plan.fs, plan.source, fs, plan.target, progress)
-                    if same_filesystem(plan.fs, fs):
+                    if self.same_filesystem(plan.fs, fs):
                         task.record(
                             moved=(plan.source, plan.target),
                             changed=[_paths.parent(plan.source, fs)],
@@ -530,7 +533,7 @@ class FileTasks:
                 )
             elif (
                 is_folder
-                and same_filesystem(source_fs, self.fs)
+                and self.same_filesystem(source_fs, self.fs)
                 and _paths.inside(dest, source)
             ):
                 errors.append(f"{name}: a folder cannot be {verb} into itself")

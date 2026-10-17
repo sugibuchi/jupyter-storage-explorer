@@ -37,6 +37,7 @@ has some of these functions:
 | `formats()`         | Formats of your own (`DataFormat`), tried before the defaults | Later layers' first                                      |
 | `format_options()`  | Options for the default formats ([Format options](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#format-options)) | By option name                                           |
 | `operations()`      | File operations of your own (`FileSystemOperations`)          | Later layers' first, all before the defaults             |
+| `filesystem_mappers()` | [URLs and identities](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#urls-of-other-storages) of storages (`FileSystemMapper`) | Later layers' first, all before the defaults |
 | `transfer_policy()` | Rules of a [transfer policy](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#transfer-policy) | Later layers' first, so they decide first                |
 | `parameters()`      | Other `StorageExplorer` arguments, e.g. `{"height": "fill"}`  | By name                                                  |
 | `style()`           | CSS for the page while the tab is open                        | Joined, the user's last                                  |
