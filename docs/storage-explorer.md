@@ -190,7 +190,8 @@ StorageExplorer(filesystems={...}, transfer_policy=[
 
 URLs are those of "Copy URL"; files through JupyterLab's file browser are `jupyterlab://<absolute path>`, e.g.
 `jupyterlab:///home/jovyan/x.csv`, and files on your computer `browser:///<name>`. A pattern left out matches any URL.
-A folder is checked as one item, by its own URL. It prevents mistakes; it is not a security boundary.
+A folder is checked as one item, by its own URL. It prevents mistakes; it is not a security boundary. For the launcher's
+tabs, use `transfer_policy()` in [its configuration](../launcher/README.md#configuration).
 
 **Named groups** tie the two URLs together: `(?P<name>...)` in both patterns, and the rule matches only if each group
 captures the same text in both. Both patterns must have the same group names. With `L` for
@@ -203,16 +204,7 @@ captures the same text in both. Both patterns must have the same group names. Wi
 | From `raw` to `curated`, same project  | `abfs://raw@L/(?P<project>[^/]+)/.*` → `abfs://curated@L/(?P<project>[^/]+)/.*`              |
 | Within each user's folder              | `abfs://home@L/(?P<user>[^/]+)/.*` in both                                                    |
 
-```python
-StorageExplorer(filesystems={...}, transfer_policy=[
-    # Within each container of the lake account, not between them.
-    {"rule": "allow",
-     "src": r"abfs://(?P<container>[^@/]+)@acct\.dfs\.core\.windows\.net/.*",
-     "dest": r"abfs://(?P<container>[^@/]+)@acct\.dfs\.core\.windows\.net/.*"},
-    {"rule": "deny", "src": r"abfs://[^@/]+@acct\.dfs\.core\.windows\.net/.*"},
-])
-``` For the launcher's tabs, use `transfer_policy()` in
-[its configuration](../launcher/README.md#configuration).
+The `deny` after it has no groups, e.g. `{"rule": "deny", "src": r"abfs://[^@/]+@L/.*"}` for "not between containers".
 
 ## Query data
 
