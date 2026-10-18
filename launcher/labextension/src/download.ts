@@ -3,17 +3,20 @@
 // or the one the browser shows, after asking the user.
 //
 // The explorer (an anywidget, see static/storage_explorer/transfers.js) gives
-// its drags of items ITEMS_TYPE, its value the items' JSON, and puts itself in
-// a page-wide map of explorers, with a `download` function that asks its
-// kernel to copy files (drag data can only be text). The file browser handles
-// native drops itself (uploads from the computer), so these are caught first,
-// on the listing, in the capture phase.
+// its drags of items ITEMS_TYPE, its value the drag's id, and keeps the drag
+// itself in this page (DRAG: the items, and the explorer's id): only a drop of
+// this page's drag is taken, never one from another page. It also puts itself
+// in a page-wide map of explorers, with a `download` function that asks its
+// kernel to copy files. The file browser handles native drops itself (uploads
+// from the computer), so these are caught first, on the listing, in the
+// capture phase.
 
 import { JupyterFrontEnd, JupyterFrontEndPlugin } from '@jupyterlab/application';
 import { Dialog, Notification, showDialog } from '@jupyterlab/apputils';
 import { DirListing, FileBrowser, IFileBrowserFactory } from '@jupyterlab/filebrowser';
 
 const ITEMS_TYPE = 'application/x-jupyter-storage-explorer-items';
+const DRAG = Symbol.for('jupyter-storage-explorer.drag');
 const EXPLORERS = Symbol.for('jupyter-storage-explorer.explorers');
 // JupyterLab's classes for a highlighted folder row, and the whole listing.
 const DROP_TARGET_CLASS = 'jp-mod-dropTarget';
@@ -34,18 +37,29 @@ interface IExplorer {
   download(paths: string[], dest: string, ifExists: IfExists): Promise<IDownloadResult>;
 }
 
-// What the explorer's drags carry (more than this, which is all used here).
+// What a drag's items are (more than this, which is all used here).
 interface IItems {
   explorer: string;
   files: { path: string; name: string }[];
 }
 
+// The drag of items running on this page (see static/storage_explorer/transfers.js).
+interface IDrag {
+  id: string;
+  explorer: string;
+  items: IItems;
+}
+
+const currentDrag = (): IDrag | null =>
+  ((globalThis as Record<symbol, unknown>)[DRAG] as IDrag | null | undefined) ?? null;
+
 function describeFiles(names: string[]): string {
   return names.length === 1 ? names[0] : `${names.length} files`;
 }
 
+// An explorer's drag, while this page has one (only the types are readable before the drop).
 const isExplorerDrag = (ev: DragEvent): boolean =>
-  Array.from(ev.dataTransfer?.types ?? []).includes(ITEMS_TYPE);
+  Array.from(ev.dataTransfer?.types ?? []).includes(ITEMS_TYPE) && currentDrag() !== null;
 
 // Asks, downloads, then asks again for files that already exist.
 async function download(
@@ -170,13 +184,18 @@ function acceptDownloads(browser: FileBrowser, app: JupyterFrontEnd): void {
       ev.preventDefault();
       ev.stopPropagation();
       highlight(null);
-      const items = JSON.parse(ev.dataTransfer?.getData(ITEMS_TYPE) || 'null') as IItems | null;
+      // Only this page's drag, by its id: never one from another page.
+      const drag = currentDrag();
+      if (!drag || ev.dataTransfer?.getData(ITEMS_TYPE) !== drag.id) {
+        Notification.error('Download failed: drag files from an explorer of this page');
+        return;
+      }
+      const items = drag.items;
       const explorers = (globalThis as Record<symbol, unknown>)[EXPLORERS] as
         | Map<string, IExplorer>
         | undefined;
-      const explorer = items && explorers?.get(items.explorer);
-      if (!items || !explorer) {
-        // e.g. dragged from another browser window, whose kernel cannot be reached from here.
+      const explorer = explorers?.get(drag.explorer);
+      if (!explorer) {
         Notification.error('Download failed: the explorer the files come from is not on this page');
         return;
       }

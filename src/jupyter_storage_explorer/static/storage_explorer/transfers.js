@@ -7,18 +7,20 @@
 // browser's native ones. Its data is a list of paths relative to the folder
 // the Jupyter server runs in.
 const CONTENTS_MIME = "application/x-jupyter-icontents";
-// Drags of items from the list carry this type, its value their JSON: the
-// items as Copy puts them on the clipboard (see copyFiles: {explorer,
-// filesystem: {name, protocol, identifier}, folders, files: [{path, url,
-// name}]}), and "unsafe": whether
-// unsafe mode was on when the drag started. Readable on the drop only, but on
-// any page: a drag copies between browser windows too.
+// Drags of items from the list carry this type, its value a random id of the
+// drag, and nothing else: the items are kept in this page (see DRAG), so a
+// drag from another page (another tab, window or site) cannot name files.
 const ITEMS_TYPE = "application/x-jupyter-storage-explorer-items";
-// While a drag of items runs, the id of the explorer it started in (set as it
-// starts, cleared as it ends): before the drop, targets on this page tell
-// their own explorer's drags (moves) from another's (copies, as Paste does)
-// by it. Drags from another page leave it unset: another explorer's.
-const DRAG_SOURCE = Symbol.for("jupyter-storage-explorer.drag-source");
+// The drag of items running on this page, if any: {id, explorer, unsafe,
+// items}, set by the explorer it starts in and cleared as it ends. `items` are
+// as Copy puts them on the clipboard (see copyFiles: {explorer, filesystem:
+// {name, protocol, identifier}, folders, files: [{path, url, name}]}),
+// `unsafe` whether unsafe mode was on as it started. A drop is taken only if
+// it carries this id: drags work between the explorers of one page
+// (notebooks, launcher tabs, maybe in other kernels), never from elsewhere.
+// Before the drop, targets tell their own explorer's drags (moves) from
+// another's (copies, as Paste does) by `explorer`.
+const DRAG = Symbol.for("jupyter-storage-explorer.drag");
 // The explorers on this page, by id: {download(paths, dest, ifExists)}, the
 // download to the Jupyter server that the launcher's JupyterLab extension
 // calls on a drop of items onto JupyterLab's file browser (download.ts), as
@@ -26,6 +28,18 @@ const DRAG_SOURCE = Symbol.for("jupyter-storage-explorer.drag-source");
 const EXPLORERS = Symbol.for("jupyter-storage-explorer.explorers");
 // Under the server's 10 MB limit for one message from the browser.
 const CHUNK_BYTES = 1024 * 1024;
+
+// The drag of items `ev` (a drop) carries, if it is this page's (see DRAG); else null.
+function thisPagesDrag(ev) {
+  const drag = globalThis[DRAG];
+  return drag && ev.dataTransfer?.getData(ITEMS_TYPE) === drag.id ? drag : null;
+}
+
+// 128 random bits as hex. Not crypto.randomUUID, which browsers offer only on
+// https and localhost: JupyterLab is sometimes served over plain http.
+function randomId() {
+  return Array.from(globalThis.crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
+}
 
 // Where JupyterLab's paths are relative to (the server's folder on disk),
 // from the configuration JupyterLab puts in every page.
@@ -137,24 +151,29 @@ function createTransfers(x) {
     // (another tab or notebook, maybe another kernel): copied, as Paste does,
     // onto a folder or the folder shown.
     onDrops("", {
-      accepts: (ev) => Array.from(ev.dataTransfer?.types ?? []).includes(ITEMS_TYPE),
+      // While dragging, only the types are readable: our type, while this page has a drag.
+      accepts: (ev) => Array.from(ev.dataTransfer?.types ?? []).includes(ITEMS_TYPE) && Boolean(globalThis[DRAG]),
       target(ev) {
-        const own = globalThis[DRAG_SOURCE] === explorer;
+        const own = globalThis[DRAG].explorer === explorer;
         const at = dropTarget(ev);
         if (own && at.el === x.list.el) return null;
         ev.dataTransfer.dropEffect = own ? "move" : "copy";
         return at;
       },
       drop(ev, at) {
-        const { unsafe, ...items } = JSON.parse(ev.dataTransfer.getData(ITEMS_TYPE));
-        if (items.explorer === explorer) {
+        const drag = thisPagesDrag(ev);
+        if (!drag) {
+          x.flash("Drag files between explorers of one JupyterLab page");
+          return;
+        }
+        if (drag.explorer === explorer) {
           x.operations.move(
-            items.files.map((f) => f.path),
+            drag.items.files.map((f) => f.path),
             at.dir,
-            unsafe,
+            drag.unsafe,
           );
         } else {
-          x.clipboard.paste({ ...items, cut: false }, at.dir, unsafe);
+          x.clipboard.paste({ ...drag.items, cut: false }, at.dir, drag.unsafe);
         }
       },
     });
@@ -282,23 +301,27 @@ function createTransfers(x) {
       x.flash("Turn on unsafe mode to move folders");
       return;
     }
-    // With their URLs, which another kernel finds them by (known from the list's tooltips).
-    const drag = {
+    const id = randomId();
+    globalThis[DRAG] = {
+      id,
       explorer,
-      filesystem: x.storage(),
-      folders: items.some(isFolder),
       unsafe: folders,
-      files: items.map((e) => ({ path: e.path, url: x.list.urlOf(e), name: e.name })),
+      // With their URLs, which another kernel finds them by (known from the list's tooltips).
+      items: {
+        explorer,
+        filesystem: x.storage(),
+        folders: items.some(isFolder),
+        files: items.map((e) => ({ path: e.path, url: x.list.urlOf(e), name: e.name })),
+      },
     };
-    ev.dataTransfer.setData(ITEMS_TYPE, JSON.stringify(drag));
+    ev.dataTransfer.setData(ITEMS_TYPE, id);
     ev.dataTransfer.effectAllowed = "copyMove";
-    globalThis[DRAG_SOURCE] = explorer;
     // On the row, which gets the event even if the list has redrawn it meanwhile.
     ev.target.addEventListener("dragend", endDrag, { once: true });
   }
 
   function endDrag() {
-    if (globalThis[DRAG_SOURCE] === explorer) globalThis[DRAG_SOURCE] = null;
+    if (globalThis[DRAG]?.explorer === explorer) globalThis[DRAG] = null;
   }
 
   // Copies files `paths` into `dest`, a folder relative to the Jupyter
