@@ -181,7 +181,7 @@ class TestFsspecOperations:
 
     def test_copy_folder_file_by_file(self, tree):
         progress = Recorder()
-        self.ops.copy(tree, "/src", tree, "/dst", progress)
+        self.ops.copy(tree, "/src", tree, "/dst", progress, same=True)
         assert tree.cat_file("/dst/sub/c.txt") == b"c"
         assert sorted(progress.names) == ["a.txt", "b.txt", "c.txt"]
         assert (progress.files_done, progress.bytes_done) == (3, 7)
@@ -197,7 +197,7 @@ class TestFsspecOperations:
         tree.cp_file = cp_then_cancel
         try:
             with pytest.raises(OperationCancelled):
-                self.ops.copy(tree, "/src", tree, "/dst", progress)
+                self.ops.copy(tree, "/src", tree, "/dst", progress, same=True)
         finally:
             del tree.cp_file
         assert len(tree.find("/dst")) == 1
@@ -206,7 +206,7 @@ class TestFsspecOperations:
         local = fsspec.filesystem("file")
         target = (tmp_path / "copy").as_posix()
         progress = Progress()
-        self.ops.copy(tree, "/src", local, target, progress)
+        self.ops.copy(tree, "/src", local, target, progress, same=False)
         assert (tmp_path / "copy" / "sub" / "c.txt").read_bytes() == b"c"
         assert (progress.files_done, progress.bytes_done) == (3, 7)
 
@@ -214,7 +214,7 @@ class TestFsspecOperations:
         local = fsspec.filesystem("file")
         target = (tmp_path / "moved").as_posix()
         progress = Progress()
-        self.ops.move(tree, "/src", local, target, progress)
+        self.ops.move(tree, "/src", local, target, progress, same=False)
         assert (tmp_path / "moved" / "sub" / "c.txt").read_bytes() == b"c"
         assert not tree.exists("/src")
         assert (progress.files_done, progress.bytes_done) == (3, 7)
@@ -233,7 +233,12 @@ class TestFsspecOperations:
         monkeypatch.setattr(tree, "rm_file", rm_then_cancel)
         with pytest.raises(OperationCancelled):
             self.ops.move(
-                tree, "/src", local, (tmp_path / "moved").as_posix(), progress
+                tree,
+                "/src",
+                local,
+                (tmp_path / "moved").as_posix(),
+                progress,
+                same=False,
             )
         moved = {p.name for p in (tmp_path / "moved").rglob("*.txt")}
         left = {p.rsplit("/", 1)[-1] for p in tree.find("/src")}
@@ -248,7 +253,7 @@ class TestFsspecOperations:
         monkeypatch.setattr(tree, "rm_file", read_only)
         local, target = fsspec.filesystem("file"), (tmp_path / "a.txt").as_posix()
         with pytest.raises(OSError, match=r"a\.txt was copied, but not deleted"):
-            self.ops.move(tree, "/src/a.txt", local, target, Progress())
+            self.ops.move(tree, "/src/a.txt", local, target, Progress(), same=False)
         assert (tmp_path / "a.txt").read_bytes() == b"aaaa"
 
     def test_delete_folder_in_batches(self, tree, monkeypatch):
@@ -260,7 +265,7 @@ class TestFsspecOperations:
 
     def test_move_folder_file_by_file(self, tree):
         progress = Recorder()
-        self.ops.move(tree, "/src", tree, "/moved", progress)
+        self.ops.move(tree, "/src", tree, "/moved", progress, same=True)
         assert tree.cat_file("/moved/sub/c.txt") == b"c"
         assert not tree.exists("/src")
         assert sorted(progress.names) == ["a.txt", "b.txt", "c.txt"]
@@ -271,7 +276,7 @@ class TestFsspecOperations:
         (tmp_path / "src" / "sub" / "c.txt").write_bytes(b"c")
         local = fsspec.filesystem("file")
         source, target = (tmp_path / "src").as_posix(), (tmp_path / "moved").as_posix()
-        self.ops.move(local, source, local, target, Progress())
+        self.ops.move(local, source, local, target, Progress(), same=True)
         assert (tmp_path / "moved" / "sub" / "c.txt").read_bytes() == b"c"
         assert not (tmp_path / "src").exists()
 
@@ -290,8 +295,10 @@ class TestFsspecOperations:
 
         local = fsspec.filesystem("file")
         target = (tmp_path / "copy").as_posix()
-        ServerSide().copy(tree, "/src", local, target, Progress())
-        ServerSide().move(tree, "/src/a.txt", local, f"{target}/moved.txt", Progress())
+        ServerSide().copy(tree, "/src", local, target, Progress(), same=False)
+        ServerSide().move(
+            tree, "/src/a.txt", local, f"{target}/moved.txt", Progress(), same=False
+        )
         assert sorted(calls) == [
             "/src/a.txt",
             "/src/a.txt",
@@ -321,7 +328,7 @@ class TestAsyncFsspecOperations:
 
     def test_copy_folder_concurrently(self, tree, async_tree):
         progress = Recorder()
-        self.ops.copy(async_tree, "/src", async_tree, "/dst", progress)
+        self.ops.copy(async_tree, "/src", async_tree, "/dst", progress, same=True)
         assert tree.cat_file("/dst/sub/c.txt") == b"c"
         assert sorted(progress.names) == ["a.txt", "b.txt", "c.txt"]
         assert (progress.files_done, progress.bytes_done) == (3, 7)
@@ -337,7 +344,7 @@ class TestAsyncFsspecOperations:
 
         monkeypatch.setattr(async_tree, "_cp_file", cp_then_cancel)
         with pytest.raises(OperationCancelled):
-            ops.copy(async_tree, "/src", async_tree, "/dst", progress)
+            ops.copy(async_tree, "/src", async_tree, "/dst", progress, same=True)
         assert len(tree.find("/dst")) == 1
 
     def test_failure_raised(self, async_tree, monkeypatch):
@@ -346,13 +353,13 @@ class TestAsyncFsspecOperations:
 
         monkeypatch.setattr(async_tree, "_cp_file", failing)
         with pytest.raises(OSError, match="denied"):
-            self.ops.copy(async_tree, "/src", async_tree, "/dst", Progress())
+            self.ops.copy(async_tree, "/src", async_tree, "/dst", Progress(), same=True)
 
     def test_copy_between_filesystems(self, async_tree, tmp_path):
         local = AsyncFileSystemWrapper(fsspec.filesystem("file"))
         progress = Progress()
         target = (tmp_path / "copy").as_posix()
-        self.ops.copy(async_tree, "/src", local, target, progress)
+        self.ops.copy(async_tree, "/src", local, target, progress, same=False)
         assert (tmp_path / "copy" / "sub" / "c.txt").read_bytes() == b"c"
         assert (progress.files_done, progress.bytes_done) == (3, 7)
 
@@ -360,11 +367,13 @@ class TestAsyncFsspecOperations:
         local = AsyncFileSystemWrapper(fsspec.filesystem("file"))
         progress = Progress()
         target = (tmp_path / "moved").as_posix()
-        self.ops.move(async_tree, "/src", local, target, progress)
+        self.ops.move(async_tree, "/src", local, target, progress, same=False)
         assert (tmp_path / "moved" / "sub" / "c.txt").read_bytes() == b"c"
         assert not tree.exists("/src")
         assert (progress.files_done, progress.bytes_done) == (3, 7)
-        self.ops.move(local, f"{target}/a.txt", async_tree, "/a.txt", Progress())
+        self.ops.move(
+            local, f"{target}/a.txt", async_tree, "/a.txt", Progress(), same=False
+        )
         assert tree.cat_file("/a.txt") == b"aaaa"
         assert not (tmp_path / "moved" / "a.txt").exists()
 
@@ -375,10 +384,12 @@ class TestAsyncFsspecOperations:
         assert progress.files_done == 3
 
     def test_move_within_the_filesystem(self, tree, async_tree):
-        self.ops.move(async_tree, "/src/a.txt", async_tree, "/a.txt", Progress())
+        self.ops.move(
+            async_tree, "/src/a.txt", async_tree, "/a.txt", Progress(), same=True
+        )
         assert tree.cat_file("/a.txt") == b"aaaa"
         progress = Recorder()
-        self.ops.move(async_tree, "/src", async_tree, "/moved", progress)
+        self.ops.move(async_tree, "/src", async_tree, "/moved", progress, same=True)
         assert tree.cat_file("/moved/sub/c.txt") == b"c"
         assert not tree.exists("/src")
         assert sorted(progress.names) == ["b.txt", "c.txt"]
@@ -396,7 +407,7 @@ class TestAsyncFsspecOperations:
 
     def test_other_filesystems_left_to_the_next(self, tree):
         with pytest.raises(FileSystemOperations.NotSupported):
-            self.ops.copy(tree, "/src", tree, "/dst", Progress())
+            self.ops.copy(tree, "/src", tree, "/dst", Progress(), same=True)
         # Async by its class, but over a filesystem that is not.
         with pytest.raises(FileSystemOperations.NotSupported):
             self.ops.measure(DirFileSystem("/src", tree), "", Progress())
@@ -404,7 +415,7 @@ class TestAsyncFsspecOperations:
     def test_dir_filesystem_over_an_async_one(self, tree, async_tree):
         fs = DirFileSystem("/src", async_tree)
         assert self.ops.measure(fs, "", Progress()).files == 3
-        self.ops.copy(fs, "sub", fs, "copy", Progress())
+        self.ops.copy(fs, "sub", fs, "copy", Progress(), same=True)
         assert tree.cat_file("/src/copy/c.txt") == b"c"
 
 
@@ -420,7 +431,7 @@ class TestAtomicMoveOperation:
             original(*args, **kwargs)
 
         monkeypatch.setattr(tree, "mv", mv)
-        self.ops.move(tree, "/src", tree, "/moved", Progress())
+        self.ops.move(tree, "/src", tree, "/moved", Progress(), same=True)
         assert calls == [("/src", "/moved")]
         assert tree.cat_file("/moved/sub/c.txt") == b"c"
 
@@ -428,7 +439,7 @@ class TestAtomicMoveOperation:
         (tmp_path / "src").mkdir()
         (tmp_path / "src" / "a.txt").write_bytes(b"a")
         fs = DirFileSystem(tmp_path.as_posix(), fsspec.filesystem("file"))
-        self.ops.move(fs, "src", fs, "moved", Progress())
+        self.ops.move(fs, "src", fs, "moved", Progress(), same=True)
         assert (tmp_path / "moved" / "a.txt").read_bytes() == b"a"
 
 
@@ -440,7 +451,7 @@ def test_default_operations_on_a_dir_filesystem(tmp_path):
     fs = DirFileSystem(tmp_path.as_posix(), fsspec.filesystem("file"))
     ops = OperationChain(StorageExplorer.default_operations())
     assert ops.measure(fs, "src", Progress()).files == 1
-    ops.copy(fs, "src", fs, "copy", Progress())
+    ops.copy(fs, "src", fs, "copy", Progress(), same=True)
     assert (tmp_path / "copy" / "sub" / "a.txt").read_bytes() == b"aa"
     ops.delete(fs, "copy", Progress())
     assert not (tmp_path / "copy").exists()
@@ -454,9 +465,9 @@ def test_default_operations_on_a_dir_filesystem(tmp_path):
             (self.ops, (tree, "/src", local, (tmp_path / "x").as_posix())),
         ]:
             with pytest.raises(FileSystemOperations.NotSupported):
-                ops.move(*args, Progress())
+                ops.move(*args, Progress(), same=args[0] is args[2])
         with pytest.raises(FileSystemOperations.NotSupported):
-            self.ops.copy(tree, "/src", tree, "/copy", Progress())
+            self.ops.copy(tree, "/src", tree, "/copy", Progress(), same=True)
         assert tree.exists("/src/a.txt")
 
 
@@ -464,9 +475,9 @@ class TestOperationChain:
     def test_in_the_order_given(self, tree, async_tree):
         chain = OperationChain([AtomicMoveOperation(), FsspecOperations()])
         # Anything but a move within a filesystem: FsspecOperations.
-        chain.copy(tree, "/src", tree, "/again", Progress())
+        chain.copy(tree, "/src", tree, "/again", Progress(), same=True)
         assert tree.exists("/again/a.txt")
-        chain.move(tree, "/again", tree, "/moved", Progress())
+        chain.move(tree, "/again", tree, "/moved", Progress(), same=True)
         assert tree.cat_file("/moved/sub/c.txt") == b"c"
 
     def test_first_that_supports_it_wins(self, tree):
@@ -486,7 +497,7 @@ class TestOperationChain:
         assert calls == ["/src/a.txt"]
         assert tree.exists("/trash/a.txt")
         # Not supported by Trash: the next one's.
-        chain.copy(tree, "/src/b.txt", tree, "/b2.txt", Progress())
+        chain.copy(tree, "/src/b.txt", tree, "/b2.txt", Progress(), same=True)
         assert tree.cat_file("/b2.txt") == b"bb"
 
     def test_no_defaults_added(self):
@@ -504,18 +515,18 @@ class TestOperationChain:
         is reported, not taken as "not supported" by the next object."""
 
         class Library(FileSystemOperations):
-            def copy(self, fs, source, target_fs, target, progress):
+            def copy(self, fs, source, target_fs, target, progress, *, same):
                 raise NotImplementedError("this filesystem cannot copy")
 
         chain = OperationChain([Library(), FsspecOperations()])
         with pytest.raises(NotImplementedError, match="cannot copy"):
-            chain.copy(tree, "/src/a.txt", tree, "/a2.txt", Progress())
+            chain.copy(tree, "/src/a.txt", tree, "/a2.txt", Progress(), same=True)
         assert not tree.exists("/a2.txt")
 
     def test_nobody_supports_it(self, tree):
         chain = OperationChain([FileSystemOperations(), FileSystemOperations()])
         with pytest.raises(FileSystemOperations.NotSupported, match="no operations"):
-            chain.copy(tree, "/a", tree, "/b", Progress())
+            chain.copy(tree, "/a", tree, "/b", Progress(), same=True)
 
 
 class TestJobRunner:

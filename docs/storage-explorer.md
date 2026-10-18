@@ -58,7 +58,7 @@ operations optimized for a particular storage. Pass them as `operations=[...]`.
 
 | Extension                    | Storage                                               | Operations                                         | Install                                      |
 |------------------------------|-------------------------------------------------------|----------------------------------------------------|----------------------------------------------|
-| `AzureDataLakeGen2Operation` | Azure Data Lake Storage Gen2 (hierarchical namespace) | Move folders in one step; create empty folders     | `pip install "jupyter-storage-explorer[abfs]"` |
+| `AzureDataLakeGen2Operation` | Azure Data Lake Storage Gen2 (hierarchical namespace) | Move folders in one step; copy within an account on the server, many files at once; create empty folders | `pip install "jupyter-storage-explorer[abfs]"` |
 
 ```python
 from jupyter_storage_explorer import StorageExplorer

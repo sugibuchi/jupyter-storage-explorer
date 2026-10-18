@@ -32,7 +32,6 @@ from jupyter_storage_explorer.filesystems.operation import (
     OperationCancelled,
     OperationChain,
     Progress,
-    within_one_filesystem,
 )
 from jupyter_storage_explorer.filesystems.operations import (
     AsyncFsspecOperations,
@@ -63,5 +62,4 @@ __all__ = [
     "default_mappers",
     "default_operations",
     "same_filesystem",
-    "within_one_filesystem",
 ]

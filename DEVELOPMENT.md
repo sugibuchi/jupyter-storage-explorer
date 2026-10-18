@@ -325,7 +325,7 @@ from jupyter_storage_explorer.filesystems import FileSystemOperations
 class ServerSideCopy(FileSystemOperations):
     """Copies within one storage with its own API; everything else as by default."""
 
-    def copy(self, source_fs, source, target_fs, target, progress, *, same=None):
+    def copy(self, source_fs, source, target_fs, target, progress, *, same):
         if not same or not isinstance(source_fs, MyFileSystem):
             raise self.NotSupported
         progress.working_on(source.rsplit("/", 1)[-1])
