@@ -1,4 +1,4 @@
-"""fs_operations/ and _jobs/runner.py: file operations with progress and cancellation, run as jobs."""
+"""filesystems/ and _jobs/runner.py: file operations with progress and cancellation, run as jobs."""
 
 from __future__ import annotations
 
@@ -15,19 +15,18 @@ from fsspec.implementations.dirfs import DirFileSystem
 from jupyter_storage_explorer import StorageExplorer
 from jupyter_storage_explorer._jobs import runner as jobs
 from jupyter_storage_explorer._jobs.runner import JobRunner
-from jupyter_storage_explorer.fs_operations import (
+from jupyter_storage_explorer.filesystems import (
     AsyncFsspecOperations,
     AtomicMoveOperation,
     FsspecOperations,
 )
-from jupyter_storage_explorer.fs_operations.base import (
+from jupyter_storage_explorer.filesystems.operation import (
     FileSystemOperations,
     Measurement,
     OperationCancelled,
     OperationChain,
     Progress,
     measure_file_info,
-    same_filesystem,
 )
 
 
@@ -459,13 +458,6 @@ def test_default_operations_on_a_dir_filesystem(tmp_path):
         with pytest.raises(FileSystemOperations.NotSupported):
             self.ops.copy(tree, "/src", tree, "/copy", Progress())
         assert tree.exists("/src/a.txt")
-
-
-def test_same_filesystem(memfs):
-    # fsspec caches filesystems: the same arguments give the same storage.
-    assert same_filesystem(memfs, fsspec.filesystem("memory"))
-    assert same_filesystem(memfs, memfs)
-    assert not same_filesystem(memfs, fsspec.filesystem("file"))
 
 
 class TestOperationChain:

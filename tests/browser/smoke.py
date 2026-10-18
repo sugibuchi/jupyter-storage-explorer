@@ -625,7 +625,9 @@ def launcher_tab_reload(lab: Lab, page: Page) -> None:
 @lab_check
 def drag_between_tabs(lab: Lab, page: Page) -> None:
     # Two launcher tabs side by side, each with its own kernel: a file dragged
-    # from one onto the other is copied there, as Paste does, by its URL.
+    # from one onto the other is pasted there by its URL and its storage's
+    # identifier. The demo storages are in each kernel's own memory, so the
+    # other kernel refuses it rather than read its own memory.
     first = open_launcher_tab(lab, page)
     page.keyboard.press("Control+Shift+L")
     page.locator(".jp-LauncherCard", has_text="Storage Explorer").first.click()
@@ -651,12 +653,13 @@ def drag_between_tabs(lab: Lab, page: Page) -> None:
     dialog = second.locator(".jse-confirm:visible")
     expect(dialog).to_contain_text("Paste catalog.json?")
     dialog.get_by_role("button", name="Paste", exact=True).click()
+    expect(second).to_contain_text("not reachable from this kernel")
     expect(
         second.locator("tbody tr").filter(
             has=page.get_by_text("catalog.json", exact=True)
         )
-    ).to_be_visible()
-    expect(row).to_be_visible()  # copied, not moved
+    ).to_have_count(0)
+    expect(row).to_be_visible()
 
 
 @lab_check

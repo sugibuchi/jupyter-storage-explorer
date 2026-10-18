@@ -37,6 +37,7 @@ has some of these functions:
 | `formats()`         | Formats of your own (`DataFormat`), tried before the defaults | Later layers' first                                      |
 | `format_options()`  | Options for the default formats ([Format options](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#format-options)) | By option name                                           |
 | `operations()`      | File operations of your own (`FileSystemOperations`)          | Later layers' first, all before the defaults             |
+| `filesystem_mappers()` | [How storages are told apart](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#file-transfer-between-file-systems) and their URLs (`FileSystemMapper`) | Later layers' first, all before the defaults |
 | `transfer_policy()` | Rules of a [transfer policy](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#transfer-policy) | Later layers' first, so they decide first                |
 | `parameters()`      | Other `StorageExplorer` arguments, e.g. `{"height": "fill"}`  | By name                                                  |
 | `style()`           | CSS for the page while the tab is open                        | Joined, the user's last                                  |
@@ -68,18 +69,13 @@ def final():
     return ["filesystems", "transfer_policy"]  # users cannot change these
 ```
 
-And for one user, `~/.jupyter/storage-explorer/launcher.py`, with icons of their own (see
-[Customizing icons](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/DEVELOPMENT.md#customizing-icons)):
+And for one user, `~/.jupyter/storage-explorer/launcher.py`:
 
 ```python
 def parameters():
     return {"max_browser_items": 50_000}
-
-
-def style():
-    # The folders in the top folder as 🗃️: hide the folder icon, show another
-    return """
-    .jse-browser [data-depth="1"] .jse-icon svg { display: none; }
-    .jse-browser [data-depth="1"] .jse-icon::before { content: "🗃️"; }
-    """
 ```
+
+To change the explorer's icons, prefer JupyterLab's `custom.css` (see
+[Icons](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/DEVELOPMENT.md#icons)): `style()` applies only
+while an explorer tab is open, not to explorers in notebooks.

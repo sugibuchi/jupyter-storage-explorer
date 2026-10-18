@@ -10,9 +10,9 @@ import pytest
 from jupyter_storage_explorer_launcher import launcher
 from jupyter_storage_explorer_launcher.launcher import LauncherError, load_settings
 
+from jupyter_storage_explorer.filesystems import FsspecOperations
+from jupyter_storage_explorer.filesystems.operation import FileSystemOperations
 from jupyter_storage_explorer.formats import default_formats
-from jupyter_storage_explorer.fs_operations import FsspecOperations
-from jupyter_storage_explorer.fs_operations.base import FileSystemOperations
 
 if TYPE_CHECKING:
     import pathlib
@@ -107,7 +107,7 @@ class TestMerging:
             tmp_path,
             "system",
             """
-            from jupyter_storage_explorer.fs_operations import FsspecOperations
+            from jupyter_storage_explorer.filesystems import FsspecOperations
             from jupyter_storage_explorer.formats import Csv
 
             def formats():
@@ -115,13 +115,17 @@ class TestMerging:
 
             def operations():
                 return [FsspecOperations()]
+
+            def filesystem_mappers():
+                from jupyter_storage_explorer.filesystems import S3Mapper
+                return [S3Mapper()]
             """,
         )
         user = layer(
             tmp_path,
             "user",
             """
-            from jupyter_storage_explorer.fs_operations.base import FileSystemOperations
+            from jupyter_storage_explorer.filesystems.operation import FileSystemOperations
             from jupyter_storage_explorer.formats import Json
 
             def formats():
@@ -129,6 +133,10 @@ class TestMerging:
 
             def operations():
                 return [FileSystemOperations()]
+
+            def filesystem_mappers():
+                from jupyter_storage_explorer.filesystems import GCSMapper
+                return [GCSMapper()]
             """,
         )
         _, kwargs = load_settings([user, system]).explorer_arguments()
@@ -138,6 +146,8 @@ class TestMerging:
         # The explorer tries the defaults after them.
         kinds = [type(o) for o in kwargs["operations"]]
         assert kinds == [FileSystemOperations, FsspecOperations]
+        mappers = [type(m).__name__ for m in kwargs["filesystem_mappers"]]
+        assert mappers == ["GCSMapper", "S3Mapper"]
 
     def test_transfer_policy_later_layers_first(self, tmp_path):
         system = layer(

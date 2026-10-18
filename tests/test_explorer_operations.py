@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from explorers import entries, make, path_of, without_ids
+from explorers import entries, make, path_of, storage, without_ids
 from fsspec.implementations.dirfs import DirFileSystem
 
 
@@ -160,7 +160,7 @@ class TestPaste:
                     "type": "paste",
                     "rid": 1,
                     "explorer": source._explorer_id,
-                    "filesystem": source._filesystem,
+                    "filesystem": storage(source),
                     "files": [{"path": p, "url": source._url(p)} for p in files],
                     "dest": dest,
                     "if_exists": if_exists,
@@ -202,20 +202,23 @@ class TestPaste:
         assert (tmp_path / "a.csv").read_bytes() == b"x,y\n1,2\n"
         assert "a.csv" in [e["name"] for e in entries(local)]
 
-    def test_from_an_explorer_in_this_kernel_by_its_filesystem(self, memfs, tmp_path):
-        """A DirFileSystem's URLs do not say where it starts: an explorer of
-        this kernel lends its filesystem; from another kernel, it fails."""
+    def test_from_a_folder_view(self, memfs, tmp_path):
+        """A DirFileSystem's URLs are those of the filesystem it wraps: an
+        explorer of this kernel lends its filesystem, and from another kernel
+        (in this process, so with the same memory) its URL is found."""
         memfs.pipe_file("/base/x.txt", b"x")
         source = make(fs=DirFileSystem("/base", memfs))
         local = make(str(tmp_path))
         path = path_of(source, "x.txt")
+        assert source._url(path) == "memory:///base/x.txt"
         assert self.paste(local, [path], local._root, source=source)["pasted"] == [
             "x.txt"
         ]
-        assert (tmp_path / "x.txt").read_bytes() == b"x"
+        (tmp_path / "x.txt").unlink()
         source._explorer_id = "in-another-kernel"
         reply = self.paste(local, [path], local._root, source=source)
-        assert "unknown" in reply["errors"][0]
+        assert reply["pasted"] == ["x.txt"]
+        assert (tmp_path / "x.txt").read_bytes() == b"x"
 
     def test_by_url_from_another_kernel(self, mem_explorer, tmp_path):
         mem_explorer._explorer_id = "in-another-kernel"
@@ -239,7 +242,11 @@ class TestPaste:
                 "type": "paste",
                 "rid": 1,
                 "explorer": "elsewhere",
-                "filesystem": "default",
+                "filesystem": {
+                    "name": "default",
+                    "protocol": "memory",
+                    "identifier": {},
+                },
                 "files": [{"path": "/x.csv", "url": "memory:///missing/x.csv"}],
                 "dest": local._root,
             }
@@ -259,7 +266,7 @@ class TestCut:
                     "type": "paste",
                     "rid": 1,
                     "explorer": source._explorer_id,
-                    "filesystem": source._filesystem,
+                    "filesystem": storage(source),
                     "files": [{"path": p, "url": source._url(p)} for p in files],
                     "dest": dest,
                     "cut": True,
@@ -301,7 +308,7 @@ class TestCut:
                     "type": "paste",
                     "rid": 1,
                     "explorer": explorer._explorer_id,
-                    "filesystem": "mem",
+                    "filesystem": storage(explorer, "mem"),
                     "files": files,
                     "dest": explorer._root,
                     "cut": True,
@@ -408,7 +415,7 @@ class TestFolderOperations:
         files = [{"path": "/data/sub", "url": explorer._url("/data/sub")}]
         content = {
             "explorer": explorer._explorer_id,
-            "filesystem": explorer._filesystem,
+            "filesystem": storage(explorer),
             "files": files,
             "dest": "/other",
         }
@@ -427,7 +434,7 @@ class TestFolderOperations:
             local,
             "paste",
             explorer=explorer._explorer_id,
-            filesystem=explorer._filesystem,
+            filesystem=storage(explorer),
             files=[{"path": "/data/sub", "url": explorer._url("/data/sub")}],
             dest=local._root,
             unsafe=True,

@@ -9,8 +9,17 @@ import pytest
 
 from jupyter_storage_explorer._jobs.incoming import IncomingFiles
 from jupyter_storage_explorer._jobs.tasks import FileTasks, Task
-from jupyter_storage_explorer.fs_operations import FsspecOperations
-from jupyter_storage_explorer.fs_operations.base import OperationChain, Progress
+from jupyter_storage_explorer.filesystems import (
+    FsspecOperations,
+    LocalMapper,
+    MapperChain,
+    default_mappers,
+)
+from jupyter_storage_explorer.filesystems.operation import (
+    FileSystemOperations,
+    OperationChain,
+    Progress,
+)
 
 
 @pytest.fixture
@@ -109,3 +118,42 @@ class TestIncomingFiles:
             incoming.add("u", b"34", "/x", memfs)
         incoming.discard("u")
         assert not os.path.exists(received.path)
+
+
+def test_operations_are_told_if_within_one_filesystem(tmp_path):
+    """Two local filesystems with other options: one, as the mappers tell."""
+    _operations_told(tmp_path, MapperChain(default_mappers()), [True])
+
+
+def test_operations_told_by_the_explorers_mappers(tmp_path):
+    """Operations get the explorer's mappers' answer, not the defaults'."""
+
+    class ByOption(LocalMapper):
+        """Local filesystems apart by an option, unlike the default mapper."""
+
+        def identifier(self, fs):
+            return {**super().identifier(fs), "auto_mkdir": fs.auto_mkdir}
+
+    _operations_told(tmp_path, MapperChain([ByOption(), *default_mappers()]), [False])
+
+
+def _operations_told(tmp_path, mappers, same):
+    told = []
+
+    class Told(FileSystemOperations):
+        def copy(self, source_fs, source, target_fs, target, progress, *, same=None):
+            told.append(same)
+            raise self.NotSupported
+
+    (tmp_path / "a.txt").write_bytes(b"a")
+    (tmp_path / "e").mkdir()
+    source = fsspec.filesystem("file")
+    target = fsspec.filesystem("file", auto_mkdir=True)
+    assert source != target
+    root = target._strip_protocol(str(tmp_path))
+    tasks = FileTasks(
+        target, root, OperationChain([Told(), FsspecOperations()]), mappers=mappers
+    )
+    run(tasks.paste([(source, f"{root}/a.txt")], f"{root}/e"))
+    assert told == same
+    assert (tmp_path / "e" / "a.txt").read_bytes() == b"a"

@@ -14,7 +14,7 @@ together with the same version (from the git tags). The launcher requires the ex
 | Path                                                           | Contents                                                                     |
 |----------------------------------------------------------------|------------------------------------------------------------------------------|
 | `src/jupyter_storage_explorer/`                                | The widgets: `storage_explorer.py`, `data_explorer.py`.                      |
-| `src/jupyter_storage_explorer/fs_operations/`                  | File operations: the interface users extend, and the default ones.           |
+| `src/jupyter_storage_explorer/filesystems/`                    | Filesystems' URLs and identities (mappers) and file operations: interfaces users extend, and the default ones. |
 | `src/jupyter_storage_explorer/formats/`                        | The formats files are previewed, queried and loaded as.                      |
 | `src/jupyter_storage_explorer/_explorer/`                      | `StorageExplorer`'s features, as mixins of the class.                        |
 | `src/jupyter_storage_explorer/_jobs/`                          | File operations planned and run as jobs, without the widget.                 |
@@ -77,7 +77,8 @@ changing `static/` or the extension. Give check names to run only those; a faile
   transfers, ...), each a `createX(x)` sharing the explorer `x` made in `storage_explorer.js`; the kernel joins them
   into one module with the shared `common.js` and `query.js` (`_static.py`), as anywidget cannot import files.
 - **File operations** are planned by `FileTasks` (`_jobs/tasks.py`), run as jobs in a worker thread (`_jobs/runner.py`),
-  and done by a chain of `FileSystemOperations` objects (`fs_operations/`), which users can extend.
+  and done by a chain of `FileSystemOperations` objects (`filesystems/`), which users can extend. Mappers there
+  (`FileSystemMapper`) tell filesystems apart and give their URLs.
 - **The data browser** is `DataQuery` (`_query/`), on any dataframe narwhals supports; `DataExplorer` shows it alone.
 - **Formats** (`formats/`) detect, preview, scan and generate code for each kind of file.
 
@@ -181,24 +182,29 @@ memory. Their packages are in the `docs` dependency group, which `uv sync` does 
 uv run --group docs docs/scripts/make_all.py
 ```
 
-## Customizing icons
+## Customizing
 
-Rows in the explorer carry attributes you can style with CSS:
+Icons are changed with CSS; how storages are named and how files are moved and copied, with Python objects given to
+`StorageExplorer` (or returned by functions of the launcher's `storage-explorer/launcher.py`, see the
+[launcher's README](launcher/README.md)), each tried before the defaults.
 
-- **Folders** (tree and list): `data-depth`, their level below the top folder: `0` for the top folder itself, `1` for
-  the folders in it, and so on.
-- **Files** (list): `data-file-format`, the format name: `parquet`, `csv`, `json`, `json-lines`, `excel`, `markdown`,
-  `text`, `image`. Files of no known format, or without a URL, have none.
+### Icons
 
-The icons are JupyterLab's file browser's, as SVG images (`.jse-icon svg`), chosen by the file's extension. To change
-one, hide its image and show something else in its `::before`, e.g. an emoji. Run the CSS in a notebook cell,
-before or after the explorer. This example shows the top folder as 🗄️, the folders in it as 🗃️ (deeper ones keep the
-folder icon), and gives data files their own icons:
+The icons are JupyterLab's file browser's, as SVG images (`.jse-icon svg`), chosen by the file's extension. Rows in
+the explorer carry attributes to select them by:
 
-```python
-from IPython.display import HTML
+| Selector                                 | Rows                                                                                     |
+|------------------------------------------|------------------------------------------------------------------------------------------|
+| `.jse-browser`                           | The explorer (every selector starts with it, so nothing else on the page changes)        |
+| `[data-depth="0"]`, `[data-depth="1"]`, … | Folders in the tree and the list, by their level: `0` the top folder, `1` the folders in it, … |
+| `[data-file-format]`                     | Files of a known format (not those of no known format, or without a URL)                 |
+| `[data-file-format="parquet"]`           | Files of one format: `parquet`, `csv`, `json`, `json-lines`, `excel`, `markdown`, `text`, `image` |
+| `.jse-icon svg`, `.jse-icon::before`     | In a row, the icon's image, and where to show something else instead                     |
 
-HTML("""<style>
+To change an icon, hide its image and show something else in its `::before`, e.g. an emoji. This CSS shows the top
+folder as 🗄️, the folders in it as 🗃️ (deeper ones keep the folder icon), and gives data files their own icons:
+
+```css
 /* Folders: an emoji per depth */
 .jse-browser :is([data-depth="0"], [data-depth="1"]) .jse-icon svg { display: none; }
 .jse-browser [data-depth="0"] .jse-icon::before { content: "🗄️"; }
@@ -212,10 +218,123 @@ HTML("""<style>
 .jse-browser [data-file-format="parquet"] .jse-icon::before { content: "🧱"; }
 .jse-browser [data-file-format="image"] .jse-icon::before { content: "🖼️"; }
 .jse-browser [data-file-format="markdown"] .jse-icon::before { content: "📝"; }
+```
+
+#### Test in notebooks
+
+Run the CSS in a notebook cell, before or after an explorer, inside `<style>`. It applies to the whole page (every
+explorer in it) until the page is reloaded:
+
+```python
+from IPython.display import HTML
+
+HTML("""<style>
+.jse-browser [data-depth="0"] .jse-icon svg { display: none; }
+.jse-browser [data-depth="0"] .jse-icon::before { content: "🗄️"; }
 </style>""")
 ```
 
-`HTML(...)` must be the last line of the cell (or use `display(HTML(...))`). The style lasts until the page is reloaded.
-To apply it to every notebook, save the CSS (without `<style>`) to `~/.jupyter/custom/custom.css` and start JupyterLab
-with `jupyter lab --LabApp.custom_css=True`. For the tab opened from the launcher, return the CSS from a `style()`
-function in `storage-explorer/launcher.py` (see the [launcher's README](launcher/README.md)).
+`HTML(...)` must be the last line of the cell (or use `display(HTML(...))`).
+
+#### Apply to all of JupyterLab
+
+JupyterLab's custom CSS applies to every page: notebooks, consoles and the launcher's explorer tabs.
+
+1. Save the CSS (without `<style>`) as `custom/custom.css` in Jupyter's configuration directory, which
+   `jupyter --config-dir` prints: `~/.jupyter/custom/custom.css` by default (on Windows,
+   `%USERPROFILE%\.jupyter\custom\custom.css`), or `$JUPYTER_CONFIG_DIR/custom/custom.css` where
+   `JUPYTER_CONFIG_DIR` is set. JupyterLab reads it from there only, not from the other configuration directories
+   (`jupyter --paths`), so for several users, set `JUPYTER_CONFIG_DIR` or put the file in each user's. For example,
+   `~/.jupyter/custom/custom.css`:
+
+   ```css
+   /* Storage Explorer: the top folder as 🗄️, Parquet files as 🧱 */
+   .jse-browser [data-depth="0"] .jse-icon svg { display: none; }
+   .jse-browser [data-depth="0"] .jse-icon::before { content: "🗄️"; }
+   .jse-browser [data-file-format="parquet"] .jse-icon svg { display: none; }
+   .jse-browser [data-file-format="parquet"] .jse-icon::before { content: "🧱"; }
+   ```
+
+2. Turn it on, in any of Jupyter's configuration directories (`jupyter --paths`), e.g. for one user
+   `~/.jupyter/jupyter_lab_config.py`, for an environment `<env>/etc/jupyter/jupyter_lab_config.py`, or for everyone
+   `/etc/jupyter/jupyter_lab_config.py`:
+
+   ```python
+   c.LabApp.custom_css = True
+   ```
+
+   or start JupyterLab with `jupyter lab --custom-css`.
+3. Restart JupyterLab, then reload the page.
+
+The launcher's `style()` (in `storage-explorer/launcher.py`) applies only while an explorer tab is open, not to
+explorers in notebooks.
+
+### Filesystem mappers
+
+A `FileSystemMapper` (`filesystems/mapper.py`) describes the filesystems of one fsspec implementation:
+
+- `identifier(fs)`: which storage the instance is connected to, e.g. the account for Azure or the server and user
+  for SFTP. Two instances with the same identifier are the same storage, so the explorer moves files between them
+  within the storage, and finds files copied or dragged from another kernel on it.
+- `to_url(fs, path)`: the URL of a path, shown by "Copy URL" and used in "Python code", previews and the transfer
+  policy.
+- `path_of(fs, url)`: the reverse.
+
+The predefined mappers (`filesystems/mappers.py`) cover Azure, S3, Google Cloud Storage, SFTP, local disks and memory;
+others get fsspec's URLs and are told apart as fsspec compares them.
+
+```python
+from jupyter_storage_explorer import StorageExplorer
+from jupyter_storage_explorer.filesystems import FileSystemMapper
+
+
+class MyMapper(FileSystemMapper):
+    protocol = "myfs"
+    classes = ("mypackage.MyFileSystem",)  # matched by name, subclasses too
+
+    def identifier(self, fs):
+        return {"server": fs.server.lower()}  # never credentials
+
+    def to_url(self, fs, path):
+        return f"myfs://{fs.server.lower()}/{path.lstrip('/')}"
+
+    def path_of(self, fs, url):
+        scheme, _, rest = url.partition("://")
+        return rest.partition("/")[2] if scheme == "myfs" else None
+
+
+StorageExplorer(fs=my_fs, filesystem_mappers=[MyMapper()])
+```
+
+In `launcher.py`, return them from `filesystem_mappers()`. `tests/test_mappers.py` shows how to test one with a stand-in
+class, without the storage's package.
+
+### File operations
+
+A `FileSystemOperations` (`filesystems/operation.py`) moves, copies, deletes, uploads, downloads, measures files and
+creates folders, a method each. The explorer calls each operation on the first object that does not raise
+`FileSystemOperations.NotSupported`, so an object can do some operations for some storages and leave the rest to the
+defaults (`filesystems/operations.py`, with fsspec). `move` and `copy` are told with `same` whether the source and
+target are one filesystem, as the mappers tell; `_copy_file` and `_move_file` copy or move single files between
+filesystems and can be overridden alone.
+
+```python
+from jupyter_storage_explorer.filesystems import FileSystemOperations
+
+
+class ServerSideCopy(FileSystemOperations):
+    """Copies within one storage with its own API; everything else as by default."""
+
+    def copy(self, source_fs, source, target_fs, target, progress, *, same=None):
+        if not same or not isinstance(source_fs, MyFileSystem):
+            raise self.NotSupported
+        progress.working_on(source.rsplit("/", 1)[-1])
+        source_fs.server_copy(source, target)
+
+
+StorageExplorer(fs=my_fs, operations=[ServerSideCopy()])
+```
+
+Operations run in a worker thread: report to `progress` and call `progress.check()` between steps, so that Cancel
+stops them. In `launcher.py`, return them from `operations()`. `AzureDataLakeGen2Operation` (`filesystems/abfs.py`) is
+a complete example.

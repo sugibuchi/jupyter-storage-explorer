@@ -185,9 +185,10 @@ function createClipboard(x) {
     const urls = await x.urlsOf(targets);
     globalThis[CLIPBOARD] = {
       // Pasted in an explorer of the same kernel, they are read with this
-      // explorer's filesystem; otherwise from their URLs.
+      // explorer's filesystem; otherwise from their URLs, on the filesystem
+      // of this one's identifier.
       explorer: model.get("_explorer_id"),
-      filesystem: model.get("_filesystem"),
+      filesystem: x.storage(),
       cut,
       // Pasting folders needs unsafe mode again.
       folders: hasFolders,
@@ -245,7 +246,7 @@ function createClipboard(x) {
   function cutPasted(clip, result) {
     if (result.moved?.length && globalThis[CLIPBOARD] === clip) globalThis[CLIPBOARD] = null;
     if (clip.explorer === model.get("_explorer_id")) return;
-    const detail = { explorer: clip.explorer, filesystem: clip.filesystem, paths: clip.files.map((f) => f.path) };
+    const detail = { explorer: clip.explorer, filesystem: clip.filesystem.name, paths: clip.files.map((f) => f.path) };
     globalThis.dispatchEvent(new CustomEvent(CHANGED_EVENT, { detail }));
   }
 

@@ -5,17 +5,17 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from explorers import Explorer, entries, make, without_ids
+from explorers import Explorer, entries, make, storage, without_ids
 
 from jupyter_storage_explorer import _paths
 from jupyter_storage_explorer._explorer import jobs as following
 from jupyter_storage_explorer._jobs import runner as jobs
-from jupyter_storage_explorer.fs_operations import (
+from jupyter_storage_explorer.filesystems import (
     AsyncFsspecOperations,
     AtomicMoveOperation,
     FsspecOperations,
 )
-from jupyter_storage_explorer.fs_operations.base import FileSystemOperations
+from jupyter_storage_explorer.filesystems.operation import FileSystemOperations
 
 
 class Watch(FileSystemOperations):
@@ -41,10 +41,10 @@ class Watch(FileSystemOperations):
     def delete(self, fs, path, progress):
         self._look()
 
-    def copy(self, source_fs, source, target_fs, target, progress):
+    def copy(self, source_fs, source, target_fs, target, progress, *, same=None):
         self._look()
 
-    def move(self, source_fs, source, target_fs, target, progress):
+    def move(self, source_fs, source, target_fs, target, progress, *, same=None):
         self._look()
 
 
@@ -98,7 +98,7 @@ class TestFollowingJobs:
                 "type": "paste",
                 "rid": 1,
                 "explorer": explorer._explorer_id,
-                "filesystem": "default",
+                "filesystem": storage(explorer),
                 "files": [{"path": p} for p in ("/src/n1.txt", "/src/n2.txt")],
                 "dest": "/d",
             }
@@ -205,7 +205,7 @@ class TestJobs:
         """Cancelled after the first file: that one is pasted, the job says so."""
 
         class CancelAfterOne(FileSystemOperations):
-            def copy(self, fs, source, target_fs, target, progress):
+            def copy(self, fs, source, target_fs, target, progress, *, same=None):
                 fs.cp_file(source, target)
                 progress.cancel()
 
@@ -220,7 +220,7 @@ class TestJobs:
                 "type": "paste",
                 "rid": 1,
                 "explorer": explorer._explorer_id,
-                "filesystem": explorer._filesystem,
+                "filesystem": storage(explorer),
                 "files": [{"path": f"/d/{n}"} for n in ("a.txt", "b.txt", "c.txt")],
                 "dest": "/out",
             }
@@ -239,7 +239,7 @@ class TestJobs:
         """Cancelled while copying a folder: it is named as left incomplete."""
 
         class CancelInside(FileSystemOperations):
-            def copy(self, fs, source, target_fs, target, progress):
+            def copy(self, fs, source, target_fs, target, progress, *, same=None):
                 fs.makedirs(target, exist_ok=True)
                 progress.cancel()
                 progress.check()  # between two files of the folder
@@ -255,7 +255,7 @@ class TestJobs:
                 "type": "paste",
                 "rid": 1,
                 "explorer": explorer._explorer_id,
-                "filesystem": explorer._filesystem,
+                "filesystem": storage(explorer),
                 "files": [{"path": "/d/big"}],
                 "dest": "/out",
                 "unsafe": True,

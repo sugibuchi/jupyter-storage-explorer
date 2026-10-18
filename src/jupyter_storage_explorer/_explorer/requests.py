@@ -95,7 +95,8 @@ class FileRequestsMixin:
 
     def _paste_request(self, content: dict[str, Any]) -> dict[str, Any]:
         """Answer "paste": files copied (or with "cut", cut) in the explorer
-        ``content["explorer"]``, from its storage ``content["filesystem"]``."""
+        ``content["explorer"]``, from its storage ``content["filesystem"]``
+        ({"name", "protocol", "identifier"}, see ``_storage_identity``)."""
         return self._plan_request(
             lambda: self._paste_plan(
                 content["files"],
@@ -115,7 +116,7 @@ class FileRequestsMixin:
         if_exists: str,
         *,
         explorer: str | None,
-        filesystem: str | None,
+        filesystem: dict[str, Any] | None,
         folders: bool,
         cut: bool,
     ) -> Plan:
@@ -130,22 +131,31 @@ class FileRequestsMixin:
         self,
         files: Sequence[dict[str, Any]],
         explorer: str | None,
-        filesystem: str | None,
+        filesystem: dict[str, Any] | None,
         cut: bool = False,
     ) -> tuple[
         list[tuple[AbstractFileSystem, str]], list[str], dict[tuple[int, str], str]
     ]:
         """The (filesystem, path) of files copied in explorer ``explorer``, from
-        its storage ``filesystem``, errors for those not found, and their URLs
-        as copied (by their explorer's ``_url``), for the policy (see
-        ``_tasks``).
+        its storage ``filesystem`` ({"name", "protocol", "identifier"}),
+        errors for those not found, and their URLs as copied (by their
+        explorer's ``_url``), for the policy (see ``_tasks``).
 
         If that explorer is in this kernel, its filesystem object is used, as
         it is (credentials included). Otherwise it is in another kernel and
-        only the files' URLs tell where they are (see ``_locate``).
+        the files' URLs and their filesystem's identifier tell where they are
+        (see ``MapperChain.locate``), on the first of this explorer's
+        storages that reaches them (the one shown first), so with its
+        credentials, else on one fsspec opens.
         """
+        filesystem = filesystem or {}
         source = explorers.get(explorer or "")
-        entry = None if source is None else source._filesystems.get(filesystem or "")
+        entry = (
+            None
+            if source is None
+            else source._filesystems.get(filesystem.get("name") or "")
+        )
+        others = [fs for fs, _ in self._filesystems.values() if fs is not self._fs]
         sources, errors, urls = [], [], {}
         for file in files:
             path, url = file.get("path"), file.get("url")
@@ -154,10 +164,15 @@ class FileRequestsMixin:
                     fs, root = entry
                     if cut and _paths.norm(path) == _paths.norm(root):
                         raise ValueError("the top folder is not moved")
-                elif url is None:
+                elif url is None or "protocol" not in filesystem:
                     raise ValueError("its location is unknown")
                 else:
-                    fs, path = self._locate(url)
+                    fs, path = self._mappers.locate(
+                        url,
+                        filesystem["protocol"],
+                        filesystem.get("identifier") or {},
+                        [self._fs, *others],
+                    )
             except Exception as exc:
                 errors.append(f"{_paths.basename(path or url or '')}: {exc}")
                 continue
@@ -216,7 +231,9 @@ class FileRequestsMixin:
         except Exception as exc:
             self._incoming.discard(upload_id)
             return {"error": f"{_paths.basename(content['name'])}: {exc}"}
-        tasks = FileTasks(incoming.fs, self._root, self._operations)
+        tasks = FileTasks(
+            incoming.fs, self._root, self._operations, mappers=self._mappers
+        )
         return self._start(tasks.upload_file(incoming.path, incoming.target))
 
     # --- Create a folder: "Create a folder" in the right-click menu ---

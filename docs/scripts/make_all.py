@@ -9,6 +9,7 @@ import _lab
 import browser
 import data_explorer
 import data_explorer_gif
+import file_transfer_gif
 import hero
 import launcher_item
 import storage_explorer_gif
@@ -24,6 +25,7 @@ SCRIPTS = (
     launcher_item,
     storage_explorer_gif,
     data_explorer_gif,
+    file_transfer_gif,
 )
 
 

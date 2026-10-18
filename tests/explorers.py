@@ -68,6 +68,16 @@ def entries(explorer: Explorer) -> list[dict[str, Any]]:
     ]
 
 
+def storage(explorer: Explorer, name: str | None = None) -> dict[str, Any]:
+    """Storage ``name`` of ``explorer`` (default: the one shown) as files
+    copied or dragged there name it: {"name", "protocol", "identifier"}."""
+    name = name or explorer._filesystem
+    return {
+        "name": name,
+        **explorer._mappers.storage_of(explorer._filesystems[name].fs),
+    }
+
+
 def path_of(explorer: Explorer, name: str) -> str:
     return next(e["path"] for e in entries(explorer) if e["name"] == name)
 

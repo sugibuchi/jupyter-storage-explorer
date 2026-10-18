@@ -26,19 +26,20 @@ from jupyter_storage_explorer._explorer.states import ExplorerStates, explorer_s
 from jupyter_storage_explorer._jobs.incoming import IncomingFiles
 from jupyter_storage_explorer._jobs.runner import JobRunner
 from jupyter_storage_explorer._jobs.transfer_policy import TransferPolicy
-from jupyter_storage_explorer._urls import default_location, default_url
+from jupyter_storage_explorer.filesystems import (
+    MapperChain,
+    OperationChain,
+    default_mappers,
+)
+from jupyter_storage_explorer.filesystems import (
+    default_operations as _default_operations,
+)
 from jupyter_storage_explorer.formats import (
     DataFormat,
     PreviewLimits,
     Text,
     explorer_formats,
 )
-from jupyter_storage_explorer.fs_operations import (
-    AsyncFsspecOperations,
-    AtomicMoveOperation,
-    FsspecOperations,
-)
-from jupyter_storage_explorer.fs_operations.base import OperationChain
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
@@ -48,7 +49,8 @@ if TYPE_CHECKING:
 
     from jupyter_storage_explorer._query.data_query import DataQuery
     from jupyter_storage_explorer.data_explorer import DataExplorer
-    from jupyter_storage_explorer.fs_operations.base import FileSystemOperations
+    from jupyter_storage_explorer.filesystems.mapper import FileSystemMapper
+    from jupyter_storage_explorer.filesystems.operation import FileSystemOperations
 
     # A request's handler: the reply to its content (see _requests).
     _Handler = Callable[[dict[str, Any]], dict[str, Any]]
@@ -60,7 +62,7 @@ _VENDOR_FILES = frozenset({"marked.esm.js", "purify.es.mjs"})
 
 # Its features are mixins (in _explorer/), each a group of the methods below
 # working on the state the class sets up; what the class keeps is that state,
-# the messages' routing, the locations (_url, _locate) and the fsspec calls.
+# the messages' routing, the URLs (_url) and the fsspec calls.
 class StorageExplorer(
     FoldersMixin,
     PreviewsMixin,
@@ -144,8 +146,16 @@ class StorageExplorer(
         File operations of your own, tried before ``default_operations()``,
         e.g. ``[MyOps()]`` for server-side copies: for each operation (move,
         copy, delete, ...), the first object that supports it does it (see
-        ``jupyter_storage_explorer.fs_operations``). To change the defaults themselves, override
+        ``jupyter_storage_explorer.filesystems``). To change the defaults themselves, override
         ``default_operations`` in a subclass.
+    filesystem_mappers : sequence of FileSystemMapper, optional
+        Mappers of your own, tried before
+        ``jupyter_storage_explorer.filesystems.default_mappers()``: for each
+        filesystem, the first that maps it gives the URLs of its paths ("Copy
+        URL", ``folder_url``, "Python code", previews, the transfer policy)
+        and what it reaches (its identifier), by which files copied or
+        dragged from another kernel are found and two filesystems are told
+        apart, also for the file operations (their ``same`` argument).
     transfer_policy : list of dict, optional
         Rules for the directions files may be transferred in, each
         ``{"rule": "allow" or "deny", "src": regex, "dest": regex}``.
@@ -181,7 +191,7 @@ class StorageExplorer(
     ``folder_url`` and ``selected_urls`` give the locations of the folder
     shown and of the selected items. To change how paths become locations
     ("Copy URL", these properties, "Python code", data read by polars),
-    override ``_url`` in a subclass.
+    give a mapper in ``filesystem_mappers``.
 
     Examples
     --------
@@ -241,6 +251,10 @@ class StorageExplorer(
     # widget's drop-down sets `_filesystem` to switch.
     _filesystem_names = traitlets.List(traitlets.Unicode()).tag(sync=True)
     _filesystem = traitlets.Unicode().tag(sync=True)
+    # The filesystem shown, as its mapper describes it: {"protocol",
+    # "identifier"} (see filesystems/), sent with files copied or dragged, by
+    # which an explorer in another kernel finds them (MapperChain.locate).
+    _storage_identity = traitlets.Dict().tag(sync=True)
     # The "Unsafe mode" switch in the toolbar: while on, risky operations
     # are offered (today: moving, copying, pasting, renaming and deleting folders). The
     # frontend turns it off when any operation starts, and sends with each
@@ -269,6 +283,7 @@ class StorageExplorer(
         fetch_rows: Callable[[nw.LazyFrame, int, int], nw.DataFrame | None]
         | None = None,
         operations: Sequence[FileSystemOperations] | None = None,
+        filesystem_mappers: Sequence[FileSystemMapper] | None = None,
         transfer_policy: Sequence[Mapping[str, str]] | None = None,
         **storage_options: Any,
     ) -> None:
@@ -282,8 +297,10 @@ class StorageExplorer(
         except (OSError, ValueError) as exc:
             states_error = f"Bookmarks and queries not read again: {exc}"
         self._max_browser_items = max_browser_items
-        # How files are moved, copied, deleted and downloaded (see fs_operations/),
+        # How files are moved, copied, deleted and downloaded (see filesystems/),
         # and the jobs doing it in the background (see _jobs/runner.py).
+        # What filesystems reach, their URLs and back (see filesystems/).
+        self._mappers = MapperChain([*(filesystem_mappers or ()), *default_mappers()])
         self._operations = OperationChain(
             [*(operations or ()), *self.default_operations()]
         )
@@ -343,19 +360,18 @@ class StorageExplorer(
 
     @staticmethod
     def default_operations() -> list[FileSystemOperations]:
-        """The file operations tried after those given as ``operations``.
+        """The file operations tried after those given as ``operations``;
+        override it in a subclass to change them.
 
         Returns
         -------
         list of FileSystemOperations
-            New objects each time: ``AtomicMoveOperation`` (moves in one step
-            on local disks), ``AsyncFsspecOperations`` (asynchronous fsspec
-            filesystems such as s3fs, gcsfs and adlfs, many files at a time),
-            then ``FsspecOperations`` (everything else, with fsspec), from the
-            ``jupyter_storage_explorer.filesystems`` package. The last does
-            every operation, so the explorer can always do them.
+            By default ``jupyter_storage_explorer.filesystems.default_operations()``:
+            ``AtomicMoveOperation``, ``AsyncFsspecOperations``, then
+            ``FsspecOperations``, which does every operation, so the explorer
+            can always do them.
         """
-        return [AtomicMoveOperation(), AsyncFsspecOperations(), FsspecOperations()]
+        return _default_operations()
 
     @traitlets.validate("_filesystem")
     def _validate_filesystem(self, proposal: dict[str, Any]) -> str:
@@ -386,6 +402,7 @@ class StorageExplorer(
         with self.hold_sync():
             self._preview = {}
             self._tree = {}
+            self._storage_identity = self._mappers.storage_of(self._fs)
             self._root = root
             if self._current_dir == path:
                 # Same path string as before (e.g. "/" on both), so no change event lists it.
@@ -555,74 +572,17 @@ class StorageExplorer(
             "query": bool(formats) and formats[0].can_query(),
         }
 
-    # --- Locations: how paths become URLs and back (override _url and
-    # _locate to change them) ---
+    # --- Locations: the URLs of paths, from the filesystem mappers ---
 
     def _url(self, path: str) -> str | None:
-        """The location of a path of the filesystem shown, for users and libraries.
-
-        The one place paths become locations: "Copy URL", ``folder_url``,
-        "Python code" snippets and previews that read by location all use it.
-        Override it in a subclass, e.g. to resolve a ``DirFileSystem`` to its
-        underlying location; with several ``filesystems``, tell them apart by
-        ``self._filesystem``.
-
-        Parameters
-        ----------
-        path : str
-            A file or folder of the filesystem shown (``self._fs``), as fsspec
-            lists it.
-
-        Returns
-        -------
-        str or None
-            A plain path for local files, which every library reads;
-            ``abfs://container@account.dfs.core.windows.net/key`` for Azure
-            (adlfs), which names the account; ``protocol://path`` otherwise.
-            An override may return None for items without a URL: they can
-            still be browsed, uploaded to, downloaded and moved, but have no
-            "Copy URL", preview, "Query data", "Python code" or "Edit".
-
-        See Also
-        --------
-        _locate : The reverse, override it along with this method.
-        """
-        return default_url(self._fs, path)
-
-    def _locate(self, url: str) -> tuple[AbstractFileSystem, str]:
-        """The filesystem and path of a location: the reverse of ``_url``.
-
-        Used to paste files copied in an explorer of another kernel (another
-        notebook), which only says where they are by their URLs; those copied
-        in this kernel are read from their explorer's filesystem directly.
-        Override it with ``_url``, so that what one makes the other reads.
-
-        Parameters
-        ----------
-        url : str
-            A location made by ``_url``, in this explorer or another one.
-
-        Returns
-        -------
-        tuple of (AbstractFileSystem, str)
-            The filesystem and its fsspec path. One of this explorer's
-            filesystems if one has the URL's protocol (the one shown first;
-            for Azure, one of the URL's account), so with its credentials;
-            else one fsspec opens from the URL, with the environment's.
-
-        Raises
-        ------
-        ValueError
-            If the URL does not tell which storage it is on, e.g.
-            ``abfs://container/key`` (without the account).
-        """
-        others = [fs for fs, _ in self._filesystems.values() if fs is not self._fs]
-        return default_location(url, [self._fs, *others])
+        """The URL of a path of the filesystem shown (its mapper's ``to_url``),
+        or None if it has none."""
+        return self._mappers.url_of(self._fs, path)
 
     # --- File operations: wrappers of fsspec calls on the filesystem shown
     # (``self._fs``) for listing, reading and writing; the methods above go
     # through them, never through fsspec directly. Moving, copying and
-    # deleting go through the operations objects instead (see fs_operations/) ---
+    # deleting go through the operations objects instead (see filesystems/) ---
 
     def _ls(self, path: str) -> list[dict[str, Any]]:
         """The items in directory ``path`` (fsspec's ``ls(detail=True)`` entries)."""
