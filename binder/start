@@ -1,0 +1,5 @@
+#!/bin/bash
+# Run when a demo starts: kernels find the demo data (demo_data.py) and its copy.
+export JSE_DEMO_DATA="$HOME/.demo-data"
+export PYTHONPATH="${REPO_DIR:-$HOME}/docs/scripts${PYTHONPATH:+:$PYTHONPATH}"
+exec "$@"
