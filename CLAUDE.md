@@ -198,10 +198,11 @@ it starts, which turns it off (one operation at a time), and sends whether it wa
 the kernel refuses folders without it (the methods' `folders=` parameter).
 
 **Transfer policy** (`_jobs/transfer_policy.py`). `transfer_policy=` rules (`TransferPolicy`: the first rule whose `src`
-and `dest` both `fullmatch` decides, default allow) apply to transfers only: copies and moves between filesystems, not
-within one (`same_filesystem`). They are checked in the kernel only, per item as it is planned: `FileTasks._refused`
-calls its `check` (the explorer's `_transfer_error`) from `_plan_copies` and `download`, and refused items become errors
-while the others go on. URLs come from `_location` (the mappers' `url_of`, else fsspec's; files pasted keep
+and `dest` both `fullmatch`, with their named groups capturing the same text in both, decides; default allow; a rule's
+patterns must have the same group names) apply to every copy and move, within a filesystem as well as between
+filesystems. They are checked in the kernel only, per item as it is planned: `FileTasks._refused` calls its `check`
+(the explorer's `_transfer_error`) from `_plan_moves`, `rename`, `_plan_copies` and `download`, and refused items
+become errors while the others go on. URLs come from `_location` (the mappers' `url_of`, else fsspec's; files pasted keep
 the URL they were copied with, from `_paste_sources`). Transfers with the user's computer use `computer_url(name)`
 (`browser:///<name>`): checked in `_download` and `_upload_chunk`. Transfers with JupyterLab's file browser (uploads
 from it, both downloads to the server) pass filesystem None to `check` for that side, which `_location` makes

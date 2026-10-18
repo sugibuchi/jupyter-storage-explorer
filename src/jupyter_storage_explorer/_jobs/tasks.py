@@ -164,12 +164,12 @@ class FileTasks:
     ``check(source_fs, source, target_fs, target)``, if given, tells why a
     transfer may not happen (the explorer's transfer policy, see
     transfer_policy.py), or returns None: items it refuses are left out,
-    with that error. Transfers are copies and moves between filesystems:
-    within one (as ``mappers`` tell, default the default mappers), e.g.
-    moves, nothing is checked. A
-    filesystem None is the Jupyter server's disk as JupyterLab's file
-    browser shows it (uploads from it, downloads to it), with a local path:
-    always a transfer.
+    with that error. Transfers are all copies and moves, within a filesystem
+    as well as between filesystems (moves, renames, pastes, uploads,
+    downloads). A filesystem None is the Jupyter server's disk as
+    JupyterLab's file browser shows it (uploads from it, downloads to it),
+    with a local path. ``mappers`` tell whether two filesystems are one
+    (default: the default mappers), which decides how a copy or move is done.
     """
 
     def __init__(
@@ -199,15 +199,9 @@ class FileTasks:
         target_fs: AbstractFileSystem | None,
         target: str,
     ) -> str | None:
-        """Why ``check`` refuses an item, or None (always, within a filesystem)."""
+        """Why ``check`` refuses an item, or None."""
         if self.check is None:
             return None
-        if (
-            source_fs is not None
-            and target_fs is not None
-            and self.same_filesystem(source_fs, target_fs)
-        ):
-            return None  # not a transfer
         return self.check(source_fs, source, target_fs, target)
 
     def measure(self, fs: AbstractFileSystem, path: str) -> tuple[int, int]:
@@ -275,8 +269,9 @@ class FileTasks:
             target = _paths.join(dest, name)
             if _paths.norm(path) == _paths.norm(target):
                 continue  # already in that folder
-            # Within the filesystem: not a transfer, so the policy does not apply.
-            if not self.fs.isdir(path):
+            if (refused := self._refused(self.fs, path, self.fs, target)) is not None:
+                errors.append(f"{name}: {refused}")
+            elif not self.fs.isdir(path):
                 moves.append((path, target, False))
             elif not folders:
                 errors.append(
@@ -316,6 +311,8 @@ class FileTasks:
             return {"error": "the top folder is not renamed"}
         if self.fs.exists(target):
             return {"error": f"{name} already exists"}
+        if (refused := self._refused(self.fs, path, self.fs, target)) is not None:
+            return {"error": refused}
         fs, ops = self.fs, self.ops
         task = Task("move", f"Renaming {_paths.basename(path)} to {name}", fs)
 

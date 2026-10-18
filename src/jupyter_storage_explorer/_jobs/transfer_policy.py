@@ -1,11 +1,10 @@
 """Transfer policies: the directions in which an explorer transfers files.
 
-A transfer is a copy or move of files from one filesystem to another: copy
-(or cut) and paste between storages (of the explorer, or another explorer's),
-drag and drop with JupyterLab's file browser, "Download to JupyterLab", and
-uploads from and downloads to the user's computer. Copies and moves within a
-filesystem (``same_filesystem``), e.g. dragging files onto a folder, are not
-transfers: the policy does not apply to them.
+A transfer is any copy or move of files from one URL to another, within a
+storage or between storages: moves onto a folder, renames, copy (or cut) and
+paste (in the explorer, or from another explorer), drag and drop with
+JupyterLab's file browser, "Download to JupyterLab", and uploads from and
+downloads to the user's computer. Deleting and creating folders are not.
 
 ``StorageExplorer(transfer_policy=[...])`` takes a list of rules::
 
@@ -18,6 +17,17 @@ A transfer has a source URL and a destination URL (see ``TransferPolicy``).
 Rules are tried in order: the first whose ``src`` and ``dest`` regular
 expressions both match the whole URLs (``re.fullmatch``) decides; if none
 does, the transfer is allowed. A pattern left out matches any URL.
+
+Named groups (``(?P<name>...)``) tie the two URLs together: a rule matches
+only if each group captures the same text in both, e.g. transfers within one
+container of an Azure account::
+
+    {"rule": "allow",
+     "src": r"abfs://(?P<container>[^@/]+)@acct\\.dfs\\.core\\.windows\\.net/.*",
+     "dest": r"abfs://(?P<container>[^@/]+)@acct\\.dfs\\.core\\.windows\\.net/.*"}
+
+Both patterns must have the same group names. Unnamed groups are not
+compared.
 
 This only keeps files from going where they are not meant to by mistake. It
 is not a security boundary: users can still copy files with code.
@@ -66,6 +76,17 @@ class _Rule:
     src: re.Pattern[str]
     dest: re.Pattern[str]
 
+    def matches(self, source: str, dest: str) -> bool:
+        """Whether both URLs match, with each named group capturing the same
+        text in both (a group that did not take part captures None)."""
+        src_match = self.src.fullmatch(source)
+        if src_match is None:
+            return False
+        dest_match = self.dest.fullmatch(dest)
+        return (
+            dest_match is not None and src_match.groupdict() == dest_match.groupdict()
+        )
+
 
 class TransferPolicy:
     """The rules of ``StorageExplorer``'s ``transfer_policy`` (see the module docstring).
@@ -80,8 +101,8 @@ class TransferPolicy:
     item, by its own URL, not file by file.
 
     Raises ValueError for rules that are not of the form {"rule": "allow" or
-    "deny", "src": pattern, "dest": pattern}, or patterns that are not
-    regular expressions.
+    "deny", "src": pattern, "dest": pattern}, patterns that are not regular
+    expressions, or patterns of a rule with different group names.
     """
 
     def __init__(self, rules: Sequence[Mapping[str, Any]] | None = None) -> None:
@@ -94,7 +115,7 @@ class TransferPolicy:
     def allows(self, source: str, dest: str) -> bool:
         """Whether a file may go from URL ``source`` to URL ``dest``."""
         for rule in self.rules:
-            if rule.src.fullmatch(source) and rule.dest.fullmatch(dest):
+            if rule.matches(source, dest):
                 return rule.allow
         return True
 
@@ -129,4 +150,11 @@ def _rule(index: int, rule: Any) -> _Rule:
             raise ValueError(
                 f"{where}: {key!r} is not a regular expression: {exc}"
             ) from exc
-    return _Rule(rule["rule"] == "allow", *patterns)
+    src, dest = patterns
+    if set(src.groupindex) != set(dest.groupindex):
+        raise ValueError(
+            f"{where}: 'src' and 'dest' must have the same named groups "
+            f"(src: {sorted(src.groupindex)}, dest: {sorted(dest.groupindex)}), "
+            f"as a rule matches only if each captures the same text in both"
+        )
+    return _Rule(rule["rule"] == "allow", src, dest)

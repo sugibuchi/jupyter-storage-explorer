@@ -159,16 +159,18 @@ class StorageExplorer(
     transfer_policy : list of dict, optional
         Rules for the directions files may be transferred in, each
         ``{"rule": "allow" or "deny", "src": regex, "dest": regex}``.
-        Transfers are copies and moves between filesystems: copy (or cut)
-        and paste between storages, and transfers with JupyterLab's file
-        browser (``jupyterlab://<absolute path>``, "Download to JupyterLab"
-        too) and the user's computer (``browser:///<name>``); not those
-        within a filesystem, e.g. dragging files onto a folder. The first
-        rule whose patterns both match the whole source and destination URLs
+        Transfers are all copies and moves of files, within a storage as well
+        as between storages: dragging files onto a folder, renaming, copy
+        (or cut) and paste, and transfers with JupyterLab's file browser
+        (``jupyterlab://<absolute path>``, "Download to JupyterLab" too) and
+        the user's computer (``browser:///<name>``). The first rule whose
+        patterns both match the whole source and destination URLs
         (``re.fullmatch``; a pattern left out matches any) decides; without
-        one, files go. Items refused are reported, the others done. Not a
-        security boundary: it only keeps files from going where they are not
-        meant to by mistake (see _jobs/transfer_policy.py).
+        one, files go. Named groups (``(?P<name>...)``), the same in both
+        patterns, must capture the same text in both URLs, e.g. to allow
+        transfers within one container only. Items refused are reported, the
+        others done. Not a security boundary: it only keeps files from going
+        where they are not meant to by mistake (see _jobs/transfer_policy.py).
     **storage_options
         Passed to fsspec with ``path``, e.g. ``anon=True`` or
         ``profile="analytics"``.

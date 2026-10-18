@@ -232,15 +232,15 @@ DENY_SECRET = [{"rule": "deny", "src": r"memory:///d/secret.*", "dest": ".*"}]
 
 
 class TestTransferPolicy:
-    """Files are transferred (between filesystems) only in the directions the
-    policy allows; within a filesystem, it does not apply."""
+    """Files are copied and moved only in the directions the policy allows,
+    within a filesystem as well as between filesystems."""
 
     @pytest.fixture
     def files(self, memfs):
         memfs.pipe({"/d/secret.txt": b"s", "/d/ok.txt": b"o", "/d/sub/x": b""})
         return memfs
 
-    def test_move_within_a_filesystem_is_not_a_transfer(self, files):
+    def test_move_within_a_filesystem(self, files):
         explorer = make("/", fs=files, transfer_policy=DENY_SECRET)
         reply = explorer.request(
             {
@@ -250,10 +250,23 @@ class TestTransferPolicy:
                 "dest": "/d/sub",
             }
         )
-        assert (reply["moved"], reply["errors"]) == (["secret.txt", "ok.txt"], [])
+        assert reply["moved"] == ["ok.txt"]
+        assert reply["errors"] == [
+            "secret.txt: not allowed by the transfer policy "
+            "(memory:///d/secret.txt → memory:///d/sub/secret.txt)"
+        ]
+        assert files.exists("/d/secret.txt")
+
+    def test_rename(self, files):
+        explorer = make("/", fs=files, transfer_policy=DENY_SECRET)
+        reply = explorer.request(
+            {"type": "rename", "rid": 1, "path": "/d/secret.txt", "name": "public.txt"}
+        )
+        assert "not allowed by the transfer policy" in reply["error"]
+        assert files.exists("/d/secret.txt")
 
     @pytest.mark.parametrize("cut", [False, True])
-    def test_paste_within_a_filesystem_is_not_a_transfer(self, files, cut):
+    def test_paste_within_a_filesystem(self, files, cut):
         explorer = make("/", fs=files, transfer_policy=DENY_SECRET)
         reply = explorer.request(
             {
@@ -266,8 +279,24 @@ class TestTransferPolicy:
                 "cut": cut,
             }
         )
-        assert reply["moved" if cut else "pasted"] == ["secret.txt"]
-        assert files.exists("/d/sub/secret.txt")
+        assert reply["moved" if cut else "pasted"] == []
+        assert "not allowed by the transfer policy" in reply["errors"][0]
+        assert not files.exists("/d/sub/secret.txt")
+
+    def test_named_groups_keep_files_in_their_folder(self, files):
+        """Moves within each top folder only: the same folder on both sides."""
+        files.pipe({"/e/y.txt": b"y"})
+        top = r"memory:///(?P<top>[^/]+)/.*"
+        policy = [
+            {"rule": "allow", "src": top, "dest": top},
+            {"rule": "deny", "src": "memory:///.*"},
+        ]
+        explorer = make("/", fs=files, transfer_policy=policy)
+        move = {"type": "move", "rid": 1, "paths": ["/d/ok.txt"]}
+        assert explorer.request({**move, "dest": "/d/sub"})["moved"] == ["ok.txt"]
+        reply = explorer.request({**move, "paths": ["/d/sub/ok.txt"], "dest": "/e"})
+        assert reply["moved"] == []
+        assert "not allowed by the transfer policy" in reply["errors"][0]
 
     def test_paste_between_storages_of_the_explorer(self, files, tmp_path):
         local = fsspec.filesystem("file")._strip_protocol(str(tmp_path))
