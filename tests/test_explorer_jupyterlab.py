@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 from typing import Any
 
@@ -123,3 +124,82 @@ class TestOpenInJupyterLab:
         self.save(mem_explorer, "/data/n.ipynb", model["content"], format="json")
         saved = json.loads(memfs.cat_file("/data/n.ipynb"))
         assert [cell["metadata"] for cell in saved["cells"]] == [{"tags": ["x"]}, {}]
+
+    def notebook(self, *, trusted: bool) -> dict[str, Any]:
+        """A notebook as JupyterLab saves it: a code cell with rich output,
+        trusted or not, and a Markdown cell."""
+        output = {
+            "output_type": "display_data",
+            "metadata": {},
+            "data": {"text/html": "<b>chart</b>", "text/plain": "chart"},
+        }
+        code = {
+            "cell_type": "code",
+            "execution_count": 1,
+            "id": "c1",
+            "metadata": {"trusted": trusted},
+            "source": "1",
+            "outputs": [output],
+        }
+        text = {"cell_type": "markdown", "id": "m1", "metadata": {}, "source": "# x"}
+        return {
+            "nbformat": 4,
+            "nbformat_minor": 5,
+            "metadata": {},
+            "cells": [code, text],
+        }
+
+    def trust(self, explorer: Explorer, path: str) -> list[Any]:
+        model = self.get(explorer, path, contentType="notebook")["model"]
+        return [cell["metadata"].get("trusted") for cell in model["content"]["cells"]]
+
+    def test_saved_trusted_is_trusted_when_opened_again(self, mem_explorer, memfs):
+        """As in JupyterLab: saving a trusted notebook signs it (nbformat's
+        notary); its code cells are trusted when opened again."""
+        memfs.pipe_file("/data/n.ipynb", b"{}")
+        notebook = self.notebook(trusted=True)
+        self.save(mem_explorer, "/data/n.ipynb", notebook, format="json")
+        assert "trusted" not in memfs.cat_file("/data/n.ipynb").decode()
+        assert self.trust(mem_explorer, "/data/n.ipynb") == [True, False]
+
+    def test_saved_untrusted_is_not_signed(self, mem_explorer, memfs):
+        memfs.pipe_file("/data/n.ipynb", b"{}")
+        self.save(
+            mem_explorer, "/data/n.ipynb", self.notebook(trusted=False), format="json"
+        )
+        assert self.trust(mem_explorer, "/data/n.ipynb") == [False, False]
+
+    def test_changed_elsewhere_is_untrusted(self, mem_explorer, memfs):
+        """Any change to a signed notebook (here its output) voids its signature."""
+        memfs.pipe_file("/data/n.ipynb", b"{}")
+        self.save(
+            mem_explorer, "/data/n.ipynb", self.notebook(trusted=True), format="json"
+        )
+        text = memfs.cat_file("/data/n.ipynb").decode().replace("chart", "evil")
+        memfs.pipe_file("/data/n.ipynb", text.encode())
+        assert self.trust(mem_explorer, "/data/n.ipynb") == [False, False]
+
+    def test_another_users_signature_does_not_count(
+        self, mem_explorer, memfs, monkeypatch, tmp_path
+    ):
+        """Signatures are the user's (their secret and database)."""
+        memfs.pipe_file("/data/n.ipynb", b"{}")
+        self.save(
+            mem_explorer, "/data/n.ipynb", self.notebook(trusted=True), format="json"
+        )
+        monkeypatch.setenv("JUPYTER_DATA_DIR", str(tmp_path / "another-user"))
+        assert self.trust(mem_explorer, "/data/n.ipynb") == [False, False]
+
+    def test_without_the_notary_untrusted(self, mem_explorer, memfs, monkeypatch):
+        """Without nbformat (or if its notary cannot be used): never trusted."""
+
+        @contextlib.contextmanager
+        def no_notary():
+            yield None
+
+        memfs.pipe_file("/data/n.ipynb", b"{}")
+        self.save(
+            mem_explorer, "/data/n.ipynb", self.notebook(trusted=True), format="json"
+        )
+        monkeypatch.setattr(jupyterlab_files, "_notary", no_notary)
+        assert self.trust(mem_explorer, "/data/n.ipynb") == [False, False]

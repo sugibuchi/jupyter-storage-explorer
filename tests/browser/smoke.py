@@ -614,6 +614,54 @@ def notebook_opened_untrusted(x: Explorer) -> None:
     x.back_to_notebook()
 
 
+@check
+def notebook_trust_kept(x: Explorer) -> None:
+    # Trusted by the user and saved, a notebook from a storage is trusted
+    # when opened again (signed with nbformat's notary, as JupyterLab does).
+    notebook = json.loads(json.dumps(UNTRUSTED_NOTEBOOK))
+    notebook["cells"][0]["outputs"][0]["data"] = {
+        "application/javascript": "window.__jse_trusted_ran = (window.__jse_trusted_ran || 0) + 1;",
+        "text/plain": "output",
+    }
+    x.top("Scratch")
+    x.el.locator(".jse-list").evaluate(
+        """(list, text) => {
+          const data = new DataTransfer();
+          data.items.add(new File([text], "trusted.ipynb", { type: "application/json" }));
+          for (const type of ["dragenter", "dragover", "drop"]) {
+            list.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: data }));
+          }
+        }""",
+        json.dumps(notebook),
+    )
+    x.button("Upload").click()
+    x.row("trusted.ipynb").dblclick()
+    shown = x.page.locator(".jp-NotebookPanel:not(.lm-mod-hidden)")
+    expect(shown.locator(".jp-OutputArea-output").first).to_be_visible()
+    assert x.page.evaluate("window.__jse_trusted_ran") is None
+    # Trust it (JupyterLab's command), then save.
+    x.page.keyboard.press("Control+Shift+c")
+    x.page.keyboard.type("Trust Notebook")
+    x.page.keyboard.press("Enter")
+    x.page.locator(".jp-Dialog-footer .jp-Dialog-button", has_text="Trust").click()
+    x.page.wait_for_timeout(1000)
+    trusted_runs = x.page.evaluate("window.__jse_trusted_ran || 0")
+    x.page.keyboard.press("Control+s")
+    expect(x.page.locator(".lm-TabBar-tab.jp-mod-current.jp-mod-dirty")).to_have_count(
+        0
+    )
+    # Closed, then opened again from the explorer: trusted, its output runs.
+    x.page.locator(".lm-TabBar-tab.jp-mod-current .lm-TabBar-tabCloseIcon").click()
+    x.back_to_notebook()
+    x.row("trusted.ipynb").dblclick()
+    expect(shown.locator(".jp-OutputArea-output").first).to_be_visible()
+    x.page.wait_for_timeout(1500)
+    assert x.page.evaluate("window.__jse_trusted_ran || 0") > trusted_runs, (
+        "not trusted again"
+    )
+    x.back_to_notebook()
+
+
 # A notebook whose outputs link to an image by a relative path (next to it),
 # which the drive does not serve.
 RELATIVE_IMAGE_NOTEBOOK = {

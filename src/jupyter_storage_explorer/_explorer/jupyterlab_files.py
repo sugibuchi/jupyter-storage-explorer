@@ -10,13 +10,17 @@ it) and the content it saves back into bytes.
 from __future__ import annotations
 
 import base64
+import contextlib
 import datetime as dt
 import hashlib
 import json
 import mimetypes
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from jupyter_storage_explorer import _infos, _paths
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 # Largest file opened in JupyterLab: it passes through kernel memory and the
 # notebook's connection in one message, and an editor holds all of it.
@@ -86,7 +90,7 @@ def contents_model(
             raise ValueError(f"{name} is not a valid notebook (JSON)") from None
         model["format"] = "json"
         if notebook:
-            model["content"] = _untrusted(model["content"])
+            model["content"] = _trusted_as_signed(model["content"])
     elif format_ == "base64":
         model["content"] = base64.b64encode(data).decode("ascii")
         model["format"] = "base64"
@@ -104,17 +108,58 @@ def contents_model(
     return model
 
 
-def _untrusted(notebook: Any) -> Any:
-    """``notebook`` with every cell marked untrusted, whatever the file says.
+def _trusted_as_signed(notebook: Any) -> Any:
+    """``notebook`` with its cells marked trusted as the Jupyter server marks
+    them: its code cells if the notary knows its signature (it was saved
+    trusted by this user), else none, whatever the file says.
 
     JupyterLab runs a cell's HTML and JavaScript outputs, unsanitized, only if
-    the cell's metadata says it is trusted. The Jupyter server sets that from
-    the notebook's signature, which only notebooks the user ran themselves
-    have, ignoring what the file says; this drive has no signature to check,
-    so a notebook from a storage, which anyone with write access may have
-    crafted, never runs anything by itself. The user can still trust it
-    (JupyterLab's "Trust Notebook").
+    the cell's metadata says it is trusted: a notebook from a storage, which
+    anyone with write access may have crafted, never runs anything by itself.
+    The user can still trust it (JupyterLab's "Trust Notebook"), and saving it
+    then signs it (see ``saved_bytes``).
     """
+    marked = _untrusted(notebook)
+    with _notary() as notary:
+        if notary is not None and _is_signed(notary, notebook):
+            for cell in marked["cells"]:
+                if isinstance(cell, dict) and cell.get("cell_type") == "code":
+                    cell["metadata"]["trusted"] = True
+    return marked
+
+
+@contextlib.contextmanager
+def _notary() -> Iterator[Any]:
+    """nbformat's notary with its defaults (the user's secret and database
+    of signatures, as the Jupyter server's unless configured otherwise), or
+    None without nbformat or if it cannot be used: notebooks are then
+    untrusted, and nothing is signed."""
+    try:
+        from nbformat.sign import NotebookNotary  # noqa: PLC0415 (optional)
+
+        notary = NotebookNotary()
+        notary.__enter__()
+    except Exception:
+        yield None
+        return
+    try:
+        yield notary
+    finally:
+        notary.__exit__(None, None, None)
+
+
+def _is_signed(notary: Any, notebook: Any) -> bool:
+    """Whether the notary knows ``notebook``'s signature (as read from the file)."""
+    try:
+        import nbformat  # noqa: PLC0415 (optional)
+
+        return bool(notary.check_signature(nbformat.from_dict(notebook)))
+    except Exception:
+        return False
+
+
+def _untrusted(notebook: Any) -> Any:
+    """``notebook`` with every cell marked untrusted, whatever the file says."""
     if not isinstance(notebook, dict) or not isinstance(notebook.get("cells"), list):
         return notebook
 
@@ -153,6 +198,32 @@ def _strip_transient(notebook: dict[str, Any]) -> dict[str, Any]:
     return notebook
 
 
+def _all_code_cells_trusted(notebook: dict[str, Any]) -> bool:
+    """Whether every code cell of ``notebook`` (as JupyterLab saves it) is
+    trusted, as the notary checks before signing (``check_cells``)."""
+    with _notary() as notary:
+        if notary is None:
+            return False
+        try:
+            import nbformat  # noqa: PLC0415 (optional)
+
+            return bool(notary.check_cells(nbformat.from_dict(notebook)))
+        except Exception:
+            return False
+
+
+def _sign(notebook: dict[str, Any]) -> None:
+    """Record ``notebook``'s signature (as written) with the notary, so that it
+    is trusted when opened again, here or by the Jupyter server."""
+    with _notary() as notary:
+        if notary is None:
+            return
+        with contextlib.suppress(Exception):
+            import nbformat  # noqa: PLC0415 (optional)
+
+            notary.sign(nbformat.from_dict(notebook))
+
+
 def saved_bytes(content: Any, format_: str | None, current: bytes | None) -> bytes:
     """The bytes to write for ``content`` saved by JupyterLab in ``format_``.
 
@@ -162,7 +233,10 @@ def saved_bytes(content: Any, format_: str | None, current: bytes | None) -> byt
     """
     if format_ == "json":
         if isinstance(content, dict):
+            trusted = _all_code_cells_trusted(content)
             content = _strip_transient(content)
+            if trusted:
+                _sign(content)
         return (
             json.dumps(content, indent=1, sort_keys=True, ensure_ascii=False) + "\n"
         ).encode("utf-8")
