@@ -246,16 +246,27 @@ class AzureDataLakeGen2Operation(FileSystemOperations):
 
             async def folder(src: str, dest: str) -> None:
                 progress.check()
-                container, key = _split(dest)
-                await self._create_directory(service, container, key)
                 # The folder's own items (paths within the container), with
                 # the Data Lake API: its subfolders are listed as they are copied.
                 src_container, src_key = _split(src)
-                paths = service.get_file_system_client(src_container).get_paths(
+                listing = service.get_file_system_client(src_container).get_paths(
                     path=src_key, recursive=False
                 )
+                paths = [path async for path in listing]
+                # Checked before anything of the folder is copied: a name the
+                # target would read as a path ("..", or with a backslash, which
+                # Azure may take as "/") would put files outside ``dest``.
+                for path in paths:
+                    name = _paths.basename(path.name)
+                    if name in (".", "..") or "\\" in name:
+                        raise ValueError(
+                            f"{_paths.basename(src)}: not copied, as a name in it "
+                            f"is not a file name ({path.name})"
+                        )
+                container, key = _split(dest)
+                await self._create_directory(service, container, key)
                 async with asyncio.TaskGroup() as group:
-                    async for path in paths:
+                    for path in paths:
                         name = _paths.basename(path.name)
                         item, child = f"{src_container}/{path.name}", f"{dest}/{name}"
                         if path.is_directory:
