@@ -132,8 +132,23 @@ class StorageDrive implements Contents.IDrive {
     // Nothing kept.
   }
 
-  async getDownloadUrl(): Promise<string> {
-    throw new Error('Download files from Storage Explorer.');
+  // JupyterLab asks for it to download a file (File > Download) and to load
+  // what rendered outputs and Markdown link to by relative paths (e.g. an
+  // image next to a notebook). A file opened from an explorer is read through
+  // it, as a blob: URL; any other path loads nothing (a missing image, not an
+  // error), as the drive serves no file that was not opened from an explorer.
+  async getDownloadUrl(localPath: string): Promise<string> {
+    const file = this.files.get(localPath);
+    if (!file) {
+      return 'data:,';
+    }
+    const model = await file.get({ contentType: 'file', format: 'base64', content: true });
+    const bytes = Uint8Array.from(atob(model.content as string), c => c.charCodeAt(0));
+    // Not of the file's type: downloaded, never shown by the browser.
+    const url = URL.createObjectURL(new Blob([bytes], { type: 'application/octet-stream' }));
+    // Revoking at once can cancel the download in some browsers.
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    return url;
   }
 
   async newUntitled(): Promise<Contents.IModel> {
