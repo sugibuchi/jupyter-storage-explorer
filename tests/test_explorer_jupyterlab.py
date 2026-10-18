@@ -96,3 +96,30 @@ class TestOpenInJupyterLab:
     def test_too_large(self, mem_explorer, memfs, monkeypatch):
         monkeypatch.setattr(jupyterlab_files, "MAX_BYTES", 3)
         assert "too large" in self.get(mem_explorer, "/data/a.csv")["error"]
+
+    def test_notebook_cells_are_untrusted(self, mem_explorer, memfs):
+        """Whatever a notebook's cells claim: JupyterLab would run their HTML
+        and JavaScript outputs (the Jupyter server checks a signature)."""
+        cells = [
+            {
+                "cell_type": "code",
+                "metadata": {"trusted": True, "tags": ["x"]},
+                "source": "1",
+                "outputs": [],
+            },
+            {"cell_type": "markdown", "source": "no metadata"},
+        ]
+        notebook = {"nbformat": 4, "nbformat_minor": 5, "metadata": {}, "cells": cells}
+        memfs.pipe_file("/data/n.ipynb", json.dumps(notebook).encode())
+        model = self.get(mem_explorer, "/data/n.ipynb", contentType="notebook")["model"]
+        metadata = [cell["metadata"] for cell in model["content"]["cells"]]
+        assert metadata == [{"trusted": False, "tags": ["x"]}, {"trusted": False}]
+        # A text editor opening it gets the file as it is.
+        text = self.get(
+            mem_explorer, "/data/n.ipynb", contentType="file", format="text"
+        )["model"]
+        assert '"trusted": true' in text["content"]
+        # Saved without it, as nbformat writes notebooks.
+        self.save(mem_explorer, "/data/n.ipynb", model["content"], format="json")
+        saved = json.loads(memfs.cat_file("/data/n.ipynb"))
+        assert [cell["metadata"] for cell in saved["cells"]] == [{"tags": ["x"]}, {}]

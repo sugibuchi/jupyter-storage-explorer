@@ -85,6 +85,8 @@ def contents_model(
         except ValueError:
             raise ValueError(f"{name} is not a valid notebook (JSON)") from None
         model["format"] = "json"
+        if notebook:
+            model["content"] = _untrusted(model["content"])
     elif format_ == "base64":
         model["content"] = base64.b64encode(data).decode("ascii")
         model["format"] = "base64"
@@ -100,6 +102,30 @@ def contents_model(
     if model["mimetype"] is None and model["format"] == "text":
         model["mimetype"] = "text/plain"
     return model
+
+
+def _untrusted(notebook: Any) -> Any:
+    """``notebook`` with every cell marked untrusted, whatever the file says.
+
+    JupyterLab runs a cell's HTML and JavaScript outputs, unsanitized, only if
+    the cell's metadata says it is trusted. The Jupyter server sets that from
+    the notebook's signature, which only notebooks the user ran themselves
+    have, ignoring what the file says; this drive has no signature to check,
+    so a notebook from a storage, which anyone with write access may have
+    crafted, never runs anything by itself. The user can still trust it
+    (JupyterLab's "Trust Notebook").
+    """
+    if not isinstance(notebook, dict) or not isinstance(notebook.get("cells"), list):
+        return notebook
+
+    def untrusted(cell: Any) -> Any:
+        if not isinstance(cell, dict):
+            return cell
+        metadata = cell.get("metadata")
+        metadata = metadata if isinstance(metadata, dict) else {}
+        return {**cell, "metadata": {**metadata, "trusted": False}}
+
+    return {**notebook, "cells": [untrusted(cell) for cell in notebook["cells"]]}
 
 
 def _strip_transient(notebook: dict[str, Any]) -> dict[str, Any]:
