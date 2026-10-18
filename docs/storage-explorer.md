@@ -102,7 +102,8 @@ it again.
 The **Preview** link at the bottom right of the list (with nothing selected: the current folder, e.g. a Delta Lake
 table), or right-click → **Preview**; **Preview as** chooses another format. Double-clicking a file previews it when
 JupyterLab cannot [open it](#open-files), e.g. Parquet or Excel. Tables open in the [data browser](#query-data). While
-the panel is open, clicking a file previews it. The same link, then **Close preview**, or Esc, closes it.
+the panel is open, clicking a file previews it; `open_preview=True` opens it from the start. The same link, then
+**Close preview**, or Esc, closes it.
 
 <img src="figs/using-preview.png" width="562" alt="Preview in the status bar, and Preview as in the right-click menu of a Markdown file">
 
@@ -310,13 +311,81 @@ explorer
 ```python
 explorer.folder_url  # the URL of the folder shown, e.g. to pass to polars or pandas
 explorer.selected_urls  # the URLs of the selected items
+explorer.query_result()  # the table in the data browser, with its filters; None if none
 ```
+
+`on_change(f)` calls `f(explorer)` when the folder shown or the selection changes, and `on_query_change(f)` when
+`query_result()` does: another table opened in the preview panel (or none), other filters, sort or columns, or the data
+read again. The functions run as the kernel handles the widget's messages, so what they print goes to no cell: display
+into an `ipywidgets.Output`. Keep them quick: the widget waits for them. `remove=True` stops calling one.
+
+For example, a chart of the CSV file you click, which follows the filters you set in the data browser. Some CSV files
+in a cloud storage first:
+
+```python
+import datetime as dt
+import random
+
+import fsspec
+import polars as pl
+
+folder = "s3://my-bucket/demo/sales"  # any storage you can write to
+days = pl.date_range(dt.date(2026, 1, 1), dt.date(2026, 6, 30), eager=True)
+for region in ["north", "south", "east", "west"]:
+    sales = pl.DataFrame(
+        {
+            "date": days,
+            "channel": random.choices(["online", "retail", "wholesale"], k=len(days)),
+            "amount": [random.randint(50, 500) for _ in days],
+        }
+    )
+    with fsspec.open(f"{folder}/{region}.csv", "w") as f:
+        sales.write_csv(f)
+```
+
+An explorer of them, its preview panel open, so that clicking a file opens it in the data browser:
+
+```python
+from jupyter_storage_explorer import StorageExplorer
+
+explorer = StorageExplorer(folder, open_preview=True)
+explorer
+```
+
+And the chart, in a cell of its own:
+
+```python
+import ipywidgets
+import matplotlib.pyplot as plt
+
+chart = ipywidgets.Output()
+
+
+def draw(explorer):
+    with chart:
+        chart.clear_output(wait=True)
+        result = explorer.query_result()
+        if result is None:
+            return  # no table in the preview panel
+        daily = result.group_by("date").agg(pl.col("amount").sum()).sort("date").collect()
+        plt.figure(figsize=(8, 3))
+        plt.plot(daily["date"], daily["amount"])
+        plt.show()
+
+
+explorer.on_query_change(draw)
+chart
+```
+
+Filter by channel in the data browser, and the chart shows that channel's sales. Without the data browser,
+`on_change` and `selected_urls` give the files themselves, e.g. `pl.read_csv(url)` for each one selected.
 
 ## StorageExplorer options
 
 | Option                              | Meaning                                                                                                                               |
 |-------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------|
 | `height="400px"`                    | Height of the tree and list; the preview panel adds its own space below. `"fill"`: as tall as the container, e.g. the launcher's tab. |
+| `open_preview=True`                 | Start with the preview panel open, so that clicking a file previews it (default: closed).                                             |
 | `max_upload_bytes=10 * 1024 * 1024` | Largest file you can upload from your computer (default 10 MB; `None` for no limit).                                                  |
 | `download_to_jupyterlab_path="."`   | Folder "Download to JupyterLab" copies into, e.g. `"~/Downloads"`; default: where it runs. To refuse downloads, use `transfer_policy`. |
 | `filesystems={...}`                 | Several named storages; see [Several storages in one explorer](#several-storages-in-one-explorer).                                    |

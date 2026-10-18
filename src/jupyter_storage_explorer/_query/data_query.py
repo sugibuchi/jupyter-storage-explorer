@@ -301,6 +301,12 @@ class DataQuery:
             settings = {**settings, "hidden": []}
         return build_query(data, schema, settings).to_native()
 
+    def result_settings(self) -> dict[str, Any]:
+        """The remembered settings ``result`` depends on (filters, sort,
+        hidden; not widths), to tell when it changes."""
+        settings = normalize_settings(self._remembered(), self.schema)
+        return {key: settings[key] for key in ("filters", "sort", "hidden")}
+
     def opening(self) -> dict[str, Any]:
         """What the frontend needs to show the data: its columns, remembered
         settings and the mode."""

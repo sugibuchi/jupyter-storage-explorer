@@ -63,7 +63,7 @@ explorer of exactly its own version (`launcher/hatch_build.py` sets its dependen
   dependencies are only anywidget, fsspec, narwhals, pygments, traitlets; polars, pandas, pyarrow, deltalake, fastexcel,
   openpyxl, Pillow, PySpark are all optional and probed at run time. The "abfs" extra adds adlfs and the Data Lake SDK,
   for `filesystems/abfs.py`. Its top level has the widgets (`storage_explorer.py`, `data_explorer.py`) and small
-  private helpers (`_paths`, `_infos`, `_json`, `_static`); the rest is in packages: public, `filesystems/`
+  private helpers (`_paths`, `_infos`, `_json`, `_static`, `_callbacks`); the rest is in packages: public, `filesystems/`
   (`mapper.py`: the `FileSystemMapper` interface and `MapperChain`; `mappers.py`: the predefined mappers;
   `operation.py`: the `FileSystemOperations` interface; `operations.py`: the predefined operations; `abfs.py`: the
   opt-in Data Lake operation) and `formats/`; private, `_explorer/`
@@ -103,7 +103,10 @@ browser is in `traitlets` tagged `sync=True` (underscore-prefixed). Everything e
 "download", in a message per file, its bytes attached). Uploads carry file pieces in binary `buffers`. A reply's
 error is `{"error": text}` (`error_text`: the explorer's own refusals, ValueErrors, without their type), except for
 file operations, whose results have lists, `{"errors": [...]}`, as jobs' do. Values sent go through
-`_json.jsonable`.
+`_json.jsonable`. Users' functions (`on_change`; `StorageExplorer.on_query_change`) are kept in `_callbacks.Callbacks`
+and called once per change, compared with what they last heard of (`_changed`: storage, folder and selection, from
+the traits' observers; `_query_changed`: the query shown in the preview panel and its `result_settings()`, after the
+data browser's replies and on `_preview` changes, not while one loads).
 
 `StorageExplorer` keeps its state (set up in `__init__`), the messages' routing, the traitlets observers (they must be
 on the class itself), the URLs (`_url`, from its `MapperChain`) and the fsspec calls. Its features are mixins in `_explorer/`,

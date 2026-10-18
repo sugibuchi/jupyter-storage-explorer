@@ -9,6 +9,7 @@ import anywidget
 import traitlets
 
 from jupyter_storage_explorer import _static
+from jupyter_storage_explorer._callbacks import Callbacks
 from jupyter_storage_explorer._explorer.states import ExplorerStates
 from jupyter_storage_explorer._query.data_query import DataQuery
 from jupyter_storage_explorer._query.filters import normalize_settings
@@ -203,9 +204,9 @@ class DataExplorer(anywidget.AnyWidget):
             query=self._data.opening(),
             height=height,
         )
-        self._change_callbacks: list[Callable[[DataExplorer], Any]] = []
+        self._change_callbacks = Callbacks()
         # What result() was built from when on_change's functions last heard of it.
-        self._result_basis = self._result_settings()
+        self._result_basis = self._data.result_settings()
         self.on_msg(self._on_custom_msg)
 
     def result(self, all_columns: bool = False) -> Any:
@@ -298,29 +299,7 @@ class DataExplorer(anywidget.AnyWidget):
         >>> redraw(explorer)  # the first chart, before any change
         >>> chart  # in the cell that shows the chart
         """
-        if remove:
-            if callback in self._change_callbacks:
-                self._change_callbacks.remove(callback)
-        elif callback not in self._change_callbacks:
-            self._change_callbacks.append(callback)
-
-    def _result_settings(self) -> dict[str, Any]:
-        """The settings ``result()`` depends on: not widths."""
-        settings = self.settings.to_dict()
-        return {key: settings[key] for key in ("filters", "sort", "hidden")}
-
-    def _notify_change(self) -> None:
-        """Call the ``on_change`` functions, each one even if another fails."""
-        for callback in list(self._change_callbacks):
-            try:
-                callback(self)
-            except Exception:
-                from IPython import get_ipython  # noqa: PLC0415
-
-                shell = get_ipython()
-                if shell is None:
-                    raise
-                shell.showtraceback()
+        self._change_callbacks.register(callback, remove=remove)
 
     def _on_custom_msg(
         self, _widget: Any, content: dict[str, Any], _buffers: Any
@@ -332,8 +311,8 @@ class DataExplorer(anywidget.AnyWidget):
         if reply is None:
             return
         self.send({"type": "reply", "rid": content["rid"], **reply})
-        basis = self._result_settings()
+        basis = self._data.result_settings()
         reloaded = content.get("type") == "query_reload" and "error" not in reply
         if basis != self._result_basis or reloaded:
             self._result_basis = basis
-            self._notify_change()
+            self._change_callbacks(self)
