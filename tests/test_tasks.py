@@ -141,7 +141,7 @@ def _operations_told(tmp_path, mappers, same):
     told = []
 
     class Told(FileSystemOperations):
-        def copy(self, source_fs, source, target_fs, target, progress, *, same=None):
+        def copy(self, source_fs, source, target_fs, target, progress, *, same):
             told.append(same)
             raise self.NotSupported
 

@@ -27,7 +27,6 @@ from jupyter_storage_explorer.filesystems._common import (
 from jupyter_storage_explorer.filesystems.operation import (
     FileSystemOperations,
     OperationCancelled,
-    within_one_filesystem,
 )
 
 if TYPE_CHECKING:
@@ -81,9 +80,8 @@ class FsspecOperations(FileSystemOperations):
         target: str,
         progress: Progress,
         *,
-        same: bool | None = None,
+        same: bool,
     ) -> None:
-        same = within_one_filesystem(source_fs, target_fs, same)
 
         def move_file(path: str, dest: str) -> None:
             if same:
@@ -113,9 +111,8 @@ class FsspecOperations(FileSystemOperations):
         target: str,
         progress: Progress,
         *,
-        same: bool | None = None,
+        same: bool,
     ) -> None:
-        same = within_one_filesystem(source_fs, target_fs, same)
 
         def copy_file(path: str, dest: str) -> None:
             if same:
@@ -211,11 +208,9 @@ class AtomicMoveOperation(FileSystemOperations):
         target: str,
         progress: Progress,
         *,
-        same: bool | None = None,
+        same: bool,
     ) -> None:
-        if not within_one_filesystem(source_fs, target_fs, same) or not self._renames(
-            source_fs
-        ):
+        if not same or not self._renames(source_fs):
             raise self.NotSupported
         progress.working_on(_paths.basename(source))
         source_fs.mv(source, target, recursive=source_fs.isdir(source))
@@ -292,10 +287,9 @@ class AsyncFsspecOperations(FileSystemOperations):
         target: str,
         progress: Progress,
         *,
-        same: bool | None = None,
+        same: bool,
     ) -> None:
         loop = _common_loop(source_fs, target_fs)
-        same = within_one_filesystem(source_fs, target_fs, same)
 
         async def move_file(path: str, dest: str) -> None:
             if same:
@@ -328,10 +322,9 @@ class AsyncFsspecOperations(FileSystemOperations):
         target: str,
         progress: Progress,
         *,
-        same: bool | None = None,
+        same: bool,
     ) -> None:
         loop = _common_loop(source_fs, target_fs)
-        same = within_one_filesystem(source_fs, target_fs, same)
 
         async def copy_file(path: str, dest: str) -> None:
             if same:
