@@ -1,7 +1,7 @@
 """What the scripts share: a JupyterLab server of their own, and a browser on it.
 
 The server runs in a temporary folder, with its own JupyterLab settings,
-workspaces and Jupyter config folder, so every run starts from the same state
+workspaces, and Jupyter config and data folders, so every run starts from the same state
 (default light theme, no news prompt) and leaves the user's untouched. That
 folder holds the demo data (``demo_data.write``) and the notebooks the scripts
 write; kernels get ``demo_data`` on their path. Its config folder has a
@@ -94,6 +94,8 @@ class Lab:
             "JUPYTERLAB_SETTINGS_DIR": str(settings),
             "JUPYTERLAB_WORKSPACES_DIR": str(self.folder / "workspaces"),
             "JUPYTER_CONFIG_DIR": str(config),
+            # Notebook signatures (trust) and runtime files: not the user's.
+            "JUPYTER_DATA_DIR": str(self.folder / "data"),
             "PYTHONPATH": os.pathsep.join(filter(None, [str(SCRIPTS), os.environ.get("PYTHONPATH")])),
             demo_data.DATA_ENV: str(self.root),
         }  # fmt: skip

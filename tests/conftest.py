@@ -16,6 +16,16 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 
+@pytest.fixture(autouse=True)
+def jupyter_data_dir(tmp_path_factory, monkeypatch):
+    """A Jupyter data folder of each test's own: notebooks saved through
+    "Open in JupyterLab" record their signatures in nbformat's notary
+    database there, never in the user's."""
+    folder = tmp_path_factory.mktemp("jupyter-data")
+    monkeypatch.setenv("JUPYTER_DATA_DIR", str(folder))
+    return folder
+
+
 @pytest.fixture
 def memfs() -> MemoryFileSystem:
     """An empty in-memory filesystem (fsspec keeps one store per process, so it is cleared)."""

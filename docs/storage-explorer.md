@@ -93,7 +93,9 @@ Type in the field above the list to show names containing the text, or matching 
 
 Double-click a file, or right-click → **Open in JupyterLab**, to open it in JupyterLab's own editor or viewer, as in its
 file browser; **Save** writes it back to the storage. Files JupyterLab cannot show (Parquet, Excel, …) open in the
-[preview](#preview). Needs the [launcher](../launcher/README.md) package; up to 20 MB per file.
+[preview](#preview). Needs the [launcher](../launcher/README.md) package; up to 20 MB per file. Notebooks open untrusted,
+as JupyterLab opens notebooks from elsewhere: trust one (**Trust Notebook**) and save it, and it is trusted when you open
+it again.
 
 ### Preview
 

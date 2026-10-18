@@ -85,7 +85,9 @@ explorer of exactly its own version (`launcher/hatch_build.py` sets its dependen
   - `files.ts`, "Open in JupyterLab": a JupyterLab drive (`StorageExplorer:<storage>/<path>`, not shown in the file
     browser) serving only the files explorers opened on the page, read and saved through the explorer's kernel
     (`"jupyterlab_get"`, `"jupyterlab_save"`; contents models in `_explorer/jupyterlab_files.py`, whose hash lets
-    JupyterLab detect changes made elsewhere before saving). Anything else (typed paths, new files, renames) is refused.
+    JupyterLab detect changes made elsewhere before saving; notebooks' cells are trusted as jupyter_server trusts them,
+    with nbformat's notary in the kernel: untrusted unless signed, signed when saved trusted; tests get their own
+    `JUPYTER_DATA_DIR`). Anything else (typed paths, new files, renames) is refused.
   - `queryTabs.ts`, "Query data in new tab": the kernel opens a `DataExplorer` of the same query
     (`DataExplorer._of_query`, settings remembered by URL as the preview's) and keeps it in `_query_tabs` until the
     tab closes (`"query_tab"`, `"query_tab_closed"`); the tab renders it with the output renderers of the notebook or
