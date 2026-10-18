@@ -13,7 +13,6 @@ from fsspec.asyn import AsyncFileSystem, sync
 from fsspec.implementations.dirfs import DirFileSystem
 
 from jupyter_storage_explorer import _paths
-from jupyter_storage_explorer.fs_mappers.chain import same_filesystem
 from jupyter_storage_explorer.fs_operations._common import (
     measure_by_folder,
     measure_file,
@@ -24,6 +23,7 @@ from jupyter_storage_explorer.fs_operations._common import (
 from jupyter_storage_explorer.fs_operations.base import (
     FileSystemOperations,
     OperationCancelled,
+    within_one_filesystem,
 )
 
 if TYPE_CHECKING:
@@ -97,9 +97,11 @@ class AsyncFsspecOperations(FileSystemOperations):
         target_fs: AbstractFileSystem,
         target: str,
         progress: Progress,
+        *,
+        same: bool | None = None,
     ) -> None:
         loop = _common_loop(source_fs, target_fs)
-        same = same_filesystem(source_fs, target_fs)
+        same = within_one_filesystem(source_fs, target_fs, same)
 
         async def move_file(path: str, dest: str) -> None:
             if same:
@@ -131,9 +133,11 @@ class AsyncFsspecOperations(FileSystemOperations):
         target_fs: AbstractFileSystem,
         target: str,
         progress: Progress,
+        *,
+        same: bool | None = None,
     ) -> None:
         loop = _common_loop(source_fs, target_fs)
-        same = same_filesystem(source_fs, target_fs)
+        same = within_one_filesystem(source_fs, target_fs, same)
 
         async def copy_file(path: str, dest: str) -> None:
             if same:

@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, Any
 from fsspec.implementations.dirfs import DirFileSystem
 
 from jupyter_storage_explorer import _paths
-from jupyter_storage_explorer.fs_mappers.chain import same_filesystem
 from jupyter_storage_explorer.fs_operations._common import (
     measure_by_folder,
     measure_file,
@@ -17,6 +16,7 @@ from jupyter_storage_explorer.fs_operations._common import (
 )
 from jupyter_storage_explorer.fs_operations.base import (
     FileSystemOperations,
+    within_one_filesystem,
 )
 
 if TYPE_CHECKING:
@@ -69,8 +69,10 @@ class FsspecOperations(FileSystemOperations):
         target_fs: AbstractFileSystem,
         target: str,
         progress: Progress,
+        *,
+        same: bool | None = None,
     ) -> None:
-        same = same_filesystem(source_fs, target_fs)
+        same = within_one_filesystem(source_fs, target_fs, same)
 
         def move_file(path: str, dest: str) -> None:
             if same:
@@ -99,8 +101,10 @@ class FsspecOperations(FileSystemOperations):
         target_fs: AbstractFileSystem,
         target: str,
         progress: Progress,
+        *,
+        same: bool | None = None,
     ) -> None:
-        same = same_filesystem(source_fs, target_fs)
+        same = within_one_filesystem(source_fs, target_fs, same)
 
         def copy_file(path: str, dest: str) -> None:
             if same:
@@ -195,8 +199,12 @@ class AtomicMoveOperation(FileSystemOperations):
         target_fs: AbstractFileSystem,
         target: str,
         progress: Progress,
+        *,
+        same: bool | None = None,
     ) -> None:
-        if not same_filesystem(source_fs, target_fs) or not self._renames(source_fs):
+        if not within_one_filesystem(source_fs, target_fs, same) or not self._renames(
+            source_fs
+        ):
             raise self.NotSupported
         progress.working_on(_paths.basename(source))
         source_fs.mv(source, target, recursive=source_fs.isdir(source))

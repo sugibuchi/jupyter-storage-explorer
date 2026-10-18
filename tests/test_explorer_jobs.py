@@ -41,10 +41,10 @@ class Watch(FileSystemOperations):
     def delete(self, fs, path, progress):
         self._look()
 
-    def copy(self, source_fs, source, target_fs, target, progress):
+    def copy(self, source_fs, source, target_fs, target, progress, *, same=None):
         self._look()
 
-    def move(self, source_fs, source, target_fs, target, progress):
+    def move(self, source_fs, source, target_fs, target, progress, *, same=None):
         self._look()
 
 
@@ -205,7 +205,7 @@ class TestJobs:
         """Cancelled after the first file: that one is pasted, the job says so."""
 
         class CancelAfterOne(FileSystemOperations):
-            def copy(self, fs, source, target_fs, target, progress):
+            def copy(self, fs, source, target_fs, target, progress, *, same=None):
                 fs.cp_file(source, target)
                 progress.cancel()
 
@@ -239,7 +239,7 @@ class TestJobs:
         """Cancelled while copying a folder: it is named as left incomplete."""
 
         class CancelInside(FileSystemOperations):
-            def copy(self, fs, source, target_fs, target, progress):
+            def copy(self, fs, source, target_fs, target, progress, *, same=None):
                 fs.makedirs(target, exist_ok=True)
                 progress.cancel()
                 progress.check()  # between two files of the folder

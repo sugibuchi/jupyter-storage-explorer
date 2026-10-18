@@ -248,7 +248,7 @@ class FileTasks:
                 if target in existing:
                     # Renaming onto an existing file fails on some systems.
                     ops.delete(fs, target, progress)
-                ops.move(fs, source, fs, target, progress)
+                ops.move(fs, source, fs, target, progress, same=True)
                 task.record(
                     moved=(source, target),
                     changed=[_paths.parent(source, fs)],
@@ -320,7 +320,7 @@ class FileTasks:
             failed: list[str] = []
 
             def rename(item: tuple[str, str, bool]) -> None:
-                ops.move(fs, path, fs, target, progress)
+                ops.move(fs, path, fs, target, progress, same=True)
                 task.record(moved=(path, target), changed=[parent], added_to=parent)
 
             size = self.measure(fs, path) if is_dir else (1, 0)
@@ -478,14 +478,16 @@ class FileTasks:
                 if plan.target in existing and if_exists == "skip":
                     skipped.append(_paths.basename(plan.target))
                     return
+                # As the explorer's mappers tell, for the operations to know.
+                same = self.same_filesystem(plan.fs, fs)
                 if kind != "move":
-                    ops.copy(plan.fs, plan.source, fs, plan.target, progress)
+                    ops.copy(plan.fs, plan.source, fs, plan.target, progress, same=same)
                 else:
                     if plan.target in existing:
                         # Renaming onto an existing file fails on some systems.
                         ops.delete(fs, plan.target, progress)
-                    ops.move(plan.fs, plan.source, fs, plan.target, progress)
-                    if self.same_filesystem(plan.fs, fs):
+                    ops.move(plan.fs, plan.source, fs, plan.target, progress, same=same)
+                    if same:
                         task.record(
                             moved=(plan.source, plan.target),
                             changed=[_paths.parent(plan.source, fs)],

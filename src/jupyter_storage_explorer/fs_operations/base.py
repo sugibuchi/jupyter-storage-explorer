@@ -30,6 +30,7 @@ from typing import TYPE_CHECKING, Any
 from fsspec.callbacks import Callback
 
 from jupyter_storage_explorer import _infos
+from jupyter_storage_explorer.fs_mappers.chain import same_filesystem
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -318,7 +319,9 @@ class FileSystemOperations:
     needs one. Local paths (``local_path``) are paths on the kernel's machine.
 
     ``move`` and ``copy`` are given two filesystems, which may be the same
-    one (``same_filesystem`` tells): e.g. a file pasted from another storage.
+    one: e.g. a file pasted from another storage. The explorer tells which
+    with ``same``, as its filesystem mappers decide (see
+    ``within_one_filesystem``).
 
     Targets do not exist (an existing file is deleted first when
     overwriting), and their parent folders do.
@@ -379,11 +382,13 @@ class FileSystemOperations:
         target_fs: AbstractFileSystem,
         target: str,
         progress: Progress,
+        *,
+        same: bool | None = None,
     ) -> None:
         """Move a file or folder (with everything in it), within a filesystem
         or to another one.
 
-        Between filesystems (see ``same_filesystem``), a move is a copy then a
+        Between filesystems (see ``within_one_filesystem``), a move is a copy then a
         delete: a file that fails or is cancelled must not be left partly
         written at ``target``, nor deleted from ``source`` before its copy is
         complete.
@@ -404,6 +409,10 @@ class FileSystemOperations:
             filesystem, where a move is often a rename) and check for a
             cancel (``progress.check()``, between steps).
 
+        same : bool, optional
+            Whether ``source_fs`` and ``target_fs`` are one filesystem, as
+            the explorer's filesystem mappers tell; None (a call outside an
+            explorer) for the default mappers' answer.
         Raises
         ------
         FileSystemOperations.NotSupported
@@ -420,11 +429,13 @@ class FileSystemOperations:
         target_fs: AbstractFileSystem,
         target: str,
         progress: Progress,
+        *,
+        same: bool | None = None,
     ) -> None:
         """Copy a file or folder (with everything in it), within a filesystem
         or to another one.
 
-        Between filesystems (see ``same_filesystem``), a file that fails or is
+        Between filesystems (see ``within_one_filesystem``), a file that fails or is
         cancelled must not be left partly written at ``target`` (e.g. copy
         through a temporary file).
 
@@ -447,6 +458,10 @@ class FileSystemOperations:
             ``callback()`` for transfers) and check for a cancel
             (``progress.check()``, e.g. between files).
 
+        same : bool, optional
+            Whether ``source_fs`` and ``target_fs`` are one filesystem, as
+            the explorer's filesystem mappers tell; None (a call outside an
+            explorer) for the default mappers' answer.
         Raises
         ------
         FileSystemOperations.NotSupported
@@ -666,3 +681,26 @@ class OperationChain:
             )
 
         return call
+
+
+def within_one_filesystem(
+    source_fs: AbstractFileSystem, target_fs: AbstractFileSystem, same: bool | None
+) -> bool:
+    """Whether a move or copy from ``source_fs`` to ``target_fs`` stays within
+    one filesystem: ``same`` as ``move`` and ``copy`` are given it, else (None)
+    as the default filesystem mappers tell (``same_filesystem``).
+
+    Parameters
+    ----------
+    source_fs, target_fs : AbstractFileSystem
+        The filesystems of the source and the target.
+    same : bool or None
+        The ``same`` argument of ``move`` or ``copy``.
+
+    Returns
+    -------
+    bool
+        True if the source's paths are the target's: ``source_fs`` can move
+        or copy within itself (e.g. on the server) to the target.
+    """
+    return same_filesystem(source_fs, target_fs) if same is None else same

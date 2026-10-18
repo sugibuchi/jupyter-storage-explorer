@@ -12,9 +12,9 @@ from azure.storage.filedatalake.aio import DataLakeServiceClient
 from fsspec.asyn import sync
 
 from jupyter_storage_explorer import _paths
-from jupyter_storage_explorer.fs_mappers.chain import same_filesystem
 from jupyter_storage_explorer.fs_operations.base import (
     FileSystemOperations,
+    within_one_filesystem,
 )
 
 if TYPE_CHECKING:
@@ -64,8 +64,10 @@ class AzureDataLakeGen2Operation(FileSystemOperations):
         target_fs: AbstractFileSystem,
         target: str,
         progress: Progress,
+        *,
+        same: bool | None = None,
     ) -> None:
-        if not same_filesystem(source_fs, target_fs):
+        if not within_one_filesystem(source_fs, target_fs, same):
             raise self.NotSupported
         fs = self._gen2(source_fs)
         container, key = _split(source)

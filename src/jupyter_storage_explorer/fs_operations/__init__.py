@@ -18,6 +18,7 @@ from jupyter_storage_explorer.fs_operations.base import (
     OperationCancelled,
     OperationChain,
     Progress,
+    within_one_filesystem,
 )
 from jupyter_storage_explorer.fs_operations.fsspec import (
     AtomicMoveOperation,
@@ -34,4 +35,5 @@ __all__ = [
     "OperationChain",
     "Progress",
     "same_filesystem",
+    "within_one_filesystem",
 ]

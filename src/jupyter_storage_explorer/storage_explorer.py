@@ -154,7 +154,7 @@ class StorageExplorer(
         URL", ``folder_url``, "Python code", previews, the transfer policy)
         and what it reaches (its identifier), by which files copied or
         dragged from another kernel are found and two filesystems are told
-        apart. File operations compare filesystems with the default mappers.
+        apart, also for the file operations (their ``same`` argument).
     transfer_policy : list of dict, optional
         Rules for the directions files may be transferred in, each
         ``{"rule": "allow" or "deny", "src": regex, "dest": regex}``.

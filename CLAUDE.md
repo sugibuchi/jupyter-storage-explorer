@@ -138,7 +138,8 @@ and `locate`, for files pasted from another kernel: the first of the explorer's 
 identifier and parses the URL, else `url_to_fs(url)` if it has the same identifier, else refused (so another
 kernel's memory or another machine's disk is never read). `DirFileSystem`s are not mapped: the chain unwraps them, so
 their URLs are those of the filesystem they wrap, and `same_filesystem` also compares their folders. File operations
-(`fs_operations/`) use the module-level `same_filesystem`, of the default mappers.
+are told by `FileTasks` with `move`'s and `copy`'s keyword `same` (the explorer's chain); called without it (None),
+`within_one_filesystem` asks the default mappers (the module-level `same_filesystem`).
 
 **File operations.** `StorageExplorer` ends with a *File operations* block: the only methods that call fsspec on the
 filesystem shown (`self._fs`) for listing, reading and writing (`_ls`, `_info`, `_exists`, `_isdir`, `_read_bytes`,
@@ -154,7 +155,7 @@ file by file (helpers in `fs_operations/_common.py`). Opt-in, not a default: `Az
 the "abfs" extra), which moves (renames) and creates folders on accounts with a hierarchical namespace with the async
 Data Lake SDK, connected from the adlfs filesystem's settings and run on its loop with `fsspec.asyn.sync`; tested with
 a fake client (`tests/test_abfs.py`); `fs_operations/__init__.py` does not import it. `move` and `copy` take a source
-and a target filesystem, the same one or not (`same_filesystem`, see Storage).
+and a target filesystem, the same one or not (keyword `same`, see Storage).
 Between filesystems, single files go through `FileSystemOperations._copy_file` and `_move_file`
 (`_copy_file_async`/`_move_file_async` in the async class), overridable: by default through a temporary file, so a
 failure leaves no partial file, and a move copies then deletes each file, so a cancel leaves each file in one place.
