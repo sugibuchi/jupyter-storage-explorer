@@ -17,3 +17,10 @@ def filesystems():
 def formats():
     return demo_data.formats()
 EOF
+
+# No prompt about Jupyter news over the demo.
+settings="${NB_PYTHON_PREFIX:-$(python -c 'import sys; print(sys.prefix)')}/share/jupyter/lab/settings"
+mkdir -p "$settings"
+cat > "$settings/overrides.json" <<'EOF'
+{"@jupyterlab/apputils-extension:notification": {"fetchNews": "false", "checkForUpdates": false}}
+EOF

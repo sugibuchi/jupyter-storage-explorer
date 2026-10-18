@@ -4,6 +4,7 @@
 
 [![PyPI - Version](https://img.shields.io/pypi/v/jupyter-storage-explorer?color=blue)](https://pypi.org/project/jupyter-storage-explorer/)
 [![codecov](https://codecov.io/gh/sugibuchi/jupyter-storage-explorer/graph/badge.svg?token=TFA12UL1IQ)](https://codecov.io/gh/sugibuchi/jupyter-storage-explorer)
+[![Try it on Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/sugibuchi/jupyter-storage-explorer/main?urlpath=lab/tree/binder/demo.ipynb)
 
 **`StorageExplorer`** is a file explorer for cloud storage and data lakes, right inside your Jupyter notebook, in the
 spirit of Azure Storage Explorer.
@@ -50,6 +51,10 @@ Previewing and querying data files needs a data library, e.g. `pip install polar
 which.
 
 ## Quick start
+
+**Try it without installing anything**: [open the demo on Binder](https://mybinder.org/v2/gh/sugibuchi/jupyter-storage-explorer/main?urlpath=lab/tree/binder/demo.ipynb), a made-up data lake in a notebook and in
+the launcher's tab (it may take a minute to start).
+
 
 ### From the JupyterLab launcher
 
