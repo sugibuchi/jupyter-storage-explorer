@@ -22,6 +22,7 @@ notebook, so one failure does not fail the rest.
 
 from __future__ import annotations
 
+import json
 import pathlib
 import re
 import sys
@@ -549,6 +550,66 @@ def open_in_jupyterlab(x: Explorer) -> None:
     x.back_to_notebook()
     expect(x.preview).to_contain_text("# edited")
     x.preview.press("Escape")
+
+
+# A notebook whose cell claims to be trusted, with outputs that run script
+# when rendered as trusted: written by anyone with access to a storage.
+UNTRUSTED_NOTEBOOK = {
+    "nbformat": 4,
+    "nbformat_minor": 5,
+    "metadata": {
+        "kernelspec": {
+            "name": "python3",
+            "display_name": "Python 3",
+            "language": "python",
+        }
+    },
+    "cells": [
+        {
+            "cell_type": "code",
+            "execution_count": 1,
+            "id": "c1",
+            "metadata": {"trusted": True},
+            "source": "1",
+            "outputs": [
+                {
+                    "output_type": "display_data",
+                    "metadata": {},
+                    "data": {
+                        "text/html": '<img src="x" onerror="window.__jse_ran = true">',
+                        "application/javascript": "window.__jse_ran = true;",
+                        "text/plain": "output",
+                    },
+                }
+            ],
+        }
+    ],
+}
+
+
+@check
+def notebook_opened_untrusted(x: Explorer) -> None:
+    # A notebook from a storage, opened in JupyterLab: its outputs never run
+    # script by themselves, whatever its cells claim.
+    x.top("Scratch")
+    x.el.locator(".jse-list").evaluate(
+        """(list, text) => {
+          const data = new DataTransfer();
+          data.items.add(new File([text], "untrusted.ipynb", { type: "application/json" }));
+          for (const type of ["dragenter", "dragover", "drop"]) {
+            list.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: data }));
+          }
+        }""",
+        json.dumps(UNTRUSTED_NOTEBOOK),
+    )
+    x.button("Upload").click()
+    x.row("untrusted.ipynb").dblclick()
+    expect(
+        x.page.locator(".jp-NotebookPanel .jp-OutputArea-output").first
+    ).to_be_visible()
+    x.page.wait_for_timeout(1500)
+    assert x.page.evaluate("window.__jse_ran") is None, "the notebook's outputs ran"
+    x.back_to_notebook()
 
 
 @check
