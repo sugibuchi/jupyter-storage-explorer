@@ -213,11 +213,13 @@ from it, both downloads to the server) pass filesystem None to `check` for that 
 security boundary.
 
 **Between explorers and with JupyterLab.** Drags of items from the list carry one type,
-`application/x-jupyter-storage-explorer-items`, its value their JSON (the clipboard's items, and `unsafe`), readable
-on the drop only (from any page): a drop on the same explorer moves them, on another copies them as Paste does.
+`application/x-jupyter-storage-explorer-items`, its value a random id of the drag and nothing else; the drag itself
+is kept in the page, and a drop is taken only if it carries that id, so drags from other pages (tabs, windows, sites)
+can never name files: a drop on the same explorer moves them, on another of the page copies them as Paste does.
 Objects are shared page-wide under `Symbol.for(...)` keys on `globalThis`: `"jupyter-storage-explorer.clipboard"`
-(Copy or Cut, for Paste in any explorer), `"jupyter-storage-explorer.drag-source"` (the id of the explorer a drag of
-items started in, while it runs: targets tell their own drags from others' before the drop by it) and
+(Copy or Cut, for Paste in any explorer), `"jupyter-storage-explorer.drag"` (the drag of items running, `{id,
+explorer, unsafe, items}`, the items as the clipboard's: set as it starts, cleared as it ends; targets tell their own
+drags from others' before the drop by `explorer`) and
 `"jupyter-storage-explorer.explorers"` (the explorers on the page by id, with the `download` the launcher's
 `download.ts` calls on a drop onto JupyterLab's file browser); the launcher's `files.ts` and `queryTabs.ts` put their
 functions (`canOpen`, `open`,

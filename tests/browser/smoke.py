@@ -488,6 +488,53 @@ def download_folder_by_drag(x: Explorer) -> None:
 
 
 @check
+def drag_from_another_page_refused(x: Explorer) -> None:
+    # A drop of our type from another page (tab, window, site), whatever it
+    # carries: never taken, as only this page's drag (by its id) is.
+    x.top("Scratch")
+    crafted = json.dumps(
+        {
+            "explorer": "elsewhere",
+            "filesystem": {
+                "name": "Sales lake",
+                "protocol": "memory",
+                "identifier": {},
+            },
+            "folders": True,
+            "unsafe": True,
+            "files": [
+                {
+                    "path": "/sales-lake/catalog.json",
+                    "url": "memory:///sales-lake/catalog.json",
+                    "name": "catalog.json",
+                }
+            ],
+        }
+    )
+    drop = """(list, [value, pageDrag]) => {
+      const key = Symbol.for("jupyter-storage-explorer.drag");
+      globalThis[key] = pageDrag;
+      const data = new DataTransfer();
+      data.setData("application/x-jupyter-storage-explorer-items", value);
+      for (const type of ["dragenter", "dragover", "drop"]) {
+        list.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: data }));
+      }
+      globalThis[key] = null;
+    }"""
+    lst = x.el.locator(".jse-list")
+    # No drag on this page: not even taken.
+    lst.evaluate(drop, [crafted, None])
+    # This page has a drag, but the drop carries another id.
+    page_drag = {"id": "this-page", "explorer": "x", "unsafe": False, "items": {}}
+    lst.evaluate(drop, ["another-page", page_drag])
+    expect(x.status).to_contain_text(
+        "Drag files between explorers of one JupyterLab page"
+    )
+    expect(x.el.locator(".jse-confirm:visible")).to_have_count(0)
+    expect(x.row("catalog.json")).to_have_count(0)
+
+
+@check
 def upload_from_computer(x: Explorer) -> None:
     # A native drop of a file, as from the computer's file manager.
     x.top("Scratch")
