@@ -69,8 +69,8 @@ function createJobs(x) {
       el.hidden = false;
     }
     const { title, detail, cancel: cancelBtn, bar, fill } = entry.parts;
-    title.textContent = title.title = job.title;
-    detail.textContent = detail.title = jobDetail(job);
+    title.textContent = title.title = visible(job.title);
+    detail.textContent = detail.title = visible(jobDetail(job));
     cancelBtn.disabled = cancelBtn.disabled || job.cancelling;
     // By bytes when known, else by files; unknown yet: an indeterminate bar.
     const fraction = job.bytes_total ? job.bytes_done / job.bytes_total : job.files_total ? job.files_done / job.files_total : null;

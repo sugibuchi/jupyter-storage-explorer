@@ -419,6 +419,40 @@ class TestAsyncFsspecOperations:
         assert tree.cat_file("/src/copy/c.txt") == b"c"
 
 
+class TestFolderPathsLeavingTheFolder:
+    """Object stores keep keys with ".." parts as they are: a folder holding
+    one is not copied or moved to a filesystem that would resolve them."""
+
+    @pytest.fixture(params=["sync", "async"])
+    def ops_and_source(self, request, memfs):
+        memfs.pipe_file("/lake/shared/ok.txt", b"ok")
+        return request.param, memfs
+
+    @pytest.mark.parametrize(
+        "key",
+        ["/lake/shared/../../escaped.txt", "/lake/shared/sub/..\\..\\..\\escaped.txt"],
+    )
+    @pytest.mark.parametrize("move", [False, True])
+    def test_refused_before_anything_is_written(
+        self, ops_and_source, key, move, tmp_path
+    ):
+        kind, memfs = ops_and_source
+        memfs.store[key] = memfs.store["/lake/shared/ok.txt"]
+        if kind == "sync":
+            ops, source = FsspecOperations(), memfs
+            local = fsspec.filesystem("file")
+        else:
+            ops, source = AsyncFsspecOperations(), AsyncFileSystemWrapper(memfs)
+            local = AsyncFileSystemWrapper(fsspec.filesystem("file"))
+        target = (tmp_path / "inside" / "copy").as_posix()
+        (tmp_path / "inside").mkdir()
+        action = ops.move if move else ops.copy
+        with pytest.raises(ValueError, match="leads outside the folder"):
+            action(source, "/lake/shared", local, target, Progress(), same=False)
+        assert [p.name for p in tmp_path.rglob("*")] == ["inside"]  # nothing written
+        assert memfs.exists("/lake/shared/ok.txt")  # nothing moved
+
+
 class TestAtomicMoveOperation:
     ops = AtomicMoveOperation()
 

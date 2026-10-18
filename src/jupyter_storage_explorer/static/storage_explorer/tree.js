@@ -73,7 +73,7 @@ function createTree(x) {
         { className: "jse-node" + (dir.path === current ? " jse-active" : ""), title: dir.path },
         twisty,
         h("span", { className: "jse-icon" }, fileIcon(dir.name, true)),
-        h("span", { className: "jse-label", textContent: dir.name }),
+        h("span", { className: "jse-label", textContent: visible(dir.name) }),
       );
       row.style.paddingLeft = `${depth * 14 + 4}px`;
       row.dataset.dropDir = dir.path; // files dropped here are uploaded into this folder

@@ -122,7 +122,8 @@ downloads), `jupyterlab.js`, `properties.js`, `toolbar.js` with unsafe mode and 
 (busy screen, modal, menus), `sections.js` (preview sections), `util.js`): a `createX(x)` returning its elements and
 functions. `x` is the explorer, made in `render()`: what the features share (`model`, `el`, `request`, `ask`,
 `flash`, `navigate`, ...) and the features themselves (`x.list`, `x.preview`, ...), used when needed, not when made,
-so their order rarely matters. Third-party code is vendored in `static/vendor/`. The anywidget `model` only supports
+so their order rarely matters. Third-party code is vendored in `static/vendor/`. File names, paths and messages naming files are shown through
+`visible()` (`common.js`: control, bidi and invisible characters as `\uXXXX`), never as they are. The anywidget `model` only supports
 `get`/`set`/`save_changes`/`on`/`off`/`send`; Backbone methods like `previous()` throw inside `set` and silently break
 sync.
 
@@ -155,7 +156,8 @@ library's `NotImplementedError` is reported as an error). `operations=` are trie
 filesystem whose `mv` renames a folder in one step: local, memory, or a `DirFileSystem` over them), then
 `AsyncFsspecOperations` (async filesystems such as s3fs, their coroutines, many files at a time), then
 `FsspecOperations`. Both of the latter walk folders themselves, moves included, to report progress
-file by file (helpers in `filesystems/_common.py`). Opt-in, not a default: `AzureDataLakeGen2Operation` (`abfs.py`,
+file by file (helpers in `filesystems/_common.py`). `prepare_folder_copy` refuses a folder whose files' paths in it have `.` or `..` parts (object stores keep
+such keys; written to a local disk they would leave the target folder), before writing anything. Opt-in, not a default: `AzureDataLakeGen2Operation` (`abfs.py`,
 the "abfs" extra), which moves (renames) and creates folders on accounts with a hierarchical namespace with the async
 Data Lake SDK, and copies within an account on the server (Copy Blob, `start_copy_from_url`, with a Blob client made from
 the Data Lake client's `url` and `credential`, polled until it ends; a folder's files at once, in a `TaskGroup`, at most `concurrency` at a time;

@@ -16,7 +16,7 @@ function createToolbar(x) {
     chain.forEach((path, i) => {
       if (i > 0) crumbs.append(h("span", { className: "jse-sep", textContent: "/" }));
       const name = i === 0 ? rootLabel(path) : basename(path);
-      const crumb = h("span", { className: "jse-crumb", textContent: name, title: path });
+      const crumb = h("span", { className: "jse-crumb", textContent: visible(name), title: visible(path) });
       crumb.addEventListener("click", () => x.navigate(path));
       crumbs.append(crumb);
     });

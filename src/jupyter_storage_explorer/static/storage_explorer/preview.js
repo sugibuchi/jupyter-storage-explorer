@@ -39,7 +39,7 @@ function createPreview(x) {
     }
     const opening = el.hidden || head.dataset.path !== preview.path;
     head.dataset.path = preview.path;
-    head.replaceChildren(h("span", { className: "jse-preview-name", textContent: preview.path, title: preview.path }));
+    head.replaceChildren(h("span", { className: "jse-preview-name", textContent: visible(preview.path), title: visible(preview.path) }));
     if (preview.format) head.append(h("span", { className: "jse-badge", textContent: x.formatLabel(preview.format) }));
     // The data browser, in a tab of its own (with the launcher's extension).
     if (preview.query && x.jupyterlab.canOpenQueryTab()) {

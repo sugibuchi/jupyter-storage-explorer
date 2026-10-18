@@ -32,6 +32,7 @@ const hasUrl = (item) => !item.no_url;
 
 // "a.csv", "a.csv and b.csv", or "3 files: a.csv, b.csv, c.csv" (long lists shortened).
 function describeFiles(names) {
+  names = names.map(visible);
   if (names.length === 1) return names[0];
   if (names.length === 2) return `${names[0]} and ${names[1]}`;
   const shown = names.slice(0, 8).join(", ");
@@ -40,4 +41,4 @@ function describeFiles(names) {
 
 // A confirmation's lines: a question and a note under it, e.g. "Move
 // a.csv?" and "To /data".
-const question = (text, note) => [h("div", { textContent: text }), h("div", { className: "jse-note", textContent: note })];
+const question = (text, note) => [h("div", { textContent: visible(text) }), h("div", { className: "jse-note", textContent: visible(note) })];
