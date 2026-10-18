@@ -134,6 +134,10 @@ widget in JupyterLab's main area, in a notebook or a tab of its own, with room f
   in the data browser (`query_result()`). `DataExplorer` brings the same data browser to any dataframe, and gives the
   rows you filtered back to your code (`result()`). See
   [Working with the explorer from Python](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#working-with-the-explorer-from-python).
+- **At home in JupyterLab**: drag files from JupyterLab's file browser into an explorer to upload them to a storage,
+  or onto the file browser to download them to the server. Split the main area to put explorers side by side, in
+  notebooks or tabs of their own, and drag files from one storage to another, e.g. from S3 to Azure. Files open in
+  JupyterLab's own editors, and tables in a tab of their own.
 - **Safe by default**: in a data lake, a folder is often a whole table. Folders can't be moved, copied, renamed or
   deleted by a stray drag: that takes
   [Unsafe mode](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#unsafe-operations),
@@ -141,5 +145,4 @@ widget in JupyterLab's main area, in a notebook or a tab of its own, with room f
   [transfer policy](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#transfer-policy).
 - **Runs in your kernel**: with your credentials and your libraries, and no server setup.
 
-It complements JupyterLab's file browser rather than replacing it: open files in JupyterLab's own editors, drag them
-onto its file browser, or query a table in a tab of its own.
+It complements JupyterLab's file browser rather than replacing it.
