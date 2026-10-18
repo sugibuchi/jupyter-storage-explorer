@@ -57,12 +57,26 @@ class FakeService:
             async def create_directory(self, key: str, **kwargs: Any) -> None:
                 calls.append(("create_directory", container, key, kwargs))
 
+            async def get_paths(self, path: str, recursive: bool = True) -> Any:
+                """The folder's items, from ``FakeService.folders``."""
+                calls.append(("get_paths", container, path, recursive))
+                for name, size in FakeService.folders[f"{container}/{path}"]:
+                    yield type(
+                        "PathProperties",
+                        (),
+                        {
+                            "name": f"{path}/{name}",
+                            "is_directory": size is None,
+                            "content_length": size or 0,
+                        },
+                    )()
+
         return FileSystem()
 
 
 @pytest.fixture
 def service(monkeypatch):
-    FakeService.made, FakeService.calls = [], []
+    FakeService.made, FakeService.calls, FakeService.folders = [], [], {}
     monkeypatch.setattr(abfs, "DataLakeServiceClient", FakeService)
     return FakeService
 
@@ -167,20 +181,32 @@ def test_without_a_hierarchical_namespace(service, monkeypatch):
 def test_connected_as_adlfs_is(arguments, url, credential, service):
     kwargs = {} if "connection_string" in arguments else {"account_name": "acc"}
     fs = AzureBlobFileSystem(**kwargs, **arguments)
-    client = AzureDataLakeGen2Operation._service_client(fs)
+    client = AzureDataLakeGen2Operation._datalake_service_client(fs)
     assert (client.url, client.credential) == (url, credential)
 
 
 class FakeBlobs:
-    """The parts of adlfs's async BlobServiceClient that copies use: each
-    blob's copy ends with the statuses given (``pending`` ones polled),
-    "success" by default."""
+    """The parts of the async BlobServiceClient that copies use: each blob's
+    copy ends with the statuses given (``pending`` ones polled), "success"
+    by default. Made in place of BlobServiceClient(url, credential)."""
 
     def __init__(self, statuses: dict[str, list[str]] | None = None) -> None:
         self.statuses = statuses or {}
+        self.connected: list[tuple[str, Any]] = []
+        self.closed = False
         self.descriptions: dict[str, str] = {}
         self.calls: list[tuple[Any, ...]] = []
         self.active = self.most_active = 0
+
+    def __call__(self, url: str, credential: Any = None) -> Self:
+        self.connected.append((url, credential))
+        return self
+
+    async def __aenter__(self) -> Self:
+        return self
+
+    async def __aexit__(self, *exc: object) -> None:
+        self.closed = True
 
     def get_blob_client(self, container: str, key: str) -> Any:
         blobs, name = self, f"{container}/{key}"
@@ -222,28 +248,16 @@ class FakeBlobs:
 
 
 @pytest.fixture
-def blobs(lake, monkeypatch):
+def blobs(monkeypatch):
     fake = FakeBlobs()
-    monkeypatch.setattr(lake, "service_client", fake)
+    monkeypatch.setattr(abfs, "BlobServiceClient", fake)
     return fake
 
 
-def tree(monkeypatch, fs, folders: dict[str, list[tuple[str, int | None]]]) -> None:
-    """``fs`` lists ``folders``: folder -> [(name, size, or None for a folder)]."""
-
-    async def ls(
-        path: str, detail: bool = False, **kwargs: Any
-    ) -> list[dict[str, Any]]:
-        return [
-            {
-                "name": f"{path}/{name}",
-                "type": "directory" if size is None else "file",
-                "size": size,
-            }
-            for name, size in folders[path.strip("/")]
-        ]
-
-    monkeypatch.setattr(fs, "_ls", ls)
+def tree(folders: dict[str, list[tuple[str, int | None]]]) -> None:
+    """The Data Lake client lists ``folders``: "container/folder" -> [(name,
+    size, or None for a folder)]."""
+    FakeService.folders = folders
 
 
 def ops(**kwargs: Any) -> AzureDataLakeGen2Operation:
@@ -262,6 +276,9 @@ class TestCopy:
         assert blobs.calls == [
             ("copy", "https://lake.blob.core.windows.net/data/a.csv", "other/b.csv")
         ]
+        # The Data Lake client's account: its Blob endpoint, and the same key.
+        assert blobs.connected == [("https://lake.blob.core.windows.net", "a2V5")]
+        assert blobs.closed
         assert progress.snapshot()["files_done"] == 1
 
     def test_folder_files_of_each_folder_at_once(
@@ -269,8 +286,6 @@ class TestCopy:
     ):
         is_dir(monkeypatch, lake, True)
         tree(
-            monkeypatch,
-            lake,
             {
                 "data/raw": [
                     ("a", 1),
@@ -302,6 +317,13 @@ class TestCopy:
         # Folders created first, empty ones too.
         created = sorted(c[2] for c in service.calls if c[0] == "create_directory")
         assert created == ["copy", "copy/empty", "copy/sub"]
+        # Each folder listed on its own, with the Data Lake API.
+        listed = sorted(c[1:] for c in service.calls if c[0] == "get_paths")
+        assert listed == [
+            ("data", "raw", False),
+            ("data", "raw/empty", False),
+            ("data", "raw/sub", False),
+        ]
         snapshot = progress.snapshot()
         assert (snapshot["files_done"], snapshot["bytes_done"]) == (4, 10)
 
@@ -342,7 +364,7 @@ class TestCopy:
 
     def test_cancelled_copies_are_deleted(self, lake, service, blobs, monkeypatch):
         is_dir(monkeypatch, lake, True)
-        tree(monkeypatch, lake, {"data/raw": [(n, 1) for n in "abcd"]})
+        tree({"data/raw": [(n, 1) for n in "abcd"]})
         blobs.statuses = {f"data/copy/{n}": ["pending"] for n in "abcd"}
         progress = Progress()
         started = []

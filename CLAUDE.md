@@ -154,8 +154,8 @@ filesystem whose `mv` renames a folder in one step: local, memory, or a `DirFile
 `FsspecOperations`. Both of the latter walk folders themselves, moves included, to report progress
 file by file (helpers in `filesystems/_common.py`). Opt-in, not a default: `AzureDataLakeGen2Operation` (`abfs.py`,
 the "abfs" extra), which moves (renames) and creates folders on accounts with a hierarchical namespace with the async
-Data Lake SDK, and copies within an account on the server (Copy Blob, `start_copy_from_url` on adlfs's async
-`service_client`, polled until it ends; a folder's files at once, in a `TaskGroup`, at most `concurrency` at a time;
+Data Lake SDK, and copies within an account on the server (Copy Blob, `start_copy_from_url`, with a Blob client made from
+the Data Lake client's `url` and `credential`, polled until it ends; a folder's files at once, in a `TaskGroup`, at most `concurrency` at a time;
 a failed or cancelled copy aborted and deleted), connected from the adlfs filesystem's settings and run on its loop with `fsspec.asyn.sync`; tested with
 a fake client (`tests/test_abfs.py`); `filesystems/__init__.py` does not import it. `move` and `copy` take a source
 and a target filesystem, the same one or not (keyword `same`, see Storage).

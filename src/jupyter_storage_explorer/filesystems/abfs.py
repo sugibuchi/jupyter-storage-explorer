@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 
 from adlfs import AzureBlobFileSystem
 from azure.core import MatchConditions
+from azure.storage.blob.aio import BlobServiceClient
 from azure.storage.filedatalake.aio import DataLakeServiceClient
 from fsspec.asyn import sync
 
@@ -20,7 +21,7 @@ from jupyter_storage_explorer.filesystems.operation import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Awaitable, Callable, Iterator
 
     from fsspec import AbstractFileSystem
 
@@ -55,7 +56,7 @@ class AzureDataLakeGen2Operation(FileSystemOperations):
 
     Parameters
     ----------
-    concurrency : int, default 16
+    concurrency : int, default 64
         Most files copied at once.
 
     Needs ``adlfs`` and ``azure-storage-file-datalake``, installed with
@@ -73,7 +74,7 @@ class AzureDataLakeGen2Operation(FileSystemOperations):
     # Seconds between two polls of a copy still pending, growing to the last.
     POLL_INTERVALS = (0.2, 0.5, 1.0, 2.0)
 
-    def __init__(self, concurrency: int = 16) -> None:
+    def __init__(self, concurrency: int = 64) -> None:
         self.concurrency = concurrency
         # Account URL -> whether it has a hierarchical namespace.
         self._hierarchical: dict[str, bool] = {}
@@ -98,14 +99,10 @@ class AzureDataLakeGen2Operation(FileSystemOperations):
             raise self.NotSupported  # containers: adlfs's own
         progress.working_on(_paths.basename(source))
         is_dir = fs.isdir(source)
-        sync(
-            fs.loop,
-            self._rename,
+        new_name = f"{new_container}/{new_key}"
+        self._run_with_datalake_service(
             fs,
-            container,
-            key,
-            f"{new_container}/{new_key}",
-            is_dir,
+            lambda service: self._rename(service, container, key, new_name, is_dir),
         )
         fs.invalidate_cache(source)
         fs.invalidate_cache(target)
@@ -127,7 +124,10 @@ class AzureDataLakeGen2Operation(FileSystemOperations):
             raise self.NotSupported  # containers: adlfs's own
         is_dir = fs.isdir(source)
         try:
-            sync(fs.loop, self._copy, fs, source, target, is_dir, progress)
+            self._run_with_datalake_service(
+                fs,
+                lambda service: self._copy(service, source, target, is_dir, progress),
+            )
         finally:
             fs.invalidate_cache(target)
 
@@ -136,7 +136,9 @@ class AzureDataLakeGen2Operation(FileSystemOperations):
         container, key = _split(path)
         if not key:
             raise self.NotSupported  # a container: adlfs's own
-        sync(fs.loop, self._create_directory, fs, container, key)
+        self._run_with_datalake_service(
+            fs, lambda service: self._create_directory(service, container, key)
+        )
         fs.invalidate_cache(path)
 
     def _gen2(self, fs: AbstractFileSystem) -> AzureBlobFileSystem:
@@ -165,7 +167,7 @@ class AzureDataLakeGen2Operation(FileSystemOperations):
         return bool(info.get("is_hns_enabled"))
 
     @staticmethod
-    def _service_client(fs: AzureBlobFileSystem) -> DataLakeServiceClient:
+    def _datalake_service_client(fs: AzureBlobFileSystem) -> DataLakeServiceClient:
         """A Data Lake client for ``fs``'s account, connected as adlfs connects
         (its ``do_connect``): with its connection string, else its account URL
         (the Data Lake endpoint, "dfs" for "blob") and credential or account
@@ -179,36 +181,50 @@ class AzureDataLakeGen2Operation(FileSystemOperations):
             url = f"{url}?{fs.sas_token.lstrip('?')}"
         return DataLakeServiceClient(url, credential=credential)
 
-    async def _rename(
+    def _run_with_datalake_service(
         self,
         fs: AzureBlobFileSystem,
+        work: Callable[[DataLakeServiceClient], Awaitable[None]],
+    ) -> None:
+        """Run ``work(service)``, the coroutine of an operation, on ``fs``'s
+        event loop (where its clients belong) and wait for it: ``service`` is a
+        Data Lake client of ``fs``'s account (see ``_datalake_service_client``),
+        closed afterwards. Its errors, a cancel included, are raised here."""
+
+        async def with_service() -> None:
+            async with self._datalake_service_client(fs) as service:
+                await work(service)
+
+        sync(fs.loop, with_service)
+
+    @staticmethod
+    async def _rename(
+        service: DataLakeServiceClient,
         container: str,
         key: str,
         new_name: str,
         is_dir: bool,
     ) -> None:
         """Rename ``key`` of ``container`` to ``new_name`` ("container/key")."""
-        async with self._service_client(fs) as service:
-            file_system = service.get_file_system_client(container)
-            if is_dir:
-                await file_system.get_directory_client(key).rename_directory(new_name)
-            else:
-                await file_system.get_file_client(key).rename_file(new_name)
+        file_system = service.get_file_system_client(container)
+        if is_dir:
+            await file_system.get_directory_client(key).rename_directory(new_name)
+        else:
+            await file_system.get_file_client(key).rename_file(new_name)
 
+    @staticmethod
     async def _create_directory(
-        self, fs: AzureBlobFileSystem, container: str, key: str
+        service: DataLakeServiceClient, container: str, key: str
     ) -> None:
         """Create directory ``key`` in ``container`` (and its parents), failing
         if it exists."""
-        async with self._service_client(fs) as service:
-            file_system = service.get_file_system_client(container)
-            await file_system.create_directory(
-                key, match_condition=MatchConditions.IfMissing
-            )
+        await service.get_file_system_client(container).create_directory(
+            key, match_condition=MatchConditions.IfMissing
+        )
 
     async def _copy(
         self,
-        fs: AzureBlobFileSystem,
+        service: DataLakeServiceClient,
         source: str,
         target: str,
         is_dir: bool,
@@ -216,37 +232,41 @@ class AzureDataLakeGen2Operation(FileSystemOperations):
     ) -> None:
         """Copy file or folder ``source`` to ``target`` ("container/key"),
         the files of each folder at once, at most ``concurrency`` copies at a
-        time. The first error, or a cancel, stops the others."""
+        time. The first error, or a cancel, stops the others. Folders are
+        listed and created with ``service``; files are copied with Blob
+        Storage's API (Copy Blob, which Data Lake has no counterpart of), on
+        the same account and credential."""
         copies = asyncio.Semaphore(self.concurrency)
-        if not is_dir:
-            await self._copy_file(
-                fs, source, target, size=None, copies=copies, progress=progress
-            )
-            return
-        async with self._service_client(fs) as service:
+        async with _blob_service_client(service) as blobs:
+            if not is_dir:
+                await self._copy_file(
+                    blobs, source, target, size=None, copies=copies, progress=progress
+                )
+                return
 
             async def folder(src: str, dest: str) -> None:
                 progress.check()
                 container, key = _split(dest)
-                await service.get_file_system_client(container).create_directory(
-                    key, match_condition=MatchConditions.IfMissing
+                await self._create_directory(service, container, key)
+                # The folder's own items (paths within the container), with
+                # the Data Lake API: its subfolders are listed as they are copied.
+                src_container, src_key = _split(src)
+                paths = service.get_file_system_client(src_container).get_paths(
+                    path=src_key, recursive=False
                 )
-                entries = await fs._ls(src, detail=True, invalidate_cache=True)
                 async with asyncio.TaskGroup() as group:
-                    for entry in entries:
-                        if entry["name"].strip("/") == src:
-                            continue  # the folder itself, listed by some accounts
-                        name = _paths.basename(entry["name"])
-                        child = f"{dest}/{name}"
-                        if entry["type"] == "directory":
-                            group.create_task(folder(entry["name"], child))
+                    async for path in paths:
+                        name = _paths.basename(path.name)
+                        item, child = f"{src_container}/{path.name}", f"{dest}/{name}"
+                        if path.is_directory:
+                            group.create_task(folder(item, child))
                         else:
                             group.create_task(
                                 self._copy_file(
-                                    fs,
-                                    entry["name"],
+                                    blobs,
+                                    item,
                                     child,
-                                    size=entry.get("size"),
+                                    size=path.content_length,
                                     copies=copies,
                                     progress=progress,
                                 )
@@ -259,7 +279,7 @@ class AzureDataLakeGen2Operation(FileSystemOperations):
 
     async def _copy_file(
         self,
-        fs: AzureBlobFileSystem,
+        blobs: BlobServiceClient,
         source: str,
         target: str,
         *,
@@ -273,9 +293,9 @@ class AzureDataLakeGen2Operation(FileSystemOperations):
         async with copies:
             progress.check()
             progress.working_on(name)
-            source_blob = fs.service_client.get_blob_client(*_split(source))
-            target_blob = fs.service_client.get_blob_client(*_split(target))
-            # The source's URL carries the filesystem's SAS token, if any.
+            source_blob = blobs.get_blob_client(*_split(source))
+            target_blob = blobs.get_blob_client(*_split(target))
+            # The source's URL carries the account's SAS token, if any.
             copy = await target_blob.start_copy_from_url(source_blob.url)
             status, description = copy.get("copy_status"), None
             try:
@@ -302,6 +322,13 @@ class AzureDataLakeGen2Operation(FileSystemOperations):
                 await _discard(target_blob, copy.get("copy_id") if pending else None)
                 raise
         progress.advance(files=1, bytes=size or 0)
+
+
+def _blob_service_client(service: DataLakeServiceClient) -> BlobServiceClient:
+    """A Blob Storage client of ``service``'s account: its URL (the Blob
+    endpoint, "blob" for "dfs"; with its SAS token, if any) and credential."""
+    url = service.url.replace(".dfs.", ".blob.", 1)
+    return BlobServiceClient(url, credential=service.credential)
 
 
 def _intervals(intervals: tuple[float, ...]) -> Iterator[float]:
