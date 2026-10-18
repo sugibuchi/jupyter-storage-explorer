@@ -605,10 +605,82 @@ def notebook_opened_untrusted(x: Explorer) -> None:
     x.button("Upload").click()
     x.row("untrusted.ipynb").dblclick()
     expect(
-        x.page.locator(".jp-NotebookPanel .jp-OutputArea-output").first
+        x.page.locator(
+            ".jp-NotebookPanel:not(.lm-mod-hidden) .jp-OutputArea-output"
+        ).first
     ).to_be_visible()
     x.page.wait_for_timeout(1500)
     assert x.page.evaluate("window.__jse_ran") is None, "the notebook's outputs ran"
+    x.back_to_notebook()
+
+
+# A notebook whose outputs link to an image by a relative path (next to it),
+# which the drive does not serve.
+RELATIVE_IMAGE_NOTEBOOK = {
+    "nbformat": 4,
+    "nbformat_minor": 5,
+    "metadata": {
+        "kernelspec": {
+            "name": "python3",
+            "display_name": "Python 3",
+            "language": "python",
+        }
+    },
+    "cells": [
+        {
+            "cell_type": "markdown",
+            "id": "m1",
+            "metadata": {},
+            "source": "![chart](chart.png)",
+        },
+        {
+            "cell_type": "code",
+            "execution_count": 1,
+            "id": "c1",
+            "metadata": {},
+            "source": "1",
+            "outputs": [
+                {
+                    "output_type": "display_data",
+                    "metadata": {},
+                    "data": {
+                        "text/html": '<img src="chart.png">',
+                        "text/plain": "chart",
+                    },
+                }
+            ],
+        },
+    ],
+}
+
+
+@check
+def notebook_relative_links_and_download(x: Explorer) -> None:
+    # Relative links load nothing, without an error; File > Download saves
+    # the file itself.
+    text = json.dumps(RELATIVE_IMAGE_NOTEBOOK)
+    x.top("Scratch")
+    x.el.locator(".jse-list").evaluate(
+        """(list, text) => {
+          const data = new DataTransfer();
+          data.items.add(new File([text], "charts.ipynb", { type: "application/json" }));
+          for (const type of ["dragenter", "dragover", "drop"]) {
+            list.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: data }));
+          }
+        }""",
+        text,
+    )
+    x.button("Upload").click()
+    x.row("charts.ipynb").dblclick()
+    panel = x.page.locator(".jp-NotebookPanel:not(.lm-mod-hidden)")
+    expect(panel.locator(".jp-OutputArea-output").first).to_be_visible()
+    x.page.wait_for_timeout(1500)
+    expect(panel).not_to_contain_text("Javascript Error")
+    with x.page.expect_download() as download:
+        x.page.locator(".lm-MenuBar-itemLabel", has_text="File").click()
+        x.page.locator(".lm-Menu-itemLabel", has_text="Download").first.click()
+    saved = json.loads(pathlib.Path(download.value.path()).read_text(encoding="utf-8"))
+    assert saved["cells"][0]["source"] == "![chart](chart.png)", saved
     x.back_to_notebook()
 
 
