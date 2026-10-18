@@ -1,0 +1,11 @@
+# The demo on mybinder.org (see README.md): the released packages, and the
+# libraries the demo data and its previews use.
+jupyterlab>=4.2
+jupyter-storage-explorer-launcher
+polars
+deltalake
+pyarrow
+pandas
+openpyxl
+fastexcel
+Pillow

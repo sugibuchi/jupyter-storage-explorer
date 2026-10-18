@@ -1,0 +1,26 @@
+#!/bin/bash
+# Run once when mybinder.org builds the image: the made-up data lake the demo
+# shows (docs/scripts/demo_data.py), and a launcher.py showing it in the
+# launcher's tabs too.
+set -euo pipefail
+repo="${REPO_DIR:-$HOME}"
+python "$repo/docs/scripts/demo_data.py" "$HOME/.demo-data" > /dev/null
+mkdir -p "$HOME/.jupyter/storage-explorer"
+cat > "$HOME/.jupyter/storage-explorer/launcher.py" <<'EOF'
+import demo_data
+
+
+def filesystems():
+    return demo_data.filesystems()
+
+
+def formats():
+    return demo_data.formats()
+EOF
+
+# No prompt about Jupyter news over the demo.
+settings="${NB_PYTHON_PREFIX:-$(python -c 'import sys; print(sys.prefix)')}/share/jupyter/lab/settings"
+mkdir -p "$settings"
+cat > "$settings/overrides.json" <<'EOF'
+{"@jupyterlab/apputils-extension:notification": {"fetchNews": "false", "checkForUpdates": false}}
+EOF

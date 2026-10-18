@@ -27,6 +27,7 @@ together with the same version (from the git tags). The launcher requires the ex
 | `notebooks/`                                                   | Demo notebooks and `make_samples.py`, which writes the sample data they use. |
 | `tests/browser/`                                               | Checks of the widgets' JavaScript, and their smoke test in a browser.        |
 | `docs/scripts/`                                                | Scripts making the docs' screenshots and the demo GIFs.                      |
+| `binder/`                                                      | The demo on mybinder.org (the README's "Try it" link): released packages, demo data. |
 
 All Python commands go through [uv](https://docs.astral.sh/uv/). Node.js, for the extension and the JavaScript's checks,
 comes with the dev dependencies (`nodejs-wheel`), so `uv run node`, `uv run npx` and `uv run jlpm` work without
