@@ -266,9 +266,6 @@ JupyterLab's custom CSS applies to every page: notebooks, consoles and the launc
    or start JupyterLab with `jupyter lab --custom-css`.
 3. Restart JupyterLab, then reload the page.
 
-The launcher's `style()` (in `storage-explorer/launcher.py`) applies only while an explorer tab is open, not to
-explorers in notebooks.
-
 ### Filesystem mappers
 
 A `FileSystemMapper` (`filesystems/mapper.py`) describes the filesystems of one fsspec implementation:

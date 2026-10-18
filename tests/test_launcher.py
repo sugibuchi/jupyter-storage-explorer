@@ -54,9 +54,6 @@ def system(tmp_path):
 
         def parameters():
             return {"max_upload_bytes": 1000, "height": "500px"}
-
-        def style():
-            return ".system {}"
         """,
     )
 
@@ -79,9 +76,6 @@ class TestMerging:
 
             def parameters():
                 return {"height": "fill"}
-
-            def style():
-                return ".user {}"
             """,
         )
         settings = load_settings([user, system])  # Jupyter's order: user first
@@ -99,7 +93,6 @@ class TestMerging:
         }
         assert kwargs["format_options"] == settings.format_options
         assert kwargs["max_upload_bytes"] == 1000 and kwargs["height"] == "fill"
-        assert settings.style == ".system {}\n.user {}"
         assert settings.warnings == []
 
     def test_lists_come_first_then_the_defaults(self, tmp_path):
@@ -206,7 +199,7 @@ class TestFinal:
                 return [{"rule": "deny", "dest": "browser:///.*"}]
 
             def final():
-                return ["filesystems", "max_upload_bytes", "style", "transfer_policy"]
+                return ["filesystems", "max_upload_bytes", "transfer_policy"]
             """,
         )
         user = layer(
@@ -221,23 +214,38 @@ class TestFinal:
 
             def parameters():
                 return {"max_upload_bytes": None, "height": "300px"}
-
-            def style():
-                return ".user {}"
             """,
         )
         settings = load_settings([user, system])
         assert settings.filesystems == {"Lake": "memory://lake"}
         assert settings.parameters == {"max_upload_bytes": 1000, "height": "300px"}
-        assert settings.style == ""
         assert settings.transfer_policy == [{"rule": "deny", "dest": "browser:///.*"}]
         assert [w.split(": ", 1)[1] for w in settings.warnings] == [
             f"filesystems is ignored: it is final in {system}",
             f"transfer_policy is ignored: it is final in {system}",
-            f"style is ignored: it is final in {system}",
             f"max_upload_bytes is ignored: it is final in {system}",
         ]
         assert all(w.startswith(str(user)) for w in settings.warnings)
+
+    def test_retired_style_is_ignored_with_a_warning(self, tmp_path):
+        """style() is no longer used: a layer having it, or naming it in
+        final(), still works, with a warning in the tab."""
+        path = layer(
+            tmp_path,
+            "user",
+            """
+            def style():
+                return ".jse-browser {}"
+
+            def final():
+                return ["style"]
+            """,
+        )
+        settings = load_settings([path])
+        assert settings.explorer_arguments() == defaults()
+        [warning] = settings.warnings
+        assert warning.startswith(f"{path}: style() is no longer used and is ignored")
+        assert "custom.css" in warning
 
     def test_final_applies_to_later_layers_only(self, tmp_path):
         path = layer(
