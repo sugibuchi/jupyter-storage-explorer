@@ -707,10 +707,14 @@ def notebook_trust_kept(x: Explorer) -> None:
     shown = x.page.locator(".jp-NotebookPanel:not(.lm-mod-hidden)")
     expect(shown.locator(".jp-OutputArea-output").first).to_be_visible()
     assert x.page.evaluate("window.__jse_trusted_ran") is None
-    # Trust it (JupyterLab's command), then save.
+    # Trust it (JupyterLab's command, from its palette: the notebook focused
+    # first, as the shortcut needs the focus in JupyterLab), then save.
+    x.page.locator(".lm-TabBar-tab.jp-mod-current", has_text="trusted.ipynb").click()
     x.page.keyboard.press("Control+Shift+c")
-    x.page.keyboard.type("Trust Notebook")
-    x.page.keyboard.press("Enter")
+    x.page.locator(".lm-CommandPalette-input").fill("Trust Notebook")
+    x.page.locator(
+        ".lm-CommandPalette-item:visible", has_text="Trust Notebook"
+    ).first.click()
     x.page.locator(".jp-Dialog-footer .jp-Dialog-button", has_text="Trust").click()
     x.page.wait_for_timeout(1000)
     trusted_runs = x.page.evaluate("window.__jse_trusted_ran || 0")
@@ -975,11 +979,16 @@ def drag_between_tabs(lab: Lab, page: Page) -> None:
     page.keyboard.press("Control+Shift+L")
     page.locator(".jp-LauncherCard", has_text="Storage Explorer").first.click()
     expect(page.locator(".jse-launcher-panel")).to_have_count(2, timeout=30_000)
-    page.locator(".lm-TabBar-tab", has_text="Storage Explorer").last.click(
-        button="right"
+    # Side by side: the second tab dragged to the right edge of the main area
+    # (JupyterLab 4.0's tab menu has no "Split Tab").
+    page.locator(".lm-TabBar-tab", has_text="Storage Explorer").last.hover()
+    dock = page.locator("#jp-main-dock-panel").bounding_box()
+    assert dock is not None
+    page.mouse.down()
+    page.mouse.move(
+        dock["x"] + dock["width"] - 30, dock["y"] + dock["height"] / 2, steps=15
     )
-    page.locator(".lm-Menu-itemLabel", has_text="Split Tab").first.hover()
-    page.get_by_role("menuitem", name="Right", exact=True).click()
+    page.mouse.up()
     second = launcher_explorer(page, ".jse-launcher-panel:nth-child(n)")
     explorers = page.locator(".jse-launcher-panel .jse-browser")
     expect(explorers).to_have_count(2, timeout=90_000)

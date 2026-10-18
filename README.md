@@ -108,7 +108,7 @@ The `notebooks` folder has a demo of each widget on sample data.
 ## Requirements
 
 - Python 3.11 or later
-- JupyterLab 4 (other Jupyter frontends show the widgets, without drag and drop from JupyterLab's file browser)
+- JupyterLab 4.0 or later (other Jupyter frontends show the widgets, without drag and drop from JupyterLab's file browser)
 - For querying data: polars (tested with 2.0)
 
 ## Why Storage Explorer?

@@ -178,7 +178,11 @@ class Lab:
         page.wait_for_selector(".jp-Notebook", timeout=60000)
         page.wait_for_timeout(3000)  # the kernel starting
         page.click("text=Run", timeout=10000)
-        page.click("text=Run All Cells")
+        # The menu's item: the command palette has hidden items of the same
+        # text, which JupyterLab 4.0 puts first in the page.
+        page.locator(".lm-Menu-itemLabel:visible", has_text="Run All Cells").filter(
+            has_not_text="Restart"
+        ).first.click()
 
     @contextlib.contextmanager
     def page(self, width: int, height: int, scale: int = 2) -> Iterator[Page]:
