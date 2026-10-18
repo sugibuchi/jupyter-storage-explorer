@@ -163,7 +163,8 @@ storages, the kernel copies them file by file, through a temporary file:
 
 When files are copied or dragged from one explorer to another, **the destination explorer reads them with a file
 system of its own** for the source storage. If it has none for that storage, e.g. one in another kernel's memory or on another
-machine's disk, the transfer is refused.
+machine's disk, the transfer is refused. Storages of kinds other than Azure, S3, Google Cloud Storage, SFTP, local disks
+and in-memory ones are looked for only among the destination explorer's own storages.
 
 ![Two Storage Explorer tabs, one above the other: a CSV file dragged from a shared folder on the server's disk in the top tab into the scratch storage of the bottom tab, and pasted there](figs/file-transfer.gif)
 

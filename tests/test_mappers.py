@@ -312,6 +312,29 @@ class TestUnknownFilesystems:
         b = OtherFileSystem("b")
         assert locate("other:///x", OtherFileSystem("a"), [memfs, b]) == (b, "/x")
 
+    def test_never_opened_from_the_url(self, memfs, monkeypatch):
+        """Without a mapper, nothing tells whether a filesystem opened from a
+        URL is the one the files are on: the kernel never connects there."""
+        opened = []
+        monkeypatch.setattr(
+            "jupyter_storage_explorer.filesystems.mapper.url_to_fs",
+            opened.append,
+        )
+        for url in ("http://169.254.169.254/latest/meta-data/", "ftp://host/x"):
+            with pytest.raises(ValueError, match="not reachable from this kernel"):
+                default_location(url, url.split(":")[0], {}, [memfs])
+        assert opened == []
+
+    def test_claiming_a_mapped_protocol_does_not_help(self, memfs):
+        """An http URL sent as an S3 file: the filesystem it opens is not S3."""
+        with pytest.raises(ValueError, match="not reachable from this kernel"):
+            default_location(
+                "http://169.254.169.254/latest/meta-data/",
+                "s3",
+                {"partition": "aws"},
+                [memfs],
+            )
+
     def test_same_as_fsspec_compares(self):
         assert same_filesystem(OtherFileSystem("a"), OtherFileSystem("a"))
         assert not same_filesystem(OtherFileSystem("a"), OtherFileSystem("b"))

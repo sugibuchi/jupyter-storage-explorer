@@ -295,11 +295,22 @@ class MapperChain:
         storages of the other kernel's own, its memory or another machine's
         disk, are never looked for in this one's.
 
+        Only for protocols a mapper knows: for others, nothing tells whether a
+        filesystem opened from the URL is the one the files are on, so they
+        are found among ``filesystems`` only, and the kernel never connects
+        to wherever such a URL (e.g. one dropped from another web page)
+        points.
+
         Raises ValueError if neither reaches it.
         """
         for fs in filesystems:
             if (path := self.path_in(fs, protocol, identifier, url)) is not None:
                 return fs, path
+        if not any(mapper.protocol == protocol for mapper in self.mappers):
+            raise ValueError(
+                f"not reachable from this kernel (no storage of the explorer's "
+                f"is the {protocol!r} storage it is on)"
+            )
         try:
             fs, _ = url_to_fs(url)
         except Exception as exc:

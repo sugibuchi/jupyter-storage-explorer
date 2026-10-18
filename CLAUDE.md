@@ -136,7 +136,8 @@ Azure, `s3://`, `gs://`, `sftp://user@host:port/...`; None for items without a U
 synced as `_storage_identity` and sent with files copied or dragged), `same_filesystem` (equal protocol and identifier,
 so the same storage opened with other credentials is one; unknown filesystems, `FsspecMapper`, compare as fsspec does)
 and `locate`, for files pasted from another kernel: the first of the explorer's storages whose mapper accepts the
-identifier and parses the URL, else `url_to_fs(url)` if it has the same identifier, else refused (so another
+identifier and parses the URL, else, for protocols a mapper knows (never others: the kernel would connect wherever a dropped URL points),
+`url_to_fs(url)` if it has the same identifier, else refused (so another
 kernel's memory or another machine's disk is never read). `DirFileSystem`s are not mapped: the chain unwraps them, so
 their URLs are those of the filesystem they wrap, and `same_filesystem` also compares their folders. File operations
 are told by `FileTasks` with `move`'s and `copy`'s required keyword `same` (the explorer's chain); outside an
