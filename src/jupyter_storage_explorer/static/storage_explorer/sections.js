@@ -74,13 +74,22 @@ function loadMarkdownLibs() {
   return markdownLibs;
 }
 
+// Beyond DOMPurify's defaults (no scripts, event handlers, frames, links to
+// javascript: etc.): no CSS, as a <style> element applies to all of
+// JupyterLab's page and inline styles can cover it (e.g. a fake prompt), and
+// no forms, which could send what users type elsewhere. Markdown needs none.
+const PURIFY_OPTIONS = {
+  FORBID_TAGS: ["style", "form", "input", "button", "select", "option", "textarea"],
+  FORBID_ATTR: ["style"],
+};
+
 function renderMarkdown(section) {
   // jp-RenderedHTMLCommon gives it JupyterLab's own Markdown styling.
   const box = h("div", { className: "jp-RenderedHTMLCommon jse-markdown", textContent: "Rendering…" });
   loadMarkdownLibs()
     .then(({ marked, DOMPurify }) => {
-      // Sanitizing removes scripts, event handlers etc. the file may contain.
-      box.innerHTML = DOMPurify.sanitize(marked.parse(section.text, { async: false }));
+      // Sanitizing removes scripts, event handlers, CSS etc. the file may contain.
+      box.innerHTML = DOMPurify.sanitize(marked.parse(section.text, { async: false }), PURIFY_OPTIONS);
       for (const link of box.querySelectorAll("a[href]")) {
         link.target = "_blank";
         link.rel = "noopener noreferrer";

