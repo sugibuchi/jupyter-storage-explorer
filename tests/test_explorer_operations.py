@@ -256,6 +256,33 @@ class TestPaste:
         assert list(tmp_path.iterdir()) == []
 
 
+class TestPasteFromElsewhere:
+    """Files sent by URL from another kernel, or dropped from another page."""
+
+    def test_unmapped_protocol_not_opened_from_its_url(self, tmp_path, monkeypatch):
+        opened = []
+        monkeypatch.setattr(
+            "jupyter_storage_explorer.filesystems.mapper.url_to_fs",
+            opened.append,
+        )
+        local = make(str(tmp_path))
+        reply = local.request(
+            {
+                "type": "paste",
+                "rid": 1,
+                "explorer": "elsewhere",
+                "filesystem": {"name": "web", "protocol": "http", "identifier": {}},
+                "files": [
+                    {"path": "x", "url": "http://169.254.169.254/latest/meta-data/"}
+                ],
+                "dest": local._root,
+            }
+        )
+        assert reply["pasted"] == []
+        assert "not reachable from this kernel" in reply["errors"][0]
+        assert opened == [] and list(tmp_path.iterdir()) == []
+
+
 class TestCut:
     """ "Cut" then "Paste": a move, within a storage or to another."""
 
