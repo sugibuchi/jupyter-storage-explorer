@@ -259,7 +259,7 @@ class TestOnChange:
 
     def test_remove(self):
         explorer, calls = self.explorer()
-        callback = explorer._change_callbacks[0]
+        callback = explorer._change_callbacks._functions[0]
         explorer.on_change(callback)  # once only
         explorer.request({"type": "query_rows", "settings": {"hidden": ["b"]}})
         explorer.on_change(callback, remove=True)
@@ -274,7 +274,7 @@ class TestOnChange:
         def fail(_explorer: Any) -> None:
             raise RuntimeError("chart failed")
 
-        explorer._change_callbacks.insert(0, fail)
+        explorer._change_callbacks._functions.insert(0, fail)
         with pytest.raises(RuntimeError, match="chart failed"):
             explorer.request({"type": "query_rows", "settings": {"hidden": ["b"]}})
         assert explorer.sent[-1]["rows"] == [[3], [1], [2]]

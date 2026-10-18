@@ -34,7 +34,13 @@ function createPreview(x) {
       queryPanel = null;
     }
     if (!preview.path) {
-      el.hidden = true;
+      // Open with nothing in it (open_preview=True): clicking a file fills it.
+      if (preview.empty) {
+        delete head.dataset.path;
+        head.replaceChildren(h("span", { className: "jse-preview-name", textContent: "Preview" }));
+        body.replaceChildren(h("div", { className: "jse-placeholder", textContent: "Click a file to preview it" }));
+      }
+      el.hidden = !preview.empty;
       return;
     }
     const opening = el.hidden || head.dataset.path !== preview.path;
@@ -91,10 +97,10 @@ function createPreview(x) {
   // The panel shows what the link would preview, or nothing else can be
   // previewed: the link closes it.
   function linkCloses() {
-    const shown = model.get("_preview").path;
-    if (shown == null) return false;
+    const preview = model.get("_preview");
+    if (preview.path == null && !preview.empty) return false;
     const wanted = target();
-    return wanted == null || wanted.path === shown;
+    return wanted == null || wanted.path === preview.path;
   }
 
   function updateButton() {

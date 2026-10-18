@@ -10,6 +10,7 @@ import anywidget
 import traitlets
 
 from jupyter_storage_explorer import _paths, _static
+from jupyter_storage_explorer._callbacks import Callbacks
 from jupyter_storage_explorer._explorer.bookmarks import BookmarksMixin
 from jupyter_storage_explorer._explorer.common import (
     explorers,
@@ -58,6 +59,11 @@ if TYPE_CHECKING:
 # JavaScript libraries the frontend may ask for (see static/vendor/README.md);
 # only these names are served.
 _VENDOR_FILES = frozenset({"marked.esm.js", "purify.es.mjs"})
+
+# The data browser's requests, after which query_result() may have changed.
+_QUERY_REQUESTS = frozenset(
+    {"query_rows", "query_check", "query_save", "query_reload", "query_mode"}
+)
 
 
 # Its features are mixins (in _explorer/), each a group of the methods below
@@ -109,6 +115,11 @@ class StorageExplorer(
         Height of the tree and the list (CSS); the preview panel adds its own.
         ``"fill"``: as tall as the container, e.g. the launcher's tab (not a
         notebook cell, which has no height of its own).
+    open_preview : bool, default False
+        Start with the preview panel open, empty until a file is clicked:
+        while it is open, clicking a file previews it (tables open in the
+        data browser, see ``query_result``). False: closed until the user
+        previews something.
     formats : sequence of DataFormat, optional
         The formats files are previewed and queried as, replacing
         ``default_formats()``. Cannot be combined with ``format_options``.
@@ -191,9 +202,12 @@ class StorageExplorer(
     Notes
     -----
     ``folder_url`` and ``selected_urls`` give the locations of the folder
-    shown and of the selected items. To change how paths become locations
-    ("Copy URL", these properties, "Python code", data read by polars),
-    give a mapper in ``filesystem_mappers``.
+    shown and of the selected items, and ``on_change()`` calls a function
+    when they change. ``query_result()`` gives the data the data browser
+    shows in the preview panel, with its filters applied, and
+    ``on_query_change()`` calls a function when that changes. To change how
+    paths become locations ("Copy URL", these properties, "Python code", data
+    read by polars), give a mapper in ``filesystem_mappers``.
 
     Examples
     --------
@@ -201,6 +215,7 @@ class StorageExplorer(
     >>> StorageExplorer("s3://my-bucket/data", anon=True)
     >>> StorageExplorer("data", fs=my_filesystem)
     >>> StorageExplorer(filesystems={"Lake": s3, "Local": "file:///home/me/data"})
+    >>> StorageExplorer("s3://my-bucket/data", open_preview=True)
     """
 
     _esm = _static.esm("storage_explorer")
@@ -225,7 +240,9 @@ class StorageExplorer(
     # height below them, and both can be resized by dragging in the widget.
     _height = traitlets.Unicode("400px").tag(sync=True)
     # Preview shown in the panel: {"path", "name", "format", "sections",
-    # "error", "loading"}; empty when the panel is closed.
+    # "error", "loading"} ("query" instead of "sections" for the data
+    # browser); {"empty": true} when the panel is open with nothing in it
+    # (open_preview); empty when the panel is closed.
     _preview = traitlets.Dict().tag(sync=True)
     # Format name -> label shown to the user, e.g. {"delta": "Delta Lake table"}.
     _format_labels = traitlets.Dict().tag(sync=True)
@@ -275,6 +292,7 @@ class StorageExplorer(
         fs: AbstractFileSystem | None = None,
         filesystems: Mapping[str, AbstractFileSystem | str] | None = None,
         height: str = "400px",
+        open_preview: bool = False,
         formats: Sequence[DataFormat] | None = None,
         format_options: Mapping[str, Any] | None = None,
         preview_limits: PreviewLimits | None = None,
@@ -289,6 +307,13 @@ class StorageExplorer(
         transfer_policy: Sequence[Mapping[str, str]] | None = None,
         **storage_options: Any,
     ) -> None:
+        # The functions given to on_change() and on_query_change(), and what
+        # they last heard of (see _changed, _query_changed); first, as the
+        # traits set up below call them.
+        self._change_callbacks = Callbacks()
+        self._change_basis: tuple[str, str, tuple[str, ...]] | None = None
+        self._query_callbacks = Callbacks()
+        self._query_basis: tuple[DataQuery, dict[str, Any]] | None = None
         self._transfer_policy = TransferPolicy(transfer_policy)
         self._fetch_rows = fetch_rows
         self._states = explorer_states(states)
@@ -357,6 +382,8 @@ class StorageExplorer(
         self.on_msg(self._on_custom_msg)
         explorers[self._explorer_id] = self
         self._filesystem = name  # shows its top level (see _on_filesystem)
+        if open_preview:
+            self._preview = {"empty": True}
         if states_error:
             self._error = states_error
 
@@ -402,7 +429,8 @@ class StorageExplorer(
         # filesystem to list the old filesystem's paths.
         self._queries.clear()
         with self.hold_sync():
-            self._preview = {}
+            # An open panel stays open, for the files of this storage.
+            self._preview = {"empty": True} if self._preview else {}
             self._tree = {}
             self._storage_identity = self._mappers.storage_of(self._fs)
             self._root = root
@@ -411,6 +439,7 @@ class StorageExplorer(
                 self._list(path)
             else:
                 self._current_dir = path
+        self._changed()
 
     def _restore_view(self, filesystem: Any, folders: Any) -> None:
         """Show storage ``filesystem`` at its folder in ``folders`` ({storage
@@ -475,6 +504,148 @@ class StorageExplorer(
         """
         return [url for p in self._selected if (url := self._url(p)) is not None]
 
+    def on_change(
+        self, callback: Callable[[StorageExplorer], Any], *, remove: bool = False
+    ) -> None:
+        """Call a function whenever ``folder_url`` or ``selected_urls`` changes
+        in the widget.
+
+        That is when the user opens another folder or storage, or selects
+        other items, also when items selected are moved or deleted; not for
+        filtering, sorting or paging the list. The function is called in the
+        kernel's main thread, as the widget's messages are handled: keep it
+        quick, e.g. a chart of a small file.
+
+        Parameters
+        ----------
+        callback : callable
+            Called with the explorer, as ``callback(explorer)``. What it prints
+            or displays goes to no cell (the kernel answers the widget, not a
+            cell): display into an ``ipywidgets.Output`` shown in a cell, as in
+            the example. Errors are shown as tracebacks in the same place and
+            do not stop the other functions.
+        remove : bool, default False
+            Stop calling ``callback`` instead.
+
+        See Also
+        --------
+        on_query_change : A function called when ``query_result()`` changes.
+
+        Examples
+        --------
+        >>> import ipywidgets
+        >>> import polars as pl
+        >>> schema = ipywidgets.Output()
+        >>> def show_schema(explorer):
+        ...     with schema:
+        ...         schema.clear_output(wait=True)
+        ...         for url in explorer.selected_urls:
+        ...             if url.endswith(".parquet"):
+        ...                 display(pl.read_parquet_schema(url))
+        >>> explorer = StorageExplorer("s3://my-bucket/data")
+        >>> explorer.on_change(show_schema)
+        >>> display(explorer, schema)
+        """
+        self._change_callbacks.register(callback, remove=remove)
+
+    def query_result(self, all_columns: bool = False) -> Any:
+        """The data the data browser shows in the preview panel, with its
+        filters, sort order and hidden columns applied.
+
+        As ``DataExplorer.result()``: built on the data itself, so it covers
+        all of it, also after In memory mode, where the browser showed the
+        first rows only. Query data in a new tab is not the preview panel's:
+        its ``DataExplorer`` gives its own.
+
+        Parameters
+        ----------
+        all_columns : bool, default False
+            Keep the columns hidden in the browser ("Select columns"): only
+            the filters and the sort order are applied.
+
+        Returns
+        -------
+        dataframe or None
+            Of the library the data is read with, e.g. a polars LazyFrame,
+            not yet executed; None when the preview panel is closed or shows
+            no table (another kind of file, or one still loading).
+
+        See Also
+        --------
+        on_query_change : A function called when this changes.
+        DataExplorer.result : The same for a dataframe.
+
+        Examples
+        --------
+        >>> explorer = StorageExplorer("s3://my-bucket/sales", open_preview=True)
+        >>> # ... click a CSV file, filter and sort it in the data browser ...
+        >>> explorer.query_result().collect()
+        """
+        data = self._shown_query()
+        return None if data is None else data.result(all_columns=all_columns)
+
+    def on_query_change(
+        self, callback: Callable[[StorageExplorer], Any], *, remove: bool = False
+    ) -> None:
+        """Call a function whenever ``query_result()`` changes in the widget.
+
+        That is when the preview panel opens another table in the data
+        browser, or stops showing one (closed, or another kind of file
+        previewed: ``query_result()`` is then None), and when the user
+        changes a filter, the sort order or the columns shown, or reads the
+        data again with the reload button; not for paging, column widths or
+        switching between Live and In memory. The function is called in the
+        kernel's main thread, after the widget has its rows, so the widget
+        waits for it before its next request: keep it quick, e.g. a chart of
+        a small or aggregated result.
+
+        Parameters
+        ----------
+        callback : callable
+            Called with the explorer, as ``callback(explorer)``. What it prints
+            or displays goes to no cell: display into an
+            ``ipywidgets.Output`` shown in a cell, as in the example. Errors
+            are shown as tracebacks in the same place and do not stop the
+            other functions.
+        remove : bool, default False
+            Stop calling ``callback`` instead.
+
+        See Also
+        --------
+        query_result : The data the browser shows, with its filters applied.
+        on_change : A function called when the folder or the selection changes.
+
+        Examples
+        --------
+        >>> import ipywidgets
+        >>> import matplotlib.pyplot as plt
+        >>> chart = ipywidgets.Output()
+        >>> def redraw(explorer):
+        ...     with chart:
+        ...         chart.clear_output(wait=True)
+        ...         if (lf := explorer.query_result()) is not None:
+        ...             df = lf.collect()
+        ...             plt.plot(df["date"], df["amount"])
+        ...             plt.show()
+        >>> explorer = StorageExplorer("s3://my-bucket/sales", open_preview=True)
+        >>> explorer.on_query_change(redraw)
+        >>> display(explorer, chart)
+        """
+        self._query_callbacks.register(callback, remove=remove)
+
+    def _changed(self) -> None:
+        """Call the ``on_change`` functions if the storage, the folder shown or
+        the selection has changed since they last were.
+
+        Called by each one's observer: a change of storage sets the folder,
+        and showing a folder clears the selection, so one change sets several
+        traits, of which the functions hear once.
+        """
+        basis = (self._filesystem, self._current_dir, tuple(self._selected))
+        if basis != self._change_basis:
+            self._change_basis = basis
+            self._change_callbacks(self)
+
     # --- Messages from the frontend ---
 
     def _on_custom_msg(
@@ -485,7 +656,12 @@ class StorageExplorer(
         not (its effects show in the traits, or in messages of their own)."""
         kind = content.get("type")
         if (request := self._requests(buffers or []).get(kind)) is not None:
-            self.send({"type": "reply", "rid": content["rid"], **request(content)})
+            reply = request(content)
+            self.send({"type": "reply", "rid": content["rid"], **reply})
+            if kind in _QUERY_REQUESTS:
+                # After the reply, so the widget does not wait for the functions.
+                reloaded = kind == "query_reload" and "error" not in reply
+                self._query_changed(reloaded=reloaded)
         elif (notice := self._notices().get(kind)) is not None:
             notice(content)
 
@@ -557,22 +733,35 @@ class StorageExplorer(
     @traitlets.observe("_current_dir")
     def _on_current_dir(self, change: dict[str, Any]) -> None:
         self._list(change["new"])
+        self._changed()
 
     @traitlets.observe("_selected")
     def _on_selected(self, change: dict[str, Any]) -> None:
-        if len(change["new"]) != 1:
-            self._selected_format = {}
-            return
-        path = change["new"][0]
+        self._selected_format = self._format_of_selection(change["new"])
+        self._changed()
+
+    def _format_of_selection(self, selected: list[str]) -> dict[str, Any]:
+        """``_selected_format`` for the items selected."""
+        if len(selected) != 1:
+            return {}
+        path = selected[0]
         try:
             _, formats = self._detect(path)
         except Exception:
             formats = []  # detection is best-effort; a failure just means no preview
-        self._selected_format = {
+        return {
             "path": path,
             "format": formats[0].name if formats else "",
             "query": bool(formats) and formats[0].can_query(),
         }
+
+    @traitlets.observe("_preview")
+    def _on_preview(self, change: dict[str, Any]) -> None:
+        # Opened, closed (also by the frontend) or another preview: the
+        # query shown may have changed. Not while one loads, so that going
+        # from one table to the next does not tell of none between them.
+        if not change["new"].get("loading"):
+            self._query_changed()
 
     # --- Locations: the URLs of paths, from the filesystem mappers ---
 

@@ -69,12 +69,13 @@ def check(fn: Callable[[Explorer], None]) -> Callable[[Explorer], None]:
 
 
 class Explorer:
-    """A notebook showing ``EXPLORER``, and ways to drive it."""
+    """A notebook showing ``EXPLORER`` (or the explorer of ``source``), and
+    ways to drive it."""
 
-    def __init__(self, lab: Lab, page: Page) -> None:
+    def __init__(self, lab: Lab, page: Page, source: str = EXPLORER) -> None:
         self.lab = lab
         self.page = page
-        lab.open_notebook(page, EXPLORER)
+        lab.open_notebook(page, source)
         self.el = page.locator(".jse-browser").first
         expect(self.el.locator(".jse-tree .jse-node").first).to_be_visible(
             timeout=90_000
@@ -863,6 +864,60 @@ LAB_CHECKS: dict[str, Callable[[Lab, Page], None]] = {}
 def lab_check(fn: Callable[[Lab, Page], None]) -> Callable[[Lab, Page], None]:
     LAB_CHECKS[fn.__name__] = fn
     return fn
+
+
+# An explorer whose preview panel starts open, and labels its on_change and
+# on_query_change functions write to.
+CALLBACKS = """\
+import demo_data
+import ipywidgets
+from jupyter_storage_explorer import StorageExplorer
+
+explorer = StorageExplorer(
+    filesystems=demo_data.filesystems(), formats=demo_data.formats(), open_preview=True
+)
+selected = ipywidgets.Label("-").add_class("smoke-selected")
+rows = ipywidgets.Label("-").add_class("smoke-rows")
+
+
+def show_selected(e):
+    selected.value = ",".join(url.rsplit("/", 1)[-1] for url in e.selected_urls) or "-"
+
+
+def show_rows(e):
+    result = e.query_result()
+    rows.value = "none" if result is None else str(len(result.collect()))
+
+
+explorer.on_change(show_selected)
+explorer.on_query_change(show_rows)
+display(explorer, selected, rows)"""
+
+
+@lab_check
+def python_callbacks(lab: Lab, page: Page) -> None:
+    x = Explorer(lab, page, CALLBACKS)
+    selected, rows = page.locator(".smoke-selected"), page.locator(".smoke-rows")
+    expect(x.preview).to_contain_text("Click a file to preview it")
+    x.go("curated")
+    x.row("orders.parquet").click()  # the open panel previews it
+    expect(selected).to_have_text("orders.parquet")
+    expect(x.preview.locator(".jse-query-status")).to_have_text("Rows 1–100 / 2,400")
+    expect(rows).to_have_text("2400")
+    header = x.preview.locator(
+        "th", has=page.locator(".jse-query-name", has_text="channel")
+    ).first
+    header.locator(".jse-query-filter").click()
+    dialog = x.el.locator(".jse-confirm:visible")
+    dialog.locator("select").first.select_option(label="Contains")
+    dialog.locator("input[type=text], input:not([type])").first.fill("wholesale")
+    dialog.get_by_role("button", name="Apply").click()
+    expect(rows).to_have_text("341")
+    x.preview.press("Escape")
+    expect(x.preview).to_be_hidden()
+    expect(rows).to_have_text("none")
+    x.row("customers").dblclick()
+    expect(selected).to_have_text("-")
 
 
 def open_launcher_tab(lab: Lab, page: Page) -> Locator:

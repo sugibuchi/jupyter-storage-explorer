@@ -86,6 +86,27 @@ class PreviewsMixin:
         self._queries.clear()
         self._preview = {}
 
+    # --- The query in the preview panel, for query_result() and
+    # on_query_change() ---
+
+    def _shown_query(self) -> DataQuery | None:
+        """The query the preview panel shows in the data browser, or None
+        (closed, loading, or showing something else)."""
+        preview = self._preview
+        if not preview.get("query") or preview.get("loading"):
+            return None
+        return self._queries.get(preview.get("path"))
+
+    def _query_changed(self, *, reloaded: bool = False) -> None:
+        """Call the ``on_query_change`` functions if ``query_result()`` has
+        changed since they last were: another query shown (or none), other
+        filters, sort or columns, or the data read again (``reloaded``)."""
+        data = self._shown_query()
+        basis = None if data is None else (data, data.result_settings())
+        if basis != self._query_basis or (reloaded and data is not None):
+            self._query_basis = basis
+            self._query_callbacks(self)
+
     def _open_query(self, path: str, fmt: DataFormat, target: Target) -> dict[str, Any]:
         """Open ``path`` in the data browser: its columns and remembered settings.
 
