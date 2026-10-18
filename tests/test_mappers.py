@@ -63,6 +63,13 @@ class SFTPFileSystem(AbstractFileSystem):
         self.ssh_kwargs = ssh_kwargs
 
 
+class SSHFileSystem(AbstractFileSystem):
+    """sshfs's: only fsspec's record of its arguments tells the server."""
+
+    __module__ = "sshfs.spec"
+    protocol = ("sftp", "ssh")
+
+
 class OtherFileSystem(AbstractFileSystem):
     """A filesystem no mapper knows."""
 
@@ -231,6 +238,33 @@ class TestSFTP:
             )
             is None
         )
+
+
+class TestSSHFS:
+    def test_host_port_and_user_from_its_arguments(self):
+        for fs in (
+            SSHFileSystem("Server.example.com", username="alice", port=2222),
+            SSHFileSystem(host="server.example.com", username="alice", port=2222),
+        ):
+            assert storage_of(fs) == {
+                "protocol": "sftp",
+                "identifier": {
+                    "host": "server.example.com",
+                    "port": 2222,
+                    "user": "alice",
+                },
+            }
+            url = default_url(fs, "/home/alice/x.txt")
+            assert url == "sftp://alice@server.example.com:2222/home/alice/x.txt"
+
+    def test_one_storage_with_fsspecs_sftp(self):
+        """Files copied from one implementation are found on the other."""
+        sshfs = SSHFileSystem("server", username="alice")
+        sftp = SFTPFileSystem("server", username="alice")
+        url = default_url(sftp, "/x.txt")
+        assert locate(url, sftp, [sshfs]) == (sshfs, "/x.txt")
+        assert locate(url, sshfs, [sftp]) == (sftp, "/x.txt")
+        assert same_filesystem(sshfs, sftp)
 
 
 class TestDirFileSystem:

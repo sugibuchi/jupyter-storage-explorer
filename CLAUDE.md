@@ -127,9 +127,9 @@ sync.
 **Storage.** Everything is an fsspec filesystem; `StorageExplorer` can hold several named ones (`filesystems=`).
 What a filesystem reaches and its URLs come from mappers (`filesystems/mapper.py`, the `filesystem_mappers=` argument,
 then `default_mappers()` of `mappers.py`): a `FileSystemMapper` per fsspec implementation, matched by qualified class names through the MRO
-(so optional packages are not imported; tests fake s3fs, gcsfs and paramiko's SFTP classes by `__module__`). It gives
+(so optional packages are not imported; tests fake s3fs, gcsfs, fsspec's SFTP and sshfs classes by `__module__`). It gives
 `identifier(fs)` (JSON, no credentials; defined per protocol, so implementations of one protocol agree: adlfs
-`{"account_name"}`, s3fs the endpoint or AWS partition, gcsfs `{}`, SFTP host, port and user, local disk the machine,
+`{"account_name"}`, s3fs the endpoint or AWS partition, gcsfs `{}`, SFTP (fsspec's, and sshfs's from `fs.storage_args`/`storage_options`) host, port and user, local disk the machine,
 memory the process), `to_url` (plain paths for local files, `abfs://container@account.dfs.core.windows.net/...` for
 Azure, `s3://`, `gs://`, `sftp://user@host:port/...`; None for items without a URL) and `path_of`, the reverse.
 `MapperChain` (`mapper.py`, the explorer's `_mappers`: its mappers then the defaults) asks them: `url_of`, `storage_of` (`{"protocol", "identifier"}`,

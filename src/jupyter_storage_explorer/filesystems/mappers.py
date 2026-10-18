@@ -1,7 +1,7 @@
 """The predefined filesystem mappers (see mapper.py): Azure Blob Storage and
 Data Lake Storage Gen2 (adlfs), Amazon S3 and S3-compatible stores (s3fs),
 Google Cloud Storage (gcsfs), the local disk, fsspec's memory filesystem, and
-SFTP servers. They match fsspec classes by name, so none of these packages is
+SFTP servers (fsspec's own, and sshfs). They match fsspec classes by name, so none of these packages is
 imported.
 """
 
@@ -235,6 +235,26 @@ class SFTPMapper(FileSystemMapper):
         return path or "/"
 
 
+class SSHFSMapper(SFTPMapper):
+    """sshfs's ``SSHFileSystem`` (SFTP with asyncssh): the same identifiers
+    and URLs as ``SFTPMapper``, so files copied from one are found on the
+    other. It keeps no host or user of its own, so they are read from the
+    arguments it was made with: the host (first, or ``host=``), ``port=``
+    and ``username=``."""
+
+    classes = ("sshfs.spec.SSHFileSystem",)
+
+    def identifier(self, fs: AbstractFileSystem) -> dict[str, Any]:
+        args = getattr(fs, "storage_args", None) or ()
+        options = getattr(fs, "storage_options", None) or {}
+        host = args[0] if args else options.get("host", "")
+        return {
+            "host": str(host).lower(),
+            "port": int(options.get("port") or 22),
+            "user": options.get("username"),
+        }
+
+
 def default_mappers() -> list[FileSystemMapper]:
     """The mappers tried after an explorer's ``filesystem_mappers``.
 
@@ -242,7 +262,8 @@ def default_mappers() -> list[FileSystemMapper]:
     -------
     list of FileSystemMapper
         New objects each time: ``AzureBlobMapper``, ``S3Mapper``,
-        ``GCSMapper``, ``LocalMapper``, ``MemoryMapper`` and ``SFTPMapper``.
+        ``GCSMapper``, ``LocalMapper``, ``MemoryMapper``, ``SFTPMapper`` and
+        ``SSHFSMapper``.
         Filesystems none of them maps get ``FsspecMapper``.
     """
     return [
@@ -252,6 +273,7 @@ def default_mappers() -> list[FileSystemMapper]:
         LocalMapper(),
         MemoryMapper(),
         SFTPMapper(),
+        SSHFSMapper(),
     ]
 
 

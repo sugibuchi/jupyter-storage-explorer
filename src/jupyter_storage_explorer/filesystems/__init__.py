@@ -22,6 +22,7 @@ from jupyter_storage_explorer.filesystems.mappers import (
     MemoryMapper,
     S3Mapper,
     SFTPMapper,
+    SSHFSMapper,
     default_mappers,
     same_filesystem,
 )
@@ -58,6 +59,7 @@ __all__ = [
     "Progress",
     "S3Mapper",
     "SFTPMapper",
+    "SSHFSMapper",
     "default_mappers",
     "default_operations",
     "same_filesystem",
