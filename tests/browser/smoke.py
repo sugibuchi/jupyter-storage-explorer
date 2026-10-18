@@ -241,7 +241,7 @@ def paging(x: Explorer) -> None:
 def preview(x: Explorer) -> None:
     x.go("pipelines")
     x.row("README.md").click()
-    link = x.el.locator(".jse-status-bar .jse-link")
+    link = x.el.locator(".jse-status-bar .jse-preview-btn")
     expect(link).to_have_text("Preview (Markdown)")
     link.click()
     expect(x.preview.locator(".jse-markdown")).to_contain_text(
@@ -258,7 +258,7 @@ def preview(x: Explorer) -> None:
 def query(x: Explorer) -> None:
     x.go("curated")
     x.row("orders.parquet").click()
-    x.el.locator(".jse-status-bar .jse-link", has_text="Query data").click()
+    x.el.locator(".jse-status-bar .jse-preview-btn", has_text="Query data").click()
     status = x.preview.locator(".jse-query-status")
     expect(status).to_have_text("Rows 1–100 / 2,400")
     x.preview.locator(".jse-query-bar button[title='Next page']").click()
@@ -285,7 +285,7 @@ def query(x: Explorer) -> None:
 def delta_folder(x: Explorer) -> None:
     # The folder shown, with nothing selected: a Delta table, queried.
     x.go("curated", "customers")
-    link = x.el.locator(".jse-status-bar .jse-link")
+    link = x.el.locator(".jse-status-bar .jse-preview-btn")
     expect(link).to_have_text("Query data (Delta Lake table)")
     link.click()
     expect(x.preview.locator(".jse-query-status")).to_contain_text("/ 200")
@@ -298,7 +298,7 @@ def partitioned_parquet(x: Explorer) -> None:
     # columns from the folders' names.
     x.go("curated")
     x.row("orders_by_month").click()
-    link = x.el.locator(".jse-status-bar .jse-link")
+    link = x.el.locator(".jse-status-bar .jse-preview-btn")
     expect(link).to_have_text("Query data (Parquet)")
     link.click()
     expect(x.preview.locator(".jse-query-status")).to_have_text("Rows 1–100 / 2,400")
@@ -622,7 +622,7 @@ def open_in_jupyterlab(x: Explorer) -> None:
     # A text file, which opens in JupyterLab's editor.
     paste_from_lake(x, "daily_orders.yaml", "pipelines")
     x.row("daily_orders.yaml").click()
-    x.el.locator(".jse-status-bar .jse-link").click()  # previewed, to see the edit
+    x.el.locator(".jse-status-bar .jse-preview-btn").click()  # previewed, to see the edit
     x.row("daily_orders.yaml").dblclick()
     editor = x.page.locator(".jp-FileEditor .cm-content").first
     expect(editor).to_contain_text("pipeline: daily_orders")
@@ -850,7 +850,7 @@ def markdown_preview_sanitized(x: Explorer) -> None:
     )
     x.button("Upload").click()
     x.row("report.md").click()
-    x.el.locator(".jse-status-bar .jse-link").click()
+    x.el.locator(".jse-status-bar .jse-preview-btn").click()
     markdown = x.preview.locator(".jse-markdown")
     expect(markdown.locator("h1")).to_have_text("Report")
     expect(markdown.locator("td").first).to_have_text("1")  # tables kept

@@ -26,7 +26,7 @@
   --jse-selected-bg: var(--jp-brand-color1, #1976d2);
   --jse-selected-fg: var(--jp-ui-inverse-font-color1, #fff);
   --jse-error: var(--jp-error-color1, #d32f2f);
-  /* Links such as Preview: as "Close All" in JupyterLab's running sessions panel. */
+  /* The Preview button: as "Close All" in JupyterLab's running sessions panel. */
   --jse-link: var(--jp-warn-color1, #f57c00);
 
   position: relative; /* dialogs cover the widget */
@@ -109,26 +109,6 @@
 .jse-pager .jse-btn:hover:not(:disabled),
 .jse-query-bar .jse-btn:hover:not(:disabled) {
   background: var(--jp-layout-color3, #bdbdbd);
-}
-
-/* A link-like button, e.g. Preview. */
-.jse-link {
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--jse-link);
-  font: inherit;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.jse-link:hover:not(:disabled) {
-  text-decoration: underline;
-}
-
-.jse-link:disabled {
-  color: var(--jse-fg-faint);
-  cursor: default;
 }
 
 /* The bottom edge, dragged to resize: it takes no room, its handle (::after)
@@ -275,10 +255,22 @@
   display: none;
 }
 
+/* The search icon, drawn inside the field's left end; clicks go through to the field. */
+.jse-filter-icon {
+  position: absolute;
+  top: 50%;
+  left: 5px;
+  transform: translateY(-50%);
+  width: 14px;
+  height: 14px;
+  color: var(--jse-icon);
+  pointer-events: none;
+}
+
 .jse-filter-input {
   flex: 1;
   min-width: 0;
-  padding: 1px 24px 1px 6px; /* room for the clear button */
+  padding: 1px 24px 1px 23px; /* room for the search icon and the clear button */
   border: 1px solid var(--jse-border);
   border-radius: 3px;
   background: var(--jse-bg);

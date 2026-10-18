@@ -1,13 +1,14 @@
 // The preview panel below the tree and list, showing the kernel's _preview:
 // a file's sections (sections.js), or the data browser ("Query data",
-// query.js). The Preview link at the right of the status bar opens it for
-// the selected item (or the folder shown); the link or Esc closes it.
+// query.js). The Preview button at the right of the status bar opens it for
+// the selected item (or the folder shown); the button or Esc closes it.
 
 function createPreview(x) {
   const { model } = x;
-  // A link, as JupyterLab's "Close All" in its running sessions panel: previews
-  // the selected item, or closes the preview panel showing it (see updateButton).
-  const button = h("button", { className: "jse-link", textContent: "Preview" });
+  // A borderless button, an icon and a label: previews the selected item, or
+  // closes the preview panel showing it (see updateButton).
+  const label = h("span", { className: "jse-preview-label", textContent: "Preview" });
+  const button = h("button", { className: "jse-btn jse-preview-btn" }, icon("eye"), label);
   const head = h("div", { className: "jse-dialog-head" });
   const body = h("div", { className: "jse-dialog-body" });
   // On the panel's top edge: moves the boundary with the tree and list (see render()).
@@ -103,10 +104,16 @@ function createPreview(x) {
     return wanted == null || wanted.path === preview.path;
   }
 
+  // The icon: an eye to preview, a cross to close.
+  function setButton(name, text) {
+    button.firstChild.replaceWith(icon(name));
+    label.textContent = text;
+  }
+
   function updateButton() {
     if (linkCloses()) {
       button.disabled = false;
-      button.textContent = "Close preview";
+      setButton("close", "Close preview");
       button.title = "Close the preview panel (Esc)";
       return;
     }
@@ -115,7 +122,7 @@ function createPreview(x) {
     // Tabular data opens in the data browser when polars is installed.
     const action = wanted?.query ? "Query data" : "Preview";
     button.disabled = wanted == null;
-    button.textContent = wanted ? `${action} (${x.formatLabel(wanted.format)})` : "Preview";
+    setButton("eye", wanted ? `${action} (${x.formatLabel(wanted.format)})` : "Preview");
     button.title = wanted
       ? `${action}: ${selected === 0 ? "this folder" : "the selected item"} as ${x.formatLabel(wanted.format)}`
       : selected > 1
