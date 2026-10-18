@@ -100,8 +100,8 @@ function confirmButtons(label) {
   ];
 }
 
-// A one-line filter: a text field with a clear button (✕, while it has
-// text), and a ".*" toggle for regular expressions. Matching is always
+// A one-line filter: a text field with a search icon (not a button) and a
+// clear button (✕, while it has text), and a ".*" toggle for regular expressions. Matching is always
 // case-insensitive. onChange() is called as it changes. test(text) tells
 // whether a name matches: everything matches while the field is empty, or
 // while its regular expression is invalid (marked in red). active() tells
@@ -119,7 +119,9 @@ function createFilter({ placeholder = "Filter", onChange = () => {} } = {}) {
     title: "Regular expression (case-insensitive)",
   });
   regexBtn.setAttribute("aria-pressed", "false");
-  const el = h("div", { className: "jse-filter" }, h("span", { className: "jse-filter-field" }, input, clearBtn), regexBtn);
+  const searchIcon = icon("search");
+  searchIcon.classList.add("jse-filter-icon");
+  const el = h("div", { className: "jse-filter" }, h("span", { className: "jse-filter-field" }, searchIcon, input, clearBtn), regexBtn);
   let regex = false;
   let test = () => true;
   let active = false;

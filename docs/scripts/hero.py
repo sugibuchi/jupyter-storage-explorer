@@ -25,7 +25,7 @@ def make(lab: Lab) -> None:
             page.wait_for_timeout(1200)
         row("events_2026-09-30.jsonl").click()
         page.wait_for_timeout(1000)
-        page.locator(".jse-status-bar .jse-link", has_text="Query data").first.click()
+        page.locator(".jse-status-bar .jse-preview-btn", has_text="Query data").first.click()
         page.wait_for_selector(".jse-data tbody tr", timeout=30000)
         page.wait_for_timeout(1500)
         _lab.calm(page)

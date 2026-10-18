@@ -623,8 +623,21 @@
   border-top: none;
 }
 
-.jse-status-bar > .jse-link {
-  margin: 2px 8px 2px auto; /* stays right when the message is hidden */
+/* Preview: a borderless button, an icon and its label, in the link colour. */
+.jse-status-bar > .jse-preview-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 1px 4px 1px auto; /* stays right when the message is hidden */
+  padding: 1px 6px 1px 4px;
+  color: var(--jse-link);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.jse-status-bar > .jse-preview-btn:disabled {
+  color: var(--jse-fg-faint);
+  opacity: 1;
 }
 
 /* At the toolbar's right end. */
