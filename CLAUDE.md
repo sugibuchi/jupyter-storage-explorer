@@ -261,7 +261,10 @@ unfiltered.
 which package sets can read it (`preferred_requirements` for previews and code, `code_only_requirements` such as
 PySpark for code only, `query_requirements` for the data browser), and implements:
 - `matches(target)`: cheap detection, called on every click; directory formats (Delta, Parquet datasets) inspect
-  `target.children`. The highest `priority` wins (Delta 20 > Parquet 10 > default 0 > Text -10).
+  `target.children`. Parquet also takes Hive-style partition folders (`year=…/month=…/`), followed down one branch
+  (one more `ls` per partition column, `_partitioned_layout`), and keeps each directory's layout by URL for `scan`,
+  which gets the URL only (a URL it has not seen is detected again through fsspec, `_discover`). The highest
+  `priority` wins (Delta 20 > Parquet 10 > default 0 > Text -10).
 - `preview(target, limits)`: a list of `Preview` dataclasses (`TablePreview`, `TextPreview`, `TreePreview`,
   `MediaPreview`, `InstallPreview`...) that the frontend renders by `kind`; returns `install_hint()` when no package
   set is installed.

@@ -293,6 +293,23 @@ def delta_folder(x: Explorer) -> None:
 
 
 @check
+def partitioned_parquet(x: Explorer) -> None:
+    # Hive-style partitions (year=…/month=…/): one table, its partition
+    # columns from the folders' names.
+    x.go("curated")
+    x.row("orders_by_month").click()
+    link = x.el.locator(".jse-status-bar .jse-link")
+    expect(link).to_have_text("Query data (Parquet)")
+    link.click()
+    expect(x.preview.locator(".jse-query-status")).to_have_text("Rows 1–100 / 2,400")
+    for column in ("year", "month"):
+        expect(
+            x.preview.locator(".jse-query-name", has_text=re.compile(f"^{column}$"))
+        ).to_be_visible()
+    x.preview.press("Escape")
+
+
+@check
 def python_code(x: Explorer) -> None:
     x.go("curated")
     x.row("orders.parquet").click(button="right")
