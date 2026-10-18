@@ -75,7 +75,11 @@ function createModal(widgetEl) {
     close,
     isOpen: () => !el.hidden,
     show(title, children) {
-      head.replaceChildren(h("span", { className: "jse-preview-name", textContent: title, title }), h("span", { className: "jse-spacer" }), closeBtn);
+      head.replaceChildren(
+        h("span", { className: "jse-preview-name", textContent: visible(title), title: visible(title) }),
+        h("span", { className: "jse-spacer" }),
+        closeBtn,
+      );
       body.replaceChildren(...children);
       body.scrollTop = 0;
       el.hidden = false;

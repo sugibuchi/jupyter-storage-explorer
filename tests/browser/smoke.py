@@ -535,6 +535,26 @@ def drag_from_another_page_refused(x: Explorer) -> None:
 
 
 @check
+def hidden_characters_shown(x: Explorer) -> None:
+    # A name with a bidi override reads as another ("reportexe.jpg"): shown
+    # with the character escaped, in the list and the messages.
+    x.top("Scratch")
+    x.el.locator(".jse-list").evaluate(
+        """(list) => {
+          const data = new DataTransfer();
+          data.items.add(new File(["x"], "report\u202egpj.exe", { type: "application/octet-stream" }));
+          for (const type of ["dragenter", "dragover", "drop"]) {
+            list.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: data }));
+          }
+        }"""
+    )
+    expect(x.el.locator(".jse-confirm:visible")).to_contain_text("report\\u202egpj.exe")
+    x.button("Upload").click()
+    expect(x.row("report\\u202egpj.exe")).to_be_visible()
+    expect(x.status).to_contain_text("Uploaded report\\u202egpj.exe")
+
+
+@check
 def upload_from_computer(x: Explorer) -> None:
     # A native drop of a file, as from the computer's file manager.
     x.top("Scratch")

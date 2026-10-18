@@ -98,19 +98,34 @@ def prepare_folder_copy(
     """Prepare copying (or moving, file by file) folder ``source`` to
     ``target`` on ``fs``: create the target folders the files go in (empty
     folders are not copied, as object stores have none), and return (file,
-    its target, size) for each file in ``source``, to copy."""
+    its target, size) for each file in ``source``, to copy.
+
+    Raises ValueError, before anything is created, if a file's path in the
+    folder has "." or ".." parts (with "/" or "\\" between them, as Windows
+    takes both): object stores keep such keys as they are, and on a
+    filesystem that resolves them (a local disk, SFTP) the file would be
+    written outside ``target``.
+    """
+    root = source.rstrip("/")
+    files = []
+    for path, info in source_fs.find(source, detail=True).items():
+        relative = path.rstrip("/")[len(root) :].lstrip("/")
+        if {".", ".."} & set(relative.replace("\\", "/").split("/")):
+            raise ValueError(
+                f"{_paths.basename(source)}: not copied, as a file's path in it "
+                f"leads outside the folder ({relative})"
+            )
+        files.append((path, relative, info.get("size") or 0))
     fs.makedirs(target, exist_ok=True)
     made = {target.rstrip("/")}
     out = []
-    root = source.rstrip("/")
-    for path, info in source_fs.find(source, detail=True).items():
-        relative = path.rstrip("/")[len(root) :].lstrip("/")
+    for path, relative, size in files:
         dest = f"{target.rstrip('/')}/{relative}"
         parent = dest.rsplit("/", 1)[0]
         if parent not in made:
             fs.makedirs(parent, exist_ok=True)
             made.add(parent)
-        out.append((path, dest, info.get("size") or 0))
+        out.append((path, dest, size))
     return out
 
 

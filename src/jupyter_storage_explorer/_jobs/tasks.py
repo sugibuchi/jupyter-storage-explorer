@@ -592,7 +592,11 @@ class FileTasks:
             name = _paths.safe_name(_paths.basename(path))
             target = os.path.join(dest, name)
             refused = self._refused(self.fs, path, None, local._strip_protocol(target))
-            if refused is not None:
+            if not _directly_in(target, dest):
+                # e.g. "D:x" on Windows, with the folder on another drive: a
+                # path of its own, in drive D's current folder.
+                errors.append(f"{name}: not a file name of this system")
+            elif refused is not None:
                 errors.append(f"{name}: {refused}")
             elif self.fs.isdir(path):
                 errors.append(f"{name}: folders are not downloaded")
@@ -692,6 +696,13 @@ def _outcome(stop: _Stop | None, **lists: list[str]) -> dict[str, Any]:
         return lists
     incomplete = {"incomplete": stop.incomplete} if stop.incomplete else {}
     return {**lists, "cancelled": True, **incomplete}
+
+
+def _directly_in(path: str, folder: str) -> bool:
+    """Whether local ``path`` is in ``folder`` itself, as joining a file name
+    to it should give: a name the system reads as more than a name (e.g. with
+    a Windows drive letter) does not."""
+    return os.path.dirname(os.path.abspath(path)) == os.path.abspath(folder)
 
 
 def _conflicts(targets: Iterable[str]) -> dict[str, list[str]]:

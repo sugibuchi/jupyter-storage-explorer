@@ -200,7 +200,7 @@ function createList(x) {
   const tooltipUrls = new Map();
 
   function tooltip(entry, location) {
-    const lines = [`Name: ${entry.name}`];
+    const lines = [`Name: ${visible(entry.name)}`];
     if (entry.size != null) lines.push(`Size: ${formatSize(entry.size)}`);
     if (entry.mtime != null) lines.push(`Modified: ${formatTime(entry.mtime)}`);
     if (entry.ctime != null) lines.push(`Created: ${formatTime(entry.ctime)}`);
@@ -247,7 +247,7 @@ function createList(x) {
     const tr = h(
       "tr",
       { className: selected.has(entry.path) ? "jse-selected" : "" },
-      h("td", { className: "jse-col-name" }, h("span", { className: "jse-icon" }, fileIcon(entry.name, isDir)), entry.name),
+      h("td", { className: "jse-col-name" }, h("span", { className: "jse-icon" }, fileIcon(entry.name, isDir)), visible(entry.name)),
       h("td", { className: "jse-col-size", textContent: formatSize(entry.size) }),
       h("td", { className: "jse-col-mtime", textContent: formatTime(entry.mtime) }),
     );
@@ -372,7 +372,7 @@ function createList(x) {
   let flashTimer = null;
 
   function flash(message) {
-    statusEl.textContent = message;
+    statusEl.textContent = visible(message);
     clearTimeout(flashTimer);
     flashTimer = setTimeout(() => {
       flashTimer = null;
@@ -385,7 +385,7 @@ function createList(x) {
     const error = model.get("_error");
     statusEl.classList.toggle("jse-error", Boolean(error));
     if (error) {
-      statusEl.textContent = error;
+      statusEl.textContent = visible(error);
       return;
     }
     let total, matches;

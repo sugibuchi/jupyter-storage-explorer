@@ -48,7 +48,7 @@ function createProperties(x) {
 
   function showFile(file) {
     const rows = [
-      ["Name", file.name],
+      ["Name", visible(file.name)],
       ["Path", file.path],
       ...(file.url ? [["URL", file.url]] : []),
       ["Size", sizeText(file.size)],

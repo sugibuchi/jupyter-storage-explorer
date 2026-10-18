@@ -3,6 +3,18 @@
 // the kernel (see _static.py), as an anywidget module cannot import files next
 // to it.
 
+// Characters that change how the text around them reads, or are not seen:
+// controls, bidi embeddings, overrides and isolates (e.g. "report\u202Egpj.exe"
+// reads as "reportexe.jpg"), zero-width and other invisible format characters.
+const HIDDEN_CHARACTERS = /[\u0000-\u001f\u007f-\u009f\u00ad\u061c\u180e\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff\ufff9-\ufffb]/g;
+
+// `text` (a file name, a path, a message naming files) as users should read
+// it: HIDDEN_CHARACTERS shown as \uXXXX escapes, so that a name cannot pass
+// for another. Only for display; names are sent and compared as they are.
+function visible(text) {
+  return String(text).replace(HIDDEN_CHARACTERS, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`);
+}
+
 function h(tag, props = {}, ...children) {
   const el = document.createElement(tag);
   Object.assign(el, props);

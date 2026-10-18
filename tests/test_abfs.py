@@ -399,6 +399,18 @@ class TestCopy:
         assert deleted == sorted(f"data/{k}" for k in started)
         assert sum(1 for c in blobs.calls if c[0] == "abort") == 2
 
+    @pytest.mark.parametrize("bad", ["..", "a\\..\\x"])
+    def test_names_leaving_the_folder_refused(
+        self, lake, service, blobs, monkeypatch, bad
+    ):
+        """Checked before anything of the folder is created or copied."""
+        is_dir(monkeypatch, lake, True)
+        tree({"data/raw": [("ok.csv", 1), (bad, 2)]})
+        with pytest.raises(ValueError, match="is not a file name"):
+            ops().copy(lake, "data/raw", lake, "data/copy", Progress(), same=True)
+        assert blobs.calls == []
+        assert not [c for c in service.calls if c[0] == "create_directory"]
+
     def test_left_to_the_next(self, lake, service, blobs, monkeypatch):
         is_dir(monkeypatch, lake, False)
         other = AzureBlobFileSystem(account_name="other", account_key="a2V5")

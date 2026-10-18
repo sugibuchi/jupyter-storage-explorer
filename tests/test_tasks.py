@@ -7,6 +7,7 @@ import os
 import fsspec
 import pytest
 
+from jupyter_storage_explorer._jobs import tasks as tasks_module
 from jupyter_storage_explorer._jobs.incoming import IncomingFiles
 from jupyter_storage_explorer._jobs.tasks import FileTasks, Task
 from jupyter_storage_explorer.filesystems import (
@@ -157,3 +158,22 @@ def _operations_told(tmp_path, mappers, same):
     run(tasks.paste([(source, f"{root}/a.txt")], f"{root}/e"))
     assert told == same
     assert (tmp_path / "e" / "a.txt").read_bytes() == b"a"
+
+
+def test_directly_in(tmp_path):
+    folder = str(tmp_path)
+    assert tasks_module._directly_in(os.path.join(folder, "a.csv"), folder)
+    assert not tasks_module._directly_in(os.path.join(folder, "sub", "a.csv"), folder)
+    assert not tasks_module._directly_in(str(tmp_path.parent / "a.csv"), folder)
+
+
+@pytest.mark.skipif(os.name != "nt", reason="drive letters are Windows'")
+def test_download_name_with_another_drive_refused(memfs, tmp_path):
+    """On Windows, "X:name" joined to a folder of another drive is a path of
+    its own (drive X's current folder): never written."""
+    drive = "Z:" if not str(tmp_path).upper().startswith("Z:") else "Y:"
+    memfs.pipe_file(f"/d/{drive}evil.py", b"x")
+    tasks = FileTasks(memfs, "/", OperationChain([FsspecOperations()]))
+    reply = run(tasks.download([f"/d/{drive}evil.py"], str(tmp_path)))
+    assert reply["copied"] == []
+    assert "not a file name of this system" in reply["errors"][0]
