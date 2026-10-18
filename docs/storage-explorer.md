@@ -176,20 +176,42 @@ For example, with a MinIO storage, `s3fs` with `endpoint_url="http://minio:9000"
 
 ## Transfer policy
 
-`transfer_policy=[...]` limits where files may be transferred: between storages, to or from JupyterLab's file browser,
-and to or from your computer, not within a storage (see [File transfer between file systems](#file-transfer-between-file-systems)).
-The first rule whose `src` and `dest` regular expressions match the whole URLs decides; without one, files go:
+`transfer_policy=[...]` limits where files may be copied or moved: within a storage (moves onto a folder, renames, copy
+or cut and paste), between storages, to or from JupyterLab's file browser, and to or from your computer. The first rule
+whose `src` and `dest` regular expressions match the whole URLs decides; without one, files go:
 
 ```python
 StorageExplorer(filesystems={...}, transfer_policy=[
     {"rule": "allow", "src": r"abfs://lake@acct\.dfs\.core\.windows\.net/public/.*", "dest": ".*"},
+    {"rule": "allow", "src": r"abfs://lake@.*", "dest": r"abfs://lake@.*"},  # within the lake
     {"rule": "deny", "src": r"abfs://lake@.*", "dest": ".*"},  # nothing else leaves the lake
 ])
 ```
 
 URLs are those of "Copy URL"; files through JupyterLab's file browser are `jupyterlab://<absolute path>`, e.g.
 `jupyterlab:///home/jovyan/x.csv`, and files on your computer `browser:///<name>`. A pattern left out matches any URL.
-It prevents mistakes; it is not a security boundary. For the launcher's tabs, use `transfer_policy()` in
+A folder is checked as one item, by its own URL. It prevents mistakes; it is not a security boundary.
+
+**Named groups** tie the two URLs together: `(?P<name>...)` in both patterns, and the rule matches only if each group
+captures the same text in both. Both patterns must have the same group names. With `L` for
+`acct\.dfs\.core\.windows\.net`:
+
+| Files may move or be copied            | `src` and `dest` (an `allow` rule, before a broader `deny`)                                  |
+|----------------------------------------|-----------------------------------------------------------------------------------------------|
+| Within each container                  | `abfs://(?P<container>[^@/]+)@L/.*` in both                                                   |
+| Within each project folder of `raw`    | `abfs://raw@L/(?P<project>[^/]+)/.*` in both                                                  |
+| From `raw` to `curated`, same project  | `abfs://raw@L/(?P<project>[^/]+)/.*` → `abfs://curated@L/(?P<project>[^/]+)/.*`              |
+| Within each user's folder              | `abfs://home@L/(?P<user>[^/]+)/.*` in both                                                    |
+
+```python
+StorageExplorer(filesystems={...}, transfer_policy=[
+    # Within each container of the lake account, not between them.
+    {"rule": "allow",
+     "src": r"abfs://(?P<container>[^@/]+)@acct\.dfs\.core\.windows\.net/.*",
+     "dest": r"abfs://(?P<container>[^@/]+)@acct\.dfs\.core\.windows\.net/.*"},
+    {"rule": "deny", "src": r"abfs://[^@/]+@acct\.dfs\.core\.windows\.net/.*"},
+])
+``` For the launcher's tabs, use `transfer_policy()` in
 [its configuration](../launcher/README.md#configuration).
 
 ## Query data

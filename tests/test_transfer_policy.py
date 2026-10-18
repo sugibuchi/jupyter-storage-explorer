@@ -53,6 +53,68 @@ class TestAllows:
         assert TransferPolicy().error("s3://a/x", "/tmp/x") is None
 
 
+LAKE = r"abfs://(?P<container>[^@/]+)@lake\.dfs\.core\.windows\.net/"
+
+
+class TestNamedGroups:
+    """Named groups tie the source and the destination together."""
+
+    def test_same_text_in_both(self):
+        policy = TransferPolicy(
+            [
+                {"rule": "allow", "src": LAKE + ".*", "dest": LAKE + ".*"},
+                # Without the group: "dest" has none.
+                {
+                    "rule": "deny",
+                    "src": r"abfs://[^@/]+@lake\.dfs\.core\.windows\.net/.*",
+                },
+            ]
+        )
+        url = "abfs://{}@lake.dfs.core.windows.net/{}".format
+        assert policy.allows(url("raw", "a.csv"), url("raw", "b/a.csv"))
+        assert not policy.allows(url("raw", "a.csv"), url("curated", "a.csv"))
+        assert not policy.allows(url("raw", "a.csv"), "/tmp/a.csv")
+
+    def test_several_groups_and_other_texts_around_them(self):
+        """raw → curated, but only within one project."""
+        src = r"abfs://raw@lake/(?P<project>[^/]+)/(?P<year>\d{4})/.*"
+        dest = r"abfs://curated@lake/(?P<project>[^/]+)/(?P<year>\d{4})/.*"
+        policy = TransferPolicy(
+            [
+                {"rule": "allow", "src": src, "dest": dest},
+                {"rule": "deny", "src": "abfs://raw@lake/.*", "dest": ".*"},
+            ]
+        )
+        assert policy.allows(
+            "abfs://raw@lake/p1/2026/x", "abfs://curated@lake/p1/2026/x"
+        )
+        assert not policy.allows(
+            "abfs://raw@lake/p1/2026/x", "abfs://curated@lake/p2/2026/x"
+        )
+        assert not policy.allows(
+            "abfs://raw@lake/p1/2026/x", "abfs://curated@lake/p1/2025/x"
+        )
+
+    def test_group_that_did_not_take_part(self):
+        """A group outside the match captures None: equal only to None."""
+        pattern = r"s3://b/(?:(?P<team>[^/]+)/)?x"
+        policy = TransferPolicy(
+            [
+                {"rule": "allow", "src": pattern, "dest": pattern},
+                {"rule": "deny"},
+            ]
+        )
+        assert policy.allows("s3://b/x", "s3://b/x")
+        assert policy.allows("s3://b/t1/x", "s3://b/t1/x")
+        assert not policy.allows("s3://b/x", "s3://b/t1/x")
+
+    def test_unnamed_groups_are_not_compared(self):
+        policy = TransferPolicy(
+            [{"rule": "deny", "src": r"s3://(a|b)/.*", "dest": r"s3://(a|b)/.*"}]
+        )
+        assert not policy.allows("s3://a/x", "s3://b/x")
+
+
 @pytest.mark.parametrize(
     ("path", "url"),
     [
@@ -81,6 +143,21 @@ def test_jupyterlab_url(path, url):
         ),
         ([{"rule": "deny", "src": 3}], "'src' must be a regular expression"),
         ([{"rule": "deny", "dest": "("}], "'dest' is not a regular expression"),
+        (
+            [
+                {
+                    "rule": "deny",
+                    "src": r"s3://(?P<b>[^/]+)/.*",
+                    "dest": r"s3://(?P<c>[^/]+)/.*",
+                }
+            ],
+            r"rule 0: 'src' and 'dest' must have the same named groups "
+            r"\(src: \['b'\], dest: \['c'\]\)",
+        ),
+        (
+            [{"rule": "deny", "src": r"s3://(?P<b>[^/]+)/.*"}],
+            r"must have the same named groups \(src: \['b'\], dest: \[\]\)",
+        ),
     ],
 )
 def test_invalid_rules(rules, message):
