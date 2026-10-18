@@ -10,13 +10,14 @@ spirit of Azure Storage Explorer.
 
 Browse Amazon S3, Azure Data Lake / Blob Storage, Google Cloud Storage, local disks and more; preview Parquet files,
 Delta Lake tables, CSV, Excel, JSON and other formats; page through, sort and filter tables; get ready-to-run code that
-loads the data into your notebook; and upload, download, move and edit files without leaving JupyterLab.
+loads the data into your notebook; and upload, download, move and edit files without leaving JupyterLab. See
+[Using the explorer](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#using-the-explorer) for all you can do with it.
 
 ![Storage Explorer in JupyterLab: a Delta Lake table queried, files filtered, and a Markdown file edited in JupyterLab's editor and previewed](https://raw.githubusercontent.com/sugibuchi/jupyter-storage-explorer/main/docs/figs/storage-explorer.gif)
 
 This package also provides the **`DataExplorer`** widget, which lets you browse tabular data in your notebook: any
 dataframe of pandas, polars, Spark, DuckDB and more. Page through, sort and filter it in the widget, then get the
-result back in code.
+result back in code. See [Using the data browser](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/data-explorer.md#using-the-data-browser) for all you can do with it.
 
 ![DataExplorer in a notebook: a Parquet file paged through, columns hidden, filtered and sorted](https://raw.githubusercontent.com/sugibuchi/jupyter-storage-explorer/main/docs/figs/data-explorer.gif)
 

@@ -73,8 +73,8 @@ explorer of exactly its own version (`launcher/hatch_build.py` sets its dependen
   from the top level, `filesystems` and `formats` only.
 - `jupyter-storage-explorer-launcher` (`launcher/`): a JupyterLab launcher item opening a tab whose kernel runs
   `launch()`. It merges every `storage-explorer/launcher.py` in Jupyter's config paths as layers, system to user
-  (their `filesystems()`, `formats()`, `format_options()`, `operations()`, `filesystem_mappers()`, `transfer_policy()`, `parameters()`,
-  `style()`; `final()` names what later layers cannot change; see `load_settings`, tested in
+  (their `filesystems()`, `formats()`, `format_options()`, `operations()`, `filesystem_mappers()`, `transfer_policy()`, `parameters()`;
+  `final()` names what later layers cannot change; a retired `style()` is ignored with a warning, `RETIRED`; see `load_settings`, tested in
   `tests/test_launcher.py`). Its JupyterLab extension has four plugins:
   - `index.ts`: the tab, a console (`ExplorerTab`). ipywidgets binds a console's widgets to its first kernel, so a tab
     whose session is lost (server restart) or whose kernel changes or restarts is replaced by a new tab. Each tab's

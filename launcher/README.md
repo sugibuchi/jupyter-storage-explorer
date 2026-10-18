@@ -24,6 +24,8 @@ pip install jupyter-storage-explorer-launcher
 Install it in the environment of JupyterLab and of the default kernel (on JupyterHub, usually the single-user image),
 then restart JupyterLab. Requires JupyterLab 4.
 
+Then see [Using the explorer](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#using-the-explorer).
+
 ## Configuration
 
 Configure the tab with files `storage-explorer/launcher.py` in Jupyter's configuration directories (`jupyter --paths`,
@@ -40,7 +42,6 @@ has some of these functions:
 | `filesystem_mappers()` | [How storages are told apart](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#file-transfer-between-file-systems) and their URLs (`FileSystemMapper`) | Later layers' first, all before the defaults |
 | `transfer_policy()` | Rules of a [transfer policy](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#transfer-policy) | Later layers' first, so they decide first                |
 | `parameters()`      | Other `StorageExplorer` arguments, e.g. `{"height": "fill"}`  | By name                                                  |
-| `style()`           | CSS for the page while the tab is open                        | Joined, the user's last                                  |
 | `final()`           | Settings later layers cannot change, e.g. `["filesystems"]`   | Function names (except `parameters`) and parameter names |
 
 `"."` is the folder the tab opens on. The tabs share bookmarks and query settings in
@@ -76,6 +77,7 @@ def parameters():
     return {"max_browser_items": 50_000}
 ```
 
-To change the explorer's icons, prefer JupyterLab's `custom.css` (see
-[Icons](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/DEVELOPMENT.md#icons)): `style()` applies only
-while an explorer tab is open, not to explorers in notebooks.
+To change the explorer's icons, use JupyterLab's `custom.css` (see
+[Icons](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/DEVELOPMENT.md#icons)), which applies to the
+launcher's tabs and to explorers in notebooks alike. `style()`, which earlier versions used for this, is ignored, with a
+warning in the tab.

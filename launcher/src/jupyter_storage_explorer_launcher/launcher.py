@@ -47,10 +47,6 @@ final. Each file may have these functions, all optional:
     recent queries) the file ``storage-explorer/states.json`` in the user's
     Jupyter configuration directory, shared by the tabs (``None``: in each
     tab's memory only).
-``style()``
-    CSS (without ``<style>``) applied to the page while the tab is open, e.g.
-    to customize the explorer's icons; the layers' are joined, the user's
-    last.
 ``final()``
     ``["filesystems", "height", ...]``: settings later layers cannot change:
     the names of the functions above, except ``parameters``, and the names
@@ -105,8 +101,15 @@ HOOKS = (
     "filesystem_mappers",
     "transfer_policy",
     "parameters",
-    "style",
 )
+
+# Functions launcher.py files may still have, no longer used: they are
+# ignored (and their names in final()), with a warning shown in the tab.
+RETIRED = {
+    # CSS applied to the page while the tab was open: not to explorers in
+    # notebooks, which JupyterLab's custom.css reaches.
+    "style": "use JupyterLab's custom.css instead, for every page (see Icons in the project's DEVELOPMENT.md)",
+}
 
 # StorageExplorer arguments that are not "parameters": set by their own
 # function, or by the launcher.
@@ -134,7 +137,8 @@ class Settings:
     """The settings of all the layers, merged (see the module docstring).
 
     ``warnings`` are the changes ignored because an earlier layer made the
-    setting final, shown in the tab.
+    setting final, and the functions no longer used (see ``RETIRED``), shown
+    in the tab.
     """
 
     filesystems: dict[str, Any] = dataclasses.field(default_factory=dict)
@@ -144,7 +148,6 @@ class Settings:
     filesystem_mappers: list[Any] = dataclasses.field(default_factory=list)
     transfer_policy: list[Any] = dataclasses.field(default_factory=list)
     parameters: dict[str, Any] = dataclasses.field(default_factory=dict)
-    style: str = ""
     warnings: list[str] = dataclasses.field(default_factory=list)
 
     def explorer_arguments(self) -> tuple[tuple[Any, ...], dict[str, Any]]:
@@ -219,9 +222,16 @@ def load_settings(files: Sequence[pathlib.Path] | None = None) -> Settings:
                 f"{path}: launch() is no longer used; set filesystems(), "
                 f"parameters() etc. instead (see the launcher's README)"
             )
+        for name, instead in RETIRED.items():
+            if callable(getattr(module, name, None)):
+                settings.warnings.append(
+                    f"{path}: {name}() is no longer used and is ignored; {instead}"
+                )
         values = {name: _call(module, path, name) for name in (*HOOKS, "final")}
         _apply(settings, values, path, final)
         for name in values["final"] or ():
+            if name in RETIRED:
+                continue  # its function is ignored anyway
             _check_final_name(name, path)
             final.setdefault(name, path)
     return settings
@@ -240,10 +250,8 @@ def _apply(
             continue
         if merge == "by name":
             getattr(settings, name).update(_mapping(value, path, name))
-        elif merge == "first":
+        else:  # "first"
             getattr(settings, name)[:0] = _sequence(value, path, name)
-        elif value:  # "joined": style
-            settings.style = "\n".join(s for s in (settings.style, str(value)) if s)
     if values["parameters"] is not None:
         for name, value in _mapping(values["parameters"], path, "parameters").items():
             _check_parameter_name(name, path)
@@ -273,7 +281,6 @@ _MERGES = {
     "operations": "first",
     "filesystem_mappers": "first",
     "transfer_policy": "first",
-    "style": "joined",
 }
 
 
@@ -356,21 +363,16 @@ def create_widget() -> Any:
 
 
 def launch(view: str | None = None) -> None:
-    """Run by the launcher's tab: apply the layers' ``style()``, show their
-    warnings, and show the explorer.
+    """Run by the launcher's tab: show the layers' warnings, and the explorer.
 
     ``view``: the tab's view when it was last open, as JSON ({"filesystem":
     name, "folders": {name: folder}}), saved by the tab (see the extension's
     index.ts): the explorer reopens there. A view that cannot be used is
     ignored.
     """
-    from IPython.display import HTML, display  # noqa: PLC0415
+    from IPython.display import display  # noqa: PLC0415
 
     settings = load_settings()
-    if settings.style:
-        # A <style> output applies to the whole page while the tab is open;
-        # the tab's CSS hides the (empty) output itself.
-        display(HTML(f"<style>{settings.style}</style>"))
     for warning in settings.warnings:
         print(warning, file=sys.stderr)
     display(_create_explorer(settings, view))
