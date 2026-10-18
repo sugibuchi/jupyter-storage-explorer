@@ -9,13 +9,14 @@ from adlfs import AzureBlobFileSystem
 from fsspec import AbstractFileSystem
 from fsspec.implementations.dirfs import DirFileSystem
 
-from jupyter_storage_explorer.fs_mappers import (
+from jupyter_storage_explorer.filesystems import (
     FileSystemMapper,
     MapperChain,
+    default_mappers,
     same_filesystem,
 )
 
-chain = MapperChain()
+chain = MapperChain(default_mappers())
 default_url, default_location = chain.url_of, chain.locate
 path_in, storage_of = chain.path_in, chain.storage_of
 
@@ -304,7 +305,7 @@ def test_mappers_given_first(memfs):
         def to_url(self, fs, path):
             return f"memory://tests{path}"
 
-    mine = MapperChain([Namespaced()])
+    mine = MapperChain([Namespaced(), *default_mappers()])
     assert mine.url_of(memfs, "/x") == "memory://tests/x"
     assert mine.storage_of(memfs)["identifier"] == {"namespace": "tests"}
     assert default_url(memfs, "/x") == "memory:///x"

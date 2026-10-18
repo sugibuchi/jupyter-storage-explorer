@@ -9,5 +9,5 @@ it plans and runs in the background, so testable on their own.
 - properties.py: "Properties": a file's info, or the totals of a selection.
 - transfer_policy.py: the rules of the directions files may be transferred in.
 
-The operations themselves are done by ``fs_operations``.
+The operations themselves are done by ``filesystems``.
 """

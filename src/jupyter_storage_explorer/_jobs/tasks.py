@@ -5,7 +5,7 @@ Each is planned by a ``FileTasks`` method on the kernel's main thread: checks
 already exist, to ask the user about. The result is a reply for the
 frontend (e.g. {"conflicts": [...]}), or a ``Task`` to run: its
 ``work(progress)`` does the operation in a job's worker thread (see runner.py)
-through the operations objects (see fs_operations/base.py), and records what it
+through the operations objects (see filesystems/operation.py), and records what it
 changed on the task (files moved or removed, folders whose listing changed),
 for the explorer to show as the job goes and once it has ended.
 
@@ -26,8 +26,9 @@ from fsspec.implementations.local import LocalFileSystem
 
 from jupyter_storage_explorer import _paths
 from jupyter_storage_explorer._jobs import properties
-from jupyter_storage_explorer.fs_mappers.chain import MapperChain
-from jupyter_storage_explorer.fs_operations.base import (
+from jupyter_storage_explorer.filesystems.mapper import MapperChain
+from jupyter_storage_explorer.filesystems.mappers import default_mappers
+from jupyter_storage_explorer.filesystems.operation import (
     OperationCancelled,
     Progress,
 )
@@ -37,7 +38,7 @@ if TYPE_CHECKING:
 
     from fsspec import AbstractFileSystem
 
-    from jupyter_storage_explorer.fs_operations.base import OperationChain
+    from jupyter_storage_explorer.filesystems.operation import OperationChain
 
 
 @dataclasses.dataclass
@@ -187,7 +188,9 @@ class FileTasks:
         self.root = root
         self.ops = operations
         self.check = check
-        self.same_filesystem = (mappers or MapperChain()).same_filesystem
+        self.same_filesystem = (
+            mappers or MapperChain(default_mappers())
+        ).same_filesystem
 
     def _refused(
         self,

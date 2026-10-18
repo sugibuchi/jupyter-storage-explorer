@@ -62,7 +62,7 @@ operations optimized for a particular storage. Pass them as `operations=[...]`.
 
 ```python
 from jupyter_storage_explorer import StorageExplorer
-from jupyter_storage_explorer.fs_operations.abfs import AzureDataLakeGen2Operation
+from jupyter_storage_explorer.filesystems.abfs import AzureDataLakeGen2Operation
 
 StorageExplorer(
     "abfs://lake@myaccount.dfs.core.windows.net/raw",
@@ -70,7 +70,7 @@ StorageExplorer(
 )
 ```
 
-To write your own, subclass `FileSystemOperations` (see [fs_operations/base.py](../src/jupyter_storage_explorer/fs_operations/base.py)).
+To write your own, subclass `FileSystemOperations` (see [filesystems/operation.py](../src/jupyter_storage_explorer/filesystems/operation.py)).
 
 ### URLs of other storages
 
@@ -79,7 +79,7 @@ tells storages apart by what they reach, e.g. an Azure account or an SFTP server
 copied or dragged into an explorer of another notebook are found again by both: on one of its storages that reaches
 them, else on one opened from the URL with the environment's credentials, never on another storage of the same kind.
 Azure, S3, Google Cloud Storage, SFTP, local disks and in-memory storages are known; for others, write a
-`FileSystemMapper` (see [fs_mappers/base.py](../src/jupyter_storage_explorer/fs_mappers/base.py)) and pass it as
+`FileSystemMapper` (see [filesystems/mapper.py](../src/jupyter_storage_explorer/filesystems/mapper.py)) and pass it as
 `filesystem_mappers=[...]`. A storage wrapped in fsspec's `DirFileSystem` (a folder of another one) has the URLs of
 that storage.
 
@@ -244,7 +244,7 @@ StorageExplorer("s3://my-bucket/data", states=ExplorerStates("states.json", max_
 | Text, code, configuration (YAML, SQL, Python, …)             | `text`       | With syntax highlighting      |            | Python                                              |
 | Images (PNG, JPEG, GIF, SVG, …)                              | `image`      | Shown                         |            | Pillow                                              |
 
-The name identifies the format in CSS (see [Customizing icons](../DEVELOPMENT.md#customizing-icons)).
+The name identifies the format in CSS (see [Icons](../DEVELOPMENT.md#icons)).
 
 ## Format options
 

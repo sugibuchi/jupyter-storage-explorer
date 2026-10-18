@@ -4,8 +4,8 @@
 of ``FileSystemOperations`` objects (its ``operations`` argument): for each
 operation it calls the first object's method, and the next object's if that
 raises ``FileSystemOperations.NotSupported`` (see ``OperationChain``). Its
-default list (``StorageExplorer.default_operations``, from the
-``filesystems`` package) is ``AtomicMoveOperation``, for moves in one step
+default list (``default_operations()`` in operations.py, with the predefined
+operations) is ``AtomicMoveOperation``, for moves in one step
 on local disks, then ``AsyncFsspecOperations``, for asynchronous filesystems
 (s3fs, gcsfs, adlfs, ...), many files at a time, then ``FsspecOperations``,
 which does everything with fsspec. So an object put before them can do some
@@ -30,7 +30,7 @@ from typing import TYPE_CHECKING, Any
 from fsspec.callbacks import Callback
 
 from jupyter_storage_explorer import _infos
-from jupyter_storage_explorer.fs_mappers.chain import same_filesystem
+from jupyter_storage_explorer.filesystems.mappers import same_filesystem
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence

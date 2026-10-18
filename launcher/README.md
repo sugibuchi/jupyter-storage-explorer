@@ -69,18 +69,13 @@ def final():
     return ["filesystems", "transfer_policy"]  # users cannot change these
 ```
 
-And for one user, `~/.jupyter/storage-explorer/launcher.py`, with icons of their own (see
-[Customizing icons](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/DEVELOPMENT.md#customizing-icons)):
+And for one user, `~/.jupyter/storage-explorer/launcher.py`:
 
 ```python
 def parameters():
     return {"max_browser_items": 50_000}
-
-
-def style():
-    # The folders in the top folder as 🗃️: hide the folder icon, show another
-    return """
-    .jse-browser [data-depth="1"] .jse-icon svg { display: none; }
-    .jse-browser [data-depth="1"] .jse-icon::before { content: "🗃️"; }
-    """
 ```
+
+To change the explorer's icons, prefer JupyterLab's `custom.css` (see
+[Icons](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/DEVELOPMENT.md#icons)): `style()` applies only
+while an explorer tab is open, not to explorers in notebooks.

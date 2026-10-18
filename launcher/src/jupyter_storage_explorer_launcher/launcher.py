@@ -32,7 +32,7 @@ final. Each file may have these functions, all optional:
     first.
 ``filesystem_mappers()``
     ``[FileSystemMapper, ...]``: how filesystems of your own are told apart
-    and their paths become URLs (see ``jupyter_storage_explorer.fs_mappers``),
+    and their paths become URLs (see ``jupyter_storage_explorer.filesystems``),
     tried before the defaults; a later layer's come first.
 ``transfer_policy()``
     ``[{"rule": "allow" or "deny", "src": regex, "dest": regex}, ...]``:

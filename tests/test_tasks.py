@@ -9,9 +9,13 @@ import pytest
 
 from jupyter_storage_explorer._jobs.incoming import IncomingFiles
 from jupyter_storage_explorer._jobs.tasks import FileTasks, Task
-from jupyter_storage_explorer.fs_mappers import LocalMapper, MapperChain
-from jupyter_storage_explorer.fs_operations import FsspecOperations
-from jupyter_storage_explorer.fs_operations.base import (
+from jupyter_storage_explorer.filesystems import (
+    FsspecOperations,
+    LocalMapper,
+    MapperChain,
+    default_mappers,
+)
+from jupyter_storage_explorer.filesystems.operation import (
     FileSystemOperations,
     OperationChain,
     Progress,
@@ -118,7 +122,7 @@ class TestIncomingFiles:
 
 def test_operations_are_told_if_within_one_filesystem(tmp_path):
     """Two local filesystems with other options: one, as the mappers tell."""
-    _operations_told(tmp_path, MapperChain(), [True])
+    _operations_told(tmp_path, MapperChain(default_mappers()), [True])
 
 
 def test_operations_told_by_the_explorers_mappers(tmp_path):
@@ -130,7 +134,7 @@ def test_operations_told_by_the_explorers_mappers(tmp_path):
         def identifier(self, fs):
             return {**super().identifier(fs), "auto_mkdir": fs.auto_mkdir}
 
-    _operations_told(tmp_path, MapperChain([ByOption()]), [False])
+    _operations_told(tmp_path, MapperChain([ByOption(), *default_mappers()]), [False])
 
 
 def _operations_told(tmp_path, mappers, same):

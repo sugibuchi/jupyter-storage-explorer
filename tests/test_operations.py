@@ -1,4 +1,4 @@
-"""fs_operations/ and _jobs/runner.py: file operations with progress and cancellation, run as jobs."""
+"""filesystems/ and _jobs/runner.py: file operations with progress and cancellation, run as jobs."""
 
 from __future__ import annotations
 
@@ -15,12 +15,12 @@ from fsspec.implementations.dirfs import DirFileSystem
 from jupyter_storage_explorer import StorageExplorer
 from jupyter_storage_explorer._jobs import runner as jobs
 from jupyter_storage_explorer._jobs.runner import JobRunner
-from jupyter_storage_explorer.fs_operations import (
+from jupyter_storage_explorer.filesystems import (
     AsyncFsspecOperations,
     AtomicMoveOperation,
     FsspecOperations,
 )
-from jupyter_storage_explorer.fs_operations.base import (
+from jupyter_storage_explorer.filesystems.operation import (
     FileSystemOperations,
     Measurement,
     OperationCancelled,

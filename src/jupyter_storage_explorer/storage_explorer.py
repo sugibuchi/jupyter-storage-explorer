@@ -26,19 +26,20 @@ from jupyter_storage_explorer._explorer.states import ExplorerStates, explorer_s
 from jupyter_storage_explorer._jobs.incoming import IncomingFiles
 from jupyter_storage_explorer._jobs.runner import JobRunner
 from jupyter_storage_explorer._jobs.transfer_policy import TransferPolicy
+from jupyter_storage_explorer.filesystems import (
+    MapperChain,
+    OperationChain,
+    default_mappers,
+)
+from jupyter_storage_explorer.filesystems import (
+    default_operations as _default_operations,
+)
 from jupyter_storage_explorer.formats import (
     DataFormat,
     PreviewLimits,
     Text,
     explorer_formats,
 )
-from jupyter_storage_explorer.fs_mappers.chain import MapperChain
-from jupyter_storage_explorer.fs_operations import (
-    AsyncFsspecOperations,
-    AtomicMoveOperation,
-    FsspecOperations,
-)
-from jupyter_storage_explorer.fs_operations.base import OperationChain
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
@@ -48,8 +49,8 @@ if TYPE_CHECKING:
 
     from jupyter_storage_explorer._query.data_query import DataQuery
     from jupyter_storage_explorer.data_explorer import DataExplorer
-    from jupyter_storage_explorer.fs_mappers.base import FileSystemMapper
-    from jupyter_storage_explorer.fs_operations.base import FileSystemOperations
+    from jupyter_storage_explorer.filesystems.mapper import FileSystemMapper
+    from jupyter_storage_explorer.filesystems.operation import FileSystemOperations
 
     # A request's handler: the reply to its content (see _requests).
     _Handler = Callable[[dict[str, Any]], dict[str, Any]]
@@ -145,11 +146,11 @@ class StorageExplorer(
         File operations of your own, tried before ``default_operations()``,
         e.g. ``[MyOps()]`` for server-side copies: for each operation (move,
         copy, delete, ...), the first object that supports it does it (see
-        ``jupyter_storage_explorer.fs_operations``). To change the defaults themselves, override
+        ``jupyter_storage_explorer.filesystems``). To change the defaults themselves, override
         ``default_operations`` in a subclass.
     filesystem_mappers : sequence of FileSystemMapper, optional
         Mappers of your own, tried before
-        ``jupyter_storage_explorer.fs_mappers.default_mappers()``: for each
+        ``jupyter_storage_explorer.filesystems.default_mappers()``: for each
         filesystem, the first that maps it gives the URLs of its paths ("Copy
         URL", ``folder_url``, "Python code", previews, the transfer policy)
         and what it reaches (its identifier), by which files copied or
@@ -251,7 +252,7 @@ class StorageExplorer(
     _filesystem_names = traitlets.List(traitlets.Unicode()).tag(sync=True)
     _filesystem = traitlets.Unicode().tag(sync=True)
     # The filesystem shown, as its mapper describes it: {"protocol",
-    # "identifier"} (see fs_mappers/), sent with files copied or dragged, by
+    # "identifier"} (see filesystems/), sent with files copied or dragged, by
     # which an explorer in another kernel finds them (MapperChain.locate).
     _storage_identity = traitlets.Dict().tag(sync=True)
     # The "Unsafe mode" switch in the toolbar: while on, risky operations
@@ -296,10 +297,10 @@ class StorageExplorer(
         except (OSError, ValueError) as exc:
             states_error = f"Bookmarks and queries not read again: {exc}"
         self._max_browser_items = max_browser_items
-        # How files are moved, copied, deleted and downloaded (see fs_operations/),
+        # How files are moved, copied, deleted and downloaded (see filesystems/),
         # and the jobs doing it in the background (see _jobs/runner.py).
-        # What filesystems reach, their URLs and back (see fs_mappers/).
-        self._mappers = MapperChain(filesystem_mappers or ())
+        # What filesystems reach, their URLs and back (see filesystems/).
+        self._mappers = MapperChain([*(filesystem_mappers or ()), *default_mappers()])
         self._operations = OperationChain(
             [*(operations or ()), *self.default_operations()]
         )
@@ -359,19 +360,18 @@ class StorageExplorer(
 
     @staticmethod
     def default_operations() -> list[FileSystemOperations]:
-        """The file operations tried after those given as ``operations``.
+        """The file operations tried after those given as ``operations``;
+        override it in a subclass to change them.
 
         Returns
         -------
         list of FileSystemOperations
-            New objects each time: ``AtomicMoveOperation`` (moves in one step
-            on local disks), ``AsyncFsspecOperations`` (asynchronous fsspec
-            filesystems such as s3fs, gcsfs and adlfs, many files at a time),
-            then ``FsspecOperations`` (everything else, with fsspec), from the
-            ``jupyter_storage_explorer.filesystems`` package. The last does
-            every operation, so the explorer can always do them.
+            By default ``jupyter_storage_explorer.filesystems.default_operations()``:
+            ``AtomicMoveOperation``, ``AsyncFsspecOperations``, then
+            ``FsspecOperations``, which does every operation, so the explorer
+            can always do them.
         """
-        return [AtomicMoveOperation(), AsyncFsspecOperations(), FsspecOperations()]
+        return _default_operations()
 
     @traitlets.validate("_filesystem")
     def _validate_filesystem(self, proposal: dict[str, Any]) -> str:
@@ -582,7 +582,7 @@ class StorageExplorer(
     # --- File operations: wrappers of fsspec calls on the filesystem shown
     # (``self._fs``) for listing, reading and writing; the methods above go
     # through them, never through fsspec directly. Moving, copying and
-    # deleting go through the operations objects instead (see fs_operations/) ---
+    # deleting go through the operations objects instead (see filesystems/) ---
 
     def _ls(self, path: str) -> list[dict[str, Any]]:
         """The items in directory ``path`` (fsspec's ``ls(detail=True)`` entries)."""

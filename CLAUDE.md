@@ -62,17 +62,18 @@ explorer of exactly its own version (`launcher/hatch_build.py` sets its dependen
   and `DataExplorer` (a dataframe given by the user, any library narwhals supports, with `QuerySettings`). Runtime
   dependencies are only anywidget, fsspec, narwhals, pygments, traitlets; polars, pandas, pyarrow, deltalake, fastexcel,
   openpyxl, Pillow, PySpark are all optional and probed at run time. The "abfs" extra adds adlfs and the Data Lake SDK,
-  for `fs_operations/abfs.py`. Its top level has the widgets (`storage_explorer.py`, `data_explorer.py`) and small
-  private helpers (`_paths`, `_infos`, `_json`, `_static`); the rest is in packages: public, `fs_mappers/` (URLs and
-  identities of filesystems), `fs_operations/`
-  (`FileSystemOperations` in `base.py`, the default operations) and `formats/`; private, `_explorer/`
+  for `filesystems/abfs.py`. Its top level has the widgets (`storage_explorer.py`, `data_explorer.py`) and small
+  private helpers (`_paths`, `_infos`, `_json`, `_static`); the rest is in packages: public, `filesystems/`
+  (`mapper.py`: the `FileSystemMapper` interface and `MapperChain`; `mappers.py`: the predefined mappers;
+  `operation.py`: the `FileSystemOperations` interface; `operations.py`: the predefined operations; `abfs.py`: the
+  opt-in Data Lake operation) and `formats/`; private, `_explorer/`
   (`StorageExplorer`'s mixins, with `states.py`, `listing.py` and `jupyterlab_files.py`), `_jobs/` (`tasks.py`:
   `FileTasks`; `runner.py`: `JobRunner`; `incoming.py`, `properties.py`, `transfer_policy.py`) and `_query/`
   (`filters.py`, `settings.py`: `QuerySettings`, `QueryState`; `data_query.py`: `DataQuery`, `fetch_rows`). Users import
-  from the top level, `fs_mappers`, `fs_operations` and `formats` only.
+  from the top level, `filesystems` and `formats` only.
 - `jupyter-storage-explorer-launcher` (`launcher/`): a JupyterLab launcher item opening a tab whose kernel runs
   `launch()`. It merges every `storage-explorer/launcher.py` in Jupyter's config paths as layers, system to user
-  (their `filesystems()`, `formats()`, `format_options()`, `operations()`, `transfer_policy()`, `parameters()`,
+  (their `filesystems()`, `formats()`, `format_options()`, `operations()`, `filesystem_mappers()`, `transfer_policy()`, `parameters()`,
   `style()`; `final()` names what later layers cannot change; see `load_settings`, tested in
   `tests/test_launcher.py`). Its JupyterLab extension has four plugins:
   - `index.ts`: the tab, a console (`ExplorerTab`). ipywidgets binds a console's widgets to its first kernel, so a tab
@@ -124,14 +125,14 @@ so their order rarely matters. Third-party code is vendored in `static/vendor/`.
 sync.
 
 **Storage.** Everything is an fsspec filesystem; `StorageExplorer` can hold several named ones (`filesystems=`).
-What a filesystem reaches and its URLs come from mappers (`fs_mappers/`, the `filesystem_mappers=` argument, then
-`default_mappers()`): a `FileSystemMapper` per fsspec implementation, matched by qualified class names through the MRO
+What a filesystem reaches and its URLs come from mappers (`filesystems/mapper.py`, the `filesystem_mappers=` argument,
+then `default_mappers()` of `mappers.py`): a `FileSystemMapper` per fsspec implementation, matched by qualified class names through the MRO
 (so optional packages are not imported; tests fake s3fs, gcsfs and paramiko's SFTP classes by `__module__`). It gives
 `identifier(fs)` (JSON, no credentials; defined per protocol, so implementations of one protocol agree: adlfs
 `{"account_name"}`, s3fs the endpoint or AWS partition, gcsfs `{}`, SFTP host, port and user, local disk the machine,
 memory the process), `to_url` (plain paths for local files, `abfs://container@account.dfs.core.windows.net/...` for
 Azure, `s3://`, `gs://`, `sftp://user@host:port/...`; None for items without a URL) and `path_of`, the reverse.
-`MapperChain` (`chain.py`, the explorer's `_mappers`) asks them: `url_of`, `storage_of` (`{"protocol", "identifier"}`,
+`MapperChain` (`mapper.py`, the explorer's `_mappers`: its mappers then the defaults) asks them: `url_of`, `storage_of` (`{"protocol", "identifier"}`,
 synced as `_storage_identity` and sent with files copied or dragged), `same_filesystem` (equal protocol and identifier,
 so the same storage opened with other credentials is one; unknown filesystems, `FsspecMapper`, compare as fsspec does)
 and `locate`, for files pasted from another kernel: the first of the explorer's storages whose mapper accepts the
@@ -144,17 +145,17 @@ are told by `FileTasks` with `move`'s and `copy`'s keyword `same` (the explorer'
 **File operations.** `StorageExplorer` ends with a *File operations* block: the only methods that call fsspec on the
 filesystem shown (`self._fs`) for listing, reading and writing (`_ls`, `_info`, `_exists`, `_isdir`, `_read_bytes`,
 `_write_bytes`); other methods go through them. Moving, copying, deleting, downloading and creating folders go through
-the operations objects instead (`fs_operations/`, the `operations=` argument): a chain of `FileSystemOperations`, each
+the operations objects instead (`filesystems/operation.py`, the `operations=` argument): a chain of `FileSystemOperations`, each
 method tried in order until one does not raise `FileSystemOperations.NotSupported` (its own exception, so that a
 library's `NotImplementedError` is reported as an error). `operations=` are tried before
-`StorageExplorer.default_operations()`, from the same package: `AtomicMoveOperation` (only moves within a
+`StorageExplorer.default_operations()` (`default_operations()` of `operations.py`, with them): `AtomicMoveOperation` (only moves within a
 filesystem whose `mv` renames a folder in one step: local, memory, or a `DirFileSystem` over them), then
-`AsyncFsspecOperations` (`async_fsspec.py`: async filesystems such as s3fs, their coroutines, many files at a time),
-then `FsspecOperations` (`fsspec.py`). Both of the latter walk folders themselves, moves included, to report progress
-file by file (helpers in `fs_operations/_common.py`). Opt-in, not a default: `AzureDataLakeGen2Operation` (`abfs.py`,
+`AsyncFsspecOperations` (async filesystems such as s3fs, their coroutines, many files at a time), then
+`FsspecOperations`. Both of the latter walk folders themselves, moves included, to report progress
+file by file (helpers in `filesystems/_common.py`). Opt-in, not a default: `AzureDataLakeGen2Operation` (`abfs.py`,
 the "abfs" extra), which moves (renames) and creates folders on accounts with a hierarchical namespace with the async
 Data Lake SDK, connected from the adlfs filesystem's settings and run on its loop with `fsspec.asyn.sync`; tested with
-a fake client (`tests/test_abfs.py`); `fs_operations/__init__.py` does not import it. `move` and `copy` take a source
+a fake client (`tests/test_abfs.py`); `filesystems/__init__.py` does not import it. `move` and `copy` take a source
 and a target filesystem, the same one or not (keyword `same`, see Storage).
 Between filesystems, single files go through `FileSystemOperations._copy_file` and `_move_file`
 (`_copy_file_async`/`_move_file_async` in the async class), overridable: by default through a temporary file, so a
