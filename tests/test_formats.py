@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import json
 
+import fsspec
 import pandas as pd
 import polars as pl
 import pytest
@@ -70,9 +71,104 @@ class TestParquetDetection:
         memfs.pipe_file("/orc/000000_0", b"ORC...")
         assert not Parquet().matches(make_target("/orc"))
 
-    def test_partition_folders_are_not_a_dataset(self, make_target, memfs):
+    def test_hudi_table_is_not_a_dataset(self, make_target, memfs):
+        # Its files hold versions of rows: read as Parquet, stale ones show.
+        memfs.pipe_file("/h/part-0.parquet", b"")
+        memfs.pipe_file("/h/.hoodie/hoodie.properties", b"")
+        assert not Parquet().matches(make_target("/h"))
+
+
+class TestPartitionedParquetDetection:
+    """Hive-style partition folders ("year=2026/month=9/…"), checked down one
+    branch: one more listing per partition column."""
+
+    @pytest.fixture
+    def listings(self, memfs, monkeypatch):
+        """The folders listed by detection, besides the listing it is given."""
+        listed = []
+        ls = memfs.ls
+
+        def counting(path, *args, **kwargs):
+            listed.append(path)
+            return ls(path, *args, **kwargs)
+
+        monkeypatch.setattr(memfs, "ls", counting)
+        return listed
+
+    def table(self, memfs, root="/t", name="part-0.parquet"):
+        for year in (2025, 2026):
+            for month in (1, 2):
+                memfs.pipe_file(f"{root}/year={year}/month={month}/{name}", b"")
+                memfs.pipe_file(f"{root}/year={year}/month={month}/_SUCCESS", b"")
+        memfs.pipe_file(f"{root}/_SUCCESS", b"")
+
+    def test_two_columns_with_two_more_listings(self, make_target, memfs, listings):
+        self.table(memfs)
+        target = make_target("/t")
+        listings.clear()
+        fmt = Parquet()
+        assert fmt.matches(target)
+        assert listings == ["/t/year=2025", "/t/year=2025/month=1"]
+        assert fmt._layout("memory://t").glob("memory://t") == (
+            "memory://t/year=*/month=*/*.parquet"
+        )
+
+    def test_a_partition_of_it_too(self, make_target, memfs):
+        self.table(memfs)
+        assert Parquet().matches(make_target("/t/year=2025"))
+        assert Parquet().matches(make_target("/t/year=2025/month=1"))
+
+    def test_other_folders_cost_nothing(self, make_target, memfs, listings):
+        memfs.pipe_file("/d/year=2025/part-0.parquet", b"")
+        memfs.pipe_file("/d/notes/a.txt", b"")
+        target = make_target("/d")
+        listings.clear()
+        assert not Parquet().matches(target)
+        assert listings == []
+
+    @pytest.mark.parametrize(
+        "paths",
+        [
+            # Folders of two columns side by side.
+            ["year=2025/part-0.parquet", "month=1/part-0.parquet"],
+            # A data file beside the partitions.
+            ["year=2025/part-0.parquet", "part-0.parquet"],
+            # CSV partitions.
+            ["year=2025/part-0.csv", "year=2026/part-0.csv"],
+            # The same column twice.
+            ["year=2025/year=1/part-0.parquet"],
+            # Partitions holding other folders.
+            ["year=2025/data/part-0.parquet"],
+        ],
+    )
+    def test_not_partitioned_parquet(self, make_target, memfs, paths):
+        for path in paths:
+            memfs.pipe_file(f"/d/{path}", b"")
+        assert not Parquet().matches(make_target("/d"))
+
+    def test_an_empty_partition_passed_over(self, make_target, memfs):
+        memfs.pipe_file("/t/year=2024/_SUCCESS", b"")
         memfs.pipe_file("/t/year=2025/part-0.parquet", b"")
-        assert not Parquet().matches(make_target("/t"))
+        assert Parquet().matches(make_target("/t"))
+        memfs.pipe_file("/u/year=2023/_SUCCESS", b"")
+        memfs.pipe_file("/u/year=2024/_SUCCESS", b"")
+        memfs.pipe_file("/u/year=2025/part-0.parquet", b"")
+        assert not Parquet().matches(make_target("/u"))  # two empty: given up
+
+    def test_at_most_five_columns(self, make_target, memfs):
+        memfs.pipe_file("/t/a=1/b=1/c=1/d=1/e=1/part-0.parquet", b"")
+        assert Parquet().matches(make_target("/t"))
+        memfs.pipe_file("/u/a=1/b=1/c=1/d=1/e=1/f=1/part-0.parquet", b"")
+        assert not Parquet().matches(make_target("/u"))
+
+    def test_hive_files_checked_by_magic_bytes(self, make_target, memfs):
+        data = parquet_bytes(pl.DataFrame({"a": [1]}))
+        memfs.pipe_file("/t/dt=2026-10-01/000000_0", data)
+        fmt = Parquet()
+        assert fmt.matches(make_target("/t"))
+        assert fmt._layout("memory://t").files == "*"
+        memfs.pipe_file("/orc/dt=2026-10-01/000000_0", b"ORC...")
+        assert not Parquet().matches(make_target("/orc"))
 
 
 def test_delta_detection(make_target, memfs):
@@ -284,6 +380,92 @@ def test_scan_local_file(tmp_path, fmt, write, name):
 def test_scan_delta_table(tmp_path):
     pl.DataFrame({"a": [1, 2]}).write_delta(tmp_path / "t")
     assert DeltaLake().scan(str(tmp_path / "t"), True).collect().height == 2
+
+
+def local_target(path) -> Target:
+    """A local directory's Target, as the explorer gives it to ``matches``."""
+    fs = fsspec.filesystem("file")
+    path = path.as_posix()
+    return Target(
+        fs=fs, path=path, url=path, info={}, children=fs.ls(path, detail=True)
+    )
+
+
+class TestPartitionedParquetReading:
+    def write(self, root):
+        for year in (2025, 2026):
+            for month in (1, 2):
+                folder = root / f"year={year}" / f"month={month}"
+                folder.mkdir(parents=True)
+                pl.DataFrame({"a": [year * 100 + month]}).write_parquet(
+                    folder / "part-0.parquet"
+                )
+                (folder / "_SUCCESS").write_bytes(b"")
+        # Left by a writer: not part of the table.
+        (root / "_temporary" / "0").mkdir(parents=True)
+        pl.DataFrame({"a": [-1]}).write_parquet(root / "_temporary" / "0" / "x.parquet")
+
+    def test_scan_with_partition_columns(self, tmp_path):
+        self.write(tmp_path)
+        fmt = Parquet()
+        assert fmt.matches(local_target(tmp_path))
+        df = fmt.scan(tmp_path.as_posix(), True).collect().sort("a")
+        assert df.columns == ["a", "year", "month"]
+        assert df.rows() == [
+            (202501, 2025, 1),
+            (202502, 2025, 2),
+            (202601, 2026, 1),
+            (202602, 2026, 2),
+        ]
+
+    def test_scan_of_a_url_not_detected(self, tmp_path):
+        # E.g. rewritten by a subclass's scan: its layout is found then.
+        self.write(tmp_path)
+        df = Parquet().scan(tmp_path.as_posix(), True).collect()
+        assert (df.columns, df.height) == (["a", "year", "month"], 4)
+
+    def test_scan_hive_files(self, tmp_path):
+        folder = tmp_path / "dt=2026-10-01"
+        folder.mkdir()
+        pl.DataFrame({"a": [1, 2]}).write_parquet(folder / "000000_0")
+        (folder / "_SUCCESS").write_bytes(b"")
+        fmt = Parquet()
+        assert fmt.matches(local_target(tmp_path))
+        df = fmt.scan(tmp_path.as_posix(), True).collect()
+        assert df["a"].to_list() == [1, 2]
+        assert df.columns == ["a", "dt"]
+
+    def test_pandas_preview_of_one_partition(self, make_target, memfs):
+        for year in (2025, 2026):
+            data = parquet_bytes(pl.DataFrame({"a": [year, year]}))
+            memfs.pipe_file(f"/t/year={year}/part-0.parquet", data)
+        fmt = Parquet()
+        target = make_target("/t")
+        assert fmt.matches(target)
+        [table] = fmt.preview_with_pandas(target, PreviewLimits(max_rows=5))
+        assert table.columns == ["a", "year"]
+        assert table.rows == [[2025, 2025], [2025, 2025]]
+
+    def test_code(self, make_target, memfs):
+        memfs.pipe_file("/t/year=2025/month=1/part-0.parquet", b"")
+        fmt = Parquet()
+        code = {r.library: r.code for r in fmt.recipes(make_target("/t"))}
+        assert last_line(code["polars"]) == (
+            "df = pl.scan_parquet('memory://t/year=*/month=*/*.parquet', "
+            "hive_partitioning=True)"
+        )
+        # pandas (pyarrow) and Spark find partitions themselves.
+        assert last_line(code["pandas"]) == "df = pd.read_parquet('memory://t')"
+        assert last_line(code["pyspark"]) == "df = spark.read.parquet('memory://t')"
+
+    def test_code_for_hive_files(self, make_target, memfs):
+        data = parquet_bytes(pl.DataFrame({"a": [1]}))
+        memfs.pipe_file("/t/dt=2026-10-01/000000_0", data)
+        code = {r.library: r.code for r in Parquet().recipes(make_target("/t"))}
+        assert last_line(code["polars"]) == (
+            "df = pl.scan_parquet('memory://t/dt=*/*', hive_partitioning=True, "
+            "hidden_file_prefix=['.', '_'])"
+        )
 
 
 def test_scan_parquet_directory_skips_hidden_files(tmp_path):

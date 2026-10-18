@@ -271,6 +271,9 @@ StorageExplorer("s3://my-bucket/data", states=ExplorerStates("states.json", max_
 | Text, code, configuration (YAML, SQL, Python, …)             | `text`       | With syntax highlighting      |            | Python                                              |
 | Images (PNG, JPEG, GIF, SVG, …)                              | `image`      | Shown                         |            | Pillow                                              |
 
+Folders of Parquet files written by Spark or Hive, partitioned or not, are supported; folders written by other tools
+may work, but are not guaranteed to.
+
 The name identifies the format in CSS (see [Icons](../DEVELOPMENT.md#icons)).
 
 ## Format options
