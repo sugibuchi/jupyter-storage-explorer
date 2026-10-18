@@ -21,6 +21,7 @@ the pictures are taken at 2× (`data-explorer.png`, `launcher.png` and the GIFs 
 | `launcher_item.py`        | `launcher/figs/launcher.png`                                          |
 | `storage_explorer_gif.py` | `docs/figs/storage-explorer.gif`                                      |
 | `data_explorer_gif.py`    | `docs/figs/data-explorer.gif`                                         |
+| `file_transfer_gif.py`    | `docs/figs/file-transfer.gif` ("File transfer between file systems")  |
 | `make_all.py`             | All of the above, on one server                                       |
 | `_lab.py`                 | The server (in a temporary folder, with its own settings) and helpers |
 | `_film.py`                | The GIFs' frames, and a mouse pointer drawn in the page               |
@@ -28,4 +29,6 @@ the pictures are taken at 2× (`data-explorer.png`, `launcher.png` and the GIFs 
 
 The explorers show the demo storage from fsspec's memory filesystem (`memory:///sales-lake`), so the pictures show no
 path of your computer. Notebook widgets and launcher tabs alike get it: the server's Jupyter config folder has a
-`storage-explorer/launcher.py` for them.
+`storage-explorer/launcher.py` for them. `file_transfer_gif.py` gives its tabs a `launcher.py` of its own (`Lab.launcher_settings`), adding a
+"Shared drive", a folder on the server's disk shown from its top (a `DirFileSystem`): the tabs' kernels cannot read each
+other's memory, but both reach that folder.

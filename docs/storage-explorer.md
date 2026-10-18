@@ -72,17 +72,6 @@ StorageExplorer(
 
 To write your own, subclass `FileSystemOperations` (see [filesystems/operation.py](../src/jupyter_storage_explorer/filesystems/operation.py)).
 
-### URLs of other storages
-
-The explorer gives each storage's files URLs ("Copy URL", "Python code", the [transfer policy](#transfer-policy)), and
-tells storages apart by what they reach, e.g. an Azure account or an SFTP server and user, whatever the credentials. Files
-copied or dragged into an explorer of another notebook are found again by both: on one of its storages that reaches
-them, else on one opened from the URL with the environment's credentials, never on another storage of the same kind.
-Azure, S3, Google Cloud Storage, SFTP, local disks and in-memory storages are known; for others, write a
-`FileSystemMapper` (see [filesystems/mapper.py](../src/jupyter_storage_explorer/filesystems/mapper.py)) and pass it as
-`filesystem_mappers=[...]`. A storage wrapped in fsspec's `DirFileSystem` (a folder of another one) has the URLs of
-that storage.
-
 ## Using the explorer
 
 ### Browse
@@ -165,12 +154,31 @@ Folder operations need **Unsafe mode**, turned on with the slider at the right o
 | Rename folders         | Right-click → **Rename** (on most storages, a move of everything in it).                     |
 | Delete folders         | Right-click → **Delete** (with everything in it).                                            |
 
+## File transfer between file systems
+
+Files are moved and copied within a storage by the storage itself where it can (a rename, a copy on the server); between
+storages, the kernel copies them file by file, through a temporary file:
+
+- A failed or cancelled copy leaves no partial file, and a move deletes each file only once its copy is complete.
+
+When files are copied or dragged from one explorer to another, **the destination explorer reads them with a file
+system of its own** for the source storage. If it has none for that storage, e.g. one in another kernel's memory or on another
+machine's disk, the transfer is refused.
+
+![Two Storage Explorer tabs, one above the other: a CSV file dragged from a shared folder on the server's disk in the top tab into the scratch storage of the bottom tab, and pasted there](figs/file-transfer.gif)
+
+For example, with a MinIO storage, `s3fs` with `endpoint_url="http://minio:9000"`, in the source explorer:
+
+- If the destination explorer, in another notebook, has a storage of that endpoint, files dragged onto it are read
+  with that storage.
+- If not, but fsspec's configuration sets that endpoint for S3, they are read with the S3 storage fsspec opens.
+- Otherwise they are refused.
+
 ## Transfer policy
 
 `transfer_policy=[...]` limits where files may be transferred: between storages, to or from JupyterLab's file browser,
-and to or from your computer (not within a storage: the containers of one Azure account, or the buckets of one S3
-endpoint, are one). The first rule whose `src` and `dest` regular expressions match
-the whole URLs decides; without one, files go:
+and to or from your computer, not within a storage (see [File transfer between file systems](#file-transfer-between-file-systems)).
+The first rule whose `src` and `dest` regular expressions match the whole URLs decides; without one, files go:
 
 ```python
 StorageExplorer(filesystems={...}, transfer_policy=[
@@ -297,7 +305,7 @@ explorer.selected_urls  # the URLs of the selected items
 | `max_browser_items=20_000`          | Folders with more items are filtered, sorted and paged by the kernel, one page at a time, instead of the browser (`None`: never).     |
 | `fetch_rows=...`                    | How the data browser reads pages; see [Reading pages](#reading-pages).                                                                |
 | `operations=[...]`                  | File operation extensions, tried before the defaults; see [File operation extensions](#file-operation-extensions).                   |
-| `filesystem_mappers=[...]`          | URLs and identities of storages, tried before the defaults; see [URLs of other storages](#urls-of-other-storages).                    |
+| `filesystem_mappers=[...]`          | How storages are told apart and their URLs, tried before the defaults; see [File transfer](#file-transfer-between-file-systems).    |
 | `transfer_policy=[...]`             | Rules for transfers of files between storages; see [Transfer policy](#transfer-policy).                                               |
 | `states="states.json"`              | Where bookmarks and the data browser's settings are kept (a path or an `ExplorerStates`); see [Remembered states](#remembered-states). |
 | `format_options={...}`              | Options for the formats (see [Format options](#format-options)).                                                                      |

@@ -130,6 +130,18 @@ class Lab:
         except subprocess.TimeoutExpired:
             self._process.kill()
 
+    @contextlib.contextmanager
+    def launcher_settings(self, source: str) -> Iterator[None]:
+        """Launcher tabs opened meanwhile use ``source`` as their
+        ``storage-explorer/launcher.py`` (read when a tab starts), then the
+        usual one again."""
+        path = self.folder / "config" / "storage-explorer" / "launcher.py"
+        path.write_text(source, encoding="utf-8")
+        try:
+            yield
+        finally:
+            path.write_text(LAUNCHER_PY, encoding="utf-8")
+
     def url(self, path: str = "") -> str:
         """``/lab/<path>`` in a new, empty workspace, so that no tab or panel
         of an earlier page is restored."""

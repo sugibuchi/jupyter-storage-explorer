@@ -38,6 +38,9 @@ DATA_ENV = "JSE_DEMO_DATA"
 LAKE = "sales-lake"
 LAKE_URL = f"memory:///{LAKE}"
 SCRATCH_URL = "memory:///scratch"
+# A team's folder on the server's disk, which every kernel reaches (unlike
+# each kernel's memory): the source of file-transfer.gif's drag.
+SHARE = "shared-drive"
 
 FIRST_NAMES = [
     "Aiko", "Haruto", "Yui", "Sota", "Camille", "Louis", "Chloé", "Hugo", "Emma",
@@ -318,6 +321,30 @@ def write(root: pathlib.Path) -> None:
     stamp(lake, rng)
 
 
+def write_share(root: pathlib.Path) -> None:
+    """Write a team's shared folder into ``root``/shared-drive (replacing it),
+    for file-transfer.gif only: other pictures do not show it in JupyterLab's
+    file browser."""
+    rng = random.Random(7)
+    share = root / SHARE
+    shutil.rmtree(share, ignore_errors=True)
+    (share / "pricing").mkdir(parents=True)
+    pl.DataFrame(
+        PRODUCTS, schema=["sku", "product", "category", "unit_price"], orient="row"
+    ).with_columns(price_2027=(pl.col("unit_price") * 1.04).round(2)).write_csv(
+        share / "pricing" / "price_list_2027.csv"
+    )
+    (share / "pricing" / "README.md").write_text(
+        "# Pricing\n\nPrice lists agreed with finance, one file per year.\n",
+        encoding="utf-8",
+    )
+    (share / "meeting_notes.md").write_text(
+        "# Sales sync, 2026-10-14\n\n- New price list from January.\n",
+        encoding="utf-8",
+    )
+    stamp(share, rng)
+
+
 def stamp(lake: pathlib.Path, rng: random.Random) -> None:
     """Give the files modification times as if the pipelines wrote them:
     a day's or a month's files the next morning, the rest on October 1st."""
@@ -345,6 +372,15 @@ def stamp(lake: pathlib.Path, rng: random.Random) -> None:
 
 
 # In the kernel.
+
+
+def shared_drive() -> dict[str, Any]:
+    """The team's shared folder, a storage of the server's disk: a
+    ``DirFileSystem``, so its paths start at the folder."""
+    from fsspec.implementations.dirfs import DirFileSystem  # noqa: PLC0415
+
+    folder = (local_copy() / SHARE).as_posix()
+    return {"Shared drive": DirFileSystem(folder, fsspec.filesystem("file"))}
 
 
 def local_copy() -> pathlib.Path:

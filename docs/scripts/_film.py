@@ -26,13 +26,33 @@ addEventListener("DOMContentLoaded", () => {
   Object.assign(ring.style, {position: "fixed", zIndex: 2147483646, pointerEvents: "none", width: "28px",
     height: "28px", marginLeft: "-14px", marginTop: "-14px", borderRadius: "50%",
     background: "rgba(25, 118, 210, 0.35)", display: "none"});
-  document.body.append(ring, pointer);
-  addEventListener("mousemove", e => {
-    pointer.style.left = ring.style.left = e.clientX + "px";
-    pointer.style.top = ring.style.top = e.clientY + "px";
+  // What is dragged: screenshots do not show the browser's drag image, so the
+  // name of the table row dragged (its first cell) follows the pointer.
+  const label = document.createElement("div");
+  Object.assign(label.style, {position: "fixed", zIndex: 2147483646, pointerEvents: "none", marginLeft: "18px",
+    marginTop: "14px", padding: "2px 8px", borderRadius: "4px", background: "rgba(25, 118, 210, 0.9)",
+    color: "white", font: "12px sans-serif", whiteSpace: "nowrap", display: "none"});
+  document.body.append(ring, label, pointer);
+  const follow = e => {
+    pointer.style.left = ring.style.left = label.style.left = e.clientX + "px";
+    pointer.style.top = ring.style.top = label.style.top = e.clientY + "px";
+  };
+  addEventListener("dragstart", e => {
+    const cell = e.target.closest?.("tr")?.cells?.[0];
+    label.textContent = cell ? cell.textContent.trim() : "";
+    label.style.display = label.textContent ? "block" : "none";
   }, true);
+  const dropped = () => { label.style.display = "none"; };
+  addEventListener("dragend", dropped, true);
+  addEventListener("drop", dropped, true);
+  // While dragging, the browser sends dragover events instead of mousemove.
+  addEventListener("mousemove", follow, true);
+  addEventListener("dragover", follow, true);
   addEventListener("mousedown", () => { ring.style.display = "block"; }, true);
-  addEventListener("mouseup", () => setTimeout(() => { ring.style.display = "none"; }, 150), true);
+  const release = () => setTimeout(() => { ring.style.display = "none"; }, 150);
+  addEventListener("mouseup", release, true);
+  addEventListener("dragend", release, true);
+  addEventListener("drop", release, true);
 });
 """
 
