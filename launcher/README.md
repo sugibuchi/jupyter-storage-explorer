@@ -22,7 +22,7 @@ pip install jupyter-storage-explorer-launcher
 ```
 
 Install it in the environment of JupyterLab and of the default kernel (on JupyterHub, usually the single-user image),
-then restart JupyterLab. Requires JupyterLab 4.
+then restart JupyterLab. Requires JupyterLab 4.0 or later.
 
 Or from JupyterLab itself, without a terminal: run this in a notebook, then reload the page (no restart needed):
 

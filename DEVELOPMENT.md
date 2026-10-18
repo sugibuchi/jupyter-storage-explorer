@@ -69,6 +69,21 @@ a kernel restart) in a JupyterLab of its own, with the installed Microsoft Edge.
 changing `static/` or the extension. Give check names to run only those; a failed check leaves a screenshot,
 `tests/browser/smoke-<check>.png`.
 
+The packages support JupyterLab 4.0 or later, while the development environment has the latest. To run the smoke test
+on an older JupyterLab, make an environment of its own (`uv run --with` would not see the extensions installed in
+`.venv`), outside the repository:
+
+```bash
+uv export --group docs --group dev --no-hashes --no-emit-workspace -o ../req.txt
+echo "jupyterlab==4.0.*" > ../override.txt
+uv venv ../lab40
+uv pip install --python ../lab40 -r ../req.txt --override ../override.txt -e . -e launcher
+uv run --no-project --python ../lab40 tests/browser/smoke.py
+```
+
+After rebuilding the extension, install it there again (`uv pip install --python ../lab40 -e launcher
+--reinstall-package jupyter-storage-explorer-launcher`).
+
 ## How the code fits together
 
 - **`StorageExplorer`** (`storage_explorer.py`) holds the widget's state and routes the frontend's messages
