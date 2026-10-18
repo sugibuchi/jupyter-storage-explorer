@@ -1,7 +1,8 @@
 # The demo on mybinder.org (see README.md): the released packages, and the
-# libraries the demo data and its previews use.
+# libraries the demo data, its previews and charts use. The demo's examples need
+# the launcher (and explorer) of 0.12 or later: on_change and the like.
 jupyterlab>=4.2
-jupyter-storage-explorer-launcher
+jupyter-storage-explorer-launcher>=0.12
 polars
 deltalake
 pyarrow
@@ -9,3 +10,4 @@ pandas
 openpyxl
 fastexcel
 Pillow
+matplotlib
