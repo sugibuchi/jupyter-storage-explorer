@@ -1,6 +1,6 @@
 """How to handle data in a format with a library: the ``FormatSupport``
 interface, and ``SupportChain``, by which explorers choose a support for
-each job (the predefined supports have a module per library: by_polars.py,
+each capability (the predefined supports have a module per library: by_polars.py,
 by_pandas.py, ...)."""
 
 from __future__ import annotations
@@ -21,9 +21,10 @@ if TYPE_CHECKING:
         Requirements,
     )
 
-# What a support can do with a format's data: preview it, query it in the
-# data browser, give code loading it ("Python code").
-Job: TypeAlias = Literal["preview", "query", "code"]
+# What a support can do with a format's data, each the name of the method
+# doing it: preview it, query it in the data browser, give a recipe, the code
+# loading it ("Python code").
+Capability: TypeAlias = Literal["preview", "query", "recipe"]
 
 
 class FormatSupport:
@@ -32,21 +33,22 @@ class FormatSupport:
     Subclass it to handle a format with a library of your own, e.g. Parquet
     with DuckDB, and give it to ``StorageExplorer``
     (``supports=[ParquetByDuckDB]``): supports given are tried before the
-    defaults. For each job, an explorer uses the first support for the
-    format (``isinstance`` of ``format``) whose packages are installed and
-    that lists the job in ``jobs``; "Python code" shows the code of the
-    first support listing "code" of each library, installed or not.
+    defaults. For previews and the data browser, an explorer uses the first
+    support for the format (``isinstance`` of ``format``) whose packages are
+    installed and that lists the capability in ``capabilities``; "Python
+    code" shows the recipe of the first support listing "recipe" of each
+    library, installed or not.
 
     Rules for a subclass:
 
-    - List in ``jobs`` every job the class implements: "preview" for
-      ``preview()``, "query" for ``query()``, "code" for ``load_code()``.
-      The explorer reads only ``jobs`` to decide what to offer: a method not
-      listed there is never called, and a job listed there must have its
-      method implemented. A subclass adding a job extends ``jobs``.
+    - List in ``capabilities`` the name of every method the class
+      implements: "preview", "query", "recipe". The explorer reads only
+      ``capabilities`` to decide what to offer: a method not listed there is
+      never called, and a capability listed there must have its method
+      implemented. A subclass adding a method extends ``capabilities``.
     - A method may raise ``NotSupported`` for a particular target (e.g. an
       image format the library cannot read): the next support is then
-      tried, and for "code", the support's code is left out.
+      tried, and for "recipe", the support's code is left out.
     - Options are keyword-only arguments of ``__init__``. Explorers create
       the supports given as classes with the options of their ``use``'s
       package (``format_options={"polars": {"*": {...}, "parquet":
@@ -68,19 +70,19 @@ class FormatSupport:
     additional_requirements : tuple of Requirement classes
         Other packages it needs, e.g. ``(DeltaSpark,)`` for Spark reading
         Delta Lake tables.
-    jobs : tuple of str
-        The jobs it does: "preview", "query", "code" (see above).
+    capabilities : tuple of str
+        The methods it implements: "preview", "query", "recipe" (see above).
     """
 
     class NotSupported(Exception):
-        """Raised by a job's method for a target it cannot handle: the next
+        """Raised by a capability's method for a target it cannot handle: the next
         support is tried."""
 
     # See the class docstring.
     format: ClassVar[type[DataFormat]]
     use: ClassVar[type[Requirement] | None] = None
     additional_requirements: ClassVar[Requirements] = ()
-    jobs: ClassVar[tuple[Job, ...]] = ()
+    capabilities: ClassVar[tuple[Capability, ...]] = ()
 
     @classmethod
     def requirements(cls) -> Requirements:
@@ -103,7 +105,7 @@ class FormatSupport:
     def preview(
         self, fmt: DataFormat, target: Target, limits: PreviewLimits
     ) -> list[Preview]:
-        """The sections to show in the preview panel (job "preview").
+        """The sections to show in the preview panel.
 
         Parameters
         ----------
@@ -128,7 +130,7 @@ class FormatSupport:
         raise self.NotSupported
 
     def query(self, fmt: DataFormat, url: str, is_dir: bool) -> Any:
-        """The data, lazily, for the data browser ("Query data", job "query").
+        """The data, lazily, for the data browser ("Query data").
 
         Read lazily where the format allows: the browser only fetches the
         rows it shows.
@@ -156,15 +158,16 @@ class FormatSupport:
         """
         raise self.NotSupported
 
-    def load_code(self, fmt: DataFormat, target: Target) -> str:
-        """Python code loading the data with the library (job "code").
+    def recipe(self, fmt: DataFormat, target: Target) -> str:
+        """The recipe's code: Python loading the data with the library, shown
+        in "Python code" under ``library()``.
 
         The code runs as it is in a new notebook: its imports first, and what
         else it needs, e.g. a Spark session. Installing the packages and
         configuring access to the storage are left to the user.
 
         The predefined supports fill a template, a class attribute
-        ``load_code_template`` written with ``inspect.cleandoc`` just before
+        ``recipe_template`` written with ``inspect.cleandoc`` just before
         the method, with ``str.format``: the URL (``{url}``, as a Python
         literal) and the keyword arguments set by the options (``{kwargs}``,
         with ``format_kwargs``; storage options through ``snippet_options``).
@@ -199,20 +202,26 @@ def support_options(cls: type[FormatSupport]) -> frozenset[str]:
 
 
 class SupportChain:
-    """The supports of an explorer, in order, and the jobs done with them:
-    for each, the first support for the format that is installed and does
-    it (see ``FormatSupport``)."""
+    """The supports of an explorer, in order, and what is done with them:
+    for each capability, the first support for the format that is installed
+    and has it (see ``FormatSupport``)."""
 
     def __init__(self, supports: Iterable[FormatSupport]) -> None:
         self.supports = list(supports)
 
-    def of(self, fmt: DataFormat, job: Job) -> list[FormatSupport]:
-        """The supports doing ``job`` for ``fmt``, installed or not, in order."""
-        return [s for s in self.supports if isinstance(fmt, s.format) and job in s.jobs]
+    def of(self, fmt: DataFormat, capability: Capability) -> list[FormatSupport]:
+        """The supports with ``capability`` for ``fmt``, installed or not, in
+        order."""
+        return [
+            s
+            for s in self.supports
+            if isinstance(fmt, s.format) and capability in s.capabilities
+        ]
 
-    def installed(self, fmt: DataFormat, job: Job) -> list[FormatSupport]:
-        """The supports doing ``job`` for ``fmt`` whose packages are installed."""
-        return [s for s in self.of(fmt, job) if s.is_installed()]
+    def installed(self, fmt: DataFormat, capability: Capability) -> list[FormatSupport]:
+        """The supports with ``capability`` for ``fmt`` whose packages are
+        installed."""
+        return [s for s in self.of(fmt, capability) if s.is_installed()]
 
     def can_query(self, fmt: DataFormat) -> bool:
         """Whether the data browser can query ``fmt``: a support installed does it."""
@@ -252,16 +261,16 @@ class SupportChain:
         raise ValueError(f"{fmt.label} cannot be queried")
 
     def recipes(self, fmt: DataFormat, target: Target) -> list[Recipe]:
-        """The code of the supports doing "code" for ``fmt``, installed or
+        """The recipes of the supports with "recipe" for ``fmt``, installed or
         not (the code may run elsewhere): of each library, the first that
         supports ``target``, so a support given before the defaults replaces
         the default one of its library."""
         recipes: dict[str, Recipe] = {}
-        for support in self.of(fmt, "code"):
+        for support in self.of(fmt, "recipe"):
             if support.library() in recipes:
                 continue
             try:
-                code = support.load_code(fmt, target)
+                code = support.recipe(fmt, target)
             except FormatSupport.NotSupported:
                 continue
             recipes[support.library()] = Recipe(library=support.library(), code=code)

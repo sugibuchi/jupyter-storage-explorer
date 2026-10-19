@@ -21,17 +21,17 @@ if TYPE_CHECKING:
 class CsvByPySpark(FormatSupport):
     format = Csv
     use = PySpark
-    jobs = ("code",)
+    capabilities = ("recipe",)
 
-    load_code_template = cleandoc("""
+    recipe_template = cleandoc("""
         from pyspark.sql import SparkSession
 
         spark = SparkSession.builder.getOrCreate()
         df = spark.read.csv({url}, header=True, inferSchema=True{kwargs})
         """)
 
-    def load_code(self, fmt: Csv, target: Target) -> str:
-        return self.load_code_template.format(
+    def recipe(self, fmt: Csv, target: Target) -> str:
+        return self.recipe_template.format(
             url=repr(spark_url(target.url)),
             kwargs=format_kwargs(sep=fmt.code_separator(target)),
         )
@@ -40,35 +40,35 @@ class CsvByPySpark(FormatSupport):
 class JsonLinesByPySpark(FormatSupport):
     format = JsonLines
     use = PySpark
-    jobs = ("code",)
+    capabilities = ("recipe",)
 
     # Spark reads JSON Lines (one record per line) by default.
-    load_code_template = cleandoc("""
+    recipe_template = cleandoc("""
         from pyspark.sql import SparkSession
 
         spark = SparkSession.builder.getOrCreate()
         df = spark.read.json({url})
         """)
 
-    def load_code(self, fmt: JsonLines, target: Target) -> str:
-        return self.load_code_template.format(url=repr(spark_url(target.url)))
+    def recipe(self, fmt: JsonLines, target: Target) -> str:
+        return self.recipe_template.format(url=repr(spark_url(target.url)))
 
 
 class ParquetByPySpark(FormatSupport):
     format = Parquet
     use = PySpark
-    jobs = ("code",)
+    capabilities = ("recipe",)
 
     # A file or a folder of them; Spark finds partitions itself.
-    load_code_template = cleandoc("""
+    recipe_template = cleandoc("""
         from pyspark.sql import SparkSession
 
         spark = SparkSession.builder.getOrCreate()
         df = spark.read.parquet({url})
         """)
 
-    def load_code(self, fmt: Parquet, target: Target) -> str:
-        return self.load_code_template.format(url=repr(spark_url(target.url)))
+    def recipe(self, fmt: Parquet, target: Target) -> str:
+        return self.recipe_template.format(url=repr(spark_url(target.url)))
 
 
 class DeltaLakeByPySpark(FormatSupport):
@@ -76,9 +76,9 @@ class DeltaLakeByPySpark(FormatSupport):
     use = PySpark
     # Delta Lake set up in the Spark session (on Databricks, it is).
     additional_requirements = (DeltaSpark,)
-    jobs = ("code",)
+    capabilities = ("recipe",)
 
-    load_code_template = cleandoc("""
+    recipe_template = cleandoc("""
         from pyspark.sql import SparkSession
 
         # Needs Delta Lake in the Spark session (Databricks has it)
@@ -86,5 +86,5 @@ class DeltaLakeByPySpark(FormatSupport):
         df = spark.read.format("delta").load({url})
         """)
 
-    def load_code(self, fmt: DeltaLake, target: Target) -> str:
-        return self.load_code_template.format(url=repr(spark_url(target.url)))
+    def recipe(self, fmt: DeltaLake, target: Target) -> str:
+        return self.recipe_template.format(url=repr(spark_url(target.url)))

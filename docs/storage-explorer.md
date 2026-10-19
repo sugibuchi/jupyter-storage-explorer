@@ -280,8 +280,8 @@ above (the code is shown for every library; a support given for a library replac
 
 ### Another library for a format
 
-A *support* handles a format's data with a library: a `FormatSupport` subclass, listing the jobs it does (`"preview"`,
-`"query"` for the data browser, `"code"`) and implementing their methods. Supports given as `supports` are tried before
+A *support* handles a format's data with a library: a `FormatSupport` subclass, listing in `capabilities` the methods it
+implements: `"preview"`, `"query"` for the data browser, `"recipe"` for "Python code". Supports given as `supports` are tried before
 the defaults, e.g. DuckDB for the data browser on Parquet:
 
 ```python
@@ -297,7 +297,7 @@ class DuckDB(Requirement):
 class ParquetByDuckDB(FormatSupport):
     format = Parquet
     use = DuckDB
-    jobs = ("query",)
+    capabilities = ("query",)
 
     def query(self, fmt, url, is_dir):
         # A folder's data files, as detection found them.

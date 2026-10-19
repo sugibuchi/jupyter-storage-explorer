@@ -2,7 +2,7 @@
 
 ``DataFormat`` (format.py, with the ``Target`` it looks at) detects a format,
 ``FormatSupport`` (support.py) handles its data with one library (previews,
-the data browser, load code), and ``Requirement`` (requirement.py) is a
+the data browser, recipes), and ``Requirement`` (requirement.py) is a
 package one needs. The predefined formats each have a module (delta.py,
 parquet.py, excel.py, text.py, images.py), the predefined supports one per
 library (by_polars.py, by_pandas.py, by_pyspark.py, by_fsspec.py,
@@ -70,7 +70,11 @@ from jupyter_storage_explorer.formats.preview import (
     TreePreview,
 )
 from jupyter_storage_explorer.formats.requirement import Requirement, Requirements
-from jupyter_storage_explorer.formats.support import FormatSupport, Job, SupportChain
+from jupyter_storage_explorer.formats.support import (
+    Capability,
+    FormatSupport,
+    SupportChain,
+)
 from jupyter_storage_explorer.formats.text import Csv, Json, JsonLines, Markdown, Text
 from jupyter_storage_explorer.formats.utils import (
     DEFAULT_FORMATS,
@@ -84,6 +88,7 @@ __all__ = [
     "DEFAULT_FORMATS",
     "DEFAULT_SUPPORTS",
     "FILE_ICONS",
+    "Capability",
     "Csv",
     "CsvByPandas",
     "CsvByPolars",
@@ -100,7 +105,6 @@ __all__ = [
     "ImageByPillow",
     "ImageByPython",
     "InstallPreview",
-    "Job",
     "Json",
     "JsonByFsspec",
     "JsonByPandas",

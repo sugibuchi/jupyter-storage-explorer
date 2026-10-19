@@ -20,9 +20,9 @@ class ImageByPillow(OpenedByFsspec):
     format = Image
     use = Pillow
     additional_requirements = (Fsspec,)
-    jobs = ("code",)
+    capabilities = ("recipe",)
 
-    load_code_template = cleandoc("""
+    recipe_template = cleandoc("""
         import fsspec
         import PIL.Image
 
@@ -32,9 +32,9 @@ class ImageByPillow(OpenedByFsspec):
         img
         """)
 
-    def load_code(self, fmt: Image, target: Target) -> str:
+    def recipe(self, fmt: Image, target: Target) -> str:
         if target.name.lower().endswith(".svg"):
             raise self.NotSupported
-        return self.load_code_template.format(
+        return self.recipe_template.format(
             url=repr(target.url), kwargs=self.code_kwargs()
         )

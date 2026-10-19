@@ -63,7 +63,7 @@ class TextByPython(FormatSupport):
     """Text and code files, from their beginning, highlighted by their extension."""
 
     format = Text
-    jobs = ("preview",)
+    capabilities = ("preview",)
 
     def preview(
         self, fmt: Text, target: Target, limits: PreviewLimits
@@ -78,7 +78,7 @@ class MarkdownByPython(FormatSupport):
     Markdown is a Text format."""
 
     format = Markdown
-    jobs = ("preview",)
+    capabilities = ("preview",)
 
     def preview(
         self, fmt: Markdown, target: Target, limits: PreviewLimits
@@ -92,7 +92,7 @@ class JsonByPython(FormatSupport):
     """JSON as a tree; as text if it is too large or invalid."""
 
     format = Json
-    jobs = ("preview",)
+    capabilities = ("preview",)
 
     def preview(
         self, fmt: Json, target: Target, limits: PreviewLimits
@@ -112,7 +112,7 @@ class ImageByPython(FormatSupport):
     those too large to send through the kernel."""
 
     format = Image
-    jobs = ("preview",)
+    capabilities = ("preview",)
 
     def preview(
         self, fmt: Image, target: Target, limits: PreviewLimits

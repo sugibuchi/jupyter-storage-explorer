@@ -397,7 +397,7 @@ class TestFormatOptionsInCode:
             use_pyarrow=True,
             delta_table_options={"version": 1},
         )
-        code = support.load_code(DeltaLake(), make_target("/t", url="s3://b/t"))
+        code = support.recipe(DeltaLake(), make_target("/t", url="s3://b/t"))
         assert last_line(code) == (
             "df = pl.scan_delta('s3://b/t', storage_options={'region': 'eu'}, "
             "delta_table_options={'version': 1}, use_pyarrow=True)"

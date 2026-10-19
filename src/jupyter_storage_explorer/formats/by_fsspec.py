@@ -35,17 +35,17 @@ class TextByFsspec(OpenedByFsspec):
 
     format = Text
     use = Fsspec
-    jobs = ("code",)
+    capabilities = ("recipe",)
 
-    load_code_template = cleandoc("""
+    recipe_template = cleandoc("""
         import fsspec
 
         with fsspec.open({url}, 'rt'{kwargs}) as f:
             text = f.read()
         """)
 
-    def load_code(self, fmt: Text, target: Target) -> str:
-        return self.load_code_template.format(
+    def recipe(self, fmt: Text, target: Target) -> str:
+        return self.recipe_template.format(
             url=repr(target.url), kwargs=self.code_kwargs()
         )
 
@@ -55,9 +55,9 @@ class JsonByFsspec(OpenedByFsspec):
 
     format = Json
     use = Fsspec
-    jobs = ("code",)
+    capabilities = ("recipe",)
 
-    load_code_template = cleandoc("""
+    recipe_template = cleandoc("""
         import json
 
         import fsspec
@@ -66,7 +66,7 @@ class JsonByFsspec(OpenedByFsspec):
             data = json.load(f)
         """)
 
-    def load_code(self, fmt: Json, target: Target) -> str:
-        return self.load_code_template.format(
+    def recipe(self, fmt: Json, target: Target) -> str:
+        return self.recipe_template.format(
             url=repr(target.url), kwargs=self.code_kwargs()
         )

@@ -419,7 +419,7 @@ def supports() -> list[Any]:
 
     result = default_supports()
     for support in result:
-        if "query" in support.jobs:
+        if "query" in support.capabilities:
             query = support.query
             support.query = lambda fmt, url, is_dir, query=query: query(
                 fmt, local(url), is_dir

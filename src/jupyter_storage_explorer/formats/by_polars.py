@@ -55,7 +55,7 @@ class _PolarsByUrl(FormatSupport):
 
 class CsvByPolars(_PolarsByUrl):
     format = Csv
-    jobs = ("preview", "query", "code")
+    capabilities = ("preview", "query", "recipe")
 
     def preview(self, fmt: Csv, target: Target, limits: PreviewLimits) -> list[Preview]:
         pl = Polars().load()
@@ -82,14 +82,14 @@ class CsvByPolars(_PolarsByUrl):
             **self.storage(),
         )
 
-    load_code_template = cleandoc("""
+    recipe_template = cleandoc("""
         import polars as pl
 
         df = pl.read_csv({url}{kwargs})
         """)
 
-    def load_code(self, fmt: Csv, target: Target) -> str:
-        return self.load_code_template.format(
+    def recipe(self, fmt: Csv, target: Target) -> str:
+        return self.recipe_template.format(
             url=repr(target.url),
             kwargs=format_kwargs(
                 separator=fmt.code_separator(target),
@@ -100,7 +100,7 @@ class CsvByPolars(_PolarsByUrl):
 
 class JsonLinesByPolars(_PolarsByUrl):
     format = JsonLines
-    jobs = ("preview", "query", "code")
+    capabilities = ("preview", "query", "recipe")
 
     def preview(
         self, fmt: JsonLines, target: Target, limits: PreviewLimits
@@ -114,14 +114,14 @@ class JsonLinesByPolars(_PolarsByUrl):
     def query(self, fmt: JsonLines, url: str, is_dir: bool) -> Any:
         return Polars().load().scan_ndjson(url, **self.storage())
 
-    load_code_template = cleandoc("""
+    recipe_template = cleandoc("""
         import polars as pl
 
         df = pl.scan_ndjson({url}{kwargs})
         """)
 
-    def load_code(self, fmt: JsonLines, target: Target) -> str:
-        return self.load_code_template.format(
+    def recipe(self, fmt: JsonLines, target: Target) -> str:
+        return self.recipe_template.format(
             url=repr(target.url),
             kwargs=format_kwargs(storage_options=self.code_storage_options()),
         )
@@ -132,17 +132,17 @@ class JsonByPolars(FormatSupport):
 
     format = Json
     use = Polars
-    jobs = ("code",)
+    capabilities = ("recipe",)
 
-    load_code_template = cleandoc("""
+    recipe_template = cleandoc("""
         import polars as pl
 
         df = pl.read_json({url})
         """)
 
-    def load_code(self, fmt: Json, target: Target) -> str:
+    def recipe(self, fmt: Json, target: Target) -> str:
         # polars' read_json takes no storage options.
-        return self.load_code_template.format(url=repr(target.url))
+        return self.recipe_template.format(url=repr(target.url))
 
 
 class ExcelByPolars(FormatSupport):
@@ -150,7 +150,7 @@ class ExcelByPolars(FormatSupport):
     use = Polars
     # fastexcel reads workbooks for polars; the code reads the bytes with fsspec.
     additional_requirements = (Fastexcel, Fsspec)
-    jobs = ("preview", "query", "code")
+    capabilities = ("preview", "query", "recipe")
 
     def __init__(
         self, *, fsspec_storage_options: Mapping[str, Any] | None = None
@@ -180,7 +180,7 @@ class ExcelByPolars(FormatSupport):
         return Polars().load().read_excel(url).lazy()
 
     # polars reads the bytes, fetched with fsspec so any storage works.
-    load_code_template = cleandoc("""
+    recipe_template = cleandoc("""
         import fsspec
         import polars as pl
 
@@ -188,8 +188,8 @@ class ExcelByPolars(FormatSupport):
             df = pl.read_excel(f.read())
         """)
 
-    def load_code(self, fmt: Excel, target: Target) -> str:
-        return self.load_code_template.format(
+    def recipe(self, fmt: Excel, target: Target) -> str:
+        return self.recipe_template.format(
             url=repr(target.url),
             kwargs=format_kwargs(**snippet_options(self.fsspec_storage_options)),
         )
@@ -197,7 +197,7 @@ class ExcelByPolars(FormatSupport):
 
 class ParquetByPolars(_PolarsByUrl):
     format = Parquet
-    jobs = ("preview", "query", "code")
+    capabilities = ("preview", "query", "recipe")
 
     def preview(
         self, fmt: Parquet, target: Target, limits: PreviewLimits
@@ -234,15 +234,15 @@ class ParquetByPolars(_PolarsByUrl):
         )
 
     # A LazyFrame, so only the needed rows and columns are read.
-    load_code_template = cleandoc("""
+    recipe_template = cleandoc("""
         import polars as pl
 
         df = pl.scan_parquet({url}{kwargs})
         """)
 
-    def load_code(self, fmt: Parquet, target: Target) -> str:
+    def recipe(self, fmt: Parquet, target: Target) -> str:
         layout = fmt.target_layout(target) if target.is_dir else None
-        return self.load_code_template.format(
+        return self.recipe_template.format(
             url=repr(fmt.data_url(target.url, target.is_dir)),
             kwargs=format_kwargs(
                 hive_partitioning=True if layout and layout.keys else None,
@@ -260,7 +260,7 @@ class DeltaLakeByPolars(_PolarsByUrl):
     # polars reads the table with deltalake (delta-rs), which reads cloud
     # storage itself, by default with credentials from the environment.
     additional_requirements = (DeltaLakePackage,)
-    jobs = ("preview", "query", "code")
+    capabilities = ("preview", "query", "recipe")
 
     def __init__(
         self,
@@ -309,15 +309,15 @@ class DeltaLakeByPolars(_PolarsByUrl):
             )
         )
 
-    load_code_template = cleandoc("""
+    recipe_template = cleandoc("""
         import polars as pl
 
         df = pl.scan_delta({url}{kwargs})
         """)
 
-    def load_code(self, fmt: DeltaLake, target: Target) -> str:
+    def recipe(self, fmt: DeltaLake, target: Target) -> str:
         # Only the arguments that differ from scan_delta's defaults.
-        return self.load_code_template.format(
+        return self.recipe_template.format(
             url=repr(target.url),
             kwargs=format_kwargs(
                 storage_options=self.code_storage_options(),

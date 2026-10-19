@@ -261,7 +261,7 @@ The list's is cleared when another folder's listing arrives, not on the click, s
 unfiltered.
 
 **Formats** (`formats/`). Laid out as `filesystems/`: the interfaces `DataFormat` (`format.py`, with `Target`,
-`Recipe`, `detect`, `FILE_ICONS`), `FormatSupport` (`support.py`, with `SupportChain` and `Job`) and `Requirement`
+`Recipe`, `detect`, `FILE_ICONS`), `FormatSupport` (`support.py`, with `SupportChain` and `Capability`) and `Requirement`
 (`requirement.py`); a module per predefined format (`delta.py`, `parquet.py`, `excel.py`, `text.py`, `images.py`) and
 per library of the predefined supports (`by_polars.py`, `by_pandas.py`, `by_pyspark.py`, `by_fsspec.py`,
 `by_pillow.py`; `by_python.py` for those needing no package); the predefined packages in `requirements.py`, the
@@ -281,15 +281,16 @@ so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
   (`Csv.separator`, `Text.language`, `Image.mime_type`, `Parquet.data_url`, ...).
 - `FormatSupport` subclasses declare `format` (matched with `isinstance`, so subclasses too: `MarkdownByPython` comes
   before `TextByPython`), `use` (the library's `Requirement`, None for none; names its code, `library()`, and its
-  options), `additional_requirements`, and `jobs` (`"preview"`, `"query"`, `"code"`): the explorer reads only `jobs`,
-  so a method not listed is never called (no runtime check of that, by design: users are expected to generate
-  supports with AI from the written rules in `FormatSupport`'s docstring, kept by `test_jobs_are_the_methods_implemented`
-  for the defaults). Each method gets the detected format object first; any may raise `FormatSupport.NotSupported`
+  options), `additional_requirements`, and `capabilities`, the names of the methods it implements (`"preview"`,
+  `"query"`, `"recipe"`; `Capability`; not "jobs" or "tasks", which are file operations here): the explorer reads only
+  `capabilities`, so a method not listed is never called (no runtime check of that, by design: users are expected to
+  generate supports with AI from the written rules in `FormatSupport`'s docstring, kept by
+  `test_capabilities_are_the_methods_implemented` for the defaults). Each method gets the detected format object first; any may raise `FormatSupport.NotSupported`
   for a target, and the next support is tried. Options are keyword-only `__init__` arguments, no `**kwargs`. Class
   names are `<Format>By<Library>`.
 - `SupportChain` (the explorer's `_supports`: `supports=` then `StorageExplorer.default_supports()`, i.e.
-  `DEFAULT_SUPPORTS`, ordered format by format, most preferred first) does the jobs: `preview` and `query` by the
-  first support installed for the format (`installed`; `can_query`), `recipes` with the first support doing `"code"` of each library (so one given replaces the default's),
+  `DEFAULT_SUPPORTS`, ordered format by format, most preferred first) calls them: `preview` and `query` of the
+  first support installed for the format (`installed`; `can_query`), `recipes` with the first support with `"recipe"` of each library (so one given replaces the default's),
   installed or not (the code may run elsewhere).
 - `preview(fmt, target, limits)`: a list of `Preview` dataclasses (`TablePreview`, `TextPreview`, `TreePreview`,
   `MediaPreview`...) that the frontend renders by `kind`. With no support installed, the chain returns an
@@ -298,9 +299,10 @@ so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
   `_query/data_query.py`'s `DataQuery` does filters, sort and paging as narwhals expressions, either on the data itself
   ("live") or on rows read into memory (queried with polars); behaviour such as regex syntax then follows the data's
   library.
-- `load_code(fmt, target)`: the "Python code" snippet, run as it is in a new notebook: its imports (`import polars as
+- `recipe(fmt, target)`: the code of the "Python code" snippet (a `str`; the chain makes the `Recipe`, adding
+  `library()`), run as it is in a new notebook: its imports (`import polars as
   pl`, whatever the notebook has), and a Spark session (`SparkSession.builder.getOrCreate()`). It fills a class
-  attribute `load_code_template`, written just before the method, an indented `inspect.cleandoc("""...""")`, with
+  attribute `recipe_template`, written just before the method, an indented `inspect.cleandoc("""...""")`, with
   `str.format`: `{url}` (a repr) and `{kwargs}` (`format_kwargs`, the options; empty when none). Installing packages and
   configuring access to the storage (credentials, Spark's setup for Delta Lake) depend on the environment, so they are
   left to the user. `Requirement`s (`requirements.py`) only say what a support needs (`package`, `import_name`,

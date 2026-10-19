@@ -41,7 +41,7 @@ class _PandasByUrl(FormatSupport):
 
 class CsvByPandas(_PandasByUrl):
     format = Csv
-    jobs = ("preview", "code")
+    capabilities = ("preview", "recipe")
 
     def preview(self, fmt: Csv, target: Target, limits: PreviewLimits) -> list[Preview]:
         pd = Pandas().load()
@@ -54,14 +54,14 @@ class CsvByPandas(_PandasByUrl):
         more = truncated or len(df) == limits.max_rows
         return [pandas_table(df, note=rows_note(len(df), more))]
 
-    load_code_template = cleandoc("""
+    recipe_template = cleandoc("""
         import pandas as pd
 
         df = pd.read_csv({url}{kwargs})
         """)
 
-    def load_code(self, fmt: Csv, target: Target) -> str:
-        return self.load_code_template.format(
+    def recipe(self, fmt: Csv, target: Target) -> str:
+        return self.recipe_template.format(
             url=repr(target.url),
             kwargs=format_kwargs(
                 sep=fmt.code_separator(target),
@@ -72,7 +72,7 @@ class CsvByPandas(_PandasByUrl):
 
 class JsonLinesByPandas(_PandasByUrl):
     format = JsonLines
-    jobs = ("preview", "code")
+    capabilities = ("preview", "recipe")
 
     def preview(
         self, fmt: JsonLines, target: Target, limits: PreviewLimits
@@ -83,14 +83,14 @@ class JsonLinesByPandas(_PandasByUrl):
         more = truncated or len(df) == limits.max_rows
         return [pandas_table(df, note=rows_note(len(df), more, "records"))]
 
-    load_code_template = cleandoc("""
+    recipe_template = cleandoc("""
         import pandas as pd
 
         df = pd.read_json({url}, lines=True{kwargs})
         """)
 
-    def load_code(self, fmt: JsonLines, target: Target) -> str:
-        return self.load_code_template.format(
+    def recipe(self, fmt: JsonLines, target: Target) -> str:
+        return self.recipe_template.format(
             url=repr(target.url),
             kwargs=format_kwargs(storage_options=self.code_storage_options()),
         )
@@ -100,16 +100,16 @@ class JsonByPandas(_PandasByUrl):
     """Load code only: JSON is previewed as a tree (``JsonByPython``)."""
 
     format = Json
-    jobs = ("code",)
+    capabilities = ("recipe",)
 
-    load_code_template = cleandoc("""
+    recipe_template = cleandoc("""
         import pandas as pd
 
         df = pd.read_json({url}{kwargs})
         """)
 
-    def load_code(self, fmt: Json, target: Target) -> str:
-        return self.load_code_template.format(
+    def recipe(self, fmt: Json, target: Target) -> str:
+        return self.recipe_template.format(
             url=repr(target.url),
             kwargs=format_kwargs(storage_options=self.code_storage_options()),
         )
@@ -118,7 +118,7 @@ class JsonByPandas(_PandasByUrl):
 class ExcelByPandas(_PandasByUrl):
     format = Excel
     additional_requirements = (Openpyxl,)  # pandas' Excel engine
-    jobs = ("preview", "code")
+    capabilities = ("preview", "recipe")
 
     def preview(
         self, fmt: Excel, target: Target, limits: PreviewLimits
@@ -139,14 +139,14 @@ class ExcelByPandas(_PandasByUrl):
             )
         ]
 
-    load_code_template = cleandoc("""
+    recipe_template = cleandoc("""
         import pandas as pd
 
         df = pd.read_excel({url}{kwargs})
         """)
 
-    def load_code(self, fmt: Excel, target: Target) -> str:
-        return self.load_code_template.format(
+    def recipe(self, fmt: Excel, target: Target) -> str:
+        return self.recipe_template.format(
             url=repr(target.url),
             kwargs=format_kwargs(storage_options=self.code_storage_options()),
         )
@@ -155,7 +155,7 @@ class ExcelByPandas(_PandasByUrl):
 class ParquetByPandas(_PandasByUrl):
     format = Parquet
     additional_requirements = (PyArrow,)  # pandas' Parquet engine
-    jobs = ("preview", "code")
+    capabilities = ("preview", "recipe")
 
     def preview(
         self, fmt: Parquet, target: Target, limits: PreviewLimits
@@ -185,14 +185,14 @@ class ParquetByPandas(_PandasByUrl):
             note = rows_note(len(df), len(df) < total, total=total)
         return [pandas_table(df, note=note)]
 
-    load_code_template = cleandoc("""
+    recipe_template = cleandoc("""
         import pandas as pd
 
         df = pd.read_parquet({url}{kwargs})
         """)
 
-    def load_code(self, fmt: Parquet, target: Target) -> str:
-        return self.load_code_template.format(
+    def recipe(self, fmt: Parquet, target: Target) -> str:
+        return self.recipe_template.format(
             url=repr(target.url),
             kwargs=format_kwargs(storage_options=self.code_storage_options()),
         )

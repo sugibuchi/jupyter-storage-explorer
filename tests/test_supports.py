@@ -1,7 +1,9 @@
-"""formats/support.py and utils.py: which support does each job, and the
+"""formats/support.py and utils.py: which support does what, and the
 supports' options (format_options)."""
 
 from __future__ import annotations
+
+from typing import get_args
 
 import polars as pl
 import pytest
@@ -10,6 +12,7 @@ from jupyter_storage_explorer import StorageExplorer
 from jupyter_storage_explorer.formats import (
     DEFAULT_FORMATS,
     DEFAULT_SUPPORTS,
+    Capability,
     Csv,
     CsvByPandas,
     CsvByPolars,
@@ -37,11 +40,10 @@ class Missing(Requirement):
     import_name = "not_a_package"
 
 
-def support(fmt=Csv, use=None, jobs=("preview",), **methods):
-    """A support class of ``jobs``, its methods ``methods``."""
-    return type(
-        "Fake", (FormatSupport,), {"format": fmt, "use": use, "jobs": jobs, **methods}
-    )
+def support(fmt=Csv, use=None, capabilities=("preview",), **methods):
+    """A support class of ``capabilities``, its methods ``methods``."""
+    attributes = {"format": fmt, "use": use, "capabilities": capabilities}
+    return type("Fake", (FormatSupport,), {**attributes, **methods})
 
 
 def by_class(supports):
@@ -55,15 +57,14 @@ def test_default_formats_are_new_objects():
 
 
 @pytest.mark.parametrize("cls", DEFAULT_SUPPORTS)
-def test_jobs_are_the_methods_implemented(cls):
+def test_capabilities_are_the_methods_implemented(cls):
     # The rule FormatSupport states for subclasses, kept by the defaults.
-    methods = {"preview": "preview", "query": "query", "code": "load_code"}
     implemented = {
-        job
-        for job, method in methods.items()
+        method
+        for method in get_args(Capability)
         if getattr(cls, method) is not getattr(FormatSupport, method)
     }
-    assert implemented == set(cls.jobs)
+    assert implemented == set(cls.capabilities)
 
 
 class TestOptions:
@@ -157,14 +158,14 @@ class TestChain:
         assert chain.preview(Csv(), make_target("/a.csv", b""), LIMITS) == ["next"]
 
     def test_only_its_jobs(self, make_target):
-        # A method not in jobs is never called.
+        # A method not in capabilities is never called.
         chain = SupportChain(
             [
-                support(jobs=(), preview=lambda *a: ["not a job"])(),
-                support(preview=lambda *a: ["job"])(),
+                support(capabilities=(), preview=lambda *a: ["not listed"])(),
+                support(preview=lambda *a: ["listed"])(),
             ]
         )
-        assert chain.preview(Csv(), make_target("/a.csv", b""), LIMITS) == ["job"]
+        assert chain.preview(Csv(), make_target("/a.csv", b""), LIMITS) == ["listed"]
 
     def test_install_hint(self, make_target, monkeypatch):
         monkeypatch.setattr(Requirement, "is_installed", lambda self: False)
@@ -202,7 +203,7 @@ class TestExplorer:
 
     def test_given_first(self, make_target, mem_explorer):
         duck = support(
-            fmt=Parquet, use=Missing, jobs=("code",), load_code=lambda *a: "duck"
+            fmt=Parquet, use=Missing, capabilities=("recipe",), recipe=lambda *a: "duck"
         )
         explorer = StorageExplorer(fs=mem_explorer._fs, supports=[duck])
         recipes = explorer._supports.recipes(Parquet(), make_target("/a.parquet", b""))
