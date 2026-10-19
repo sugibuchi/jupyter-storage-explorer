@@ -57,7 +57,7 @@ class CsvByPolars(_PolarsByUrl):
     format = Csv
     capabilities = ("preview", "query", "recipe")
 
-    def preview(self, fmt: Csv, target: Target, limits: PreviewLimits) -> list[Preview]:
+    def preview(self, fmt: Csv, target: Target, limits: PreviewLimits) -> Preview:
         pl = Polars().load()
         text, truncated = target.head_text(limits.max_bytes)
         df = pl.read_csv(
@@ -67,7 +67,7 @@ class CsvByPolars(_PolarsByUrl):
             truncate_ragged_lines=True,
         )
         more = truncated or df.height == limits.max_rows
-        return [polars_table(df, note=rows_note(df.height, more))]
+        return polars_table(df, note=rows_note(df.height, more))
 
     def query(self, fmt: Csv, url: str, is_dir: bool) -> Any:
         pl = Polars().load()
@@ -102,14 +102,12 @@ class JsonLinesByPolars(_PolarsByUrl):
     format = JsonLines
     capabilities = ("preview", "query", "recipe")
 
-    def preview(
-        self, fmt: JsonLines, target: Target, limits: PreviewLimits
-    ) -> list[Preview]:
+    def preview(self, fmt: JsonLines, target: Target, limits: PreviewLimits) -> Preview:
         pl = Polars().load()
         text, truncated = target.head_text(limits.max_bytes)
         df = pl.read_ndjson(io.BytesIO(text.encode()), n_rows=limits.max_rows)
         more = truncated or df.height == limits.max_rows
-        return [polars_table(df, note=rows_note(df.height, more, "records"))]
+        return polars_table(df, note=rows_note(df.height, more, "records"))
 
     def query(self, fmt: JsonLines, url: str, is_dir: bool) -> Any:
         return Polars().load().scan_ndjson(url, **self.storage())
@@ -160,9 +158,7 @@ class ExcelByPolars(FormatSupport):
         credentials are left out."""
         self.fsspec_storage_options = fsspec_storage_options
 
-    def preview(
-        self, fmt: Excel, target: Target, limits: PreviewLimits
-    ) -> list[Preview]:
+    def preview(self, fmt: Excel, target: Target, limits: PreviewLimits) -> Preview:
         Polars().load()  # fastexcel's to_polars() needs polars
         fastexcel = Fastexcel().load()
         reader = fastexcel.read_excel(target.read_whole(limits))
@@ -172,7 +168,7 @@ class ExcelByPolars(FormatSupport):
             df.height, sheet.total_height > df.height, total=sheet.total_height
         )
         note = with_sheets(note, reader.sheet_names)
-        return [polars_table(df, title=sheet.name, note=note)]
+        return polars_table(df, title=sheet.name, note=note)
 
     def query(self, fmt: Excel, url: str, is_dir: bool) -> Any:
         # Excel cannot be read lazily: the first sheet is read whole and
@@ -199,9 +195,7 @@ class ParquetByPolars(_PolarsByUrl):
     format = Parquet
     capabilities = ("preview", "query", "recipe")
 
-    def preview(
-        self, fmt: Parquet, target: Target, limits: PreviewLimits
-    ) -> list[Preview]:
+    def preview(self, fmt: Parquet, target: Target, limits: PreviewLimits) -> Preview:
         pl = Polars().load()
         lf = self.query(fmt, target.url, target.is_dir)
         df = lf.head(limits.max_rows).collect()
@@ -211,7 +205,7 @@ class ParquetByPolars(_PolarsByUrl):
             # Counting rows only reads the file's metadata.
             total = lf.select(pl.len()).collect().item()
             note = rows_note(df.height, df.height < total, total=total)
-        return [polars_table(df, note=note)]
+        return polars_table(df, note=note)
 
     def query(self, fmt: Parquet, url: str, is_dir: bool) -> Any:
         """A LazyFrame over a Parquet file, or over a directory's data files.
@@ -288,13 +282,9 @@ class DeltaLakeByPolars(_PolarsByUrl):
         self.use_pyarrow = use_pyarrow
         self.pyarrow_options = pyarrow_options
 
-    def preview(
-        self, fmt: DeltaLake, target: Target, limits: PreviewLimits
-    ) -> list[Preview]:
+    def preview(self, fmt: DeltaLake, target: Target, limits: PreviewLimits) -> Preview:
         df = self.query(fmt, target.url, target.is_dir).head(limits.max_rows).collect()
-        return [
-            polars_table(df, note=rows_note(df.height, df.height == limits.max_rows))
-        ]
+        return polars_table(df, note=rows_note(df.height, df.height == limits.max_rows))
 
     def query(self, fmt: DeltaLake, url: str, is_dir: bool) -> Any:
         return (

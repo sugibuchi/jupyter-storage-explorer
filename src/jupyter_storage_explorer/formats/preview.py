@@ -1,5 +1,6 @@
-"""Preview sections: ``DataFormat.preview`` returns a list of these, and the
-frontend renders each section according to its ``kind``."""
+"""Previews: ``FormatSupport.preview`` returns one of these, and the
+frontend renders it, a section of the preview panel, according to its
+``kind``."""
 
 from __future__ import annotations
 

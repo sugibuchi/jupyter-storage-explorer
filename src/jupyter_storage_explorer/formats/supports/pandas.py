@@ -43,7 +43,7 @@ class CsvByPandas(_PandasByUrl):
     format = Csv
     capabilities = ("preview", "recipe")
 
-    def preview(self, fmt: Csv, target: Target, limits: PreviewLimits) -> list[Preview]:
+    def preview(self, fmt: Csv, target: Target, limits: PreviewLimits) -> Preview:
         pd = Pandas().load()
         text, truncated = target.head_text(limits.max_bytes)
         df = pd.read_csv(
@@ -52,7 +52,7 @@ class CsvByPandas(_PandasByUrl):
             nrows=limits.max_rows,
         )
         more = truncated or len(df) == limits.max_rows
-        return [pandas_table(df, note=rows_note(len(df), more))]
+        return pandas_table(df, note=rows_note(len(df), more))
 
     recipe_template = cleandoc("""
         import pandas as pd
@@ -74,14 +74,12 @@ class JsonLinesByPandas(_PandasByUrl):
     format = JsonLines
     capabilities = ("preview", "recipe")
 
-    def preview(
-        self, fmt: JsonLines, target: Target, limits: PreviewLimits
-    ) -> list[Preview]:
+    def preview(self, fmt: JsonLines, target: Target, limits: PreviewLimits) -> Preview:
         pd = Pandas().load()
         text, truncated = target.head_text(limits.max_bytes)
         df = pd.read_json(io.StringIO(text), lines=True, nrows=limits.max_rows)
         more = truncated or len(df) == limits.max_rows
-        return [pandas_table(df, note=rows_note(len(df), more, "records"))]
+        return pandas_table(df, note=rows_note(len(df), more, "records"))
 
     recipe_template = cleandoc("""
         import pandas as pd
@@ -120,9 +118,7 @@ class ExcelByPandas(_PandasByUrl):
     additional_requirements = (Openpyxl,)  # pandas' Excel engine
     capabilities = ("preview", "recipe")
 
-    def preview(
-        self, fmt: Excel, target: Target, limits: PreviewLimits
-    ) -> list[Preview]:
+    def preview(self, fmt: Excel, target: Target, limits: PreviewLimits) -> Preview:
         pd = Pandas().load()
         workbook = pd.ExcelFile(
             io.BytesIO(target.read_whole(limits)), engine="openpyxl"
@@ -131,13 +127,11 @@ class ExcelByPandas(_PandasByUrl):
         # One extra row tells whether there are more.
         df = workbook.parse(name, nrows=limits.max_rows + 1)
         note = rows_note(min(len(df), limits.max_rows), len(df) > limits.max_rows)
-        return [
-            pandas_table(
-                df.head(limits.max_rows),
-                title=name,
-                note=with_sheets(note, workbook.sheet_names),
-            )
-        ]
+        return pandas_table(
+            df.head(limits.max_rows),
+            title=name,
+            note=with_sheets(note, workbook.sheet_names),
+        )
 
     recipe_template = cleandoc("""
         import pandas as pd
@@ -157,9 +151,7 @@ class ParquetByPandas(_PandasByUrl):
     additional_requirements = (PyArrow,)  # pandas' Parquet engine
     capabilities = ("preview", "recipe")
 
-    def preview(
-        self, fmt: Parquet, target: Target, limits: PreviewLimits
-    ) -> list[Preview]:
+    def preview(self, fmt: Parquet, target: Target, limits: PreviewLimits) -> Preview:
         pa_dataset = PyArrow().load("dataset")
         # pyarrow reads through the browser's fsspec filesystem, so any storage
         # works. For a directory, given its first few files, of one partition
@@ -183,7 +175,7 @@ class ParquetByPandas(_PandasByUrl):
         else:
             total = dataset.count_rows()
             note = rows_note(len(df), len(df) < total, total=total)
-        return [pandas_table(df, note=note)]
+        return pandas_table(df, note=note)
 
     recipe_template = cleandoc("""
         import pandas as pd

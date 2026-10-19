@@ -142,35 +142,35 @@ class TestOptions:
 
 class TestChain:
     def test_first_installed_previews(self, make_target):
-        missing = support(use=Missing, preview=lambda *a: ["missing"])
-        first = support(preview=lambda *a: ["first"])
-        second = support(preview=lambda *a: ["second"])
+        missing = support(use=Missing, preview=lambda *a: "missing")
+        first = support(preview=lambda *a: "first")
+        second = support(preview=lambda *a: "second")
         chain = SupportChain([missing(), first(), second()])
-        assert chain.preview(Csv(), make_target("/a.csv", b""), LIMITS) == ["first"]
+        assert chain.preview(Csv(), make_target("/a.csv", b""), LIMITS) == "first"
 
     def test_not_supported_tries_the_next(self, make_target):
         def refuse(self, *args):
             raise self.NotSupported
 
         chain = SupportChain(
-            [support(preview=refuse)(), support(preview=lambda *a: ["next"])()]
+            [support(preview=refuse)(), support(preview=lambda *a: "next")()]
         )
-        assert chain.preview(Csv(), make_target("/a.csv", b""), LIMITS) == ["next"]
+        assert chain.preview(Csv(), make_target("/a.csv", b""), LIMITS) == "next"
 
     def test_only_its_jobs(self, make_target):
         # A method not in capabilities is never called.
         chain = SupportChain(
             [
-                support(capabilities=(), preview=lambda *a: ["not listed"])(),
-                support(preview=lambda *a: ["listed"])(),
+                support(capabilities=(), preview=lambda *a: "not listed")(),
+                support(preview=lambda *a: "listed")(),
             ]
         )
-        assert chain.preview(Csv(), make_target("/a.csv", b""), LIMITS) == ["listed"]
+        assert chain.preview(Csv(), make_target("/a.csv", b""), LIMITS) == "listed"
 
     def test_install_hint(self, make_target, monkeypatch):
         monkeypatch.setattr(Requirement, "is_installed", lambda self: False)
         chain = SupportChain(default_supports())
-        [hint] = chain.preview(Csv(), make_target("/a.csv", b"a\n"), LIMITS)
+        hint = chain.preview(Csv(), make_target("/a.csv", b"a\n"), LIMITS)
         assert isinstance(hint, InstallPreview)
         assert hint.options == [["polars"], ["pandas"]]
         assert not chain.can_query(Csv())

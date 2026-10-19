@@ -77,8 +77,8 @@ class PreviewsMixin:
                 else:
                     # By the first support installed; with none, what to
                     # install instead.
-                    sections = self._supports.preview(fmt, target, self._preview_limits)
-                    base["sections"] = [_section(s) for s in sections]
+                    preview = self._supports.preview(fmt, target, self._preview_limits)
+                    base["sections"] = [_section(preview)]
         except Exception as exc:
             base["error"] = error_text(exc)
         self._preview = base

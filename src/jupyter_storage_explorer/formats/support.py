@@ -104,8 +104,8 @@ class FormatSupport:
 
     def preview(
         self, fmt: DataFormat, target: Target, limits: PreviewLimits
-    ) -> list[Preview]:
-        """The sections to show in the preview panel.
+    ) -> Preview:
+        """What to show in the preview panel.
 
         Parameters
         ----------
@@ -119,7 +119,7 @@ class FormatSupport:
 
         Returns
         -------
-        list of Preview
+        Preview
             E.g. a ``TablePreview`` of the first rows, a ``TextPreview``.
 
         Raises
@@ -229,7 +229,7 @@ class SupportChain:
 
     def preview(
         self, fmt: DataFormat, target: Target, limits: PreviewLimits
-    ) -> list[Preview]:
+    ) -> Preview:
         """The preview of the first support installed that previews
         ``target``; with none installed, what to install
         (``InstallPreview``). ValueError if none can preview it."""
@@ -248,7 +248,7 @@ class SupportChain:
             ]
             if packages not in options:
                 options.append(packages)
-        return [InstallPreview(format=fmt.label, options=options)]
+        return InstallPreview(format=fmt.label, options=options)
 
     def query(self, fmt: DataFormat, url: str, is_dir: bool) -> Any:
         """The data of the first support installed that queries ``url``.

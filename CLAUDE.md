@@ -293,8 +293,8 @@ so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
   `DEFAULT_SUPPORTS`, ordered format by format, most preferred first) calls them: `preview` and `query` of the
   first support installed for the format (`installed`; `can_query`), `recipes` with the first support with `"recipe"` of each library (so one given replaces the default's),
   installed or not (the code may run elsewhere).
-- `preview(fmt, target, limits)`: a list of `Preview` dataclasses (`TablePreview`, `TextPreview`, `TreePreview`,
-  `MediaPreview`...) that the frontend renders by `kind`. With no support installed, the chain returns an
+- `preview(fmt, target, limits)`: one `Preview` dataclass (`TablePreview`, `TextPreview`, `TreePreview`,
+  `MediaPreview`...) that the frontend renders by `kind` (sent as the one item of the preview's `"sections"`). With no support installed, the chain returns an
   `InstallPreview` naming the missing packages per support, so supports never check.
 - `query(fmt, url, is_dir)`: any dataframe narwhals supports, for the data browser (`_new_query`).
   `_query/data_query.py`'s `DataQuery` does filters, sort and paging as narwhals expressions, either on the data itself

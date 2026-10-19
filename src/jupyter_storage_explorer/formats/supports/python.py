@@ -65,12 +65,10 @@ class TextByPython(FormatSupport):
     format = Text
     capabilities = ("preview",)
 
-    def preview(
-        self, fmt: Text, target: Target, limits: PreviewLimits
-    ) -> list[Preview]:
+    def preview(self, fmt: Text, target: Target, limits: PreviewLimits) -> Preview:
         text, truncated = target.head_text(limits.max_bytes)
         note = size_note(target, limits) if truncated else ""
-        return [text_preview(text, fmt.language(target), note)]
+        return text_preview(text, fmt.language(target), note)
 
 
 class MarkdownByPython(FormatSupport):
@@ -80,12 +78,10 @@ class MarkdownByPython(FormatSupport):
     format = Markdown
     capabilities = ("preview",)
 
-    def preview(
-        self, fmt: Markdown, target: Target, limits: PreviewLimits
-    ) -> list[Preview]:
+    def preview(self, fmt: Markdown, target: Target, limits: PreviewLimits) -> Preview:
         text, truncated = target.head_text(limits.max_bytes)
         note = size_note(target, limits) if truncated else ""
-        return [MarkdownPreview(text=text, note=note)]
+        return MarkdownPreview(text=text, note=note)
 
 
 class JsonByPython(FormatSupport):
@@ -94,17 +90,15 @@ class JsonByPython(FormatSupport):
     format = Json
     capabilities = ("preview",)
 
-    def preview(
-        self, fmt: Json, target: Target, limits: PreviewLimits
-    ) -> list[Preview]:
+    def preview(self, fmt: Json, target: Target, limits: PreviewLimits) -> Preview:
         text, truncated = target.head_text(limits.max_bytes)
         if truncated:
             note = f"{size_note(target, limits)}; too large to show as a tree"
-            return [text_preview(text, "json", note)]
+            return text_preview(text, "json", note)
         try:
-            return [TreePreview(value=json.loads(text))]
+            return TreePreview(value=json.loads(text))
         except json.JSONDecodeError as exc:
-            return [text_preview(text, "json", f"Invalid JSON: {exc}")]
+            return text_preview(text, "json", f"Invalid JSON: {exc}")
 
 
 class ImageByPython(FormatSupport):
@@ -114,16 +108,14 @@ class ImageByPython(FormatSupport):
     format = Image
     capabilities = ("preview",)
 
-    def preview(
-        self, fmt: Image, target: Target, limits: PreviewLimits
-    ) -> list[Preview]:
+    def preview(self, fmt: Image, target: Target, limits: PreviewLimits) -> Preview:
         mime = fmt.mime_type(target)
         if target.size is not None and target.size <= limits.max_whole_file_bytes:
-            return [MediaPreview(mime=mime, data=target.head(target.size))]
+            return MediaPreview(mime=mime, data=target.head(target.size))
         # Too large to send through the kernel: let the browser fetch it, if the
         # storage can issue a temporary link.
         try:
-            return [MediaPreview(mime=mime, src=target.fs.sign(target.path))]
+            return MediaPreview(mime=mime, src=target.fs.sign(target.path))
         except NotImplementedError:
             limit = limits.max_whole_file_bytes // (1024 * 1024)
             raise ValueError(f"too large to preview (over {limit} MB)") from None

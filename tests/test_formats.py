@@ -196,33 +196,33 @@ class TestPreviews:
 
     def test_csv_detects_separator(self, make_target):
         target = make_target("/a.csv", b"x;y\n1;2\n3;4\n5;6\n")
-        [table] = self.preview(Csv(), target, self.limits)
+        table = self.preview(Csv(), target, self.limits)
         assert isinstance(table, TablePreview)
         assert table.columns == ["x", "y"]
         assert table.rows == [[1, 2], [3, 4]]
 
     def test_json_tree(self, make_target):
-        [tree] = self.preview(
+        tree = self.preview(
             Json(), make_target("/a.json", b'{"a": [1, 2]}'), self.limits
         )
         assert isinstance(tree, TreePreview)
         assert tree.value == {"a": [1, 2]}
 
     def test_invalid_json_shown_as_text(self, make_target):
-        [text] = self.preview(Json(), make_target("/a.json", b"{oops"), self.limits)
+        text = self.preview(Json(), make_target("/a.json", b"{oops"), self.limits)
         assert isinstance(text, TextPreview)
         assert text.note.startswith("Invalid JSON")
 
     def test_json_lines(self, make_target):
         data = b"".join(json.dumps({"i": i}).encode() + b"\n" for i in range(5))
-        [table] = self.preview(JsonLines(), make_target("/a.jsonl", data), self.limits)
+        table = self.preview(JsonLines(), make_target("/a.jsonl", data), self.limits)
         assert table.rows == [[0], [1]]
 
     def test_parquet_file_with_pandas(self, make_target):
         # pyarrow reads through the target's fsspec filesystem, so memory:// works.
         data = parquet_bytes(pl.DataFrame({"a": [1, 2, 3]}))
         target = make_target("/a.parquet", data)
-        [table] = ParquetByPandas().preview(Parquet(), target, self.limits)
+        table = ParquetByPandas().preview(Parquet(), target, self.limits)
         assert table.rows == [[1], [2]]
         assert "of 3" in table.note
 
@@ -231,7 +231,7 @@ class TestPreviews:
         path = tmp_path / "a.parquet"
         pl.DataFrame({"a": [1, 2, 3]}).write_parquet(path)
         target = Target(fs=memfs, path=str(path), url=str(path), info={})
-        [table] = ParquetByPolars().preview(Parquet(), target, self.limits)
+        table = ParquetByPolars().preview(Parquet(), target, self.limits)
         assert table.rows == [[1], [2]]
         assert "of 3" in table.note
 
@@ -242,7 +242,7 @@ class TestPreviews:
                 writer, sheet_name="one", index=False
             )
             pd.DataFrame({"b": [1]}).to_excel(writer, sheet_name="two", index=False)
-        [table] = self.preview(
+        table = self.preview(
             Excel(), make_target("/a.xlsx", buffer.getvalue()), self.limits
         )
         assert table.title == "one"
@@ -250,37 +250,37 @@ class TestPreviews:
         assert "other sheets: two" in table.note
 
     def test_text_highlighted(self, make_target):
-        [text] = self.preview(Text(), make_target("/a.py", b"import os\n"), self.limits)
+        text = self.preview(Text(), make_target("/a.py", b"import os\n"), self.limits)
         assert text.language == "python"
         assert text.html is not None
         assert '<span class="kn">import</span>' in text.html
 
     def test_text_truncated(self, make_target):
         limits = PreviewLimits(max_bytes=4)
-        [text] = self.preview(Text(), make_target("/a.txt", b"ab\ncd\nef\n"), limits)
+        text = self.preview(Text(), make_target("/a.txt", b"ab\ncd\nef\n"), limits)
         assert text.text == "ab\n"
         assert text.note.startswith("First 0 KB of 9 bytes")
 
     def test_markdown(self, make_target):
-        [md] = self.preview(Markdown(), make_target("/a.md", b"# Title\n"), self.limits)
+        md = self.preview(Markdown(), make_target("/a.md", b"# Title\n"), self.limits)
         assert isinstance(md, MarkdownPreview)
         assert md.text == "# Title\n"
 
     def test_image(self, make_target):
-        [media] = self.preview(Image(), make_target("/a.png", b"\x89PNG"), self.limits)
+        media = self.preview(Image(), make_target("/a.png", b"\x89PNG"), self.limits)
         assert isinstance(media, MediaPreview)
         assert (media.mime, media.data) == ("image/png", b"\x89PNG")
 
     def test_install_hint_when_nothing_installed(self, make_target, monkeypatch):
         monkeypatch.setattr(Requirement, "is_installed", lambda self: False)
-        [hint] = self.preview(Csv(), make_target("/a.csv", b"a\n"), self.limits)
+        hint = self.preview(Csv(), make_target("/a.csv", b"a\n"), self.limits)
         assert isinstance(hint, InstallPreview)
         assert hint.options == [["polars"], ["pandas"]]
 
     def test_image_needs_no_package(self, make_target, monkeypatch):
         # The browser shows images itself: Pillow is for the load code only.
         monkeypatch.setattr(Requirement, "is_installed", lambda self: False)
-        [media] = self.preview(Image(), make_target("/a.png", b"\x89PNG"), self.limits)
+        media = self.preview(Image(), make_target("/a.png", b"\x89PNG"), self.limits)
         assert isinstance(media, MediaPreview)
 
 
@@ -490,7 +490,7 @@ class TestPartitionedParquetReading:
         fmt = Parquet()
         target = make_target("/t")
         assert fmt.matches(target)
-        [table] = ParquetByPandas().preview(fmt, target, PreviewLimits(max_rows=5))
+        table = ParquetByPandas().preview(fmt, target, PreviewLimits(max_rows=5))
         assert table.columns == ["a", "year"]
         assert table.rows == [[2025, 2025], [2025, 2025]]
 
