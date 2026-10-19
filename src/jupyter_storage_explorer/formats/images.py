@@ -30,8 +30,8 @@ class Image(DataFormat):
     }  # fmt: skip
     extensions = tuple(mime_types)
     file_icon = "image"
-    # Previewed by the browser itself: Pillow is only for the load code.
-    code_only_requirements = ((Pillow, Fsspec),)
+    # Previewed by the browser itself, without packages.
+    code_requirements = ((Pillow, Fsspec),)
 
     def __init__(
         self,
@@ -63,10 +63,7 @@ class Image(DataFormat):
             return []  # Pillow cannot read SVG.
         return super().recipes(target)
 
-    def load_code(self, target: Target, requirements: Requirements) -> str:
-        return self.load_code_pillow(target)
-
-    load_code_pillow_template = cleandoc("""
+    load_code_template = cleandoc("""
         import fsspec
         import PIL.Image
 
@@ -76,8 +73,8 @@ class Image(DataFormat):
         img
         """)
 
-    def load_code_pillow(self, target: Target) -> str:
-        return self.load_code_pillow_template.format(
+    def load_code(self, target: Target, requirements: Requirements) -> str:
+        return self.load_code_template.format(
             url=repr(target.url),
             kwargs=format_kwargs(**snippet_options(self.fsspec_storage_options)),
         )

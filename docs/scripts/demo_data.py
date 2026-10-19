@@ -408,7 +408,7 @@ def filesystems() -> dict[str, str]:
 
 def formats() -> list[Any]:
     """The default formats, reading the local copy where they read by URL
-    (``scan``: the data browser, and previews of Delta tables)."""
+    (``query``: the data browser, and previews of Delta tables)."""
 
     def local(url: str) -> str:
         if url.startswith("memory:///"):
@@ -417,8 +417,10 @@ def formats() -> list[Any]:
 
     result = default_formats()
     for fmt in result:
-        scan = fmt.scan
-        fmt.scan = lambda url, is_dir, scan=scan: scan(local(url), is_dir)
+        query = fmt.query
+        fmt.query = lambda url, is_dir, requirements, query=query: query(
+            local(url), is_dir, requirements
+        )
     return result
 
 

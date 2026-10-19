@@ -10,6 +10,7 @@ from jupyter_storage_explorer import StorageExplorer
 from jupyter_storage_explorer.formats import (
     FILE_ICONS,
     Csv,
+    DataFormat,
     DeltaLake,
     Parquet,
     Requirement,
@@ -104,6 +105,20 @@ class TestRequirement:
             "Missing", (Requirement,), {"package": "x", "import_name": "not_a_pkg"}
         )
         assert not missing().is_installed()
+
+    def test_first_set_installed(self):
+        # What preview and query are given, of their requirements' sets.
+        missing = type(
+            "Missing", (Requirement,), {"package": "x", "import_name": "not_a_pkg"}
+        )
+        installed = DataFormat.installed_requirements
+        assert installed(((missing,), (Polars,))) == (Polars,)
+        assert installed(((missing,), (Polars, missing))) is None
+        assert installed(()) == ()  # a format needing no package
+
+    def test_can_query(self):
+        assert Csv().can_query()
+        assert not Text().can_query()  # no query_requirements
 
 
 class TestDetection:

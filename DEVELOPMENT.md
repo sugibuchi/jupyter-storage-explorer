@@ -96,7 +96,7 @@ After rebuilding the extension, install it there again (`uv pip install --python
   and done by a chain of `FileSystemOperations` objects (`filesystems/`), which users can extend. Mappers there
   (`FileSystemMapper`) tell filesystems apart and give their URLs.
 - **The data browser** is `DataQuery` (`_query/`), on any dataframe narwhals supports; `DataExplorer` shows it alone.
-- **Formats** (`formats/`) detect, preview, scan and generate code for each kind of file.
+- **Formats** (`formats/`) detect, preview, query and generate code for each kind of file.
 
 CLAUDE.md describes each part in more detail.
 

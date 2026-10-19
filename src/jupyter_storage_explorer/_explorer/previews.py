@@ -77,7 +77,7 @@ class PreviewsMixin:
                 else:
                     # Previewed with the first set of packages installed; with
                     # none, what to install instead.
-                    requirements = fmt.installed_requirements()
+                    requirements = fmt.installed_requirements(fmt.preview_requirements)
                     sections = (
                         fmt.install_hint()
                         if requirements is None
@@ -128,17 +128,19 @@ class PreviewsMixin:
         Settings are remembered by URL, so they follow the data across
         explorers and tabs, with the mode last chosen for it.
         """
-        scan = functools.partial(fmt.scan, target.url, target.is_dir)
+        # With the first set of query_requirements installed (can_query()).
+        requirements = fmt.installed_requirements(fmt.query_requirements)
+        source = functools.partial(fmt.query, target.url, target.is_dir, requirements)
         state = self._states.query(target.url)
         mode = state.mode if state is not None else "auto"
         fetch = self._fetch_rows
         try:
-            return DataQuery(scan, target.url, self._states, mode=mode, fetch=fetch)
+            return DataQuery(source, target.url, self._states, mode=mode, fetch=fetch)
         except ValueError:
             if mode != "live":
                 raise
             # "live" chosen when the format scanned lazily, and no longer does.
-            return DataQuery(scan, target.url, self._states, fetch=fetch)
+            return DataQuery(source, target.url, self._states, fetch=fetch)
 
     # --- Query data in a new tab: a DataExplorer of the same query, which the
     # launcher's JupyterLab extension shows in a tab of its own ---

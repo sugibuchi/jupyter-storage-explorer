@@ -38,9 +38,10 @@ class Excel(DataFormat):
     label = "Excel workbook"
     extensions = (".xlsx", ".xlsm")
     file_icon = "spreadsheet"
-    # polars reads Excel from bytes, fetched with fsspec so any storage works.
-    preferred_requirements = ((Polars, Fastexcel, Fsspec), (Pandas, Openpyxl))
-    query_requirements = (Polars, Fastexcel)
+    preview_requirements = ((Polars, Fastexcel), (Pandas, Openpyxl))
+    query_requirements = ((Polars, Fastexcel),)
+    # polars' code reads the bytes with fsspec, so any storage works.
+    code_requirements = ((Polars, Fastexcel, Fsspec), (Pandas, Openpyxl))
 
     def __init__(
         self,
@@ -60,21 +61,14 @@ class Excel(DataFormat):
         self.fsspec_storage_options = fsspec_storage_options
         self.pandas_storage_options = pandas_storage_options
 
-    def scan(self, url: str, is_dir: bool) -> Any:
-        # Excel cannot be read lazily: the first sheet is read whole and
-        # queried in memory.
-        return Polars().load().read_excel(url).lazy()
-
     def preview(
         self, target: Target, limits: PreviewLimits, requirements: Requirements
     ) -> list[Preview]:
         if Polars in requirements:
-            return self.preview_with_polars(target, limits)
-        return self.preview_with_pandas(target, limits)
+            return self.preview_polars(target, limits)
+        return self.preview_pandas(target, limits)
 
-    def preview_with_polars(
-        self, target: Target, limits: PreviewLimits
-    ) -> list[Preview]:
+    def preview_polars(self, target: Target, limits: PreviewLimits) -> list[Preview]:
         Polars().load()  # fastexcel's to_polars() needs polars
         fastexcel = Fastexcel().load()
         reader = fastexcel.read_excel(target.read_whole(limits))
@@ -89,9 +83,7 @@ class Excel(DataFormat):
             )
         ]
 
-    def preview_with_pandas(
-        self, target: Target, limits: PreviewLimits
-    ) -> list[Preview]:
+    def preview_pandas(self, target: Target, limits: PreviewLimits) -> list[Preview]:
         pd = Pandas().load()
         workbook = pd.ExcelFile(
             io.BytesIO(target.read_whole(limits)), engine="openpyxl"
@@ -107,6 +99,11 @@ class Excel(DataFormat):
                 note=_with_sheets(note, workbook.sheet_names),
             )
         ]
+
+    def query(self, url: str, is_dir: bool, requirements: Requirements) -> Any:
+        # Excel cannot be read lazily: the first sheet is read whole and
+        # queried in memory.
+        return Polars().load().read_excel(url).lazy()
 
     def load_code(self, target: Target, requirements: Requirements) -> str:
         if Polars in requirements:

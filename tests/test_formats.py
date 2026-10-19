@@ -30,7 +30,7 @@ from jupyter_storage_explorer.formats import (
     TextPreview,
     TreePreview,
 )
-from jupyter_storage_explorer.formats.requirements import Pillow
+from jupyter_storage_explorer.formats.requirements import Pillow, Polars
 
 
 def parquet_bytes(df: pl.DataFrame) -> bytes:
@@ -183,7 +183,7 @@ class TestPreviews:
 
     def preview(self, fmt, target, limits):
         """``fmt``'s preview, with the packages the explorer would pick."""
-        requirements = fmt.installed_requirements()
+        requirements = fmt.installed_requirements(fmt.preview_requirements)
         assert requirements is not None
         return fmt.preview(target, limits, requirements)
 
@@ -215,7 +215,7 @@ class TestPreviews:
         # pyarrow reads through the target's fsspec filesystem, so memory:// works.
         data = parquet_bytes(pl.DataFrame({"a": [1, 2, 3]}))
         target = make_target("/a.parquet", data)
-        [table] = Parquet().preview_with_pandas(target, self.limits)
+        [table] = Parquet().preview_pandas(target, self.limits)
         assert table.rows == [[1], [2]]
         assert "of 3" in table.note
 
@@ -224,7 +224,7 @@ class TestPreviews:
         path = tmp_path / "a.parquet"
         pl.DataFrame({"a": [1, 2, 3]}).write_parquet(path)
         target = Target(fs=memfs, path=str(path), url=str(path), info={})
-        [table] = Parquet().preview_with_polars(target, self.limits)
+        [table] = Parquet().preview_polars(target, self.limits)
         assert table.rows == [[1], [2]]
         assert "of 3" in table.note
 
@@ -266,7 +266,7 @@ class TestPreviews:
 
     def test_install_hint_when_nothing_installed(self, monkeypatch):
         monkeypatch.setattr(Requirement, "is_installed", lambda self: False)
-        assert Csv().installed_requirements() is None
+        assert Csv.installed_requirements(Csv.preview_requirements) is None
         [hint] = Csv().install_hint()
         assert isinstance(hint, InstallPreview)
         assert hint.options == [["polars"], ["pandas"]]
@@ -274,7 +274,7 @@ class TestPreviews:
     def test_image_needs_no_package(self, make_target, monkeypatch):
         # The browser shows images itself: Pillow is for the load code only.
         monkeypatch.setattr(Requirement, "is_installed", lambda self: False)
-        assert Image().installed_requirements() == ()
+        assert Image.installed_requirements(Image.preview_requirements) == ()
         [media] = Image().preview(make_target("/a.png", b"\x89PNG"), self.limits, ())
         assert isinstance(media, MediaPreview)
 
@@ -399,12 +399,12 @@ class TestFormatOptionsInCode:
 def test_scan_local_file(tmp_path, fmt, write, name):
     path = tmp_path / name
     write(pl.DataFrame({"a": [1, 2]}), path)
-    assert fmt.scan(str(path), False).collect()["a"].to_list() == [1, 2]
+    assert fmt.query(str(path), False, (Polars,)).collect()["a"].to_list() == [1, 2]
 
 
 def test_scan_delta_table(tmp_path):
     pl.DataFrame({"a": [1, 2]}).write_delta(tmp_path / "t")
-    assert DeltaLake().scan(str(tmp_path / "t"), True).collect().height == 2
+    assert DeltaLake().query(str(tmp_path / "t"), True, (Polars,)).collect().height == 2
 
 
 def local_target(path) -> Target:
@@ -434,7 +434,7 @@ class TestPartitionedParquetReading:
         self.write(tmp_path)
         fmt = Parquet()
         assert fmt.matches(local_target(tmp_path))
-        df = fmt.scan(tmp_path.as_posix(), True).collect().sort("a")
+        df = fmt.query(tmp_path.as_posix(), True, (Polars,)).collect().sort("a")
         assert df.columns == ["a", "year", "month"]
         assert df.rows() == [
             (202501, 2025, 1),
@@ -446,7 +446,7 @@ class TestPartitionedParquetReading:
     def test_scan_of_a_url_not_detected(self, tmp_path):
         # E.g. rewritten by a subclass's scan: its layout is found then.
         self.write(tmp_path)
-        df = Parquet().scan(tmp_path.as_posix(), True).collect()
+        df = Parquet().query(tmp_path.as_posix(), True, (Polars,)).collect()
         assert (df.columns, df.height) == (["a", "year", "month"], 4)
 
     def test_scan_hive_files(self, tmp_path):
@@ -456,7 +456,7 @@ class TestPartitionedParquetReading:
         (folder / "_SUCCESS").write_bytes(b"")
         fmt = Parquet()
         assert fmt.matches(local_target(tmp_path))
-        df = fmt.scan(tmp_path.as_posix(), True).collect()
+        df = fmt.query(tmp_path.as_posix(), True, (Polars,)).collect()
         assert df["a"].to_list() == [1, 2]
         assert df.columns == ["a", "dt"]
 
@@ -467,7 +467,7 @@ class TestPartitionedParquetReading:
         fmt = Parquet()
         target = make_target("/t")
         assert fmt.matches(target)
-        [table] = fmt.preview_with_pandas(target, PreviewLimits(max_rows=5))
+        [table] = fmt.preview_pandas(target, PreviewLimits(max_rows=5))
         assert table.columns == ["a", "year"]
         assert table.rows == [[2025, 2025], [2025, 2025]]
 
@@ -499,5 +499,5 @@ def test_scan_parquet_directory_skips_hidden_files(tmp_path):
     (tmp_path / "_SUCCESS").write_bytes(b"")
     (tmp_path / "sub").mkdir()
     pl.DataFrame({"a": [3]}).write_parquet(tmp_path / "sub" / "part-0.parquet")
-    df = Parquet().scan(str(tmp_path), True).collect()
+    df = Parquet().query(str(tmp_path), True, (Polars,)).collect()
     assert sorted(df["a"].to_list()) == [1, 2]

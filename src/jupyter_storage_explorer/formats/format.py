@@ -109,14 +109,22 @@ FILE_ICONS = (
 
 
 class DataFormat(abc.ABC):
-    """How to recognise, preview and load one kind of file or directory.
+    """How to recognise, preview, query and load one kind of file or directory.
 
     Subclass it for a format of your own, and give it to ``StorageExplorer``
     (``formats=[MyFormat(), *default_formats()]``). File formats usually only
     set ``extensions``; directory formats (Delta Lake tables, Spark output,
     Hive-partitioned datasets, ...) override ``matches`` and inspect
     ``target.children``. Implement ``preview`` and ``load_code``, and
-    ``scan`` to be queryable.
+    ``query`` to be queryable.
+
+    Each of ``preview``, ``query`` and ``load_code`` is given the packages to
+    use, one of the sets of its requirements (``preview_requirements``,
+    ``query_requirements``, ``code_requirements``). With several sets, the
+    predefined formats only choose there a method per set, named after its
+    first package (``preview_polars``, ``preview_pandas``; ``load_code_polars``
+    filling ``load_code_polars_template``, ...); with one, they implement it
+    directly.
 
     A format with options takes them in ``__init__`` as keyword-only
     arguments, and ignores others in ``**kwargs``: explorers create every
@@ -147,18 +155,20 @@ class DataFormat(abc.ABC):
         square, e.g. with ``viewBox="0 0 24 24"``), shown as an image, so its
         scripts never run. None: the icon JupyterLab gives the file's
         extension, else a plain file. Folders always have the folder icon.
-    preferred_requirements : tuple of tuples of Requirement classes
-        Sets of packages that can read the format, most preferred first,
-        e.g. ``((Polars, DeltaLake), (Pandas,))``: previews use the first set
-        installed (none installed, the explorer tells what to install), and
-        each set yields a "Python code" recipe. Empty for a format previewed
-        without packages.
-    code_only_requirements : tuple of tuples of Requirement classes
-        Sets of packages only in recipes, after the others, e.g.
-        ``((PySpark,),)``; previews never use them.
-    query_requirements : tuple of Requirement classes
-        Packages needed for the data browser ("Query data"), e.g.
-        ``(Polars, DeltaLake)``; empty if the format cannot be queried.
+    preview_requirements : tuple of tuples of Requirement classes
+        Sets of packages that can preview the format, most preferred first,
+        e.g. ``((Polars,), (Pandas, PyArrow))``: ``preview`` is given the
+        first set installed; with none installed, the explorer tells what to
+        install instead. Empty for a format previewed without packages.
+    query_requirements : tuple of tuples of Requirement classes
+        Sets of packages that can query the format in the data browser
+        ("Query data"), most preferred first, e.g. ``((Polars, DeltaLake),)``:
+        ``query`` is given the first set installed. Empty if the format cannot
+        be queried.
+    code_requirements : tuple of tuples of Requirement classes
+        Sets of packages the "Python code" loads the data with, e.g.
+        ``((Polars,), (Pandas,), (PySpark,))``: a recipe each, whether
+        installed or not.
     """
 
     # See the class docstring.
@@ -167,9 +177,9 @@ class DataFormat(abc.ABC):
     priority: ClassVar[int] = 0
     extensions: ClassVar[tuple[str, ...]] = ()
     file_icon: ClassVar[str | tuple[str, str] | None] = None
-    preferred_requirements: ClassVar[tuple[Requirements, ...]] = ()
-    code_only_requirements: ClassVar[tuple[Requirements, ...]] = ()
-    query_requirements: ClassVar[Requirements] = ()
+    preview_requirements: ClassVar[tuple[Requirements, ...]] = ()
+    query_requirements: ClassVar[tuple[Requirements, ...]] = ()
+    code_requirements: ClassVar[tuple[Requirements, ...]] = ()
 
     def matches(self, target: Target) -> bool:
         """Whether a file or folder is in this format.
@@ -196,7 +206,7 @@ class DataFormat(abc.ABC):
         """The sections to show in the preview panel.
 
         Only called with packages installed: when none of
-        ``preferred_requirements`` is, the explorer shows ``install_hint()``
+        ``preview_requirements`` is, the explorer shows ``install_hint()``
         instead.
 
         Parameters
@@ -206,9 +216,9 @@ class DataFormat(abc.ABC):
         limits : PreviewLimits
             How much to read and show (bytes, rows).
         requirements : tuple of Requirement classes
-            The packages to preview with: the first of
-            ``preferred_requirements`` installed (``installed_requirements``),
-            e.g. ``(Polars,)``; empty if the format has none.
+            The packages to preview with, the first set of
+            ``preview_requirements`` installed, e.g. ``(Polars,)``; empty if
+            the format has none.
 
         Returns
         -------
@@ -216,19 +226,7 @@ class DataFormat(abc.ABC):
             E.g. a ``TablePreview`` of the first rows, a ``TextPreview``.
         """
 
-    def can_query(self) -> bool:
-        """Whether the data browser can query this format.
-
-        Returns
-        -------
-        bool
-            True if it has ``query_requirements`` and they are all installed.
-        """
-        return bool(self.query_requirements) and all(
-            r().is_installed() for r in self.query_requirements
-        )
-
-    def scan(self, url: str, is_dir: bool) -> Any:
+    def query(self, url: str, is_dir: bool, requirements: Requirements) -> Any:
         """The data, lazily, for the data browser ("Query data").
 
         Only called when ``can_query()``. Read lazily where the format allows:
@@ -237,10 +235,14 @@ class DataFormat(abc.ABC):
         Parameters
         ----------
         url : str
-            A location polars reads itself: a local path or a cloud URL (e.g.
-            "s3://bucket/key"), with credentials from the environment.
+            A location the packages read themselves: a local path or a cloud
+            URL (e.g. "s3://bucket/key"), with credentials from the
+            environment.
         is_dir : bool
             Whether it is a folder (e.g. a table) or a file.
+        requirements : tuple of Requirement classes
+            The packages to query with, the first set of
+            ``query_requirements`` installed, e.g. ``(Polars,)``.
 
         Returns
         -------
@@ -254,37 +256,6 @@ class DataFormat(abc.ABC):
         """
         raise NotImplementedError(f"{self.label} cannot be queried")
 
-    def installed_requirements(self) -> Requirements | None:
-        """The packages to preview with.
-
-        Returns
-        -------
-        tuple of Requirement classes, or None
-            The first of ``preferred_requirements`` whose packages are all
-            installed; None if there is none; empty if the format has none.
-        """
-        if not self.preferred_requirements:
-            return ()
-        for requirements in self.preferred_requirements:
-            if all(r().is_installed() for r in requirements):
-                return requirements
-        return None
-
-    def install_hint(self) -> list[Preview]:
-        """A preview telling the user what to install to see this format.
-
-        Returns
-        -------
-        list of Preview
-            An ``InstallPreview`` with, per set of ``preferred_requirements``,
-            the packages missing.
-        """
-        options = [
-            [r.package for r in requirements if not r().is_installed()]
-            for requirements in self.preferred_requirements
-        ]
-        return [InstallPreview(format=self.label, options=options)]
-
     @abc.abstractmethod
     def load_code(self, target: Target, requirements: Requirements) -> str:
         """Python code loading the data with one set of packages ("Python code").
@@ -293,15 +264,13 @@ class DataFormat(abc.ABC):
         else it needs, e.g. a Spark session. Installing the packages and
         configuring access to the storage are left to the user.
 
-        The predefined formats only choose here, by the requirements, a
-        method per set of packages named after its first one
-        (``load_code_polars``, ``load_code_pandas``, ...), even when there is
-        one. Each fills a template, a class attribute named after it
-        (``load_code_polars_template``, written with ``inspect.cleandoc``),
-        with ``str.format``: the URL (``{url}``, as a Python literal) and the
-        keyword arguments set by the options (``{kwargs}``, with
-        ``format_kwargs``; storage options through ``snippet_options``). A
-        subclass can change a template alone.
+        The predefined formats fill a template, a class attribute
+        (``load_code_template``; with several sets, one per set:
+        ``load_code_polars_template`` for ``load_code_polars``, ...), written
+        with ``inspect.cleandoc``, with ``str.format``: the URL (``{url}``, as
+        a Python literal) and the keyword arguments set by the options
+        (``{kwargs}``, with ``format_kwargs``; storage options through
+        ``snippet_options``). A subclass can change a template alone.
 
         Parameters
         ----------
@@ -309,7 +278,7 @@ class DataFormat(abc.ABC):
             The file or folder, which ``matches``; ``target.url`` is its
             location.
         requirements : tuple of Requirement classes
-            One of ``preferred_requirements`` or ``code_only_requirements``.
+            One of ``code_requirements``.
 
         Returns
         -------
@@ -317,6 +286,57 @@ class DataFormat(abc.ABC):
             E.g. ``import polars as pl``, a blank line and
             ``df = pl.scan_delta('s3://bucket/table')``.
         """
+
+    @staticmethod
+    def installed_requirements(
+        requirement_sets: tuple[Requirements, ...],
+    ) -> Requirements | None:
+        """The set of packages to use, of the sets that can do something.
+
+        Parameters
+        ----------
+        requirement_sets : tuple of tuples of Requirement classes
+            E.g. ``preview_requirements``, most preferred first.
+
+        Returns
+        -------
+        tuple of Requirement classes, or None
+            The first set whose packages are all installed; None if there is
+            none; empty if there are no sets.
+        """
+        if not requirement_sets:
+            return ()
+        for requirements in requirement_sets:
+            if all(r().is_installed() for r in requirements):
+                return requirements
+        return None
+
+    def can_query(self) -> bool:
+        """Whether the data browser can query this format.
+
+        Returns
+        -------
+        bool
+            True if it has ``query_requirements``, one set of them installed.
+        """
+        return bool(self.query_requirements) and (
+            self.installed_requirements(self.query_requirements) is not None
+        )
+
+    def install_hint(self) -> list[Preview]:
+        """A preview telling the user what to install to see this format.
+
+        Returns
+        -------
+        list of Preview
+            An ``InstallPreview`` with, per set of ``preview_requirements``,
+            the packages missing.
+        """
+        options = [
+            [r.package for r in requirements if not r().is_installed()]
+            for requirements in self.preview_requirements
+        ]
+        return [InstallPreview(format=self.label, options=options)]
 
     def recipes(self, target: Target) -> list[Recipe]:
         """The ways to load a file or folder in a notebook ("Python code").
@@ -329,18 +349,14 @@ class DataFormat(abc.ABC):
         Returns
         -------
         list of Recipe
-            One per set of ``preferred_requirements`` and then of
-            ``code_only_requirements``, with its ``load_code``.
+            One per set of ``code_requirements``, with its ``load_code``.
         """
         return [
             Recipe(
                 library=requirements[0].package,
                 code=self.load_code(target, requirements),
             )
-            for requirements in (
-                *self.preferred_requirements,
-                *self.code_only_requirements,
-            )
+            for requirements in self.code_requirements
         ]
 
 

@@ -35,7 +35,7 @@ Python and `static/` changes need no build: restart the kernel. The launcher's J
 
 The Python tests: fixtures in `tests/conftest.py` are `memfs` (a cleared fsspec memory filesystem), `make_target`
 (writes a file there and returns its `Target`), and `mem_explorer` and `local` (explorers of those). Anything polars
-reads by URL (`scan`, polars previews, the data browser) needs real local files (`tmp_path`), as polars cannot read
+reads by URL (`query`, polars previews, the data browser) needs real local files (`tmp_path`), as polars cannot read
 `memory://`. The data browser's tests run each filter on polars, pandas, PyArrow, DuckDB and sqlframe (the PySpark API
 on DuckDB, which narwhals queries as it does Spark; real Spark needs Java, so it is not tested). The widget tests
 subclass the widget to capture `send()` and drive it through `_on_custom_msg`, as the frontend would; for
@@ -268,26 +268,32 @@ defaults in `utils.py`. Each `DataFormat` subclass declares `name`, `label`, `pr
 files' icon in the list: one of `FILE_ICONS`, or `(name, svg)` for one of its own, shown as an `<img>` so its scripts
 never run; sent as `_format_icons` and `_file_icon_svgs`, checked by `format_icons()`; files of formats without one,
 e.g. Text's, get their extension's icon, `FILE_ICON_EXTENSIONS` in `icons.js`) and
-which package sets can read it (`preferred_requirements` for previews and code, `code_only_requirements` such as
-PySpark for code only, `query_requirements` for the data browser), and implements:
+the sets of packages each of its three jobs can use, most preferred first (`preview_requirements`,
+`query_requirements`, `code_requirements`; e.g. CSV's `((Polars,), (Pandas,))`, `((Polars,),)`,
+`((Polars,), (Pandas,), (PySpark,))`), and implements the three, each given its set (`installed_requirements(sets)`:
+the first set installed, None if none, `()` if no sets). A job with several sets is an if-then choosing a method per
+set, named after its first package (`preview_polars`, `load_code_pyspark`, ...); with one set, it is implemented
+directly:
 - `matches(target)`: cheap detection, called on every click; directory formats (Delta, Parquet datasets) inspect
   `target.children`. Parquet also takes Hive-style partition folders (`year=…/month=…/`), followed down one branch
-  (one more `ls` per partition column, `_partitioned_layout`), and keeps each directory's layout by URL for `scan`,
+  (one more `ls` per partition column, `_partitioned_layout`), and keeps each directory's layout by URL for `query`,
   which gets the URL only (a URL it has not seen is detected again through fsspec, `_discover`). The highest
   `priority` wins (Delta 20 > Parquet 10 > default 0 > Text -10).
 - `preview(target, limits, requirements)`: a list of `Preview` dataclasses (`TablePreview`, `TextPreview`,
-  `TreePreview`, `MediaPreview`...) that the frontend renders by `kind`, with `requirements`, the first set of
-  `preferred_requirements` installed (`installed_requirements()`; `()` for a format with none, e.g. Image, whose
-  Pillow is code-only). When no set is installed, the explorer (`_open_preview`) shows `install_hint()` (an
-  `InstallPreview`) without calling it, so formats never check.
-- `scan(url, is_dir)`: a polars LazyFrame for the data browser. `_query/data_query.py`'s `DataQuery` does filters, sort
+  `TreePreview`, `MediaPreview`...) that the frontend renders by `kind`, with the first set of `preview_requirements`
+  installed (`()` for a format with none: Text, JSON and Image are previewed without packages). When no set is
+  installed, the explorer (`_open_preview`) shows `install_hint()` (an `InstallPreview`) without calling it, so
+  formats never check.
+- `query(url, is_dir, requirements)`: a polars LazyFrame for the data browser, with the first set of
+  `query_requirements` installed (`can_query()`: one is; `_new_query`). `_query/data_query.py`'s `DataQuery` does filters, sort
   and paging as narwhals expressions, so it takes any dataframe narwhals supports, either on the data itself ("live") or
   on rows read into memory (queried with polars); behaviour such as regex syntax then follows the data's library.
 - `load_code(target, requirements)`: the "Python code" snippet for one package set, run as it is in a new
   notebook: its imports (`import polars as pl`, whatever the notebook has), and a Spark session
-  (`SparkSession.builder.getOrCreate()`). Written as an if-then choosing `load_code_<package>` (named after the set's
-  first package, even when there is only one set), which fills the class attribute `load_code_<package>_template`
-  (an indented `inspect.cleandoc("""...""")`) with `str.format`: `{url}` (a repr) and `{kwargs}` (`format_kwargs`,
+  (`SparkSession.builder.getOrCreate()`); one per set of `code_requirements` (`recipes()`). It fills a class attribute
+  template, written just before the method that fills it (`load_code_template`; with several sets,
+  `load_code_polars_template` for `load_code_polars`, ...), an indented `inspect.cleandoc("""...""")`, with
+  `str.format`: `{url}` (a repr) and `{kwargs}` (`format_kwargs`,
   the options; empty when none). Installing packages and configuring access to the storage (credentials, Spark's
   setup for Delta Lake) depend on the environment, so they are left to the user, and a preview whose packages are
   missing (`install_hint()`) only names them. `Requirement`s (`requirements.py`) only say what a format needs

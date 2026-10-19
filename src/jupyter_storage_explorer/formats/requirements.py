@@ -27,7 +27,7 @@ class Pillow(Requirement):
 
 
 class PySpark(Requirement):
-    """Spark, used only in load code (``DataFormat.code_only_requirements``)."""
+    """Spark, used only in load code (``DataFormat.code_requirements``)."""
 
     package = "pyspark"
     import_name = "pyspark"

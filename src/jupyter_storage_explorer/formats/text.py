@@ -92,7 +92,8 @@ class Text(DataFormat):
     extensions = tuple(languages)
     priority = -10  # the fallback: any more specific format is the default
     # No file_icon: files get the icon of their extension (Python, YAML, ...).
-    preferred_requirements = ((Fsspec,),)
+    # Previewed without packages, from the storage's filesystem.
+    code_requirements = ((Fsspec,),)
 
     def __init__(
         self,
@@ -116,18 +117,15 @@ class Text(DataFormat):
             )
         ]
 
-    def load_code(self, target: Target, requirements: Requirements) -> str:
-        return self.load_code_fsspec(target)
-
-    load_code_fsspec_template = cleandoc("""
+    load_code_template = cleandoc("""
         import fsspec
 
         with fsspec.open({url}, 'rt'{kwargs}) as f:
             text = f.read()
         """)
 
-    def load_code_fsspec(self, target: Target) -> str:
-        return self.load_code_fsspec_template.format(
+    def load_code(self, target: Target, requirements: Requirements) -> str:
+        return self.load_code_template.format(
             url=repr(target.url),
             kwargs=format_kwargs(**snippet_options(self.fsspec_storage_options)),
         )
@@ -158,9 +156,9 @@ class Csv(DataFormat):
     label = "CSV"
     extensions = (".csv", ".tsv")
     file_icon = "spreadsheet"
-    preferred_requirements = ((Polars,), (Pandas,))
-    code_only_requirements = ((PySpark,),)
-    query_requirements = (Polars,)
+    preview_requirements = ((Polars,), (Pandas,))
+    query_requirements = ((Polars,),)
+    code_requirements = ((Polars,), (Pandas,), (PySpark,))
 
     def __init__(
         self,
@@ -191,7 +189,43 @@ class Csv(DataFormat):
         except csv.Error:
             return ","
 
-    def scan(self, url: str, is_dir: bool) -> Any:
+    def preview(
+        self, target: Target, limits: PreviewLimits, requirements: Requirements
+    ) -> list[Preview]:
+        if Polars in requirements:
+            return self.preview_polars(target, limits)
+        return self.preview_pandas(target, limits)
+
+    def preview_polars(self, target: Target, limits: PreviewLimits) -> list[Preview]:
+        pl = Polars().load()
+        text, truncated = target.head_text(limits.max_bytes)
+        df = pl.read_csv(
+            io.BytesIO(text.encode()),
+            separator=self._separator(target.name, text),
+            n_rows=limits.max_rows,
+            truncate_ragged_lines=True,
+        )
+        return [
+            polars_table(
+                df, note=rows_note(df.height, truncated or df.height == limits.max_rows)
+            )
+        ]
+
+    def preview_pandas(self, target: Target, limits: PreviewLimits) -> list[Preview]:
+        pd = Pandas().load()
+        text, truncated = target.head_text(limits.max_bytes)
+        df = pd.read_csv(
+            io.StringIO(text),
+            sep=self._separator(target.name, text),
+            nrows=limits.max_rows,
+        )
+        return [
+            pandas_table(
+                df, note=rows_note(len(df), truncated or len(df) == limits.max_rows)
+            )
+        ]
+
+    def query(self, url: str, is_dir: bool, requirements: Requirements) -> Any:
         pl = Polars().load()
         storage = {
             "storage_options": self.polars_storage_options,
@@ -207,46 +241,6 @@ class Csv(DataFormat):
             try_parse_dates=True,
             **storage,
         )
-
-    def preview(
-        self, target: Target, limits: PreviewLimits, requirements: Requirements
-    ) -> list[Preview]:
-        if Polars in requirements:
-            return self.preview_with_polars(target, limits)
-        return self.preview_with_pandas(target, limits)
-
-    def preview_with_polars(
-        self, target: Target, limits: PreviewLimits
-    ) -> list[Preview]:
-        pl = Polars().load()
-        text, truncated = target.head_text(limits.max_bytes)
-        df = pl.read_csv(
-            io.BytesIO(text.encode()),
-            separator=self._separator(target.name, text),
-            n_rows=limits.max_rows,
-            truncate_ragged_lines=True,
-        )
-        return [
-            polars_table(
-                df, note=rows_note(df.height, truncated or df.height == limits.max_rows)
-            )
-        ]
-
-    def preview_with_pandas(
-        self, target: Target, limits: PreviewLimits
-    ) -> list[Preview]:
-        pd = Pandas().load()
-        text, truncated = target.head_text(limits.max_bytes)
-        df = pd.read_csv(
-            io.StringIO(text),
-            sep=self._separator(target.name, text),
-            nrows=limits.max_rows,
-        )
-        return [
-            pandas_table(
-                df, note=rows_note(len(df), truncated or len(df) == limits.max_rows)
-            )
-        ]
 
     def load_code(self, target: Target, requirements: Requirements) -> str:
         if PySpark in requirements:
@@ -310,7 +304,8 @@ class Json(DataFormat):
     label = "JSON"
     extensions = (".json",)
     file_icon = "json"
-    preferred_requirements = ((Fsspec,), (Polars,), (Pandas,))
+    # Previewed without packages, as a tree.
+    code_requirements = ((Fsspec,), (Polars,), (Pandas,))
 
     def __init__(
         self,
@@ -394,9 +389,9 @@ class JsonLines(DataFormat):
     label = "JSON Lines"
     extensions = (".jsonl", ".ndjson")
     file_icon = "json"
-    preferred_requirements = ((Polars,), (Pandas,))
-    code_only_requirements = ((PySpark,),)
-    query_requirements = (Polars,)
+    preview_requirements = ((Polars,), (Pandas,))
+    query_requirements = ((Polars,),)
+    code_requirements = ((Polars,), (Pandas,), (PySpark,))
 
     def __init__(
         self,
@@ -418,7 +413,28 @@ class JsonLines(DataFormat):
         self.polars_credential_provider = polars_credential_provider
         self.pandas_storage_options = pandas_storage_options
 
-    def scan(self, url: str, is_dir: bool) -> Any:
+    def preview(
+        self, target: Target, limits: PreviewLimits, requirements: Requirements
+    ) -> list[Preview]:
+        if Polars in requirements:
+            return self.preview_polars(target, limits)
+        return self.preview_pandas(target, limits)
+
+    def preview_polars(self, target: Target, limits: PreviewLimits) -> list[Preview]:
+        pl = Polars().load()
+        text, truncated = target.head_text(limits.max_bytes)
+        df = pl.read_ndjson(io.BytesIO(text.encode()), n_rows=limits.max_rows)
+        more = truncated or df.height == limits.max_rows
+        return [polars_table(df, note=rows_note(df.height, more, "records"))]
+
+    def preview_pandas(self, target: Target, limits: PreviewLimits) -> list[Preview]:
+        pd = Pandas().load()
+        text, truncated = target.head_text(limits.max_bytes)
+        df = pd.read_json(io.StringIO(text), lines=True, nrows=limits.max_rows)
+        more = truncated or len(df) == limits.max_rows
+        return [pandas_table(df, note=rows_note(len(df), more, "records"))]
+
+    def query(self, url: str, is_dir: bool, requirements: Requirements) -> Any:
         return (
             Polars()
             .load()
@@ -428,31 +444,6 @@ class JsonLines(DataFormat):
                 credential_provider=self.polars_credential_provider,
             )
         )
-
-    def preview(
-        self, target: Target, limits: PreviewLimits, requirements: Requirements
-    ) -> list[Preview]:
-        if Polars in requirements:
-            return self.preview_with_polars(target, limits)
-        return self.preview_with_pandas(target, limits)
-
-    def preview_with_polars(
-        self, target: Target, limits: PreviewLimits
-    ) -> list[Preview]:
-        pl = Polars().load()
-        text, truncated = target.head_text(limits.max_bytes)
-        df = pl.read_ndjson(io.BytesIO(text.encode()), n_rows=limits.max_rows)
-        more = truncated or df.height == limits.max_rows
-        return [polars_table(df, note=rows_note(df.height, more, "records"))]
-
-    def preview_with_pandas(
-        self, target: Target, limits: PreviewLimits
-    ) -> list[Preview]:
-        pd = Pandas().load()
-        text, truncated = target.head_text(limits.max_bytes)
-        df = pd.read_json(io.StringIO(text), lines=True, nrows=limits.max_rows)
-        more = truncated or len(df) == limits.max_rows
-        return [pandas_table(df, note=rows_note(len(df), more, "records"))]
 
     def load_code(self, target: Target, requirements: Requirements) -> str:
         if PySpark in requirements:

@@ -48,7 +48,7 @@ _PARTITION = re.compile(r"([^=/]+)=([^/]*)")
 # Apache Hudi tables are folders of Parquet files whose rows are versioned by
 # the table's timeline: read as plain Parquet, they show stale rows.
 _HUDI_FOLDER = ".hoodie"
-# Datasets' layouts remembered per format, for ``scan`` (by URL).
+# Datasets' layouts remembered per format, for ``query`` (by URL).
 _MAX_LAYOUTS = 256
 
 
@@ -257,9 +257,9 @@ class Parquet(DataFormat):
     extensions = (".parquet", ".parq")
     file_icon = "spreadsheet"
     priority = 10  # above generic directories, below table formats such as Delta Lake
-    preferred_requirements = ((Polars,), (Pandas, PyArrow))
-    code_only_requirements = ((PySpark,),)
-    query_requirements = (Polars,)
+    preview_requirements = ((Polars,), (Pandas, PyArrow))
+    query_requirements = ((Polars,),)
+    code_requirements = ((Polars,), (Pandas, PyArrow), (PySpark,))
 
     def __init__(
         self,
@@ -280,7 +280,7 @@ class Parquet(DataFormat):
         self.polars_storage_options = polars_storage_options
         self.polars_credential_provider = polars_credential_provider
         self.pandas_storage_options = pandas_storage_options
-        # Directory URL -> its layout, found by ``matches`` for ``scan``,
+        # Directory URL -> its layout, found by ``matches`` for ``query``,
         # which is given the URL only.
         self._layouts: dict[str, _Layout] = {}
 
@@ -310,7 +310,7 @@ class Parquet(DataFormat):
 
     def _discover(self, url: str) -> _Layout | None:
         """The layout of directory ``url``, which ``matches`` was not given
-        (e.g. a URL a subclass's ``scan`` rewrote): read with fsspec, with the
+        (e.g. a URL a subclass's ``query`` rewrote): read with fsspec, with the
         environment's credentials. None if it cannot be read or is no dataset."""
         try:
             fs, path = fsspec.core.url_to_fs(url)
@@ -334,39 +334,16 @@ class Parquet(DataFormat):
         which polars would search recursively."""
         return self._layout(url).glob(url) if is_dir else url
 
-    def scan(self, url: str, is_dir: bool) -> Any:
-        """A LazyFrame over a Parquet file, or over a directory's data files.
-
-        For a directory, its data files as ``matches`` found them (see
-        ``_polars_url``); partition folders give columns ("year=2026": a
-        column "year"). Names starting with "." or "_" are skipped, as Spark
-        writes "_SUCCESS" and ".crc" checksums next to the data.
-        """
-        layout = self._layout(url) if is_dir else None
-        return (
-            Polars()
-            .load()
-            .scan_parquet(
-                layout.glob(url) if layout is not None else url,
-                hive_partitioning=layout is not None and bool(layout.keys),
-                hidden_file_prefix=[".", "_"],
-                storage_options=self.polars_storage_options,
-                credential_provider=self.polars_credential_provider,
-            )
-        )
-
     def preview(
         self, target: Target, limits: PreviewLimits, requirements: Requirements
     ) -> list[Preview]:
         if Polars in requirements:
-            return self.preview_with_polars(target, limits)
-        return self.preview_with_pandas(target, limits)
+            return self.preview_polars(target, limits)
+        return self.preview_pandas(target, limits)
 
-    def preview_with_polars(
-        self, target: Target, limits: PreviewLimits
-    ) -> list[Preview]:
+    def preview_polars(self, target: Target, limits: PreviewLimits) -> list[Preview]:
         pl = Polars().load()
-        lf = self.scan(target.url, target.is_dir)
+        lf = self.query(target.url, target.is_dir, (Polars,))
         df = lf.head(limits.max_rows).collect()
         if target.is_dir:
             note = rows_note(df.height, df.height == limits.max_rows)
@@ -376,9 +353,7 @@ class Parquet(DataFormat):
             note = rows_note(df.height, df.height < total, total=total)
         return [polars_table(df, note=note)]
 
-    def preview_with_pandas(
-        self, target: Target, limits: PreviewLimits
-    ) -> list[Preview]:
+    def preview_pandas(self, target: Target, limits: PreviewLimits) -> list[Preview]:
         pa_dataset = PyArrow().load("dataset")
         # pyarrow reads through the browser's fsspec filesystem, so any storage
         # works. For a directory, given its first few files, of one partition
@@ -404,6 +379,27 @@ class Parquet(DataFormat):
             total = dataset.count_rows()
             note = rows_note(len(df), len(df) < total, total=total)
         return [pandas_table(df, note=note)]
+
+    def query(self, url: str, is_dir: bool, requirements: Requirements) -> Any:
+        """A LazyFrame over a Parquet file, or over a directory's data files.
+
+        For a directory, its data files as ``matches`` found them (see
+        ``_polars_url``); partition folders give columns ("year=2026": a
+        column "year"). Names starting with "." or "_" are skipped, as Spark
+        writes "_SUCCESS" and ".crc" checksums next to the data.
+        """
+        layout = self._layout(url) if is_dir else None
+        return (
+            Polars()
+            .load()
+            .scan_parquet(
+                layout.glob(url) if layout is not None else url,
+                hive_partitioning=layout is not None and bool(layout.keys),
+                hidden_file_prefix=[".", "_"],
+                storage_options=self.polars_storage_options,
+                credential_provider=self.polars_credential_provider,
+            )
+        )
 
     def load_code(self, target: Target, requirements: Requirements) -> str:
         if PySpark in requirements:

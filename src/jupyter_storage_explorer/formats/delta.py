@@ -26,10 +26,10 @@ class DeltaLake(DataFormat):
     name = "delta"
     label = "Delta Lake table"
     priority = 20  # a Delta table is also a directory of Parquet files
-    preferred_requirements = ((Polars, DeltaLakePackage),)
+    preview_requirements = ((Polars, DeltaLakePackage),)
+    query_requirements = ((Polars, DeltaLakePackage),)
     # delta-spark: a Spark session with Delta Lake set up.
-    code_only_requirements = ((DeltaSpark,),)
-    query_requirements = (Polars, DeltaLakePackage)
+    code_requirements = ((Polars, DeltaLakePackage), (DeltaSpark,))
 
     def __init__(
         self,
@@ -60,7 +60,16 @@ class DeltaLake(DataFormat):
     def matches(self, target: Target) -> bool:
         return target.is_dir and "_delta_log" in target.child_names
 
-    def scan(self, url: str, is_dir: bool) -> Any:
+    def preview(
+        self, target: Target, limits: PreviewLimits, requirements: Requirements
+    ) -> list[Preview]:
+        lf = self.query(target.url, target.is_dir, requirements)
+        df = lf.head(limits.max_rows).collect()
+        return [
+            polars_table(df, note=rows_note(df.height, df.height == limits.max_rows))
+        ]
+
+    def query(self, url: str, is_dir: bool, requirements: Requirements) -> Any:
         # polars reads the table with deltalake (delta-rs), which reads cloud
         # storage itself, by default with credentials from the environment.
         return (
@@ -75,19 +84,6 @@ class DeltaLake(DataFormat):
                 pyarrow_options=self.polars_delta_pyarrow_options,
             )
         )
-
-    def preview(
-        self, target: Target, limits: PreviewLimits, requirements: Requirements
-    ) -> list[Preview]:
-        return self.preview_with_polars(target, limits)
-
-    def preview_with_polars(
-        self, target: Target, limits: PreviewLimits
-    ) -> list[Preview]:
-        df = self.scan(target.url, target.is_dir).head(limits.max_rows).collect()
-        return [
-            polars_table(df, note=rows_note(df.height, df.height == limits.max_rows))
-        ]
 
     def load_code(self, target: Target, requirements: Requirements) -> str:
         if DeltaSpark in requirements:
