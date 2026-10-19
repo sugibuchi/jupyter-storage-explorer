@@ -75,7 +75,10 @@ explorer of exactly its own version (`launcher/hatch_build.py` sets its dependen
   `launch()`. It merges every `storage-explorer/launcher.py` in Jupyter's config paths as layers, system to user
   (their `filesystems()`, `formats()`, `format_options()`, `operations()`, `filesystem_mappers()`, `transfer_policy()`, `parameters()`;
   `final()` names what later layers cannot change; a retired `style()` is ignored with a warning, `RETIRED`; see `load_settings`, tested in
-  `tests/test_launcher.py`). Its JupyterLab extension has four plugins:
+  `tests/test_launcher.py`). The tab's explorer gets a settings button (`_offer_settings`, trait `_settings_path`;
+  never in notebooks) opening the user's `launcher.py` through the `files.ts` drive, created from
+  `launcher_template.py` if missing, once the user confirms (`"settings_open"`: `{"missing"}`, then with `"create"`; `"jupyterlab_get"`/`"jupyterlab_save"` with `"settings"` read
+  and write that file only): `~/.jupyter` is hidden, so JupyterLab's own contents API would refuse it. Its JupyterLab extension has four plugins:
   - `index.ts`: the tab, a console (`ExplorerTab`). ipywidgets binds a console's widgets to its first kernel, so a tab
     whose session is lost (server restart) or whose kernel changes or restarts is replaced by a new tab. Each tab's
     view (storage, folder per storage) is reported by the explorer as a bubbling `"jupyter-storage-explorer:view"` DOM

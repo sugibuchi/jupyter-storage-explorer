@@ -54,6 +54,33 @@ function createJupyterLab(x) {
     }).catch((err) => x.flash(`Cannot open in JupyterLab: ${err.message ?? err}`));
   }
 
+  // The launcher's settings file (the toolbar's settings button), created by
+  // the kernel from its template if missing, once the user agrees
+  // ("settings_open"), then opened as a file of its own storage: get and save
+  // name no path, the kernel reads and writes that file only ("settings").
+  const canOpenSettings = () => Boolean(globalThis[JUPYTERLAB]?.open);
+
+  async function openSettings() {
+    let reply = await request({ type: "settings_open" });
+    if (reply.missing) {
+      const lines = question("Create your launcher settings from a template?", model.get("_settings_path"));
+      if (!(await x.ask(lines, confirmButtons("Create")))) return;
+      reply = await request({ type: "settings_open", create: true });
+    }
+    if (reply.error) {
+      x.flash(`Cannot open the settings: ${reply.error}`);
+      return;
+    }
+    const ask = (type, options) => askKernel({ ...options, type, settings: true });
+    globalThis[JUPYTERLAB].open({
+      explorer: model.get("_explorer_id"),
+      storage: "Launcher settings",
+      path: "launcher.py",
+      get: (options) => ask("jupyterlab_get", options),
+      save: (options) => ask("jupyterlab_save", options),
+    }).catch((err) => x.flash(`Cannot open the settings: ${err.message ?? err}`));
+  }
+
   // "Query data" in a tab of its own: the kernel opens a DataExplorer of the
   // same query ("query_tab"), which the extension shows with this widget's
   // kernel connection (`openWidget`), and closes when the tab closes.
@@ -74,5 +101,5 @@ function createJupyterLab(x) {
     }
   }
 
-  return { canOpen, open, canOpenQueryTab, openQueryTab };
+  return { canOpen, open, canOpenSettings, openSettings, canOpenQueryTab, openQueryTab };
 }

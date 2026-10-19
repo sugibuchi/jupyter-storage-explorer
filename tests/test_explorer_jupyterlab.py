@@ -203,3 +203,75 @@ class TestOpenInJupyterLab:
         )
         monkeypatch.setattr(jupyterlab_files, "_notary", no_notary)
         assert self.trust(mem_explorer, "/data/n.ipynb") == [False, False]
+
+
+class TestSettingsFile:
+    """The launcher's settings file, opened by the toolbar's settings button
+    through the same drive ("settings": that file only)."""
+
+    def offered(self, explorer: Explorer, tmp_path) -> tuple[Any, list[int]]:
+        path = tmp_path / "launcher.py"
+        created = []
+
+        def create():
+            created.append(1)
+            if not path.exists():
+                path.write_bytes(b"# template\n")
+
+        explorer._offer_settings(path, create)
+        return path, created
+
+    def test_none_in_notebooks(self, mem_explorer):
+        assert mem_explorer._settings_path == ""  # no button
+        reply = mem_explorer.request({"type": "settings_open", "rid": 1})
+        assert reply["error"] == "this explorer has no settings file"
+        get = {"type": "jupyterlab_get", "rid": 2, "settings": True, "format": "text"}
+        assert "error" in mem_explorer.request(get)
+
+    def test_open_get_and_save(self, mem_explorer, tmp_path):
+        path, created = self.offered(mem_explorer, tmp_path)
+        assert mem_explorer._settings_path == str(path)
+        # Missing: the user is asked before it is created.
+        open_ = {"type": "settings_open", "rid": 1}
+        assert mem_explorer.request(open_)["missing"] is True
+        assert created == []
+        assert not path.exists()
+        reply = mem_explorer.request({**open_, "create": True})
+        assert "error" not in reply
+        assert "missing" not in reply
+        assert created == [1]
+        # Existing: opened as it is, never created again.
+        reply = mem_explorer.request(open_)
+        assert "error" not in reply
+        assert "missing" not in reply
+        assert created == [1]
+        settings = {"settings": True, "format": "text"}
+        model = mem_explorer.request({"type": "jupyterlab_get", "rid": 2, **settings})
+        assert model["model"]["content"] == "# template\n"
+        save = {"type": "jupyterlab_save", "rid": 3, "content": "# mine\n", **settings}
+        assert "model" in mem_explorer.request(save)
+        assert path.read_bytes() == b"# mine\n"
+
+    def test_only_that_file(self, mem_explorer, memfs, tmp_path):
+        """A path or storage sent with "settings" is ignored."""
+        path, _ = self.offered(mem_explorer, tmp_path)
+        path.write_bytes(b"# settings\n")
+        reply = mem_explorer.request(
+            {
+                "type": "jupyterlab_get",
+                "rid": 1,
+                "settings": True,
+                "filesystem": mem_explorer._filesystem,
+                "path": "/data/notes.md",
+                "format": "text",
+            }
+        )
+        assert reply["model"]["content"] == "# settings\n"
+
+    def test_creation_failed(self, mem_explorer, tmp_path):
+        def fail():
+            raise PermissionError("denied")
+
+        mem_explorer._offer_settings(tmp_path / "launcher.py", fail)
+        open_ = {"type": "settings_open", "rid": 1, "create": True}
+        assert "denied" in mem_explorer.request(open_)["error"]

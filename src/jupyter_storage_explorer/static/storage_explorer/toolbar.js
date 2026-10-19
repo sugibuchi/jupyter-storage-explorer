@@ -1,11 +1,15 @@
-// The toolbar: bookmarks, Up, Refresh, the folder's path, and Unsafe mode.
+// The toolbar: bookmarks, Up, Refresh, the folder's path, Unsafe mode, and
+// in the launcher's tabs, their settings.
 
 function createToolbar(x) {
   const { model } = x;
   const upBtn = iconButton("up", "Parent directory");
   const refreshBtn = iconButton("refresh", "Refresh");
   const pathEl = h("div", { className: "jse-path" });
-  const el = h("div", { className: "jse-toolbar" }, x.bookmarks.button, upBtn, refreshBtn, pathEl, x.unsafe.el);
+  // Opens the launcher's settings file in JupyterLab's editor: only in its
+  // tabs (the kernel sets _settings_path), with the launcher's extension.
+  const settingsBtn = iconButton("settings", "Edit launcher settings", "jse-settings-btn");
+  const el = h("div", { className: "jse-toolbar" }, x.bookmarks.button, upBtn, refreshBtn, pathEl, x.unsafe.el, settingsBtn);
 
   // The current folder's path, a crumb per folder from the root.
   function renderPath() {
@@ -29,8 +33,15 @@ function createToolbar(x) {
     if (chain.length > 1) x.navigate(chain[chain.length - 2]);
   });
   refreshBtn.addEventListener("click", () => model.send({ type: "refresh" }));
+  settingsBtn.addEventListener("click", () => void x.jupyterlab.openSettings());
 
-  return { el, renderPath };
+  function renderSettings() {
+    const path = model.get("_settings_path");
+    settingsBtn.hidden = !path || !x.jupyterlab.canOpenSettings();
+    settingsBtn.title = `Edit launcher settings (${visible(path)})\nReload the web browser, then open the explorer tab again to apply the changes.`;
+  }
+
+  return { el, renderPath, renderSettings };
 }
 
 // "Unsafe mode": while on, risky operations are offered (today: moving,
