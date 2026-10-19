@@ -39,8 +39,12 @@ Then see [Using the explorer](https://github.com/sugibuchi/jupyter-storage-explo
 <img src="https://raw.githubusercontent.com/sugibuchi/jupyter-storage-explorer/main/launcher/figs/settings-button.png" width="152" alt="The settings button (a gear) after Unsafe mode in the tab's toolbar">
 
 Click the ⚙ button at the right of the tab's toolbar to edit your settings, a Python file (`launcher.py`), in
-JupyterLab's editor. If you have none, it offers to create one from a template with an example of each setting:
-uncomment and edit the ones you need, then save. Reload the web browser, then open the explorer tab again to apply
+JupyterLab's editor.
+
+<img src="https://raw.githubusercontent.com/sugibuchi/jupyter-storage-explorer/main/launcher/figs/settings-editor.png" width="834" alt="launcher.py, created from the template, open in JupyterLab's editor beside the Storage Explorer tab">
+
+If you have none, it offers to create one from a template with an example of each setting: uncomment and edit the ones
+you need, then save. Reload the web browser, then open the explorer tab again to apply
 the changes.
 
 For example, to open each tab on the data lake and the folder it starts on, with a preview at once:
