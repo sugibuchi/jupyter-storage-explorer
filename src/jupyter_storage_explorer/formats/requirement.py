@@ -1,4 +1,4 @@
-"""The packages a format needs to preview or load its data: the
+"""The packages a format's support needs to handle its data: the
 ``Requirement`` interface (requirements.py has the predefined ones)."""
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 
 class Requirement:
-    """A package needed to preview or load the data.
+    """A package a support needs (``FormatSupport.use``, ``additional_requirements``).
 
     Subclasses declare ``package`` and ``import_name``.
     """

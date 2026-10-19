@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
 def make(lab: Lab) -> None:
     path = lab.folder / "config" / "storage-explorer" / "launcher.py"
-    with lab.launcher_settings(_lab.LAUNCHER_PY), lab.page(900, 640) as page:
+    with lab.launcher_settings(_lab.LAUNCHER_PY), lab.page(900, 740) as page:
         page.goto(lab.url())
         page.wait_for_selector(".jp-LauncherCard", timeout=60000)
         # A narrower toolbar: no file browser.
@@ -46,7 +46,7 @@ def make(lab: Lab) -> None:
         _lab.calm(page)
         # The tabs and editor, down to the end of format_options' example.
         x0, y0, x1, _ = box(page.locator("#jp-main-dock-panel"))
-        last = box(page.locator(".jp-FileEditor .cm-line").nth(28))[3]
+        last = box(page.locator(".jp-FileEditor .cm-line").nth(33))[3]
         area = (x0, y0, x1, last + 1)
         shot(page, _lab.LAUNCHER_FIGS / "settings-editor.png", area, pad=0)
 

@@ -1,5 +1,5 @@
-"""The predefined packages used by previews and the generated load code
-(``Requirement`` subclasses, see requirement.py)."""
+"""The predefined packages the supports use (``Requirement`` subclasses, see
+requirement.py)."""
 
 from __future__ import annotations
 
@@ -27,21 +27,20 @@ class Pillow(Requirement):
 
 
 class PySpark(Requirement):
-    """Spark, used only in load code (``DataFormat.code_requirements``)."""
+    """Spark, used only in load code."""
 
     package = "pyspark"
     import_name = "pyspark"
 
 
-class DeltaSpark(PySpark):
-    """Delta Lake for Spark: like ``PySpark``, with Delta Lake set up in the
-    session (on Databricks, it is)."""
+# Optional dependencies of the packages above: installed, never imported by snippets.
+
+
+class DeltaSpark(Requirement):
+    """Delta Lake for Spark, set up in the session (on Databricks, it is)."""
 
     package = "delta-spark"
     import_name = "delta"
-
-
-# Optional dependencies of the packages above: installed, never imported by snippets.
 
 
 class PyArrow(Requirement):

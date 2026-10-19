@@ -274,35 +274,74 @@ StorageExplorer("s3://my-bucket/data", states=ExplorerStates("states.json", max_
 Folders of Parquet files written by Spark or Hive, partitioned or not, are supported; folders written by other tools
 may work, but are not guaranteed to.
 
-The name identifies the format in CSS (see [Icons](../DEVELOPMENT.md#icons)).
+Each format's previews, data browser and code are done by the first library installed in the kernel, in the order
+above (the code is shown for every library; a support given for a library replaces the default one's). The name identifies the format in CSS (see
+[Icons](../DEVELOPMENT.md#icons)) and in [Format options](#format-options).
+
+### Another library for a format
+
+A *support* handles a format's data with a library: a `FormatSupport` subclass, listing the jobs it does (`"preview"`,
+`"query"` for the data browser, `"code"`) and implementing their methods. Supports given as `supports` are tried before
+the defaults, e.g. DuckDB for the data browser on Parquet:
+
+```python
+from jupyter_storage_explorer import StorageExplorer
+from jupyter_storage_explorer.formats import FormatSupport, Parquet, Requirement
+
+
+class DuckDB(Requirement):
+    package = "duckdb"
+    import_name = "duckdb"
+
+
+class ParquetByDuckDB(FormatSupport):
+    format = Parquet
+    use = DuckDB
+    jobs = ("query",)
+
+    def query(self, fmt, url, is_dir):
+        # A folder's data files, as detection found them.
+        partitioned = is_dir and bool(fmt.layout(url).keys)
+        return DuckDB().load().read_parquet(fmt.data_url(url, is_dir), hive_partitioning=partitioned)
+
+
+StorageExplorer("data", supports=[ParquetByDuckDB])
+```
+
+`FormatSupport`'s docstring has the rules for writing one.
 
 ## Format options
 
-`format_options` is one dictionary for all formats; each uses the options it takes, named after their library (and
-format):
+`format_options` gives the libraries' options, by library, then format name, or `"*"` for all formats (a format's
+options override those for all):
 
 ```python
 StorageExplorer(
     "s3://my-bucket/lake",
     format_options={
-        "polars_storage_options": {"aws_region": "eu-west-1"},
-        "pandas_storage_options": {"anon": False},
-        "polars_delta_use_pyarrow": True,
+        "polars": {
+            "*": {"storage_options": {"aws_region": "eu-west-1"}},
+            "delta": {"use_pyarrow": True},
+        },
+        "pandas": {"*": {"storage_options": {"anon": False}}},
     },
 )
 ```
 
-| Option                         | Formats                                         | Meaning                                                                                                               |
-|--------------------------------|-------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------|
-| `polars_storage_options`       | `delta`, `parquet`, `csv`, `json-lines`         | polars' `storage_options` (object_store's names, not fsspec's), in the preview, the data browser and the polars code. |
-| `polars_credential_provider`   | `delta`, `parquet`, `csv`, `json-lines`         | polars' `credential_provider`, in the preview and the data browser (not in the code).                                 |
-| `pandas_storage_options`       | `parquet`, `csv`, `json-lines`, `json`, `excel` | pandas' `storage_options` (fsspec's), in the pandas code.                                                             |
-| `fsspec_storage_options`       | `json`, `excel`, `markdown`, `text`, `image`    | `fsspec.open`'s keyword arguments, in the code that reads with fsspec.                                                |
-| `polars_delta_table_options`   | `delta`                                         | `scan_delta`'s `delta_table_options`.                                                                                 |
-| `polars_delta_use_pyarrow`     | `delta`                                         | `scan_delta`'s `use_pyarrow`.                                                                                         |
-| `polars_delta_pyarrow_options` | `delta`                                         | `scan_delta`'s `pyarrow_options`.                                                                                     |
+| Library  | Option                   | Formats                                         | Meaning                                                                                                       |
+|----------|--------------------------|-------------------------------------------------|---------------------------------------------------------------------------------------------------------------|
+| `polars` | `storage_options`        | `delta`, `parquet`, `csv`, `json-lines`         | polars' `storage_options` (object_store's names, not fsspec's), in the preview, the data browser and the code. |
+| `polars` | `credential_provider`    | `delta`, `parquet`, `csv`, `json-lines`         | polars' `credential_provider`, in the preview and the data browser (not in the code).                          |
+| `polars` | `fsspec_storage_options` | `excel`                                         | `fsspec.open`'s keyword arguments, in the code (which reads the file with fsspec).                             |
+| `polars` | `delta_table_options`    | `delta`                                         | `scan_delta`'s `delta_table_options`.                                                                          |
+| `polars` | `use_pyarrow`            | `delta`                                         | `scan_delta`'s `use_pyarrow`.                                                                                  |
+| `polars` | `pyarrow_options`        | `delta`                                         | `scan_delta`'s `pyarrow_options`.                                                                              |
+| `pandas` | `storage_options`        | `parquet`, `csv`, `json-lines`, `json`, `excel` | pandas' `storage_options` (fsspec's), in the code.                                                             |
+| `fsspec` | `storage_options`        | `json`, `markdown`, `text`                      | `fsspec.open`'s keyword arguments, in the code.                                                                |
+| `pillow` | `storage_options`        | `image`                                         | `fsspec.open`'s keyword arguments, in the code (which reads the file with fsspec).                             |
 
-Options that look like credentials are left out of the code.
+Options that look like credentials are left out of the code. A library, format or option name that no support takes is
+an error.
 
 ## Working with the explorer from Python
 
@@ -398,4 +437,6 @@ Filter by channel in the data browser, and the chart shows that channel's sales.
 | `filesystem_mappers=[...]`          | How storages are told apart and their URLs, tried before the defaults; see [File transfer](#file-transfer-between-file-systems).    |
 | `transfer_policy=[...]`             | Rules for transfers of files between storages; see [Transfer policy](#transfer-policy).                                               |
 | `states="states.json"`              | Where bookmarks and the data browser's settings are kept (a path or an `ExplorerStates`); see [Remembered states](#remembered-states). |
-| `format_options={...}`              | Options for the formats (see [Format options](#format-options)).                                                                      |
+| `formats=[...]`                     | The formats files are detected as, replacing the defaults (`default_formats()`).                                                      |
+| `supports=[...]`                    | Libraries of your own for formats, tried before the defaults; see [Another library for a format](#another-library-for-a-format).     |
+| `format_options={...}`              | The libraries' options (see [Format options](#format-options)).                                                                       |

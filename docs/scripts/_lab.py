@@ -46,8 +46,8 @@ def filesystems():
     return demo_data.filesystems()
 
 
-def formats():
-    return demo_data.formats()
+def supports():
+    return demo_data.supports()
 """
 
 # Settings of the server's JupyterLab: no prompt about news or updates.
@@ -287,7 +287,7 @@ EXPLORER = """\
 import demo_data
 from jupyter_storage_explorer import StorageExplorer
 
-StorageExplorer(filesystems=demo_data.filesystems(), formats=demo_data.formats(){args})"""
+StorageExplorer(filesystems=demo_data.filesystems(), supports=demo_data.supports(){args})"""
 
 
 def explorer_source(**kwargs: Any) -> str:

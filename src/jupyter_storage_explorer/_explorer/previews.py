@@ -72,17 +72,12 @@ class PreviewsMixin:
             if formats:
                 fmt = formats[0]
                 base["format"] = fmt.name
-                if fmt.can_query():
+                if self._supports.can_query(fmt):
                     base["query"] = self._open_query(path, fmt, target)
                 else:
-                    # Previewed with the first set of packages installed; with
-                    # none, what to install instead.
-                    requirements = fmt.installed_requirements(fmt.preview_requirements)
-                    sections = (
-                        fmt.install_hint()
-                        if requirements is None
-                        else fmt.preview(target, self._preview_limits, requirements)
-                    )
+                    # By the first support installed; with none, what to
+                    # install instead.
+                    sections = self._supports.preview(fmt, target, self._preview_limits)
                     base["sections"] = [_section(s) for s in sections]
         except Exception as exc:
             base["error"] = error_text(exc)
@@ -128,9 +123,8 @@ class PreviewsMixin:
         Settings are remembered by URL, so they follow the data across
         explorers and tabs, with the mode last chosen for it.
         """
-        # With the first set of query_requirements installed (can_query()).
-        requirements = fmt.installed_requirements(fmt.query_requirements)
-        source = functools.partial(fmt.query, target.url, target.is_dir, requirements)
+        # By the first support installed (can_query()).
+        source = functools.partial(self._supports.query, fmt, target.url, target.is_dir)
         state = self._states.query(target.url)
         mode = state.mode if state is not None else "auto"
         fetch = self._fetch_rows
@@ -156,7 +150,7 @@ class PreviewsMixin:
                 raise ValueError(f"{path} has no URL, so it cannot be queried")
             if content.get("format"):
                 formats = [f for f in formats if f.name == content["format"]]
-            if not formats or not formats[0].can_query():
+            if not formats or not self._supports.can_query(formats[0]):
                 raise ValueError(f"{_paths.basename(path)} cannot be queried")
             explorer = DataExplorer._of_query(
                 self._new_query(formats[0], target),
@@ -195,11 +189,11 @@ class PreviewsMixin:
         "query": whether it opens in the data browser}, or {"error"}."""
         try:
             target, formats = self._detect(path)
-            recipes = formats[0].recipes(target) if formats else []
+            recipes = self._supports.recipes(formats[0], target) if formats else []
         except Exception as exc:
             return {"error": error_text(exc)}
         return {
             "formats": [f.name for f in formats],
             "recipes": [dataclasses.asdict(r) for r in recipes],
-            "query": bool(formats) and formats[0].can_query(),
+            "query": bool(formats) and self._supports.can_query(formats[0]),
         }

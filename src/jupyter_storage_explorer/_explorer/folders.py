@@ -48,7 +48,7 @@ class FoldersMixin:
         self._selected = []
         fmt = self._directory_format(path, infos)
         self._current_format = fmt.name if fmt is not None else ""
-        self._current_query = fmt is not None and fmt.can_query()
+        self._current_query = fmt is not None and self._supports.can_query(fmt)
 
     def _ancestors(self, path: str) -> list[str]:
         """Directories from the root down to (but excluding) ``path``."""

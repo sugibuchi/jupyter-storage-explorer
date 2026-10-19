@@ -4,8 +4,8 @@ lake of a coffee roaster, with realistic but made-up content.
 The explorers show it from fsspec's memory filesystem ("memory:///sales-lake"),
 so no path of the computer the pictures are taken on appears in them. The
 kernel fills it from a local copy written by ``write``, which also serves the
-data browser: polars cannot read the memory filesystem, so ``formats``
-reads the local copy instead (the explorer still shows memory URLs).
+data browser: polars cannot read the memory filesystem, so ``supports``
+read the local copy instead (the explorer still shows memory URLs).
 
 Run as a script to write the data into a folder and list it:
 uv run --group docs docs/scripts/demo_data.py <folder>
@@ -31,7 +31,7 @@ import pyarrow.dataset as ds
 from deltalake import write_deltalake
 from PIL import Image, ImageDraw
 
-from jupyter_storage_explorer.formats import default_formats
+from jupyter_storage_explorer.formats import default_supports
 
 # The local copy, set by _lab.py for the kernels of the server it starts.
 DATA_ENV = "JSE_DEMO_DATA"
@@ -406,21 +406,24 @@ def filesystems() -> dict[str, str]:
     return {"Sales lake": LAKE_URL, "Scratch": SCRATCH_URL}
 
 
-def formats() -> list[Any]:
-    """The default formats, reading the local copy where they read by URL
-    (``query``: the data browser, and previews of Delta tables)."""
+def supports() -> list[Any]:
+    """The default supports, reading the local copy where they read by URL
+    (``query``: the data browser, and previews of Delta tables and Parquet
+    by polars), for an explorer's ``supports``: tried before its own
+    defaults, they are those used."""
 
     def local(url: str) -> str:
         if url.startswith("memory:///"):
             return str(local_copy() / url.removeprefix("memory:///"))
         return url
 
-    result = default_formats()
-    for fmt in result:
-        query = fmt.query
-        fmt.query = lambda url, is_dir, requirements, query=query: query(
-            local(url), is_dir, requirements
-        )
+    result = default_supports()
+    for support in result:
+        if "query" in support.jobs:
+            query = support.query
+            support.query = lambda fmt, url, is_dir, query=query: query(
+                fmt, local(url), is_dir
+            )
     return result
 
 
