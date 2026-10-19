@@ -1,7 +1,7 @@
 """How to handle data in a format with a library: the ``FormatSupport``
 interface, and ``SupportChain``, by which explorers choose a support for
-each capability (the predefined supports have a module per library: by_polars.py,
-by_pandas.py, ...)."""
+each capability (the predefined supports are in supports/, a module per
+library: polars.py, pandas.py, ...)."""
 
 from __future__ import annotations
 

@@ -5,9 +5,9 @@ from __future__ import annotations
 from inspect import cleandoc
 from typing import TYPE_CHECKING
 
-from jupyter_storage_explorer.formats.by_fsspec import OpenedByFsspec
 from jupyter_storage_explorer.formats.images import Image
 from jupyter_storage_explorer.formats.requirements import Fsspec, Pillow
+from jupyter_storage_explorer.formats.supports.fsspec import OpenedByFsspec
 
 if TYPE_CHECKING:
     from jupyter_storage_explorer.formats.format import Target

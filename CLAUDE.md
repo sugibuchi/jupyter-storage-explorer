@@ -263,8 +263,9 @@ unfiltered.
 **Formats** (`formats/`). Laid out as `filesystems/`: the interfaces `DataFormat` (`format.py`, with `Target`,
 `Recipe`, `detect`, `FILE_ICONS`), `FormatSupport` (`support.py`, with `SupportChain` and `Capability`) and `Requirement`
 (`requirement.py`); a module per predefined format (`delta.py`, `parquet.py`, `excel.py`, `text.py`, `images.py`) and
-per library of the predefined supports (`by_polars.py`, `by_pandas.py`, `by_pyspark.py`, `by_fsspec.py`,
-`by_pillow.py`; `by_python.py` for those needing no package); the predefined packages in `requirements.py`, the
+per library of the predefined supports in `supports/` (`polars.py`, `pandas.py`, `pyspark.py`, `fsspec.py`,
+`pillow.py`; `python.py` for those needing no package; named after the libraries, which they import only inside
+methods); the predefined packages in `requirements.py`, the
 preview sections in `preview.py` (tables from dataframes in `frames.py`), the generated code's helpers in `base.py`
 (`snippet_options`, `format_kwargs`, `spark_url`), and the defaults in `utils.py` (`DEFAULT_FORMATS`,
 `DEFAULT_SUPPORTS`, `create_supports`). A format only detects; a support handles one format's data with one library,

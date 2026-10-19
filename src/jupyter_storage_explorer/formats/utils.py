@@ -5,16 +5,22 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from jupyter_storage_explorer.formats.by_fsspec import JsonByFsspec, TextByFsspec
-from jupyter_storage_explorer.formats.by_pandas import (
+from jupyter_storage_explorer.formats.delta import DeltaLake
+from jupyter_storage_explorer.formats.excel import Excel
+from jupyter_storage_explorer.formats.format import FILE_ICONS
+from jupyter_storage_explorer.formats.images import Image
+from jupyter_storage_explorer.formats.parquet import Parquet
+from jupyter_storage_explorer.formats.support import FormatSupport, support_options
+from jupyter_storage_explorer.formats.supports.fsspec import JsonByFsspec, TextByFsspec
+from jupyter_storage_explorer.formats.supports.pandas import (
     CsvByPandas,
     ExcelByPandas,
     JsonByPandas,
     JsonLinesByPandas,
     ParquetByPandas,
 )
-from jupyter_storage_explorer.formats.by_pillow import ImageByPillow
-from jupyter_storage_explorer.formats.by_polars import (
+from jupyter_storage_explorer.formats.supports.pillow import ImageByPillow
+from jupyter_storage_explorer.formats.supports.polars import (
     CsvByPolars,
     DeltaLakeByPolars,
     ExcelByPolars,
@@ -22,24 +28,18 @@ from jupyter_storage_explorer.formats.by_polars import (
     JsonLinesByPolars,
     ParquetByPolars,
 )
-from jupyter_storage_explorer.formats.by_pyspark import (
+from jupyter_storage_explorer.formats.supports.pyspark import (
     CsvByPySpark,
     DeltaLakeByPySpark,
     JsonLinesByPySpark,
     ParquetByPySpark,
 )
-from jupyter_storage_explorer.formats.by_python import (
+from jupyter_storage_explorer.formats.supports.python import (
     ImageByPython,
     JsonByPython,
     MarkdownByPython,
     TextByPython,
 )
-from jupyter_storage_explorer.formats.delta import DeltaLake
-from jupyter_storage_explorer.formats.excel import Excel
-from jupyter_storage_explorer.formats.format import FILE_ICONS
-from jupyter_storage_explorer.formats.images import Image
-from jupyter_storage_explorer.formats.parquet import Parquet
-from jupyter_storage_explorer.formats.support import FormatSupport, support_options
 from jupyter_storage_explorer.formats.text import Csv, Json, JsonLines, Markdown, Text
 
 if TYPE_CHECKING:
