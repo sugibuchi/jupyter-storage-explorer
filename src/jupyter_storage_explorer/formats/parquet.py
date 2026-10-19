@@ -355,10 +355,9 @@ class Parquet(DataFormat):
             )
         )
 
-    def preview(self, target: Target, limits: PreviewLimits) -> list[Preview]:
-        requirements = self.installed_requirements()
-        if requirements is None:
-            return self.install_hint()
+    def preview(
+        self, target: Target, limits: PreviewLimits, requirements: Requirements
+    ) -> list[Preview]:
         if Polars in requirements:
             return self.preview_with_polars(target, limits)
         return self.preview_with_pandas(target, limits)

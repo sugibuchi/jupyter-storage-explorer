@@ -75,9 +75,15 @@ class PreviewsMixin:
                 if fmt.can_query():
                     base["query"] = self._open_query(path, fmt, target)
                 else:
-                    base["sections"] = [
-                        _section(s) for s in fmt.preview(target, self._preview_limits)
-                    ]
+                    # Previewed with the first set of packages installed; with
+                    # none, what to install instead.
+                    requirements = fmt.installed_requirements()
+                    sections = (
+                        fmt.install_hint()
+                        if requirements is None
+                        else fmt.preview(target, self._preview_limits, requirements)
+                    )
+                    base["sections"] = [_section(s) for s in sections]
         except Exception as exc:
             base["error"] = error_text(exc)
         self._preview = base

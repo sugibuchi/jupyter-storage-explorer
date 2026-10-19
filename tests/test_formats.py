@@ -181,26 +181,34 @@ def test_delta_detection(make_target, memfs):
 class TestPreviews:
     limits = PreviewLimits(max_rows=2)
 
+    def preview(self, fmt, target, limits):
+        """``fmt``'s preview, with the packages the explorer would pick."""
+        requirements = fmt.installed_requirements()
+        assert requirements is not None
+        return fmt.preview(target, limits, requirements)
+
     def test_csv_detects_separator(self, make_target):
         target = make_target("/a.csv", b"x;y\n1;2\n3;4\n5;6\n")
-        [table] = Csv().preview(target, self.limits)
+        [table] = self.preview(Csv(), target, self.limits)
         assert isinstance(table, TablePreview)
         assert table.columns == ["x", "y"]
         assert table.rows == [[1, 2], [3, 4]]
 
     def test_json_tree(self, make_target):
-        [tree] = Json().preview(make_target("/a.json", b'{"a": [1, 2]}'), self.limits)
+        [tree] = self.preview(
+            Json(), make_target("/a.json", b'{"a": [1, 2]}'), self.limits
+        )
         assert isinstance(tree, TreePreview)
         assert tree.value == {"a": [1, 2]}
 
     def test_invalid_json_shown_as_text(self, make_target):
-        [text] = Json().preview(make_target("/a.json", b"{oops"), self.limits)
+        [text] = self.preview(Json(), make_target("/a.json", b"{oops"), self.limits)
         assert isinstance(text, TextPreview)
         assert text.note.startswith("Invalid JSON")
 
     def test_json_lines(self, make_target):
         data = b"".join(json.dumps({"i": i}).encode() + b"\n" for i in range(5))
-        [table] = JsonLines().preview(make_target("/a.jsonl", data), self.limits)
+        [table] = self.preview(JsonLines(), make_target("/a.jsonl", data), self.limits)
         assert table.rows == [[0], [1]]
 
     def test_parquet_file_with_pandas(self, make_target):
@@ -227,40 +235,48 @@ class TestPreviews:
                 writer, sheet_name="one", index=False
             )
             pd.DataFrame({"b": [1]}).to_excel(writer, sheet_name="two", index=False)
-        [table] = Excel().preview(
-            make_target("/a.xlsx", buffer.getvalue()), self.limits
+        [table] = self.preview(
+            Excel(), make_target("/a.xlsx", buffer.getvalue()), self.limits
         )
         assert table.title == "one"
         assert table.rows == [[1], [2]]
         assert "other sheets: two" in table.note
 
     def test_text_highlighted(self, make_target):
-        [text] = Text().preview(make_target("/a.py", b"import os\n"), self.limits)
+        [text] = self.preview(Text(), make_target("/a.py", b"import os\n"), self.limits)
         assert text.language == "python"
         assert text.html is not None
         assert '<span class="kn">import</span>' in text.html
 
     def test_text_truncated(self, make_target):
         limits = PreviewLimits(max_bytes=4)
-        [text] = Text().preview(make_target("/a.txt", b"ab\ncd\nef\n"), limits)
+        [text] = self.preview(Text(), make_target("/a.txt", b"ab\ncd\nef\n"), limits)
         assert text.text == "ab\n"
         assert text.note.startswith("First 0 KB of 9 bytes")
 
     def test_markdown(self, make_target):
-        [md] = Markdown().preview(make_target("/a.md", b"# Title\n"), self.limits)
+        [md] = self.preview(Markdown(), make_target("/a.md", b"# Title\n"), self.limits)
         assert isinstance(md, MarkdownPreview)
         assert md.text == "# Title\n"
 
     def test_image(self, make_target):
-        [media] = Image().preview(make_target("/a.png", b"\x89PNG"), self.limits)
+        [media] = self.preview(Image(), make_target("/a.png", b"\x89PNG"), self.limits)
         assert isinstance(media, MediaPreview)
         assert (media.mime, media.data) == ("image/png", b"\x89PNG")
 
-    def test_install_hint_when_nothing_installed(self, make_target, monkeypatch):
+    def test_install_hint_when_nothing_installed(self, monkeypatch):
         monkeypatch.setattr(Requirement, "is_installed", lambda self: False)
-        [hint] = Csv().preview(make_target("/a.csv", b"a\n"), self.limits)
+        assert Csv().installed_requirements() is None
+        [hint] = Csv().install_hint()
         assert isinstance(hint, InstallPreview)
         assert hint.options == [["polars"], ["pandas"]]
+
+    def test_image_needs_no_package(self, make_target, monkeypatch):
+        # The browser shows images itself: Pillow is for the load code only.
+        monkeypatch.setattr(Requirement, "is_installed", lambda self: False)
+        assert Image().installed_requirements() == ()
+        [media] = Image().preview(make_target("/a.png", b"\x89PNG"), self.limits, ())
+        assert isinstance(media, MediaPreview)
 
 
 class TestRecipes:

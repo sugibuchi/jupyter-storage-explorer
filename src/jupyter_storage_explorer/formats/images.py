@@ -30,7 +30,8 @@ class Image(DataFormat):
     }  # fmt: skip
     extensions = tuple(mime_types)
     file_icon = "image"
-    preferred_requirements = ((Pillow, Fsspec),)
+    # Previewed by the browser itself: Pillow is only for the load code.
+    code_only_requirements = ((Pillow, Fsspec),)
 
     def __init__(
         self,
@@ -43,7 +44,9 @@ class Image(DataFormat):
         options (``kwargs``) are ignored."""
         self.fsspec_storage_options = fsspec_storage_options
 
-    def preview(self, target: Target, limits: PreviewLimits) -> list[Preview]:
+    def preview(
+        self, target: Target, limits: PreviewLimits, requirements: Requirements
+    ) -> list[Preview]:
         mime = self.mime_types["." + target.name.lower().rsplit(".", 1)[-1]]
         if target.size is not None and target.size <= limits.max_whole_file_bytes:
             return [MediaPreview(mime=mime, data=target.head(target.size))]

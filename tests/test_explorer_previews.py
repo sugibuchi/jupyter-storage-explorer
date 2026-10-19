@@ -5,6 +5,7 @@ from __future__ import annotations
 from explorers import path_of
 
 from jupyter_storage_explorer._query.settings import QuerySettings
+from jupyter_storage_explorer.formats import Csv, Requirement
 
 
 class TestPreview:
@@ -31,6 +32,16 @@ class TestPreview:
         assert mem_explorer._preview["format"] == "text"
         mem_explorer._open_preview("/data/a.csv", "image")
         assert "cannot be previewed as image" in mem_explorer._preview["error"]
+
+    def test_install_hint(self, mem_explorer, monkeypatch):
+        # Packages missing: the explorer tells what to install, without
+        # calling the format's preview.
+        monkeypatch.setattr(Requirement, "is_installed", lambda self: False)
+        monkeypatch.setattr(Csv, "preview", None)
+        mem_explorer._open_preview("/data/a.csv")
+        [hint] = mem_explorer._preview["sections"]
+        assert hint["kind"] == "install"
+        assert hint["options"] == [["polars"], ["pandas"]]
 
     def test_query_after_close(self, local):
         reply = local.request({"type": "query_rows", "rid": 1, "path": "gone"})

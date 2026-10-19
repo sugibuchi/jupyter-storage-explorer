@@ -150,7 +150,9 @@ class DataFormat(abc.ABC):
     preferred_requirements : tuple of tuples of Requirement classes
         Sets of packages that can read the format, most preferred first,
         e.g. ``((Polars, DeltaLake), (Pandas,))``: previews use the first set
-        installed, and each set yields a "Python code" recipe.
+        installed (none installed, the explorer tells what to install), and
+        each set yields a "Python code" recipe. Empty for a format previewed
+        without packages.
     code_only_requirements : tuple of tuples of Requirement classes
         Sets of packages only in recipes, after the others, e.g.
         ``((PySpark,),)``; previews never use them.
@@ -188,11 +190,14 @@ class DataFormat(abc.ABC):
         return not target.is_dir and target.name.lower().endswith(self.extensions)
 
     @abc.abstractmethod
-    def preview(self, target: Target, limits: PreviewLimits) -> list[Preview]:
+    def preview(
+        self, target: Target, limits: PreviewLimits, requirements: Requirements
+    ) -> list[Preview]:
         """The sections to show in the preview panel.
 
-        Typically picks a library with ``installed_requirements``, and returns
-        ``install_hint()`` when none is installed.
+        Only called with packages installed: when none of
+        ``preferred_requirements`` is, the explorer shows ``install_hint()``
+        instead.
 
         Parameters
         ----------
@@ -200,6 +205,10 @@ class DataFormat(abc.ABC):
             The file or folder, which ``matches``.
         limits : PreviewLimits
             How much to read and show (bytes, rows).
+        requirements : tuple of Requirement classes
+            The packages to preview with: the first of
+            ``preferred_requirements`` installed (``installed_requirements``),
+            e.g. ``(Polars,)``; empty if the format has none.
 
         Returns
         -------
@@ -252,8 +261,10 @@ class DataFormat(abc.ABC):
         -------
         tuple of Requirement classes, or None
             The first of ``preferred_requirements`` whose packages are all
-            installed; None if there is none.
+            installed; None if there is none; empty if the format has none.
         """
+        if not self.preferred_requirements:
+            return ()
         for requirements in self.preferred_requirements:
             if all(r().is_installed() for r in requirements):
                 return requirements

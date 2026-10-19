@@ -105,7 +105,9 @@ class Text(DataFormat):
         options (``kwargs``) are ignored."""
         self.fsspec_storage_options = fsspec_storage_options
 
-    def preview(self, target: Target, limits: PreviewLimits) -> list[Preview]:
+    def preview(
+        self, target: Target, limits: PreviewLimits, requirements: Requirements
+    ) -> list[Preview]:
         text, truncated = target.head_text(limits.max_bytes)
         language = self.languages.get("." + target.name.lower().rsplit(".", 1)[-1])
         return [
@@ -140,7 +142,9 @@ class Markdown(Text):
     file_icon = "markdown"
     priority = 0  # preferred over Text, which stays available through "Preview as"
 
-    def preview(self, target: Target, limits: PreviewLimits) -> list[Preview]:
+    def preview(
+        self, target: Target, limits: PreviewLimits, requirements: Requirements
+    ) -> list[Preview]:
         text, truncated = target.head_text(limits.max_bytes)
         return [
             MarkdownPreview(
@@ -204,10 +208,9 @@ class Csv(DataFormat):
             **storage,
         )
 
-    def preview(self, target: Target, limits: PreviewLimits) -> list[Preview]:
-        requirements = self.installed_requirements()
-        if requirements is None:
-            return self.install_hint()
+    def preview(
+        self, target: Target, limits: PreviewLimits, requirements: Requirements
+    ) -> list[Preview]:
         if Polars in requirements:
             return self.preview_with_polars(target, limits)
         return self.preview_with_pandas(target, limits)
@@ -327,7 +330,9 @@ class Json(DataFormat):
         self.fsspec_storage_options = fsspec_storage_options
         self.pandas_storage_options = pandas_storage_options
 
-    def preview(self, target: Target, limits: PreviewLimits) -> list[Preview]:
+    def preview(
+        self, target: Target, limits: PreviewLimits, requirements: Requirements
+    ) -> list[Preview]:
         text, truncated = target.head_text(limits.max_bytes)
         if truncated:
             note = f"{_size_note(target, limits)}; too large to show as a tree"
@@ -424,10 +429,9 @@ class JsonLines(DataFormat):
             )
         )
 
-    def preview(self, target: Target, limits: PreviewLimits) -> list[Preview]:
-        requirements = self.installed_requirements()
-        if requirements is None:
-            return self.install_hint()
+    def preview(
+        self, target: Target, limits: PreviewLimits, requirements: Requirements
+    ) -> list[Preview]:
         if Polars in requirements:
             return self.preview_with_polars(target, limits)
         return self.preview_with_pandas(target, limits)

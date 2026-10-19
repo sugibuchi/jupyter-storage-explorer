@@ -76,9 +76,9 @@ class DeltaLake(DataFormat):
             )
         )
 
-    def preview(self, target: Target, limits: PreviewLimits) -> list[Preview]:
-        if self.installed_requirements() is None:
-            return self.install_hint()
+    def preview(
+        self, target: Target, limits: PreviewLimits, requirements: Requirements
+    ) -> list[Preview]:
         return self.preview_with_polars(target, limits)
 
     def preview_with_polars(

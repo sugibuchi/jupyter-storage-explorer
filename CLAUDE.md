@@ -275,9 +275,11 @@ PySpark for code only, `query_requirements` for the data browser), and implement
   (one more `ls` per partition column, `_partitioned_layout`), and keeps each directory's layout by URL for `scan`,
   which gets the URL only (a URL it has not seen is detected again through fsspec, `_discover`). The highest
   `priority` wins (Delta 20 > Parquet 10 > default 0 > Text -10).
-- `preview(target, limits)`: a list of `Preview` dataclasses (`TablePreview`, `TextPreview`, `TreePreview`,
-  `MediaPreview`, `InstallPreview`...) that the frontend renders by `kind`; returns `install_hint()` when no package
-  set is installed.
+- `preview(target, limits, requirements)`: a list of `Preview` dataclasses (`TablePreview`, `TextPreview`,
+  `TreePreview`, `MediaPreview`...) that the frontend renders by `kind`, with `requirements`, the first set of
+  `preferred_requirements` installed (`installed_requirements()`; `()` for a format with none, e.g. Image, whose
+  Pillow is code-only). When no set is installed, the explorer (`_open_preview`) shows `install_hint()` (an
+  `InstallPreview`) without calling it, so formats never check.
 - `scan(url, is_dir)`: a polars LazyFrame for the data browser. `_query/data_query.py`'s `DataQuery` does filters, sort
   and paging as narwhals expressions, so it takes any dataframe narwhals supports, either on the data itself ("live") or
   on rows read into memory (queried with polars); behaviour such as regex syntax then follows the data's library.
