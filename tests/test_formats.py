@@ -30,7 +30,7 @@ from jupyter_storage_explorer.formats import (
     TextPreview,
     TreePreview,
 )
-from jupyter_storage_explorer.formats.requirements import DeltaSpark, Pillow
+from jupyter_storage_explorer.formats.requirements import Pillow
 
 
 def parquet_bytes(df: pl.DataFrame) -> bytes:
@@ -260,10 +260,7 @@ class TestPreviews:
         monkeypatch.setattr(Requirement, "is_installed", lambda self: False)
         [hint] = Csv().preview(make_target("/a.csv", b"a\n"), self.limits)
         assert isinstance(hint, InstallPreview)
-        assert hint.options == [
-            {"packages": "polars", "command": "%pip install -q polars"},
-            {"packages": "pandas", "command": "%pip install -q pandas"},
-        ]
+        assert hint.options == [["polars"], ["pandas"]]
 
 
 class TestRecipes:
@@ -295,20 +292,14 @@ class TestRecipes:
         memfs.pipe_file("/t/_delta_log/0.json", b"{}")
         code = self.code(DeltaLake(), make_target("/t", url="s3://b/t"))
         assert last_line(code["polars"]) == "df = pl.scan_delta('s3://b/t')"
-        assert (
-            last_line(code["delta-spark"])
-            == "df = spark.read.format(\"delta\").load('s3a://b/t')"
-        )
-
-    def test_delta_spark_session_only_obtained(self):
-        # Spark must be set up for Delta Lake beforehand: the setup only gets
-        # the session, and says where to read how.
-        assert DeltaSpark().setup_command == (
-            "# Delta Lake needs the Spark environment configured in advance, see\n"
-            "# https://docs.delta.io/delta-batch/#configure-sparksession\n"
+        # The session is obtained, not configured: Delta Lake's setup in
+        # Spark is left to the user.
+        assert code["delta-spark"] == (
             "from pyspark.sql import SparkSession\n"
             "\n"
-            "spark = SparkSession.builder.getOrCreate()"
+            "# Needs Delta Lake in the Spark session (Databricks has it)\n"
+            "spark = SparkSession.builder.getOrCreate()\n"
+            "df = spark.read.format(\"delta\").load('s3a://b/t')"
         )
 
     def test_json(self, make_target):
@@ -319,11 +310,29 @@ class TestRecipes:
     def test_svg_has_no_recipe(self, make_target):
         assert Image().recipes(make_target("/a.svg", b"<svg/>")) == []
 
-    def test_install_lines_only_for_missing_packages(self, make_target, monkeypatch):
+    def test_runs_in_a_new_notebook(self, make_target, monkeypatch):
+        # Its imports first, whatever the notebook has imported; missing
+        # packages are not installed by the code.
         monkeypatch.setattr(Pillow, "is_installed", lambda self: False)
         [recipe] = Image().recipes(make_target("/a.png", b""))
-        assert recipe.install == "%pip install -q pillow"  # fsspec is installed
-        assert recipe.code.startswith("import PIL.Image\nimport fsspec")
+        assert recipe.code == (
+            "import fsspec\n"
+            "import PIL.Image\n"
+            "\n"
+            "with fsspec.open('memory://a.png', 'rb') as f:\n"
+            "    img = PIL.Image.open(f)\n"
+            "    img.load()\n"
+            "img"
+        )
+
+    def test_spark_session_created(self, make_target):
+        code = self.code(Parquet(), make_target("/a.parquet", b""))
+        assert code["pyspark"] == (
+            "from pyspark.sql import SparkSession\n"
+            "\n"
+            "spark = SparkSession.builder.getOrCreate()\n"
+            "df = spark.read.parquet('memory://a.parquet')"
+        )
 
 
 class TestFormatOptionsInCode:

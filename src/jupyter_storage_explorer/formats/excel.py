@@ -3,17 +3,11 @@
 from __future__ import annotations
 
 import io
+from inspect import cleandoc
 from typing import TYPE_CHECKING, Any
 
-from jupyter_storage_explorer.formats.base import (
-    DataFormat,
-    Preview,
-    PreviewLimits,
-    Requirements,
-    Target,
-    format_args,
-    snippet_options,
-)
+from jupyter_storage_explorer.formats.base import format_kwargs, snippet_options
+from jupyter_storage_explorer.formats.format import DataFormat, Target
 from jupyter_storage_explorer.formats.frames import (
     pandas_table,
     polars_table,
@@ -30,6 +24,9 @@ from jupyter_storage_explorer.formats.requirements import (
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
+    from jupyter_storage_explorer.formats.preview import Preview, PreviewLimits
+    from jupyter_storage_explorer.formats.requirement import Requirements
+
 
 def _with_sheets(note: str, sheets: list[str]) -> str:
     """The note under the first sheet's table, mentioning the other sheets."""
@@ -40,6 +37,7 @@ class Excel(DataFormat):
     name = "excel"
     label = "Excel workbook"
     extensions = (".xlsx", ".xlsm")
+    file_icon = "spreadsheet"
     # polars reads Excel from bytes, fetched with fsspec so any storage works.
     preferred_requirements = ((Polars, Fastexcel, Fsspec), (Pandas, Openpyxl))
     query_requirements = (Polars, Fastexcel)
@@ -113,10 +111,34 @@ class Excel(DataFormat):
 
     def load_code(self, target: Target, requirements: Requirements) -> str:
         if Polars in requirements:
-            storage_options = snippet_options(self.fsspec_storage_options)
-            return (
-                f"with {Fsspec().code_name()}.open({format_args(target.url, 'rb', **storage_options)}) as f:\n"
-                f"    df = {Polars().code_name()}.read_excel(f.read())"
-            )
-        options = snippet_options(self.pandas_storage_options) or None
-        return f"df = {Pandas().code_name()}.read_excel({format_args(target.url, storage_options=options)})"
+            return self.load_code_polars(target)
+        return self.load_code_pandas(target)
+
+    # polars reads the bytes, fetched with fsspec so any storage works.
+    load_code_polars_template = cleandoc("""
+        import fsspec
+        import polars as pl
+
+        with fsspec.open({url}, 'rb'{kwargs}) as f:
+            df = pl.read_excel(f.read())
+        """)
+
+    def load_code_polars(self, target: Target) -> str:
+        return self.load_code_polars_template.format(
+            url=repr(target.url),
+            kwargs=format_kwargs(**snippet_options(self.fsspec_storage_options)),
+        )
+
+    load_code_pandas_template = cleandoc("""
+        import pandas as pd
+
+        df = pd.read_excel({url}{kwargs})
+        """)
+
+    def load_code_pandas(self, target: Target) -> str:
+        return self.load_code_pandas_template.format(
+            url=repr(target.url),
+            kwargs=format_kwargs(
+                storage_options=snippet_options(self.pandas_storage_options) or None
+            ),
+        )

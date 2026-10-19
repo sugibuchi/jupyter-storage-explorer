@@ -1,4 +1,5 @@
-"""The default formats, and creating them with the explorers' ``format_options``."""
+"""The default formats, creating them with the explorers' ``format_options``,
+and the formats' file icons."""
 
 from __future__ import annotations
 
@@ -6,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from jupyter_storage_explorer.formats.delta import DeltaLake
 from jupyter_storage_explorer.formats.excel import Excel
+from jupyter_storage_explorer.formats.format import FILE_ICONS
 from jupyter_storage_explorer.formats.images import Image
 from jupyter_storage_explorer.formats.parquet import Parquet
 from jupyter_storage_explorer.formats.text import Csv, Json, JsonLines, Markdown, Text
@@ -13,7 +15,7 @@ from jupyter_storage_explorer.formats.text import Csv, Json, JsonLines, Markdown
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
-    from jupyter_storage_explorer.formats.base import DataFormat
+    from jupyter_storage_explorer.formats.format import DataFormat
 
 # The formats explorers use unless given others; ``default_formats`` creates them.
 # On a tie in priority, the format listed first wins.
@@ -57,6 +59,41 @@ def default_formats(options: Mapping[str, Any] | None = None) -> list[DataFormat
     options = options or {}
     check_format_options(options)
     return [cls(**options) for cls in DEFAULT_FORMATS]
+
+
+def format_icons(
+    formats: Sequence[DataFormat],
+) -> tuple[dict[str, str], dict[str, str]]:
+    """The formats' ``file_icon``: format name -> icon name, for the formats
+    that set one, and icon name -> SVG markup, for the icons of their own.
+
+    ValueError for an icon name not in ``FILE_ICONS`` (e.g. a typo), an icon
+    of their own named as one of them, not SVG, or named as another one.
+    """
+    icons: dict[str, str] = {}
+    svgs: dict[str, str] = {}
+    for fmt in formats:
+        icon = fmt.file_icon
+        if icon is None or fmt.name in icons:
+            continue
+        where = f"file_icon of format {fmt.name!r}"
+        if isinstance(icon, str):
+            if icon not in FILE_ICONS:
+                raise ValueError(
+                    f"unknown {where}: {icon!r}; choose from {list(FILE_ICONS)}, "
+                    "or give (name, svg)"
+                )
+            name = icon
+        else:
+            name, svg = icon
+            if not name or name in (*FILE_ICONS, "folder"):
+                raise ValueError(f"{where}: name it other than {list(FILE_ICONS)}")
+            if not svg.lstrip().lower().startswith(("<svg", "<?xml")):
+                raise ValueError(f"{where}: not SVG markup")
+            if svgs.setdefault(name, svg) != svg:
+                raise ValueError(f"{where}: another icon is named {name!r}")
+        icons[fmt.name] = name
+    return icons, svgs
 
 
 def explorer_formats(

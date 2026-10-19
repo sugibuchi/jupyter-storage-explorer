@@ -92,38 +92,23 @@ const FILE_ICON_SVGS = {
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="#000" d="M108.4 0h23v22.8h21.2V0h23v69h-23V46h-21v23h-23.2M206 23h-20.3V0h63.7v23H229v46h-23m53.5-69h24.1l14.8 24.3L313.2 0h24.1v69h-23V34.8l-16.1 24.8-16.1-24.8V69h-22.6m89.2-69h23v46.2h32.6V69h-55.6" class="jp-icon0 jp-icon-selectable"/><path fill="#e44d26" d="m107.6 471-33-370.4h362.8l-33 370.2L255.7 512" class="jp-icon-selectable"/><path fill="#f16529" d="M256 480.5V131h148.3L376 447" class="jp-icon-selectable"/><path fill="#ebebeb" d="M142 176.3h114v45.4h-64.2l4.2 46.5h60v45.3H154.4m2 22.8H202l3.2 36.3 50.8 13.6v47.4l-93.2-26" class="jp-icon-selectable-inverse"/><path fill="#fff" d="M369.6 176.3H255.8v45.4h109.6m-4.1 46.5H255.8v45.4h56l-5.3 59-50.7 13.6v47.2l93-25.8" class="jp-icon-selectable-inverse"/></svg>',
 };
 
-// JupyterLab's default file types (@jupyterlab/docregistry, and the HTML
-// viewer's): extension -> icon, plus the tables JupyterLab does not know
-// (Excel, Parquet), with its CSV icon. Others get the plain file icon.
+// The icons of files no format of the explorer sets one for (their
+// DataFormat.file_icon, e.g. CSV and Parquet files' "spreadsheet"): by
+// extension, JupyterLab's default file types (@jupyterlab/docregistry, and
+// the HTML viewer's), plus the old Excel files (.xls) with its CSV icon.
+// Others get the plain file icon.
 const FILE_ICON_EXTENSIONS = {
-  ".xlsx": "spreadsheet",
-  ".xlsm": "spreadsheet",
   ".xls": "spreadsheet",
-  ".parquet": "spreadsheet",
-  ".parq": "spreadsheet",
   ".ipynb": "notebook",
-  ".md": "markdown",
   ".pdf": "pdf",
   ".py": "python",
-  ".json": "json",
-  ".jsonl": "json",
-  ".ndjson": "json",
   ".jl": "julia",
-  ".csv": "spreadsheet",
-  ".tsv": "spreadsheet",
   ".r": "r-kernel",
   ".yaml": "yaml",
   ".yml": "yaml",
   ".html": "html5",
-  ".svg": "image",
   ".tif": "image",
   ".tiff": "image",
-  ".jpg": "image",
-  ".jpeg": "image",
-  ".gif": "image",
-  ".png": "image",
-  ".bmp": "image",
-  ".webp": "image",
   ".aac": "audio",
   ".midi": "audio",
   ".mid": "audio",
@@ -141,10 +126,20 @@ const FILE_ICON_EXTENSIONS = {
   ".mov": "video",
 };
 
-// The icon JupyterLab's file browser shows for an item, as an SVG element.
-function fileIcon(name, isDir) {
+// The icon of an item, as an SVG element: `formatIcon`, the file_icon of the
+// file's format if it has one, else the one JupyterLab's file browser shows.
+// An icon of the format's own comes with its SVG `markup`: shown as an
+// image, in which its scripts, if any, never run.
+function fileIcon(name, isDir, formatIcon = null, markup = null) {
+  if (!isDir && formatIcon && markup) {
+    const img = h("img", { className: "jse-svg jse-file-svg", alt: "", src: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(markup)}` });
+    img.setAttribute("aria-hidden", "true");
+    img.dataset.icon = formatIcon;
+    return img;
+  }
   let key = "file";
   if (isDir) key = "folder";
+  else if (formatIcon && Object.hasOwn(FILE_ICON_SVGS, formatIcon)) key = formatIcon;
   else {
     const dot = name.lastIndexOf(".");
     if (dot > 0) key = FILE_ICON_EXTENSIONS[name.slice(dot).toLowerCase()] ?? "file";
@@ -154,5 +149,6 @@ function fileIcon(name, isDir) {
   const svg = box.content.firstElementChild;
   svg.setAttribute("class", "jse-svg jse-file-svg");
   svg.setAttribute("aria-hidden", "true");
+  svg.dataset.icon = key; // e.g. "spreadsheet", for tests
   return svg;
 }

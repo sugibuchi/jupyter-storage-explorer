@@ -2,18 +2,15 @@
 
 from __future__ import annotations
 
+from inspect import cleandoc
 from typing import TYPE_CHECKING, Any
 
 from jupyter_storage_explorer.formats.base import (
-    DataFormat,
-    Preview,
-    PreviewLimits,
-    Requirements,
-    Target,
-    format_args,
+    format_kwargs,
     snippet_options,
     spark_url,
 )
+from jupyter_storage_explorer.formats.format import DataFormat, Target
 from jupyter_storage_explorer.formats.frames import polars_table, rows_note
 from jupyter_storage_explorer.formats.requirements import DeltaLake as DeltaLakePackage
 from jupyter_storage_explorer.formats.requirements import DeltaSpark, Polars
@@ -21,13 +18,16 @@ from jupyter_storage_explorer.formats.requirements import DeltaSpark, Polars
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
+    from jupyter_storage_explorer.formats.preview import Preview, PreviewLimits
+    from jupyter_storage_explorer.formats.requirement import Requirements
+
 
 class DeltaLake(DataFormat):
     name = "delta"
     label = "Delta Lake table"
     priority = 20  # a Delta table is also a directory of Parquet files
     preferred_requirements = ((Polars, DeltaLakePackage),)
-    # delta-spark: pyspark with Delta Lake set up in a session it creates.
+    # delta-spark: a Spark session with Delta Lake set up.
     code_only_requirements = ((DeltaSpark,),)
     query_requirements = (Polars, DeltaLakePackage)
 
@@ -91,24 +91,37 @@ class DeltaLake(DataFormat):
 
     def load_code(self, target: Target, requirements: Requirements) -> str:
         if DeltaSpark in requirements:
-            # Spark reads with its own storage configuration.
-            spark = DeltaSpark()
-            code = f'df = {spark.code_name()}.read.format("delta").load({format_args(spark_url(target.url))})'
-            # Without a session in the notebook, the recipe's setup part creates
-            # one with Delta Lake; the notebook's own must have it set up.
-            if spark.get_module_name() is None:
-                return code
-            return (
-                f"# Needs Delta Lake in the Spark session (Databricks has it)\n{code}"
-            )
+            return self.load_code_delta_spark(target)
+        return self.load_code_polars(target)
+
+    load_code_polars_template = cleandoc("""
+        import polars as pl
+
+        df = pl.scan_delta({url}{kwargs})
+        """)
+
+    def load_code_polars(self, target: Target) -> str:
         # Only the arguments that differ from scan_delta's defaults.
-        kwargs: dict[str, Any] = {}
-        if storage_options := snippet_options(self.polars_storage_options):
-            kwargs["storage_options"] = storage_options
-        if self.polars_delta_table_options is not None:
-            kwargs["delta_table_options"] = self.polars_delta_table_options
-        if self.polars_delta_use_pyarrow:
-            kwargs["use_pyarrow"] = True
-        if self.polars_delta_pyarrow_options is not None:
-            kwargs["pyarrow_options"] = self.polars_delta_pyarrow_options
-        return f"df = {Polars().code_name()}.scan_delta({format_args(target.url, **kwargs)})"
+        return self.load_code_polars_template.format(
+            url=repr(target.url),
+            kwargs=format_kwargs(
+                storage_options=snippet_options(self.polars_storage_options) or None,
+                delta_table_options=self.polars_delta_table_options,
+                use_pyarrow=True if self.polars_delta_use_pyarrow else None,
+                pyarrow_options=self.polars_delta_pyarrow_options,
+            ),
+        )
+
+    load_code_delta_spark_template = cleandoc("""
+        from pyspark.sql import SparkSession
+
+        # Needs Delta Lake in the Spark session (Databricks has it)
+        spark = SparkSession.builder.getOrCreate()
+        df = spark.read.format("delta").load({url})
+        """)
+
+    def load_code_delta_spark(self, target: Target) -> str:
+        # Spark reads with its own storage configuration.
+        return self.load_code_delta_spark_template.format(
+            url=repr(spark_url(target.url))
+        )

@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+from inspect import cleandoc
 from typing import TYPE_CHECKING, Any
 
 from pygments import highlight
@@ -13,22 +14,22 @@ from pygments.lexers import get_lexer_by_name
 from pygments.util import ClassNotFound
 
 from jupyter_storage_explorer.formats.base import (
-    DataFormat,
-    MarkdownPreview,
-    Preview,
-    PreviewLimits,
-    Requirements,
-    Target,
-    TextPreview,
-    TreePreview,
-    format_args,
+    format_kwargs,
     snippet_options,
     spark_url,
 )
+from jupyter_storage_explorer.formats.format import DataFormat, Target
 from jupyter_storage_explorer.formats.frames import (
     pandas_table,
     polars_table,
     rows_note,
+)
+from jupyter_storage_explorer.formats.preview import (
+    MarkdownPreview,
+    Preview,
+    PreviewLimits,
+    TextPreview,
+    TreePreview,
 )
 from jupyter_storage_explorer.formats.requirements import (
     Fsspec,
@@ -39,6 +40,8 @@ from jupyter_storage_explorer.formats.requirements import (
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
+
+    from jupyter_storage_explorer.formats.requirement import Requirements
 
 
 def _size_note(target: Target, limits: PreviewLimits) -> str:
@@ -88,6 +91,7 @@ class Text(DataFormat):
     }  # fmt: skip
     extensions = tuple(languages)
     priority = -10  # the fallback: any more specific format is the default
+    # No file_icon: files get the icon of their extension (Python, YAML, ...).
     preferred_requirements = ((Fsspec,),)
 
     def __init__(
@@ -111,10 +115,19 @@ class Text(DataFormat):
         ]
 
     def load_code(self, target: Target, requirements: Requirements) -> str:
-        storage_options = snippet_options(self.fsspec_storage_options)
-        return (
-            f"with {Fsspec().code_name()}.open({format_args(target.url, 'rt', **storage_options)}) as f:\n"
-            "    text = f.read()"
+        return self.load_code_fsspec(target)
+
+    load_code_fsspec_template = cleandoc("""
+        import fsspec
+
+        with fsspec.open({url}, 'rt'{kwargs}) as f:
+            text = f.read()
+        """)
+
+    def load_code_fsspec(self, target: Target) -> str:
+        return self.load_code_fsspec_template.format(
+            url=repr(target.url),
+            kwargs=format_kwargs(**snippet_options(self.fsspec_storage_options)),
         )
 
 
@@ -124,6 +137,7 @@ class Markdown(Text):
     name = "markdown"
     label = "Markdown"
     extensions = (".md", ".markdown")
+    file_icon = "markdown"
     priority = 0  # preferred over Text, which stays available through "Preview as"
 
     def preview(self, target: Target, limits: PreviewLimits) -> list[Preview]:
@@ -139,6 +153,7 @@ class Csv(DataFormat):
     name = "csv"
     label = "CSV"
     extensions = (".csv", ".tsv")
+    file_icon = "spreadsheet"
     preferred_requirements = ((Polars,), (Pandas,))
     code_only_requirements = ((PySpark,),)
     query_requirements = (Polars,)
@@ -231,25 +246,67 @@ class Csv(DataFormat):
         ]
 
     def load_code(self, target: Target, requirements: Requirements) -> str:
-        sep = self._separator(target.name, target.head_text(4096)[0])
-        sep = None if sep == "," else sep
         if PySpark in requirements:
-            # Spark reads with its own storage configuration.
-            args = format_args(
-                spark_url(target.url), header=True, inferSchema=True, sep=sep
-            )
-            return f"df = {PySpark().code_name()}.read.csv({args})"
+            return self.load_code_pyspark(target)
         if Polars in requirements:
-            options = snippet_options(self.polars_storage_options) or None
-            return f"df = {Polars().code_name()}.read_csv({format_args(target.url, separator=sep, storage_options=options)})"
-        options = snippet_options(self.pandas_storage_options) or None
-        return f"df = {Pandas().code_name()}.read_csv({format_args(target.url, sep=sep, storage_options=options)})"
+            return self.load_code_polars(target)
+        return self.load_code_pandas(target)
+
+    def _code_separator(self, target: Target) -> str | None:
+        """The file's separator for load code; None for ",", the default."""
+        sep = self._separator(target.name, target.head_text(4096)[0])
+        return None if sep == "," else sep
+
+    load_code_polars_template = cleandoc("""
+        import polars as pl
+
+        df = pl.read_csv({url}{kwargs})
+        """)
+
+    def load_code_polars(self, target: Target) -> str:
+        return self.load_code_polars_template.format(
+            url=repr(target.url),
+            kwargs=format_kwargs(
+                separator=self._code_separator(target),
+                storage_options=snippet_options(self.polars_storage_options) or None,
+            ),
+        )
+
+    load_code_pandas_template = cleandoc("""
+        import pandas as pd
+
+        df = pd.read_csv({url}{kwargs})
+        """)
+
+    def load_code_pandas(self, target: Target) -> str:
+        return self.load_code_pandas_template.format(
+            url=repr(target.url),
+            kwargs=format_kwargs(
+                sep=self._code_separator(target),
+                storage_options=snippet_options(self.pandas_storage_options) or None,
+            ),
+        )
+
+    load_code_pyspark_template = cleandoc("""
+        from pyspark.sql import SparkSession
+
+        spark = SparkSession.builder.getOrCreate()
+        df = spark.read.csv({url}, header=True, inferSchema=True{kwargs})
+        """)
+
+    def load_code_pyspark(self, target: Target) -> str:
+        # Spark reads with its own storage configuration.
+        return self.load_code_pyspark_template.format(
+            url=repr(spark_url(target.url)),
+            kwargs=format_kwargs(sep=self._code_separator(target)),
+        )
 
 
 class Json(DataFormat):
     name = "json"
     label = "JSON"
     extensions = (".json",)
+    file_icon = "json"
     preferred_requirements = ((Fsspec,), (Polars,), (Pandas,))
 
     def __init__(
@@ -282,15 +339,48 @@ class Json(DataFormat):
 
     def load_code(self, target: Target, requirements: Requirements) -> str:
         if Polars in requirements:
-            return f"df = {Polars().code_name()}.read_json({format_args(target.url)})"
+            return self.load_code_polars(target)
         if Pandas in requirements:
-            options = snippet_options(self.pandas_storage_options) or None
-            return f"df = {Pandas().code_name()}.read_json({format_args(target.url, storage_options=options)})"
-        storage_options = snippet_options(self.fsspec_storage_options)
-        return (
-            "import json\n\n"
-            f"with {Fsspec().code_name()}.open({format_args(target.url, 'rt', **storage_options)}) as f:\n"
-            "    data = json.load(f)"
+            return self.load_code_pandas(target)
+        return self.load_code_fsspec(target)
+
+    load_code_fsspec_template = cleandoc("""
+        import json
+
+        import fsspec
+
+        with fsspec.open({url}, 'rt'{kwargs}) as f:
+            data = json.load(f)
+        """)
+
+    def load_code_fsspec(self, target: Target) -> str:
+        return self.load_code_fsspec_template.format(
+            url=repr(target.url),
+            kwargs=format_kwargs(**snippet_options(self.fsspec_storage_options)),
+        )
+
+    load_code_polars_template = cleandoc("""
+        import polars as pl
+
+        df = pl.read_json({url})
+        """)
+
+    def load_code_polars(self, target: Target) -> str:
+        # polars' read_json takes no storage options.
+        return self.load_code_polars_template.format(url=repr(target.url))
+
+    load_code_pandas_template = cleandoc("""
+        import pandas as pd
+
+        df = pd.read_json({url}{kwargs})
+        """)
+
+    def load_code_pandas(self, target: Target) -> str:
+        return self.load_code_pandas_template.format(
+            url=repr(target.url),
+            kwargs=format_kwargs(
+                storage_options=snippet_options(self.pandas_storage_options) or None
+            ),
         )
 
 
@@ -298,6 +388,7 @@ class JsonLines(DataFormat):
     name = "json-lines"
     label = "JSON Lines"
     extensions = (".jsonl", ".ndjson")
+    file_icon = "json"
     preferred_requirements = ((Polars,), (Pandas,))
     code_only_requirements = ((PySpark,),)
     query_requirements = (Polars,)
@@ -361,11 +452,47 @@ class JsonLines(DataFormat):
 
     def load_code(self, target: Target, requirements: Requirements) -> str:
         if PySpark in requirements:
-            # Spark reads JSON Lines (one record per line) by default, with its
-            # own storage configuration.
-            return f"df = {PySpark().code_name()}.read.json({format_args(spark_url(target.url))})"
+            return self.load_code_pyspark(target)
         if Polars in requirements:
-            options = snippet_options(self.polars_storage_options) or None
-            return f"df = {Polars().code_name()}.scan_ndjson({format_args(target.url, storage_options=options)})"
-        options = snippet_options(self.pandas_storage_options) or None
-        return f"df = {Pandas().code_name()}.read_json({format_args(target.url, lines=True, storage_options=options)})"
+            return self.load_code_polars(target)
+        return self.load_code_pandas(target)
+
+    load_code_polars_template = cleandoc("""
+        import polars as pl
+
+        df = pl.scan_ndjson({url}{kwargs})
+        """)
+
+    def load_code_polars(self, target: Target) -> str:
+        return self.load_code_polars_template.format(
+            url=repr(target.url),
+            kwargs=format_kwargs(
+                storage_options=snippet_options(self.polars_storage_options) or None
+            ),
+        )
+
+    load_code_pandas_template = cleandoc("""
+        import pandas as pd
+
+        df = pd.read_json({url}, lines=True{kwargs})
+        """)
+
+    def load_code_pandas(self, target: Target) -> str:
+        return self.load_code_pandas_template.format(
+            url=repr(target.url),
+            kwargs=format_kwargs(
+                storage_options=snippet_options(self.pandas_storage_options) or None
+            ),
+        )
+
+    # Spark reads JSON Lines (one record per line) by default.
+    load_code_pyspark_template = cleandoc("""
+        from pyspark.sql import SparkSession
+
+        spark = SparkSession.builder.getOrCreate()
+        df = spark.read.json({url})
+        """)
+
+    def load_code_pyspark(self, target: Target) -> str:
+        # Spark reads with its own storage configuration.
+        return self.load_code_pyspark_template.format(url=repr(spark_url(target.url)))

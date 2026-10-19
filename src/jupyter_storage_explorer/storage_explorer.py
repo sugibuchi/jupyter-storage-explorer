@@ -41,6 +41,7 @@ from jupyter_storage_explorer.formats import (
     Text,
     explorer_formats,
 )
+from jupyter_storage_explorer.formats.utils import format_icons
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
@@ -250,6 +251,11 @@ class StorageExplorer(
     # which JupyterLab's text editor opens even when it does not know the
     # file's type ("Open in JupyterLab", double-click).
     _text_formats = traitlets.List().tag(sync=True)
+    # Format name -> the icon of its files (DataFormat.file_icon), for the
+    # formats that set one; other files get their extension's (icons.js).
+    _format_icons = traitlets.Dict().tag(sync=True)
+    # Icon name -> SVG markup, for the formats' icons of their own.
+    _file_icon_svgs = traitlets.Dict().tag(sync=True)
     # Format name of the current directory itself (e.g. "delta"), or ""
     # if it cannot be previewed; enables the Preview button when nothing is selected.
     _current_format = traitlets.Unicode().tag(sync=True)
@@ -372,10 +378,13 @@ class StorageExplorer(
         self._remembered: dict[str, str] = {}
         name = next(iter(self._filesystems))
         self._fs: AbstractFileSystem = self._filesystems[name].fs
+        icons, svgs = format_icons(self._formats)
         super().__init__(
             _height=height,
             _format_labels={f.name: f.label for f in self._formats},
             _text_formats=[f.name for f in self._formats if isinstance(f, Text)],
+            _format_icons=icons,
+            _file_icon_svgs=svgs,
             _max_upload_bytes=max_upload_bytes,
             _filesystem_names=list(self._filesystems),
             _explorer_id=uuid.uuid4().hex,

@@ -175,6 +175,20 @@ class Explorer:
 def browse(x: Explorer) -> None:
     x.go("curated")
     expect(x.names).to_have_text(["customers", "orders_by_month", "orders.parquet"])
+    # Icons: the format's file_icon, else the extension's (Text sets none).
+    icon = ".jse-col-name svg"
+    expect(x.row("orders.parquet").locator(icon)).to_have_attribute(
+        "data-icon", "spreadsheet"
+    )
+    expect(x.row("customers").locator(icon)).to_have_attribute("data-icon", "folder")
+    x.go("pipelines")
+    expect(x.row("daily_orders.yaml").locator(icon)).to_have_attribute(
+        "data-icon", "yaml"
+    )
+    expect(x.row("monthly_revenue.sql").locator(icon)).to_have_attribute(
+        "data-icon", "file"
+    )
+    x.go("curated")
     x.row("customers").dblclick()
     expect(x.el.locator(".jse-crumb")).to_have_text(
         ["/sales-lake", "curated", "customers"]

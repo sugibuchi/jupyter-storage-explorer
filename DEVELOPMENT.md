@@ -206,8 +206,10 @@ Icons are changed with CSS; how storages are named and how files are moved and c
 
 ### Icons
 
-The icons are JupyterLab's file browser's, as SVG images (`.jse-icon svg`), chosen by the file's extension. Rows in
-the explorer carry attributes to select them by:
+The icons are JupyterLab's file browser's, as SVG images (`.jse-icon svg`), chosen by the file's format (its
+`file_icon`, one of `FILE_ICONS` in `formats/format.py`), else by its extension. A format of your own can also bring
+its own icon, `file_icon = ("avro", "<svg ...>...</svg>")`, shown as an image (`.jse-icon img`). Rows in the explorer
+carry attributes to select them by:
 
 | Selector                                 | Rows                                                                                     |
 |------------------------------------------|------------------------------------------------------------------------------------------|

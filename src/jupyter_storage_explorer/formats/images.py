@@ -2,23 +2,22 @@
 
 from __future__ import annotations
 
+from inspect import cleandoc
 from typing import TYPE_CHECKING, Any
 
-from jupyter_storage_explorer.formats.base import (
-    DataFormat,
+from jupyter_storage_explorer.formats.base import format_kwargs, snippet_options
+from jupyter_storage_explorer.formats.format import DataFormat, Recipe, Target
+from jupyter_storage_explorer.formats.preview import (
     MediaPreview,
     Preview,
     PreviewLimits,
-    Recipe,
-    Requirements,
-    Target,
-    format_args,
-    snippet_options,
 )
 from jupyter_storage_explorer.formats.requirements import Fsspec, Pillow
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
+
+    from jupyter_storage_explorer.formats.requirement import Requirements
 
 
 class Image(DataFormat):
@@ -30,6 +29,7 @@ class Image(DataFormat):
         ".avif": "image/avif", ".svg": "image/svg+xml",
     }  # fmt: skip
     extensions = tuple(mime_types)
+    file_icon = "image"
     preferred_requirements = ((Pillow, Fsspec),)
 
     def __init__(
@@ -61,10 +61,20 @@ class Image(DataFormat):
         return super().recipes(target)
 
     def load_code(self, target: Target, requirements: Requirements) -> str:
-        storage_options = snippet_options(self.fsspec_storage_options)
-        return (
-            f"with {Fsspec().code_name()}.open({format_args(target.url, 'rb', **storage_options)}) as f:\n"
-            f"    img = {Pillow().code_name()}.Image.open(f)\n"
-            "    img.load()\n"
-            "img"
+        return self.load_code_pillow(target)
+
+    load_code_pillow_template = cleandoc("""
+        import fsspec
+        import PIL.Image
+
+        with fsspec.open({url}, 'rb'{kwargs}) as f:
+            img = PIL.Image.open(f)
+            img.load()
+        img
+        """)
+
+    def load_code_pillow(self, target: Target) -> str:
+        return self.load_code_pillow_template.format(
+            url=repr(target.url),
+            kwargs=format_kwargs(**snippet_options(self.fsspec_storage_options)),
         )

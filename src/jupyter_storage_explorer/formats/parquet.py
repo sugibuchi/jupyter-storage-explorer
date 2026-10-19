@@ -5,20 +5,17 @@ from __future__ import annotations
 import dataclasses
 import itertools
 import re
+from inspect import cleandoc
 from typing import TYPE_CHECKING, Any
 
 import fsspec
 
 from jupyter_storage_explorer.formats.base import (
-    DataFormat,
-    Preview,
-    PreviewLimits,
-    Requirements,
-    Target,
-    format_args,
+    format_kwargs,
     snippet_options,
     spark_url,
 )
+from jupyter_storage_explorer.formats.format import DataFormat, Target
 from jupyter_storage_explorer.formats.frames import (
     pandas_table,
     polars_table,
@@ -33,6 +30,9 @@ from jupyter_storage_explorer.formats.requirements import (
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
+
+    from jupyter_storage_explorer.formats.preview import Preview, PreviewLimits
+    from jupyter_storage_explorer.formats.requirement import Requirements
 
 # Items of a directory looked at to decide whether it is a Parquet dataset.
 _MAX_DETECT_ITEMS = 100
@@ -255,6 +255,7 @@ class Parquet(DataFormat):
     name = "parquet"
     label = "Parquet"
     extensions = (".parquet", ".parq")
+    file_icon = "spreadsheet"
     priority = 10  # above generic directories, below table formats such as Delta Lake
     preferred_requirements = ((Polars,), (Pandas, PyArrow))
     code_only_requirements = ((PySpark,),)
@@ -407,18 +408,54 @@ class Parquet(DataFormat):
 
     def load_code(self, target: Target, requirements: Requirements) -> str:
         if PySpark in requirements:
-            # A file or a folder of them; Spark uses its own storage configuration.
-            return f"df = {PySpark().code_name()}.read.parquet({format_args(spark_url(target.url))})"
-        if Polars not in requirements:
-            options = snippet_options(self.pandas_storage_options) or None
-            return f"df = {Pandas().code_name()}.read_parquet({format_args(target.url, storage_options=options)})"
-        # A LazyFrame, so only the needed rows and columns are read.
+            return self.load_code_pyspark(target)
+        if Polars in requirements:
+            return self.load_code_polars(target)
+        return self.load_code_pandas(target)
+
+    # A LazyFrame, so only the needed rows and columns are read.
+    load_code_polars_template = cleandoc("""
+        import polars as pl
+
+        df = pl.scan_parquet({url}{kwargs})
+        """)
+
+    def load_code_polars(self, target: Target) -> str:
         layout = self._target_layout(target) if target.is_dir else None
-        args = format_args(
-            self._polars_url(target.url, target.is_dir),
-            hive_partitioning=True if layout and layout.keys else None,
-            # "*" also matches Spark's "_SUCCESS" and checksums.
-            hidden_file_prefix=[".", "_"] if layout and layout.files == "*" else None,
-            storage_options=snippet_options(self.polars_storage_options) or None,
+        return self.load_code_polars_template.format(
+            url=repr(self._polars_url(target.url, target.is_dir)),
+            kwargs=format_kwargs(
+                hive_partitioning=True if layout and layout.keys else None,
+                # "*" also matches Spark's "_SUCCESS" and checksums.
+                hidden_file_prefix=[".", "_"]
+                if layout and layout.files == "*"
+                else None,
+                storage_options=snippet_options(self.polars_storage_options) or None,
+            ),
         )
-        return f"df = {Polars().code_name()}.scan_parquet({args})"
+
+    load_code_pandas_template = cleandoc("""
+        import pandas as pd
+
+        df = pd.read_parquet({url}{kwargs})
+        """)
+
+    def load_code_pandas(self, target: Target) -> str:
+        return self.load_code_pandas_template.format(
+            url=repr(target.url),
+            kwargs=format_kwargs(
+                storage_options=snippet_options(self.pandas_storage_options) or None
+            ),
+        )
+
+    # A file or a folder of them.
+    load_code_pyspark_template = cleandoc("""
+        from pyspark.sql import SparkSession
+
+        spark = SparkSession.builder.getOrCreate()
+        df = spark.read.parquet({url})
+        """)
+
+    def load_code_pyspark(self, target: Target) -> str:
+        # Spark uses its own storage configuration.
+        return self.load_code_pyspark_template.format(url=repr(spark_url(target.url)))

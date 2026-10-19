@@ -260,7 +260,14 @@ there follow the browser's as closely as Python allows (natural order ignoring c
 The list's is cleared when another folder's listing arrives, not on the click, so the previous folder's items never show
 unfiltered.
 
-**Formats** (`formats/`). Each `DataFormat` subclass (`base.py`) declares `name`, `label`, `priority`, `extensions` and
+**Formats** (`formats/`). Laid out as `filesystems/`: the interfaces `DataFormat` (`format.py`, with `Target`,
+`Recipe`, `detect`, `FILE_ICONS`) and `Requirement` (`requirement.py`), a module per predefined format (`delta.py`,
+`parquet.py`, `excel.py`, `text.py`, `images.py`), the predefined packages in `requirements.py`, the preview sections in
+`preview.py`, the generated code's helpers in `base.py` (`snippet_options`, `format_kwargs`, `spark_url`), and the
+defaults in `utils.py`. Each `DataFormat` subclass declares `name`, `label`, `priority`, `extensions`, `file_icon` (its
+files' icon in the list: one of `FILE_ICONS`, or `(name, svg)` for one of its own, shown as an `<img>` so its scripts
+never run; sent as `_format_icons` and `_file_icon_svgs`, checked by `format_icons()`; files of formats without one,
+e.g. Text's, get their extension's icon, `FILE_ICON_EXTENSIONS` in `icons.js`) and
 which package sets can read it (`preferred_requirements` for previews and code, `code_only_requirements` such as
 PySpark for code only, `query_requirements` for the data browser), and implements:
 - `matches(target)`: cheap detection, called on every click; directory formats (Delta, Parquet datasets) inspect
@@ -274,9 +281,15 @@ PySpark for code only, `query_requirements` for the data browser), and implement
 - `scan(url, is_dir)`: a polars LazyFrame for the data browser. `_query/data_query.py`'s `DataQuery` does filters, sort
   and paging as narwhals expressions, so it takes any dataframe narwhals supports, either on the data itself ("live") or
   on rows read into memory (queried with polars); behaviour such as regex syntax then follows the data's library.
-- `load_code(target, requirements)`: the "Python code" snippet for one package set; `recipes()` adds the
-  `%pip install`, setup and import lines. Packages are referenced through `Requirement` classes (`requirements.py`),
-  whose `code_name()` reuses the name the user already imported (e.g. `pl`).
+- `load_code(target, requirements)`: the "Python code" snippet for one package set, run as it is in a new
+  notebook: its imports (`import polars as pl`, whatever the notebook has), and a Spark session
+  (`SparkSession.builder.getOrCreate()`). Written as an if-then choosing `load_code_<package>` (named after the set's
+  first package, even when there is only one set), which fills the class attribute `load_code_<package>_template`
+  (an indented `inspect.cleandoc("""...""")`) with `str.format`: `{url}` (a repr) and `{kwargs}` (`format_kwargs`,
+  the options; empty when none). Installing packages and configuring access to the storage (credentials, Spark's
+  setup for Delta Lake) depend on the environment, so they are left to the user, and a preview whose packages are
+  missing (`install_hint()`) only names them. `Requirement`s (`requirements.py`) only say what a format needs
+  (`package`, `import_name`, `is_installed()`, `load()`).
 
 **Format options.** `format_options` (same for both widgets) is one flat dict passed to *every* default format; each
 `__init__` takes the keyword-only options it uses and ignores the rest via `**kwargs`. Names are `<library>_<option>`

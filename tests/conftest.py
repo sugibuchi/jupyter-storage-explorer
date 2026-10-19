@@ -10,7 +10,7 @@ import pytest
 from explorers import Explorer, make
 from fsspec.implementations.memory import MemoryFileSystem
 
-from jupyter_storage_explorer.formats.base import Target
+from jupyter_storage_explorer.formats.format import Target
 
 if TYPE_CHECKING:
     from collections.abc import Callable
