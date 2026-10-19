@@ -19,6 +19,7 @@ the pictures are taken at 2× (`data-explorer.png`, `launcher.png` and the GIFs 
 | `browser.py`              | `docs/figs/browser-*.png` ("Using the data browser")                  |
 | `data_explorer.py`        | `docs/figs/data-explorer.png`                                         |
 | `launcher_item.py`        | `launcher/figs/launcher.png`                                          |
+| `launcher_settings.py`    | `launcher/figs/settings-*.png` (the settings button, `launcher.py`)   |
 | `storage_explorer_gif.py` | `docs/figs/storage-explorer.gif`                                      |
 | `data_explorer_gif.py`    | `docs/figs/data-explorer.gif`                                         |
 | `file_transfer_gif.py`    | `docs/figs/file-transfer.gif` ("File transfer between file systems")  |

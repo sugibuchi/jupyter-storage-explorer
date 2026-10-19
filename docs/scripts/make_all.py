@@ -12,6 +12,7 @@ import data_explorer_gif
 import file_transfer_gif
 import hero
 import launcher_item
+import launcher_settings
 import storage_explorer_gif
 import unsafe
 import using
@@ -23,6 +24,7 @@ SCRIPTS = (
     browser,
     data_explorer,
     launcher_item,
+    launcher_settings,
     storage_explorer_gif,
     data_explorer_gif,
     file_transfer_gif,
