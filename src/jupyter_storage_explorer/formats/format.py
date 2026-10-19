@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from fsspec import AbstractFileSystem
 
     from jupyter_storage_explorer.formats.preview import PreviewLimits
+    from jupyter_storage_explorer.formats.requirement import Requirements
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -78,7 +79,10 @@ class Target:
 class Recipe:
     """One way to load the data in a notebook, e.g. with polars or with pandas."""
 
-    library: str  # label shown to the user, e.g. "polars"
+    # The packages the code needs: the library it loads with first (its
+    # support's ``use``, which names the recipe, e.g. "Load with polars"),
+    # then the others (``additional_requirements``); empty for Python alone.
+    requirements: Requirements
     # The imports, then the loading code. Installing the packages and
     # configuring access to the storage are left to the user: reaching a data
     # lake often needs configuration that depends on it.

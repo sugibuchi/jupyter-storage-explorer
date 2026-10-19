@@ -301,7 +301,8 @@ so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
   ("live") or on rows read into memory (queried with polars); behaviour such as regex syntax then follows the data's
   library.
 - `recipe(fmt, target)`: the code of the "Python code" snippet (a `str`; the chain makes the `Recipe`, adding
-  `library()`), run as it is in a new notebook: its imports (`import polars as
+  the support's `requirements()`: the frontend gets their packages, names the recipe after the first, "Load with
+  polars", and lists them under the code), run as it is in a new notebook: its imports (`import polars as
   pl`, whatever the notebook has), and a Spark session (`SparkSession.builder.getOrCreate()`). It fills a class
   attribute `recipe_template`, written just before the method, an indented `inspect.cleandoc("""...""")`, with
   `str.format`: `{url}` (a repr) and `{kwargs}` (`format_kwargs`, the options; empty when none). Installing packages and

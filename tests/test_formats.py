@@ -48,6 +48,11 @@ def parquet_bytes(df: pl.DataFrame) -> bytes:
     return buffer.getvalue()
 
 
+def library(recipe) -> str:
+    """The library a recipe loads with: its first package."""
+    return recipe.requirements[0].package
+
+
 def last_line(code: str) -> str:
     return code.strip().splitlines()[-1]
 
@@ -286,7 +291,7 @@ class TestPreviews:
 
 class TestRecipes:
     def code(self, fmt, target) -> dict[str, str]:
-        return {r.library: r.code for r in CHAIN.recipes(fmt, target)}
+        return {library(r): r.code for r in CHAIN.recipes(fmt, target)}
 
     def test_csv(self, make_target):
         code = self.code(Csv(), make_target("/a.tsv", b"x\ty\n"))
@@ -376,7 +381,7 @@ class TestFormatOptionsInCode:
             }
         )
         recipes = chain.recipes(Csv(), make_target("/a.csv", b"x,y\n"))
-        code = {r.library: r.code for r in recipes}
+        code = {library(r): r.code for r in recipes}
         assert last_line(code["polars"]) == (
             "df = pl.read_csv('memory://a.csv', storage_options={'aws_region': 'eu'})"
         )
@@ -497,7 +502,7 @@ class TestPartitionedParquetReading:
     def test_code(self, make_target, memfs):
         memfs.pipe_file("/t/year=2025/month=1/part-0.parquet", b"")
         fmt = Parquet()
-        code = {r.library: r.code for r in CHAIN.recipes(fmt, make_target("/t"))}
+        code = {library(r): r.code for r in CHAIN.recipes(fmt, make_target("/t"))}
         assert last_line(code["polars"]) == (
             "df = pl.scan_parquet('memory://t/year=*/month=*/*.parquet', "
             "hive_partitioning=True)"
@@ -510,7 +515,7 @@ class TestPartitionedParquetReading:
         data = parquet_bytes(pl.DataFrame({"a": [1]}))
         memfs.pipe_file("/t/dt=2026-10-01/000000_0", data)
         recipes = CHAIN.recipes(Parquet(), make_target("/t"))
-        code = {r.library: r.code for r in recipes}
+        code = {library(r): r.code for r in recipes}
         assert last_line(code["polars"]) == (
             "df = pl.scan_parquet('memory://t/dt=*/*', hive_partitioning=True, "
             "hidden_file_prefix=['.', '_'])"

@@ -16,6 +16,7 @@ from jupyter_storage_explorer.formats import (
     Csv,
     CsvByPandas,
     CsvByPolars,
+    DeltaLake,
     DeltaLakeByPolars,
     ExcelByPolars,
     FormatSupport,
@@ -189,7 +190,18 @@ class TestChain:
         monkeypatch.setattr(Requirement, "is_installed", lambda self: False)
         chain = SupportChain(default_supports())
         recipes = chain.recipes(Csv(), make_target("/a.csv", b"a\n"))
-        assert [r.library for r in recipes] == ["polars", "pandas", "pyspark"]
+        assert [r.requirements[0].package for r in recipes] == [
+            "polars",
+            "pandas",
+            "pyspark",
+        ]
+
+    def test_recipes_name_their_packages(self, make_target, memfs):
+        memfs.pipe_file("/t/_delta_log/00000000000000000000.json", b"{}")
+        chain = SupportChain(default_supports())
+        recipes = chain.recipes(DeltaLake(), make_target("/t"))
+        packages = [[r.package for r in recipe.requirements] for recipe in recipes]
+        assert packages == [["polars", "deltalake"], ["pyspark", "delta-spark"]]
 
     def test_query(self, tmp_path):
         path = tmp_path / "a.parquet"
@@ -213,7 +225,11 @@ class TestExplorer:
     def test_a_library_given_replaces_the_default_code(self, make_target):
         explorer = StorageExplorer(fs=None, supports=[CsvByPolars()])
         recipes = explorer._supports.recipes(Csv(), make_target("/a.csv", b"a\n"))
-        assert [r.library for r in recipes] == ["polars", "pandas", "pyspark"]
+        assert [r.requirements[0].package for r in recipes] == [
+            "polars",
+            "pandas",
+            "pyspark",
+        ]
 
     def test_defaults_overridden(self):
         class Explorer(StorageExplorer):

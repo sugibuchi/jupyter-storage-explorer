@@ -194,6 +194,10 @@ class PreviewsMixin:
             return {"error": error_text(exc)}
         return {
             "formats": [f.name for f in formats],
-            "recipes": [dataclasses.asdict(r) for r in recipes],
+            # Requirements are classes: the frontend gets their packages.
+            "recipes": [
+                {"packages": [p.package for p in r.requirements], "code": r.code}
+                for r in recipes
+            ],
             "query": bool(formats) and self._supports.can_query(formats[0]),
         }

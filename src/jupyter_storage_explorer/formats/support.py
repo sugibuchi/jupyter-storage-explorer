@@ -273,5 +273,7 @@ class SupportChain:
                 code = support.recipe(fmt, target)
             except FormatSupport.NotSupported:
                 continue
-            recipes[support.library()] = Recipe(library=support.library(), code=code)
+            recipes[support.library()] = Recipe(
+                requirements=support.requirements(), code=code
+            )
         return list(recipes.values())

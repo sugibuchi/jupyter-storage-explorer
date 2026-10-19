@@ -52,7 +52,8 @@ class TestPreview:
 def test_menu_info(mem_explorer):
     reply = mem_explorer.request({"type": "menu_info", "rid": 1, "path": "/data/a.csv"})
     assert reply["formats"] == ["csv", "text"]
-    assert [r["library"] for r in reply["recipes"]] == ["polars", "pandas", "pyspark"]
+    packages = [r["packages"] for r in reply["recipes"]]
+    assert packages == [["polars"], ["pandas"], ["pyspark"]]
     folder = mem_explorer.request(
         {"type": "menu_info", "rid": 1, "path": "/data/table"}
     )

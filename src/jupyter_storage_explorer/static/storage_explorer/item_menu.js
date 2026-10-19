@@ -43,10 +43,10 @@ function createItemMenu(x) {
     } else if (!msg.recipes.length) {
       items = [{ label: "No code for this item", disabled: true }];
     } else {
-      items = msg.recipes.map((recipe) => ({
-        label: `Load with ${recipe.library}`,
-        action: () => x.modal.show(`Load with ${recipe.library}`, recipeBlocks(recipe)),
-      }));
+      items = msg.recipes.map((recipe) => {
+        const label = `Load with ${recipeLibrary(recipe)}`;
+        return { label, action: () => x.modal.show(label, recipeBlocks(recipe)) };
+      });
     }
     codeSub.replaceChildren(...x.menu.rows(items));
     x.menu.place(); // rows shown above may have pushed it out of the widget

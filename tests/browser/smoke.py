@@ -333,6 +333,7 @@ def python_code(x: Explorer) -> None:
     x.el.locator(".jse-submenu .jse-menu-item", has_text="Load with polars").click()
     dialog = x.el.locator(".jse-dialog:visible")
     expect(dialog).to_contain_text("scan_parquet")
+    expect(dialog).to_contain_text("Needs polars")
     dialog.press("Escape")
     expect(dialog).to_be_hidden()
 
