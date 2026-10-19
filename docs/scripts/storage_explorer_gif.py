@@ -50,7 +50,9 @@ def make(lab: Lab) -> None:
         page.wait_for_timeout(800)
         film.snap(500)
         film.click(
-            page.locator(".jse-status-bar .jse-preview-btn", has_text="Query data").first
+            page.locator(
+                ".jse-status-bar .jse-preview-btn", has_text="Query data"
+            ).first
         )
         page.wait_for_selector(".jse-data tbody tr", timeout=30000)
         page.wait_for_timeout(1000)

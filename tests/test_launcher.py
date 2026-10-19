@@ -371,3 +371,29 @@ def test_files_found_in_jupyters_order(tmp_path, monkeypatch):
     ]
     monkeypatch.setattr(launcher, "jupyter_config_path", lambda: directories)
     assert launcher.find_launcher_files() == [user, system]
+
+
+class TestUserFile:
+    """The file the tab's settings button opens: the user's launcher.py."""
+
+    def test_offered_to_the_tabs_explorer(self, config_dir):
+        explorer = launcher._create_explorer(load_settings([]), None)
+        path = config_dir / "storage-explorer" / "launcher.py"
+        assert explorer._settings_path == str(path)
+        assert not path.exists()  # created when the button is clicked
+
+    def test_created_from_the_template(self, config_dir):
+        path = launcher.create_user_launcher_file()
+        assert path == config_dir / "storage-explorer" / "launcher.py"
+        assert "def filesystems():" in path.read_text(encoding="utf-8")
+        # As created, it changes nothing.
+        settings = load_settings([path])
+        assert settings.explorer_arguments() == defaults()
+        assert settings.warnings == []
+
+    def test_an_existing_file_is_kept(self, config_dir):
+        path = config_dir / "storage-explorer" / "launcher.py"
+        path.parent.mkdir(parents=True)
+        path.write_text("# mine\n", encoding="utf-8")
+        assert launcher.create_user_launcher_file() == path
+        assert path.read_text(encoding="utf-8") == "# mine\n"

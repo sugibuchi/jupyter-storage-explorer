@@ -183,6 +183,8 @@ def browse(x: Explorer) -> None:
     expect(x.el.locator(".jse-crumb").last).to_have_text("curated")
     x.el.locator(".jse-crumb", has_text="/sales-lake").click()
     expect(x.names.first).to_have_text("curated")
+    # Launcher settings: only in the launcher's tabs (see launcher_settings).
+    expect(x.el.locator(".jse-settings-btn")).to_be_hidden()
 
 
 @check
@@ -622,7 +624,8 @@ def open_in_jupyterlab(x: Explorer) -> None:
     # A text file, which opens in JupyterLab's editor.
     paste_from_lake(x, "daily_orders.yaml", "pipelines")
     x.row("daily_orders.yaml").click()
-    x.el.locator(".jse-status-bar .jse-preview-btn").click()  # previewed, to see the edit
+    # Previewed, to see the edit.
+    x.el.locator(".jse-status-bar .jse-preview-btn").click()
     x.row("daily_orders.yaml").dblclick()
     editor = x.page.locator(".jp-FileEditor .cm-content").first
     expect(editor).to_contain_text("pipeline: daily_orders")
@@ -968,6 +971,43 @@ def launcher_tab(lab: Lab, page: Page) -> None:
     tab = open_launcher_tab(lab, page)
     expect(tab.locator(".jse-tree .jse-node").first).to_contain_text("sales-lake")
     expect(tab.locator(".jse-fs-select")).to_be_visible()
+
+
+@lab_check
+def launcher_settings(lab: Lab, page: Page) -> None:
+    # The settings button opens the user's launcher.py in JupyterLab's editor,
+    # created from the template if missing (once the user agrees); saved, it
+    # applies to new tabs.
+    path = lab.folder / "config" / "storage-explorer" / "launcher.py"
+    with lab.launcher_settings(_lab.LAUNCHER_PY):
+        tab = open_launcher_tab(lab, page)
+        path.unlink()  # read when the tab started
+        dialog = tab.locator(".jse-dialog:visible")
+        tab.locator(".jse-settings-btn").click()
+        expect(dialog).to_contain_text("Create your launcher settings")
+        dialog.get_by_role("button", name="Cancel").click()
+        expect(dialog).to_be_hidden()
+        assert not path.exists()
+        tab.locator(".jse-settings-btn").click()
+        dialog.get_by_role("button", name="Create").click()
+        editor = page.locator(".jp-FileEditor .cm-content").first
+        expect(editor).to_contain_text("def filesystems():")
+        expect(page.locator(".lm-TabBar-tab.jp-mod-current")).to_contain_text(
+            "launcher.py"
+        )
+        assert "def filesystems():" in path.read_text(encoding="utf-8")
+        editor.click()
+        page.keyboard.press("Control+End")
+        # Not typed: the editor would indent and close brackets itself.
+        page.keyboard.insert_text(
+            "\n\ndef parameters():\n    return {'open_preview': True}\n"
+        )
+        page.keyboard.press("Control+s")
+        wait_for(lambda: "open_preview" in path.read_text(encoding="utf-8"), "the save")
+        tab = open_launcher_tab(lab, page)  # the folder it opens on, as no storages
+        expect(tab.locator(".jse-preview-panel")).to_contain_text(
+            "Click a file to preview it"
+        )
 
 
 @lab_check

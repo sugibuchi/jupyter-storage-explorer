@@ -71,12 +71,16 @@ and ``~/.jupyter/storage-explorer/launcher.py``::
 
     def parameters():
         return {"max_browser_items": 50_000}
+
+The tab's settings button (in its toolbar) opens the user's file in
+JupyterLab's editor, created from ``launcher_template.py`` if it is missing.
 """
 
 from __future__ import annotations
 
 import contextlib
 import dataclasses
+import importlib.resources
 import importlib.util
 import inspect
 import json
@@ -191,6 +195,32 @@ def states_file() -> pathlib.Path:
     directory (``~/.jupyter`` unless ``JUPYTER_CONFIG_DIR`` is set), beside
     their ``storage-explorer/launcher.py``."""
     return pathlib.Path(jupyter_config_dir(), "storage-explorer", "states.json")
+
+
+def user_launcher_file() -> pathlib.Path:
+    """The user's launcher.py, in their Jupyter configuration directory
+    (``~/.jupyter`` unless ``JUPYTER_CONFIG_DIR`` is set), which the tab's
+    settings button opens; it may not exist yet."""
+    return pathlib.Path(jupyter_config_dir(), LAUNCHER_FILE)
+
+
+def create_user_launcher_file() -> pathlib.Path:
+    """``user_launcher_file()``, created from the template (every function
+    commented out but an empty ``filesystems()``, so it changes nothing) if
+    it is missing; an existing file is left as it is."""
+    path = user_launcher_file()
+    if not path.exists():
+        template = importlib.resources.files(__package__).joinpath(
+            "launcher_template.py"
+        )
+        path.parent.mkdir(parents=True, exist_ok=True)
+        # "x": never over a file created meanwhile, e.g. by another tab.
+        with (
+            contextlib.suppress(FileExistsError),
+            path.open("x", encoding="utf-8") as f,
+        ):
+            f.write(template.read_text(encoding="utf-8"))
+    return path
 
 
 def find_launcher_files() -> list[pathlib.Path]:
@@ -381,6 +411,7 @@ def launch(view: str | None = None) -> None:
 def _create_explorer(settings: Settings, view: str | None) -> Any:
     """The explorer ``settings`` describe, showing ``view`` (see ``launch``)."""
     explorer = settings.create_widget()
+    explorer._offer_settings(user_launcher_file(), create_user_launcher_file)
     if view:
         # Else (e.g. a storage unreachable now) the explorer as it starts.
         with contextlib.suppress(Exception):

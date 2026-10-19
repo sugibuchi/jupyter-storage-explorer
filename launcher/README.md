@@ -36,27 +36,71 @@ Then see [Using the explorer](https://github.com/sugibuchi/jupyter-storage-explo
 
 ## Configuration
 
-Configure the tab with files `storage-explorer/launcher.py` in Jupyter's configuration directories (`jupyter --paths`,
-*config* section), e.g. `/etc/jupyter/storage-explorer/launcher.py` for everyone and
-`~/.jupyter/storage-explorer/launcher.py` for you. Each file is a layer, applied from the system's to the user's, and
-has some of these functions:
+Click the ⚙ button at the right of the tab's toolbar to edit your settings, a Python file (`launcher.py`), in
+JupyterLab's editor. If you have none, it offers to create one from a template with an example of each setting:
+uncomment and edit the ones you need, then save. Reload the web browser, then open the explorer tab again to apply
+the changes.
 
-| Function            | Returns                                                       | Merged with earlier layers                               |
-|---------------------|---------------------------------------------------------------|----------------------------------------------------------|
-| `filesystems()`     | `{name: URL or fsspec filesystem}`                            | By name: added or replaced; `None` removes one           |
-| `formats()`         | Formats of your own (`DataFormat`), tried before the defaults | Later layers' first                                      |
-| `format_options()`  | Options for the default formats ([Format options](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#format-options)) | By option name                                           |
-| `operations()`      | File operations of your own (`FileSystemOperations`)          | Later layers' first, all before the defaults             |
-| `filesystem_mappers()` | [How storages are told apart](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#file-transfer-between-file-systems) and their URLs (`FileSystemMapper`) | Later layers' first, all before the defaults |
-| `transfer_policy()` | Rules of a [transfer policy](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#transfer-policy) | Later layers' first, so they decide first                |
-| `parameters()`      | Other `StorageExplorer` arguments, e.g. `{"height": "fill"}`  | By name                                                  |
-| `final()`           | Settings later layers cannot change, e.g. `["filesystems"]`   | Function names (except `parameters`) and parameter names |
+For example, to open each tab on the data lake and the folder it starts on, with a preview at once:
 
-`"."` is the folder the tab opens on. The tabs share bookmarks and query settings in
-`~/.jupyter/storage-explorer/states.json`, unless `parameters()` sets `states` (`None`: in each tab's memory). Final
-settings are not a security boundary: users can still create explorers in notebooks.
+```python
+def filesystems():
+    return {
+        "Here": ".",  # the folder the tab opens on
+        "Data lake": "abfs://lake@myaccount.dfs.core.windows.net",
+    }
 
-For example, for everyone, `/etc/jupyter/storage-explorer/launcher.py`:
+
+def parameters():
+    return {"open_preview": True}
+```
+
+The file has some of these functions, all optional:
+
+| Function               | Returns                                                                                   |
+|------------------------|-------------------------------------------------------------------------------------------|
+| `filesystems()`        | `{name: URL or fsspec filesystem}`                                                        |
+| `formats()`            | Formats of your own (`DataFormat`), tried before the defaults                             |
+| `format_options()`     | Options for the default formats ([Format options](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#format-options)) |
+| `operations()`         | File operations of your own (`FileSystemOperations`), tried before the defaults           |
+| `filesystem_mappers()` | [How storages are told apart](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#file-transfer-between-file-systems) and their URLs (`FileSystemMapper`) |
+| `transfer_policy()`    | Rules of a [transfer policy](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#transfer-policy) |
+| `parameters()`         | Other `StorageExplorer` arguments ([StorageExplorer options](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#storageexplorer-options)), e.g. `{"height": "fill"}` |
+
+### Other configuration files
+
+Your files are in Jupyter's configuration directory, which `jupyter --config-dir` prints: `~/.jupyter` by default (on
+Windows, `%USERPROFILE%\.jupyter`), or `$JUPYTER_CONFIG_DIR` where that is set. `launcher.py` is in its
+`storage-explorer` folder.
+
+#### Icons
+
+To change the explorer's icons, use JupyterLab's `custom.css` (see
+[Icons](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/DEVELOPMENT.md#icons)), which applies to the
+launcher's tabs and to explorers in notebooks alike.
+
+#### Bookmarks and query settings
+
+The tabs share bookmarks and the data browser's query settings in `storage-explorer/states.json` in the same
+directory, unless `parameters()` sets `states` (another file's path, or `None`: in each tab's memory).
+
+### Layers of the configuration file
+
+Administrators can set up the tab for everyone: a `storage-explorer/launcher.py` in any of Jupyter's configuration
+directories (`jupyter --paths`, *config* section) is read, e.g. `/etc/jupyter/storage-explorer/launcher.py` for the
+whole system or `<environment>/etc/jupyter/storage-explorer/launcher.py` for one Python environment (e.g. a
+JupyterHub image). Each file is a layer, applied from the system's to the user's, so users' files usually come last.
+A later layer changes an earlier one's settings this way:
+
+| Function                                        | Merged with earlier layers                     |
+|-------------------------------------------------|------------------------------------------------|
+| `filesystems()`                                 | By name: added or replaced; `None` removes one |
+| `format_options()`, `parameters()`              | By name                                        |
+| `formats()`, `operations()`, `filesystem_mappers()` | Later layers' first, all before the defaults |
+| `transfer_policy()`                             | Later layers' rules first, so they decide first |
+
+`final()` returns the settings later layers cannot change: function names (except `parameters`) and parameter names.
+For example, `/etc/jupyter/storage-explorer/launcher.py`:
 
 ```python
 def filesystems():
@@ -78,14 +122,4 @@ def final():
     return ["filesystems", "transfer_policy"]  # users cannot change these
 ```
 
-And for one user, `~/.jupyter/storage-explorer/launcher.py`:
-
-```python
-def parameters():
-    return {"max_browser_items": 50_000}
-```
-
-To change the explorer's icons, use JupyterLab's `custom.css` (see
-[Icons](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/DEVELOPMENT.md#icons)), which applies to the
-launcher's tabs and to explorers in notebooks alike. `style()`, which earlier versions used for this, is ignored, with a
-warning in the tab.
+Final settings are not a security boundary: users can still create explorers in notebooks.

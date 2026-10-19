@@ -654,6 +654,15 @@
   user-select: none;
 }
 
+/* After Unsafe mode, in the launcher's tabs only. */
+.jse-settings-btn {
+  margin-right: 2px;
+}
+
+.jse-settings-btn[hidden] {
+  display: none;
+}
+
 /* The checkbox, hidden but focusable; the slider below shows its state. */
 .jse-switch-input {
   position: absolute;

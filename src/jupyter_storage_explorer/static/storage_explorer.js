@@ -188,6 +188,7 @@ function render({ model, el }) {
     "change:_selected_format": x.preview.updateButton,
     "change:_current_query": x.preview.updateButton,
     "change:_unsafe_mode": x.unsafe.render,
+    "change:_settings_path": x.toolbar.renderSettings,
     "msg:custom": onCustomMsg,
   };
   for (const [event, handler] of Object.entries(handlers)) model.on(event, handler);
@@ -195,6 +196,7 @@ function render({ model, el }) {
   applyHeight();
   x.tree.renderStorages();
   x.unsafe.render();
+  x.toolbar.renderSettings();
   onDirChange();
   x.list.render();
   x.preview.render();

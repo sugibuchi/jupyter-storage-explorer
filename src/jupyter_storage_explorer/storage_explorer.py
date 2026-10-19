@@ -284,6 +284,9 @@ class StorageExplorer(
     _explorer_id = traitlets.Unicode().tag(sync=True)
     # Absolute folder on the kernel's machine "Download to JupyterLab" copies into.
     _download_to_jupyterlab_path = traitlets.Unicode().tag(sync=True)
+    # The settings file the toolbar's settings button opens in JupyterLab, for
+    # its title; "" (no button) unless the launcher offers it (_offer_settings).
+    _settings_path = traitlets.Unicode().tag(sync=True)
 
     def __init__(
         self,
@@ -343,6 +346,9 @@ class StorageExplorer(
         # Data browsers in tabs of their own ("query_tab"): model id -> widget,
         # kept here while the tab is open.
         self._query_tabs: dict[str, DataExplorer] = {}
+        # The launcher's settings file and the function creating it (see
+        # _offer_settings); None in notebooks.
+        self._settings_file: tuple[str, Callable[[], Any]] | None = None
         self._formats = explorer_formats(formats, format_options)
         self._preview_limits = preview_limits or PreviewLimits()
         # Files being received from the user's computer (see _jobs/incoming.py).
@@ -691,6 +697,7 @@ class StorageExplorer(
             # Open in JupyterLab.
             "jupyterlab_get": self._jupyterlab_get,
             "jupyterlab_save": self._jupyterlab_save,
+            "settings_open": self._settings_open,
             # File operations: most start a job (see _start).
             "move": self._move_request,
             "rename": self._rename_request,
