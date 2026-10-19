@@ -1,4 +1,4 @@
-"""What formats share (formats/format.py, requirement.py, base.py): targets,
+"""What formats share (formats/base.py, requirement.py): targets,
 generated-code helpers, requirements, detection and file icons (the
 supports: test_supports.py)."""
 

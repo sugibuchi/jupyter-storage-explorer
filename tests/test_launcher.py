@@ -113,7 +113,8 @@ class TestMerging:
             "system",
             """
             from jupyter_storage_explorer.filesystems import FsspecOperations
-            from jupyter_storage_explorer.formats import Csv, CsvByPandas
+            from jupyter_storage_explorer.formats import Csv
+            from jupyter_storage_explorer.formats.supports import CsvByPandas
 
             def formats():
                 return [Csv()]
@@ -134,7 +135,8 @@ class TestMerging:
             "user",
             """
             from jupyter_storage_explorer.filesystems.operation import FileSystemOperations
-            from jupyter_storage_explorer.formats import Json, JsonByPandas
+            from jupyter_storage_explorer.formats import Json
+            from jupyter_storage_explorer.formats.supports import JsonByPandas
 
             def formats():
                 return [Json()]

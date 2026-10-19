@@ -70,7 +70,7 @@ explorer of exactly its own version (`launcher/hatch_build.py` sets its dependen
   (`StorageExplorer`'s mixins, with `states.py`, `listing.py` and `jupyterlab_files.py`), `_jobs/` (`tasks.py`:
   `FileTasks`; `runner.py`: `JobRunner`; `incoming.py`, `properties.py`, `transfer_policy.py`) and `_query/`
   (`filters.py`, `settings.py`: `QuerySettings`, `QueryState`; `data_query.py`: `DataQuery`, `fetch_rows`). Users import
-  from the top level, `filesystems` and `formats` only.
+  from the top level, `filesystems`, `formats` and `formats.supports` only.
 - `jupyter-storage-explorer-launcher` (`launcher/`): a JupyterLab launcher item opening a tab whose kernel runs
   `launch()`. It merges every `storage-explorer/launcher.py` in Jupyter's config paths as layers, system to user
   (their `filesystems()`, `formats()`, `supports()`, `format_options()` (merged by library, format, then option), `operations()`, `filesystem_mappers()`, `transfer_policy()`, `parameters()`;
@@ -260,13 +260,13 @@ there follow the browser's as closely as Python allows (natural order ignoring c
 The list's is cleared when another folder's listing arrives, not on the click, so the previous folder's items never show
 unfiltered.
 
-**Formats** (`formats/`). Laid out as `filesystems/`: the interfaces `DataFormat` (`format.py`, with `Target`,
-`Recipe`, `detect`, `FILE_ICONS`), `FormatSupport` (`support.py`, with `SupportChain` and `Capability`) and `Requirement`
+**Formats** (`formats/`). Laid out as `filesystems/`: the interfaces `DataFormat` (`base.py`, with `Target`,
+`Recipe`, `detect`, `FILE_ICONS`, and the generated code's helpers), `FormatSupport` (`support.py`, with `SupportChain` and `Capability`) and `Requirement`
 (`requirement.py`); a module per predefined format (`delta.py`, `parquet.py`, `excel.py`, `text.py`, `images.py`) and
 per library of the predefined supports in `supports/` (`polars.py`, `pandas.py`, `pyspark.py`, `fsspec.py`,
 `pillow.py`; `python.py` for those needing no package; named after the libraries, which they import only inside
-methods); the predefined packages in `requirements.py`, the
-preview sections in `preview.py` (tables from dataframes in `frames.py`), the generated code's helpers in `base.py`
+methods; exported by `formats.supports`, not `formats`); the predefined packages in `requirements.py`, the
+previews in `preview.py` (tables from dataframes in `frames.py`), the generated code's helpers in `base.py`
 (`snippet_options`, `format_kwargs`, `spark_url`), and the defaults in `utils.py` (`DEFAULT_FORMATS`,
 `DEFAULT_SUPPORTS`, `create_supports`). A format only detects; a support handles one format's data with one library,
 so a library is added to a format (e.g. DuckDB for Parquet) without touching it.

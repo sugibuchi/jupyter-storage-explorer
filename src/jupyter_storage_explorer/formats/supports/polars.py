@@ -19,7 +19,7 @@ from jupyter_storage_explorer.formats.text import Csv, Json, JsonLines
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from jupyter_storage_explorer.formats.format import Target
+    from jupyter_storage_explorer.formats.base import Target
     from jupyter_storage_explorer.formats.preview import Preview, PreviewLimits
 
 

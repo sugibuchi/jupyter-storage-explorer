@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import csv
 
-from jupyter_storage_explorer.formats.format import DataFormat, Target
+from jupyter_storage_explorer.formats.base import DataFormat, Target
 
 
 class Text(DataFormat):

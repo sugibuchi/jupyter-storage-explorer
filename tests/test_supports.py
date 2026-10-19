@@ -14,23 +14,25 @@ from jupyter_storage_explorer.formats import (
     DEFAULT_SUPPORTS,
     Capability,
     Csv,
-    CsvByPandas,
-    CsvByPolars,
     DeltaLake,
-    DeltaLakeByPolars,
-    ExcelByPolars,
     FormatSupport,
     InstallPreview,
     Parquet,
-    ParquetByPolars,
     PreviewLimits,
     Requirement,
     SupportChain,
     Text,
-    TextByFsspec,
     create_supports,
     default_formats,
     default_supports,
+)
+from jupyter_storage_explorer.formats.supports import (
+    CsvByPandas,
+    CsvByPolars,
+    DeltaLakeByPolars,
+    ExcelByPolars,
+    ParquetByPolars,
+    TextByFsspec,
 )
 
 LIMITS = PreviewLimits(max_rows=2)

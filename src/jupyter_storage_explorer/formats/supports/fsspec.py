@@ -13,7 +13,7 @@ from jupyter_storage_explorer.formats.text import Json, Text
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from jupyter_storage_explorer.formats.format import Target
+    from jupyter_storage_explorer.formats.base import Target
 
 
 class OpenedByFsspec(FormatSupport):

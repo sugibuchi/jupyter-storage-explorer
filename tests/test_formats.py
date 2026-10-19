@@ -13,9 +13,7 @@ import pytest
 
 from jupyter_storage_explorer.formats import (
     Csv,
-    CsvByPolars,
     DeltaLake,
-    DeltaLakeByPolars,
     Excel,
     Image,
     InstallPreview,
@@ -25,8 +23,6 @@ from jupyter_storage_explorer.formats import (
     MarkdownPreview,
     MediaPreview,
     Parquet,
-    ParquetByPandas,
-    ParquetByPolars,
     PreviewLimits,
     Requirement,
     SupportChain,
@@ -38,6 +34,12 @@ from jupyter_storage_explorer.formats import (
     default_supports,
 )
 from jupyter_storage_explorer.formats.requirements import Pillow
+from jupyter_storage_explorer.formats.supports import (
+    CsvByPolars,
+    DeltaLakeByPolars,
+    ParquetByPandas,
+    ParquetByPolars,
+)
 
 CHAIN = SupportChain(default_supports())
 

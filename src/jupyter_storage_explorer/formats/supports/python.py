@@ -22,7 +22,7 @@ from jupyter_storage_explorer.formats.support import FormatSupport
 from jupyter_storage_explorer.formats.text import Json, Markdown, Text
 
 if TYPE_CHECKING:
-    from jupyter_storage_explorer.formats.format import Target
+    from jupyter_storage_explorer.formats.base import Target
     from jupyter_storage_explorer.formats.preview import Preview, PreviewLimits
 
 

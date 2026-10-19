@@ -10,7 +10,7 @@ from jupyter_storage_explorer.formats.requirements import Fsspec, Pillow
 from jupyter_storage_explorer.formats.supports.fsspec import OpenedByFsspec
 
 if TYPE_CHECKING:
-    from jupyter_storage_explorer.formats.format import Target
+    from jupyter_storage_explorer.formats.base import Target
 
 
 class ImageByPillow(OpenedByFsspec):

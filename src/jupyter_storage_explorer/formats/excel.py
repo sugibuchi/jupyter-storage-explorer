@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from jupyter_storage_explorer.formats.format import DataFormat
+from jupyter_storage_explorer.formats.base import DataFormat
 
 
 class Excel(DataFormat):

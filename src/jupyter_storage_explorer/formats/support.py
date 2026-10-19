@@ -8,13 +8,13 @@ from __future__ import annotations
 import inspect
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, TypeAlias
 
-from jupyter_storage_explorer.formats.format import Recipe
+from jupyter_storage_explorer.formats.base import Recipe
 from jupyter_storage_explorer.formats.preview import InstallPreview
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
-    from jupyter_storage_explorer.formats.format import DataFormat, Target
+    from jupyter_storage_explorer.formats.base import DataFormat, Target
     from jupyter_storage_explorer.formats.preview import Preview, PreviewLimits
     from jupyter_storage_explorer.formats.requirement import (
         Requirement,

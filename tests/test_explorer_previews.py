@@ -5,7 +5,8 @@ from __future__ import annotations
 from explorers import path_of
 
 from jupyter_storage_explorer._query.settings import QuerySettings
-from jupyter_storage_explorer.formats import CsvByPandas, CsvByPolars, Requirement
+from jupyter_storage_explorer.formats import Requirement
+from jupyter_storage_explorer.formats.supports import CsvByPandas, CsvByPolars
 
 
 class TestPreview:

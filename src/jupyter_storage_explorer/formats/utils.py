@@ -5,9 +5,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from jupyter_storage_explorer.formats.base import FILE_ICONS
 from jupyter_storage_explorer.formats.delta import DeltaLake
 from jupyter_storage_explorer.formats.excel import Excel
-from jupyter_storage_explorer.formats.format import FILE_ICONS
 from jupyter_storage_explorer.formats.images import Image
 from jupyter_storage_explorer.formats.parquet import Parquet
 from jupyter_storage_explorer.formats.support import FormatSupport, support_options
@@ -45,7 +45,7 @@ from jupyter_storage_explorer.formats.text import Csv, Json, JsonLines, Markdown
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
-    from jupyter_storage_explorer.formats.format import DataFormat
+    from jupyter_storage_explorer.formats.base import DataFormat
 
 # The formats explorers use unless given others; ``default_formats`` creates them.
 # On a tie in priority, the format listed first wins.
