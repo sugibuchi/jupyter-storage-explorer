@@ -41,6 +41,8 @@ JupyterLab's editor. If you have none, it offers to create one from a template w
 uncomment and edit the ones you need, then save. Reload the web browser, then open the explorer tab again to apply
 the changes.
 
+<img src="https://raw.githubusercontent.com/sugibuchi/jupyter-storage-explorer/main/launcher/figs/settings-button.png" width="822" alt="The settings button (a gear) after Unsafe mode in the tab's toolbar">
+
 For example, to open each tab on the data lake and the folder it starts on, with a preview at once:
 
 ```python
