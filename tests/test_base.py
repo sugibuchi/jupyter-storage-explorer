@@ -1,6 +1,6 @@
 """What formats share (formats/base.py, package.py): reading files
-(ItemContext), generated-code helpers, requirements, detection and file
-icons (the supports: test_supports.py)."""
+(ItemContext), generated-code helpers, requirements and detection (the
+supports: test_supports.py; the formats' file icons: test_explorer_icons.py)."""
 
 from __future__ import annotations
 
@@ -10,11 +10,8 @@ import polars
 import pytest
 from items import local_item
 
-from jupyter_storage_explorer import StorageExplorer
-from jupyter_storage_explorer._explorer.icons import format_icons
 from jupyter_storage_explorer.filesystems import S3Location
 from jupyter_storage_explorer.formats import (
-    FILE_ICONS,
     Csv,
     DeltaLake,
     Parquet,
@@ -22,7 +19,6 @@ from jupyter_storage_explorer.formats import (
     SupportOptions,
     Text,
     ViewLimits,
-    default_formats,
     format_kwargs,
 )
 from jupyter_storage_explorer.formats.base import detect, matching_formats
@@ -153,55 +149,3 @@ class TestDetection:
 @pytest.mark.parametrize("name", ["DATA.CSV", "data.tsv"])
 def test_extensions_ignore_case(make_item, name):
     assert Csv().matches(make_item(f"/{name}", b"a\n"))
-
-
-class TestFileIcons:
-    """Each format's file_icon, sent to the frontend by format name; files of
-    formats without one get their extension's icon there (icons.js)."""
-
-    SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"/>'
-
-    def avro(self, icon):
-        return type("Avro", (Csv,), {"name": "avro", "file_icon": icon})()
-
-    def test_default_formats(self):
-        assert format_icons(default_formats()) == (
-            {
-                "parquet": "spreadsheet",
-                "csv": "spreadsheet",
-                "excel": "spreadsheet",
-                "json": "json",
-                "json-lines": "json",
-                "markdown": "markdown",
-                "image": "image",
-            },  # not Text (Python, YAML, ... by extension), nor Delta (folders)
-            {},
-        )
-
-    def test_one_of_jupyterlabs(self):
-        explorer = StorageExplorer(fs=None, formats=[self.avro("file"), Text()])
-        assert explorer._format_icons == {"avro": "file"}
-        assert explorer._file_icon_svgs == {}
-
-    def test_own_svg(self):
-        explorer = StorageExplorer(fs=None, formats=[self.avro(("avro", self.SVG))])
-        assert explorer._format_icons == {"avro": "avro"}
-        assert explorer._file_icon_svgs == {"avro": self.SVG}
-
-    @pytest.mark.parametrize(
-        ("icon", "error"),
-        [
-            ("avro", "unknown file_icon of format 'avro': 'avro'"),
-            (("json", SVG), "name it other than"),
-            (("avro", "<div/>"), "not SVG markup"),
-        ],
-    )
-    def test_invalid(self, icon, error):
-        assert "spreadsheet" in FILE_ICONS
-        with pytest.raises(ValueError, match=error):
-            format_icons([self.avro(icon)])
-
-    def test_one_name_per_svg(self):
-        other = type("Orc", (Csv,), {"name": "orc", "file_icon": ("avro", "<svg/>")})
-        with pytest.raises(ValueError, match="another icon is named 'avro'"):
-            format_icons([self.avro(("avro", self.SVG)), other()])
