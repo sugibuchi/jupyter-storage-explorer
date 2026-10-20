@@ -303,6 +303,15 @@ class DataExplorer(anywidget.AnyWidget):
         """
         self._change_callbacks.register(callback, remove=remove)
 
+    def close(self) -> None:
+        """Close the widget. A tab of a ``StorageExplorer``'s data ("View in
+        a new tab") also closes the view its data came from (``View.close``)."""
+        # Also called on deletion, of explorers whose __init__ failed too.
+        data = getattr(self, "_data", None)
+        if data is not None:
+            data.close()
+        super().close()
+
     def _on_custom_msg(
         self, _widget: Any, content: dict[str, Any], _buffers: Any
     ) -> None:

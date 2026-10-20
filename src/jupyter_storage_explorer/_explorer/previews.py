@@ -40,7 +40,11 @@ class _Detected(NamedTuple):
 def section(view: View) -> dict[str, Any]:
     """A view other than a ``QueryView`` as JSON for the frontend (a section
     of the preview panel or a view tab); media bytes are base64-encoded."""
-    data = {f.name: getattr(view, f.name) for f in dataclasses.fields(view)}
+    data = {
+        f.name: getattr(view, f.name)
+        for f in dataclasses.fields(view)
+        if f.name != "on_close" and not f.name.startswith("_")
+    }
     if isinstance(view, MediaView) and view.data is not None:
         data["data"] = base64.b64encode(view.data).decode("ascii")
     return {"kind": view.kind, **jsonable(data)}
@@ -111,6 +115,8 @@ class PreviewsMixin:
         }
         # Shown while the (possibly remote) reads below run.
         self._preview = {**base, "loading": True}
+        view: View | None = None
+        data: DataQuery | None = None
         try:
             item = self._detect(path)
             if item is None:
@@ -127,17 +133,38 @@ class PreviewsMixin:
                 view = viewer()
                 if isinstance(view, QueryView):
                     data = self._new_query(view, viewer, item)
-                    self._queries[path] = data
                     base["query"] = data.opening()
                 else:
                     base["sections"] = [section(view)]
         except Exception as exc:
             base["error"] = error_text(exc)
+            # Nothing shows them: released at once (closing is idempotent).
+            if data is not None:
+                data.close()
+            if view is not None:
+                view.close()
+            view = data = None
+        # The previous preview's, closed once the new one is open.
+        self._release_preview()
+        if data is not None:
+            self._queries[path] = data
+        else:
+            self._preview_view = view
         self._preview = base
 
     def _close_preview(self) -> None:
-        self._queries.clear()
+        self._release_preview()
         self._preview = {}
+
+    def _release_preview(self) -> None:
+        """Close what the preview panel shows: the data browser's query (and
+        so the view its data came from), or the view shown."""
+        queries, self._queries = list(self._queries.values()), {}
+        view, self._preview_view = self._preview_view, None
+        for data in queries:
+            data.close()
+        if view is not None:
+            view.close()
 
     # --- The query in the preview panel, for query_result() and
     # on_query_change() ---
@@ -167,17 +194,27 @@ class PreviewsMixin:
         ``item``: read again with ``viewer`` (reload).
 
         Settings are remembered by location, so they follow the data across
-        explorers and tabs, with the mode last chosen for it.
+        explorers and tabs, with the mode last chosen for it. The query owns
+        the view its data came from: each reload's view replaces it (closed
+        once the new one is open), and closing the query closes the last.
         """
         first = [view.data]
+        # The view the query's data is from, the only one open.
+        current = [view]
 
         def source() -> Any:
             if first:  # the data just viewed, not read twice
                 return first.pop()
             again = viewer()
             if not isinstance(again, QueryView):
+                again.close()
                 raise ValueError(f"{_paths.basename(item.path)} cannot be queried now")
+            previous, current[0] = current[0], again
+            previous.close()
             return again.data
+
+        def close() -> None:
+            current[0].close()
 
         key = item.location
         state = self._states.query(key)
@@ -188,6 +225,7 @@ class PreviewsMixin:
             "max_live_rows": limits.max_live_rows,
             "max_memory_rows": limits.max_memory_rows,
             "page_rows": limits.max_display_rows,
+            "on_close": close,
         }
         try:
             return DataQuery(source, key, self._states, mode=mode, **options)
@@ -208,6 +246,8 @@ class PreviewsMixin:
         until the tab closes ("view_tab_closed"). {"model_id", "title",
         "url"} or {"error"}."""
         path = content.get("path")
+        view: View | None = None
+        data: DataQuery | None = None
         try:
             item, fmt = self._formats_of(path, content.get("format") or None)
             viewer = self._viewer(fmt, item)
@@ -224,14 +264,21 @@ class PreviewsMixin:
                     height="fill",
                 )
             else:
-                widget = ViewTab(section(view), title=title, label=fmt.label)
+                widget = ViewTab(
+                    section(view), title=title, label=fmt.label, on_close=view.close
+                )
         except Exception as exc:
+            if data is not None:
+                data.close()
+            if view is not None:
+                view.close()
             return {"error": error_text(exc)}
         self._view_tabs[widget.model_id] = widget
         return {"model_id": widget.model_id, "title": title, "url": item.location.url}
 
     def _view_tab_closed(self, model_id: str) -> None:
-        """The tab of a "view_tab" closed: its widget is no longer kept."""
+        """The tab of a "view_tab" closed: its widget is no longer kept, and
+        closing it closes its view."""
         widget = self._view_tabs.pop(model_id, None)
         if widget is not None:
             widget.close()

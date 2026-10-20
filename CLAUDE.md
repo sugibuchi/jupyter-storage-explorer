@@ -336,6 +336,11 @@ so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
   `InstallView` naming the missing packages per support, so supports never check. `ViewLimits`: `max_bytes`,
   `max_display_rows` (table views' rows and the data browser's page size, sent as `"page_rows"`),
   `max_whole_file_bytes`, `max_live_rows` and `max_memory_rows` (the data browser's; `StorageExplorer(view_limits=)`).
+  A view's `on_close` (an `__init__` argument, not sent to the frontend) is called by `View.close()`, once only, errors
+  logged: the explorer closes a view once it no longer shows it (`_release_preview`: another preview, the panel closed,
+  another storage; a view tab closed; `StorageExplorer.close()`). A `QueryView`'s `DataQuery` owns it (its
+  `on_close`): a reload's view replaces it, the previous one closed, and closing the query (`DataExplorer.close()` for
+  a tab) closes the last.
   `_query/data_query.py`'s `DataQuery` does filters, sort and paging as narwhals expressions, either on the data itself
   ("live") or on rows read into memory (queried with polars); behaviour such as regex syntax then follows the data's
   library.
@@ -364,7 +369,7 @@ snippets never get storage options (`spark_url()` rewrites `abfs`/`s3` to `abfss
 - Docstrings of the public API, what users construct, call, subclass or override (`StorageExplorer`, `DataExplorer`,
   `fetch_rows` (the `fetch_rows=` default of both), `QuerySettings`, `ExplorerStates` (with `Bookmark`,
   `QueryState`), `FileSystemOperations` and its subclasses (with `_copy_file`, `_move_file`), `Measurement`,
-  `Progress`, `DataFormat`, `FormatSupport`, `Location` and its subclasses, `FileSystemMapper` and its subclasses, `MapperChain`, `same_filesystem`), are in numpy style:
+  `Progress`, `DataFormat`, `FormatSupport`, `View`, `Location` and its subclasses, `FileSystemMapper` and its subclasses, `MapperChain`, `same_filesystem`), are in numpy style:
   `Parameters`, `Returns`, `Raises`, `Attributes`, `See Also`, `Examples`. Internal ones (underscore names,
   `DataQuery`, `FileTasks`, `JobRunner`, the mixins, ...) stay prose.
 - `from __future__ import annotations` everywhere, with type-only imports under `TYPE_CHECKING` (ruff `TC` rules).

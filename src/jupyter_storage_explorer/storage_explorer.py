@@ -59,6 +59,7 @@ if TYPE_CHECKING:
     from jupyter_storage_explorer.data_explorer import DataExplorer
     from jupyter_storage_explorer.filesystems.mapper import FileSystemMapper
     from jupyter_storage_explorer.filesystems.operation import FileSystemOperations
+    from jupyter_storage_explorer.formats import View
     from jupyter_storage_explorer.location import Location
 
     # A request's handler: the reply to its content (see _requests).
@@ -361,6 +362,9 @@ class StorageExplorer(
         self._listing_version = 0
         # Data browser: path -> the data being queried.
         self._queries: dict[str, DataQuery] = {}
+        # The view the preview panel shows, if not the data browser's (whose
+        # query owns its view): closed when the panel shows something else.
+        self._preview_view: View | None = None
         # Views in tabs of their own ("view_tab"): model id -> widget,
         # kept here while the tab is open.
         self._view_tabs: dict[str, DataExplorer | ViewTab] = {}
@@ -478,7 +482,7 @@ class StorageExplorer(
         # One update for the frontend: separate ones would let it combine the
         # new root with the old folder (or the reverse) and ask the new
         # filesystem to list the old filesystem's paths.
-        self._queries.clear()
+        self._release_preview()
         with self.hold_sync():
             # An open panel stays open, for the files of this storage.
             self._preview = {"empty": True} if self._preview else {}
@@ -636,7 +640,10 @@ class StorageExplorer(
         As ``DataExplorer.result()``: built on the data itself, so it covers
         all of it, also after In memory mode, where the browser showed the
         first rows only. Data viewed in a new tab is not the preview panel's:
-        its ``DataExplorer`` gives its own.
+        its ``DataExplorer`` gives its own. Execute it while the panel shows
+        the data: some supports release what their data reads from (e.g. a
+        database connection) once the panel shows something else
+        (``View.close``).
 
         Parameters
         ----------
@@ -713,6 +720,17 @@ class StorageExplorer(
         >>> display(explorer, chart)
         """
         self._query_callbacks.register(callback, remove=remove)
+
+    def close(self) -> None:
+        """Close the widget, with the views it shows: the preview panel's and
+        those of its tabs ("View in a new tab"), whose tabs close with it."""
+        # Also called on deletion, of explorers whose __init__ failed too.
+        if hasattr(self, "_view_tabs"):
+            self._release_preview()
+            tabs, self._view_tabs = list(self._view_tabs.values()), {}
+            for widget in tabs:
+                widget.close()
+        super().close()
 
     def _changed(self) -> None:
         """Call the ``on_change`` functions if the storage, the folder shown or
@@ -837,6 +855,8 @@ class StorageExplorer(
         # Opened, closed (also by the frontend) or another preview: the
         # query shown may have changed. Not while one loads, so that going
         # from one table to the next does not tell of none between them.
+        if not change["new"]:
+            self._release_preview()  # closed, e.g. by the frontend's close button
         if not change["new"].get("loading"):
             self._query_changed()
 

@@ -5,12 +5,15 @@ rendered as the preview panel renders them (static/sections.js)."""
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import anywidget
 import traitlets
 
 from jupyter_storage_explorer import _static
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 class ViewTab(anywidget.AnyWidget):
@@ -27,9 +30,24 @@ class ViewTab(anywidget.AnyWidget):
     title = traitlets.Unicode().tag(sync=True)
     label = traitlets.Unicode().tag(sync=True)
 
-    def __init__(self, view: dict[str, Any], *, title: str, label: str) -> None:
+    def __init__(
+        self,
+        view: dict[str, Any],
+        *,
+        title: str,
+        label: str,
+        on_close: Callable[[], object] | None = None,
+    ) -> None:
         super().__init__(view=view, title=title, label=label)
+        # The view's own close, called when the tab closes the widget.
+        self._on_close = on_close
         self.on_msg(self._on_custom_msg)
+
+    def close(self) -> None:
+        on_close, self._on_close = self._on_close, None
+        if on_close is not None:
+            on_close()
+        super().close()
 
     def _on_custom_msg(
         self, _widget: Any, content: dict[str, Any], buffers: Any
