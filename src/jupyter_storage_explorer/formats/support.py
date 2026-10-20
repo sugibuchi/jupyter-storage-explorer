@@ -1,14 +1,15 @@
 """How to handle data in a format with a library: the ``FormatSupport``
-interface, and ``SupportChain``, by which explorers choose a support for
-each capability (the predefined supports are in supports/, a module per
-library: polars.py, pandas.py, ...)."""
+interface, ``SupportChain``, by which explorers choose a support for each
+capability, and the ``Recipe`` of a support's code (the predefined supports
+are in supports/, a module per library: polars.py, pandas.py, ...)."""
 
 from __future__ import annotations
 
 import inspect
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, TypeAlias
 
-from jupyter_storage_explorer.formats.base import Recipe, name_of
+from jupyter_storage_explorer.formats.base import name_of
 from jupyter_storage_explorer.formats.preview import InstallPreview
 
 if TYPE_CHECKING:
@@ -28,6 +29,22 @@ if TYPE_CHECKING:
 # doing it: preview it, query it in the data browser, give a recipe, the code
 # loading it ("Python code").
 Capability: TypeAlias = Literal["preview", "query", "recipe"]
+
+
+@dataclass(frozen=True, kw_only=True)
+class Recipe:
+    """One way to load the data in a notebook, e.g. with polars or with
+    pandas: a support's ``recipe()`` code, with its requirements (see
+    ``SupportChain.recipes``)."""
+
+    # The packages the code needs: the library it loads with first (its
+    # support's ``use``, which names the recipe, e.g. "Load with polars"),
+    # then the others (``additional_requirements``); empty for Python alone.
+    requirements: Requirements
+    # The imports, then the loading code. Installing the packages and
+    # configuring access to the storage are left to the user: reaching a data
+    # lake often needs configuration that depends on it.
+    code: str
 
 
 class FormatSupport:

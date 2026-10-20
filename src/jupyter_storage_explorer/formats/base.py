@@ -1,6 +1,6 @@
-"""The base of formats: the ``DataFormat`` interface, ``detect``, and the
-``Recipe`` supports give; helpers reading a file through its fsspec
-filesystem (``head_text``, ``read_whole``, ...); and helpers for the code
+"""The base of formats: the ``DataFormat`` interface and ``detect``; helpers
+reading a file through its fsspec filesystem (``head_text``,
+``read_whole``, ...); and helpers for the code
 supports generate ("Python code"): storage options fit to show, keyword
 arguments for recipe templates, and URLs as libraries and Spark read them.
 The predefined formats each have a module (delta.py, parquet.py, text.py,
@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from jupyter_storage_explorer.filesystems.locations import LocalLocation
@@ -21,7 +20,6 @@ if TYPE_CHECKING:
     from fsspec import AbstractFileSystem
 
     from jupyter_storage_explorer.formats.preview import PreviewLimits
-    from jupyter_storage_explorer.formats.requirement import Requirements
     from jupyter_storage_explorer.location import Location
 
 
@@ -72,20 +70,6 @@ def read_whole(fs: AbstractFileSystem, path: str, limits: PreviewLimits) -> byte
         limit = limits.max_whole_file_bytes // (1024 * 1024)
         raise ValueError(f"too large to preview (over {limit} MB)")
     return fs.cat_file(path)
-
-
-@dataclass(frozen=True, kw_only=True)
-class Recipe:
-    """One way to load the data in a notebook, e.g. with polars or with pandas."""
-
-    # The packages the code needs: the library it loads with first (its
-    # support's ``use``, which names the recipe, e.g. "Load with polars"),
-    # then the others (``additional_requirements``); empty for Python alone.
-    requirements: Requirements
-    # The imports, then the loading code. Installing the packages and
-    # configuring access to the storage are left to the user: reaching a data
-    # lake often needs configuration that depends on it.
-    code: str
 
 
 # The icons a format's files can have in the explorer's list (``file_icon``):

@@ -15,7 +15,6 @@ explorers use by default.
 from jupyter_storage_explorer.formats.base import (
     FILE_ICONS,
     DataFormat,
-    Recipe,
     child_names,
     detect,
     file_size,
@@ -47,6 +46,7 @@ from jupyter_storage_explorer.formats.requirement import Requirement, Requiremen
 from jupyter_storage_explorer.formats.support import (
     Capability,
     FormatSupport,
+    Recipe,
     SupportChain,
 )
 from jupyter_storage_explorer.formats.text import Csv, Json, JsonLines, Markdown, Text

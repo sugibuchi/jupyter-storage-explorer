@@ -284,8 +284,8 @@ The list's is cleared when another folder's listing arrives, not on the click, s
 unfiltered.
 
 **Formats** (`formats/`). Laid out as `filesystems/`: the interfaces `DataFormat` (`base.py`, with
-`Recipe`, `detect`, `FILE_ICONS`, the helpers reading a file through its filesystem, `head_text`, `read_whole`,
-`file_size`, `name_of`, `child_names`, and the generated code's helpers), `FormatSupport` (`support.py`, with `SupportChain` and `Capability`) and `Requirement`
+`detect`, `FILE_ICONS`, the helpers reading a file through its filesystem, `head_text`, `read_whole`,
+`file_size`, `name_of`, `child_names`, and the generated code's helpers), `FormatSupport` (`support.py`, with `SupportChain`, `Capability` and `Recipe`) and `Requirement`
 (`requirement.py`); a module per predefined format (`delta.py`, `parquet.py`, `excel.py`, `text.py`, `images.py`) and
 per library of the predefined supports in `supports/` (`polars.py`, `pandas.py`, `pyspark.py`, `fsspec.py`,
 `pillow.py`; `python.py` for those needing no package; named after the libraries, which they import only inside
