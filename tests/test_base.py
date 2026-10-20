@@ -11,6 +11,7 @@ import pytest
 from items import local_item
 
 from jupyter_storage_explorer import StorageExplorer
+from jupyter_storage_explorer._explorer.icons import format_icons
 from jupyter_storage_explorer.filesystems import S3Location
 from jupyter_storage_explorer.formats import (
     FILE_ICONS,
@@ -26,7 +27,6 @@ from jupyter_storage_explorer.formats import (
 )
 from jupyter_storage_explorer.formats.base import detect, matching_formats
 from jupyter_storage_explorer.formats.packages import Polars
-from jupyter_storage_explorer.formats.utils import format_icons
 
 
 class TestReading:

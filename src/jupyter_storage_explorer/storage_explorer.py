@@ -18,6 +18,7 @@ from jupyter_storage_explorer._explorer.common import (
     within_top,
 )
 from jupyter_storage_explorer._explorer.folders import FoldersMixin
+from jupyter_storage_explorer._explorer.icons import format_icons
 from jupyter_storage_explorer._explorer.jobs import JobsMixin
 from jupyter_storage_explorer._explorer.jupyterlab import JupyterLabFilesMixin
 from jupyter_storage_explorer._explorer.listing import Listing
@@ -44,7 +45,7 @@ from jupyter_storage_explorer.formats import (
     ViewLimits,
     default_formats,
 )
-from jupyter_storage_explorer.formats.utils import DEFAULT_SUPPORTS, format_icons
+from jupyter_storage_explorer.formats.defaults import DEFAULT_SUPPORTS
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence

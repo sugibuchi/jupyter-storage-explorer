@@ -28,6 +28,7 @@ from jupyter_storage_explorer.formats import (
     secret_dict_field,
     secret_field,
 )
+from jupyter_storage_explorer.formats.defaults import DEFAULT_FORMATS, DEFAULT_SUPPORTS
 from jupyter_storage_explorer.formats.supports import (
     CsvByPandas,
     CsvByPolars,
@@ -42,7 +43,6 @@ from jupyter_storage_explorer.formats.supports import (
     TextByFsspec,
     TextByPython,
 )
-from jupyter_storage_explorer.formats.utils import DEFAULT_FORMATS, DEFAULT_SUPPORTS
 
 LIMITS = ViewLimits(max_display_rows=2)
 

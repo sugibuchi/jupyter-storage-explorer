@@ -8,11 +8,12 @@ its data with one library (views, recipes), and ``PythonPackage``
 module (delta.py, parquet.py, excel.py, text.py, images.py), the predefined
 supports one per library in the ``supports`` package (imported from there),
 and packages.py has the predefined packages. view.py has the views supports
-return. ``default_formats()`` and ``default_supports()`` (utils.py) create
+return. ``default_formats()`` and ``default_supports()`` (defaults.py) create
 those explorers use by default.
 """
 
 from jupyter_storage_explorer.formats.base import FILE_ICONS, DataFormat, ItemContext
+from jupyter_storage_explorer.formats.defaults import default_formats, default_supports
 from jupyter_storage_explorer.formats.delta import DeltaLake
 from jupyter_storage_explorer.formats.excel import Excel
 from jupyter_storage_explorer.formats.images import Image
@@ -28,7 +29,6 @@ from jupyter_storage_explorer.formats.support import (
     secret_field,
 )
 from jupyter_storage_explorer.formats.text import Csv, Json, JsonLines, Markdown, Text
-from jupyter_storage_explorer.formats.utils import default_formats, default_supports
 from jupyter_storage_explorer.formats.view import (
     MarkdownView,
     MediaView,

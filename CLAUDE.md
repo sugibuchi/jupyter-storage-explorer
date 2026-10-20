@@ -301,12 +301,12 @@ per library of the predefined supports in `supports/` (`polars.py`, `pandas.py`,
 methods; exported by `formats.supports`, not `formats`); the predefined packages in `packages.py`, the
 views in `view.py` (`View`s, `ViewLimits`; tables made from dataframes in each library's support module, which
 give their counts, `TableView.more`, `total` and `unit`, and the explorer words them in the note, `section()`'s
-`_rows_note`: presentation stays out of `formats`, which never imports `_explorer`), and the defaults in `utils.py` (`DEFAULT_FORMATS`,
+`_rows_note`: presentation stays out of `formats`, which never imports `_explorer`), and the defaults in `defaults.py` (`DEFAULT_FORMATS`,
 `DEFAULT_SUPPORTS`). A format only detects; a support handles one format's data with one library,
 so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
 - `DataFormat` subclasses declare `name`, `label`, `priority`, `extensions`, `file_icon` (its files' icon in the list:
   one of `FILE_ICONS`, or `(name, svg)` for one of its own, shown as an `<img>` so its scripts never run; sent as
-  `_format_icons` and `_file_icon_svgs`, checked by `format_icons()`; files of formats without one, e.g. Text's, get
+  `_format_icons` and `_file_icon_svgs`, checked by `format_icons()` (`_explorer/icons.py`); files of formats without one, e.g. Text's, get
   their extension's icon, `FILE_ICON_EXTENSIONS` in `icons.js`) and implement `matches(ctx)`: cheap detection, called on
   every click. `ctx` is an `ItemContext` (`base.py`): a frozen dataclass of the item's `location`, the explorer's
   `fs` and its `path` there (to read more), its fsspec `info` and `children` (a folder's listing, None for a file;
