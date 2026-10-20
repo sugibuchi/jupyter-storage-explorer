@@ -35,7 +35,7 @@ Python and `static/` changes need no build: restart the kernel. The launcher's J
 
 The Python tests: fixtures in `tests/conftest.py` are `memfs` (a cleared fsspec memory filesystem), `make_target`
 (writes a file there and returns its `Target`), and `mem_explorer` and `local` (explorers of those). Anything polars
-reads by URL (`scan`, polars previews, the data browser) needs real local files (`tmp_path`), as polars cannot read
+reads by URL (`query`, polars previews, the data browser) needs real local files (`tmp_path`), as polars cannot read
 `memory://`. The data browser's tests run each filter on polars, pandas, PyArrow, DuckDB and sqlframe (the PySpark API
 on DuckDB, which narwhals queries as it does Spark; real Spark needs Java, so it is not tested). The widget tests
 subclass the widget to capture `send()` and drive it through `_on_custom_msg`, as the frontend would; for
@@ -70,10 +70,10 @@ explorer of exactly its own version (`launcher/hatch_build.py` sets its dependen
   (`StorageExplorer`'s mixins, with `states.py`, `listing.py` and `jupyterlab_files.py`), `_jobs/` (`tasks.py`:
   `FileTasks`; `runner.py`: `JobRunner`; `incoming.py`, `properties.py`, `transfer_policy.py`) and `_query/`
   (`filters.py`, `settings.py`: `QuerySettings`, `QueryState`; `data_query.py`: `DataQuery`, `fetch_rows`). Users import
-  from the top level, `filesystems` and `formats` only.
+  from the top level, `filesystems`, `formats` and `formats.supports` only.
 - `jupyter-storage-explorer-launcher` (`launcher/`): a JupyterLab launcher item opening a tab whose kernel runs
   `launch()`. It merges every `storage-explorer/launcher.py` in Jupyter's config paths as layers, system to user
-  (their `filesystems()`, `formats()`, `format_options()`, `operations()`, `filesystem_mappers()`, `transfer_policy()`, `parameters()`;
+  (their `filesystems()`, `formats()`, `supports()`, `format_options()` (merged by library, format, then option), `operations()`, `filesystem_mappers()`, `transfer_policy()`, `parameters()`;
   `final()` names what later layers cannot change; a retired `style()` is ignored with a warning, `RETIRED`; see `load_settings`, tested in
   `tests/test_launcher.py`). The tab's explorer gets a settings button (`_offer_settings`, trait `_settings_path`;
   never in notebooks) opening the user's `launcher.py` through the `files.ts` drive, created from
@@ -260,32 +260,62 @@ there follow the browser's as closely as Python allows (natural order ignoring c
 The list's is cleared when another folder's listing arrives, not on the click, so the previous folder's items never show
 unfiltered.
 
-**Formats** (`formats/`). Each `DataFormat` subclass (`base.py`) declares `name`, `label`, `priority`, `extensions` and
-which package sets can read it (`preferred_requirements` for previews and code, `code_only_requirements` such as
-PySpark for code only, `query_requirements` for the data browser), and implements:
-- `matches(target)`: cheap detection, called on every click; directory formats (Delta, Parquet datasets) inspect
-  `target.children`. Parquet also takes Hive-style partition folders (`year=…/month=…/`), followed down one branch
-  (one more `ls` per partition column, `_partitioned_layout`), and keeps each directory's layout by URL for `scan`,
-  which gets the URL only (a URL it has not seen is detected again through fsspec, `_discover`). The highest
-  `priority` wins (Delta 20 > Parquet 10 > default 0 > Text -10).
-- `preview(target, limits)`: a list of `Preview` dataclasses (`TablePreview`, `TextPreview`, `TreePreview`,
-  `MediaPreview`, `InstallPreview`...) that the frontend renders by `kind`; returns `install_hint()` when no package
-  set is installed.
-- `scan(url, is_dir)`: a polars LazyFrame for the data browser. `_query/data_query.py`'s `DataQuery` does filters, sort
-  and paging as narwhals expressions, so it takes any dataframe narwhals supports, either on the data itself ("live") or
-  on rows read into memory (queried with polars); behaviour such as regex syntax then follows the data's library.
-- `load_code(target, requirements)`: the "Python code" snippet for one package set; `recipes()` adds the
-  `%pip install`, setup and import lines. Packages are referenced through `Requirement` classes (`requirements.py`),
-  whose `code_name()` reuses the name the user already imported (e.g. `pl`).
+**Formats** (`formats/`). Laid out as `filesystems/`: the interfaces `DataFormat` (`base.py`, with `Target`,
+`Recipe`, `detect`, `FILE_ICONS`, and the generated code's helpers), `FormatSupport` (`support.py`, with `SupportChain` and `Capability`) and `Requirement`
+(`requirement.py`); a module per predefined format (`delta.py`, `parquet.py`, `excel.py`, `text.py`, `images.py`) and
+per library of the predefined supports in `supports/` (`polars.py`, `pandas.py`, `pyspark.py`, `fsspec.py`,
+`pillow.py`; `python.py` for those needing no package; named after the libraries, which they import only inside
+methods; exported by `formats.supports`, not `formats`); the predefined packages in `requirements.py`, the
+previews in `preview.py` (tables from dataframes in `frames.py`), the generated code's helpers in `base.py`
+(`snippet_options`, `format_kwargs`, `spark_url`), and the defaults in `utils.py` (`DEFAULT_FORMATS`,
+`DEFAULT_SUPPORTS`, `create_supports`). A format only detects; a support handles one format's data with one library,
+so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
+- `DataFormat` subclasses declare `name`, `label`, `priority`, `extensions`, `file_icon` (its files' icon in the list:
+  one of `FILE_ICONS`, or `(name, svg)` for one of its own, shown as an `<img>` so its scripts never run; sent as
+  `_format_icons` and `_file_icon_svgs`, checked by `format_icons()`; files of formats without one, e.g. Text's, get
+  their extension's icon, `FILE_ICON_EXTENSIONS` in `icons.js`) and implement `matches(target)`: cheap detection,
+  called on every click; directory formats (Delta, Parquet datasets) inspect `target.children`. Parquet also takes
+  Hive-style partition folders (`year=…/month=…/`), followed down one branch (one more `ls` per partition column,
+  `_partitioned_layout`), and keeps each directory's `ParquetLayout` by URL for the supports' `query`, which gets the
+  URL only (`layout(url)`; a URL it has not seen is detected again through fsspec, `_discover`). The highest
+  `priority` wins (Delta 20 > Parquet 10 > default 0 > Text -10). What supports share about a format is on it
+  (`Csv.separator`, `Text.language`, `Image.mime_type`, `Parquet.data_url`, ...).
+- `FormatSupport` subclasses declare `format` (matched with `isinstance`, so subclasses too: `MarkdownByPython` comes
+  before `TextByPython`), `use` (the library's `Requirement`, None for none; names its code, `library()`, and its
+  options), `additional_requirements`, and `capabilities`, the names of the methods it implements (`"preview"`,
+  `"query"`, `"recipe"`; `Capability`; not "jobs" or "tasks", which are file operations here): the explorer reads only
+  `capabilities`, so a method not listed is never called (no runtime check of that, by design: users are expected to
+  generate supports with AI from the written rules in `FormatSupport`'s docstring, kept by
+  `test_capabilities_are_the_methods_implemented` for the defaults). Each method gets the detected format object first; any may raise `FormatSupport.NotSupported`
+  for a target, and the next support is tried. Options are keyword-only `__init__` arguments, no `**kwargs`. Class
+  names are `<Format>By<Library>`.
+- `SupportChain` (the explorer's `_supports`: `supports=` then `StorageExplorer.default_supports()`, i.e.
+  `DEFAULT_SUPPORTS`, ordered format by format, most preferred first) calls them: `preview` and `query` of the
+  first support installed for the format (`installed`; `can_query`), `recipes` with the first support with `"recipe"` of each library (so one given replaces the default's),
+  installed or not (the code may run elsewhere).
+- `preview(fmt, target, limits)`: one `Preview` dataclass (`TablePreview`, `TextPreview`, `TreePreview`,
+  `MediaPreview`...) that the frontend renders by `kind` (sent as the one item of the preview's `"sections"`). With no support installed, the chain returns an
+  `InstallPreview` naming the missing packages per support, so supports never check.
+- `query(fmt, url, is_dir)`: any dataframe narwhals supports, for the data browser (`_new_query`).
+  `_query/data_query.py`'s `DataQuery` does filters, sort and paging as narwhals expressions, either on the data itself
+  ("live") or on rows read into memory (queried with polars); behaviour such as regex syntax then follows the data's
+  library.
+- `recipe(fmt, target)`: the code of the "Python code" snippet (a `str`; the chain makes the `Recipe`, adding
+  the support's `requirements()`: the frontend gets their packages, names the recipe after the first, "Load with
+  polars", and lists them under the code), run as it is in a new notebook: its imports (`import polars as
+  pl`, whatever the notebook has), and a Spark session (`SparkSession.builder.getOrCreate()`). It fills a class
+  attribute `recipe_template`, written just before the method, an indented `inspect.cleandoc("""...""")`, with
+  `str.format`: `{url}` (a repr) and `{kwargs}` (`format_kwargs`, the options; empty when none). Installing packages and
+  configuring access to the storage (credentials, Spark's setup for Delta Lake) depend on the environment, so they are
+  left to the user. `Requirement`s (`requirements.py`) only say what a support needs (`package`, `import_name`,
+  `is_installed()`, `load()`).
 
-**Format options.** `format_options` (same for both widgets) is one flat dict passed to *every* default format; each
-`__init__` takes the keyword-only options it uses and ignores the rest via `**kwargs`. Names are `<library>_<option>`
-for shared ones (`polars_storage_options`, `polars_credential_provider`, `pandas_storage_options`,
-`fsspec_storage_options`) and `<library>_<format>_<option>` for format-specific ones (`polars_delta_use_pyarrow`). A
-new option must also be added to the explicit `FORMAT_OPTIONS` list in `formats/utils.py`, which validates names;
-`DEFAULT_FORMATS` there is a tuple of classes instantiated by `default_formats()`. Storage options go into generated
-code through `snippet_options()`, which drops credential-looking keys and non-literal values. Spark snippets never get
-storage options (`spark_url()` rewrites `abfs`/`s3` to `abfss`/`s3a`).
+**Format options.** `format_options` is `{library: {format name or "*": {option: value}}}` (`create_supports`): a
+support class gets its library's (`use.package`) options for `"*"`, then for its `format.name`, only those its
+`__init__` takes. Unknown libraries, formats (of the explorer's formats or the supports') and options (taken by no
+support of that library and format) are ValueErrors. Supports given as objects are used as they are. Storage options
+go into generated code through `snippet_options()`, which drops credential-looking keys and non-literal values. Spark
+snippets never get storage options (`spark_url()` rewrites `abfs`/`s3` to `abfss`/`s3a`).
 
 ## Conventions
 
@@ -293,7 +323,7 @@ storage options (`spark_url()` rewrites `abfs`/`s3` to `abfss`/`s3a`).
 - Docstrings of the public API, what users construct, call, subclass or override (`StorageExplorer`, `DataExplorer`,
   `fetch_rows` (the `fetch_rows=` default of both), `QuerySettings`, `ExplorerStates` (with `Bookmark`,
   `QueryState`), `FileSystemOperations` and its subclasses (with `_copy_file`, `_move_file`), `Measurement`,
-  `Progress`, `DataFormat`, `FileSystemMapper` and its subclasses, `MapperChain`, `same_filesystem`), are in numpy style:
+  `Progress`, `DataFormat`, `FormatSupport`, `FileSystemMapper` and its subclasses, `MapperChain`, `same_filesystem`), are in numpy style:
   `Parameters`, `Returns`, `Raises`, `Attributes`, `See Also`, `Examples`. Internal ones (underscore names,
   `DataQuery`, `FileTasks`, `JobRunner`, the mixins, ...) stay prose.
 - `from __future__ import annotations` everywhere, with type-only imports under `TYPE_CHECKING` (ruff `TC` rules).

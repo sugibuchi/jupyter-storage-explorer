@@ -244,10 +244,16 @@ function createList(x) {
 
   function row(entry, selected) {
     const isDir = isFolder(entry);
+    const formatIcon = model.get("_format_icons")[entry.format];
     const tr = h(
       "tr",
       { className: selected.has(entry.path) ? "jse-selected" : "" },
-      h("td", { className: "jse-col-name" }, h("span", { className: "jse-icon" }, fileIcon(entry.name, isDir)), visible(entry.name)),
+      h(
+        "td",
+        { className: "jse-col-name" },
+        h("span", { className: "jse-icon" }, fileIcon(entry.name, isDir, formatIcon, model.get("_file_icon_svgs")[formatIcon])),
+        visible(entry.name),
+      ),
       h("td", { className: "jse-col-size", textContent: formatSize(entry.size) }),
       h("td", { className: "jse-col-mtime", textContent: formatTime(entry.mtime) }),
     );

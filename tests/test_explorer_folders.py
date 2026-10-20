@@ -255,7 +255,7 @@ class TestFilesystems:
         [
             ({"filesystems": {}}, ValueError),
             ({"filesystems": {"a": "."}, "path": "."}, TypeError),
-            ({"formats": [], "format_options": {}}, TypeError),
+            ({"supports": [object()]}, TypeError),
             ({"format_options": {"typo": 1}}, ValueError),
         ],
     )

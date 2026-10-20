@@ -30,18 +30,18 @@ function renderMedia(section) {
   return h("div", { textContent: `Cannot show ${section.mime}` });
 }
 
-// Missing packages: the install commands to copy, one block per option.
+// Missing packages: the packages of each option, the user installing them
+// as their environment does (pip, conda, an image, ...).
 function renderInstall(section) {
   const several = section.options.length > 1;
   const intro = several
-    ? `To preview this ${section.format}, install one of these options in a notebook cell, then preview it again.`
-    : `To preview this ${section.format}, install the packages below in a notebook cell, then preview it again.`;
+    ? `To preview this ${section.format}, install one of these sets of packages, then preview it again:`
+    : `To preview this ${section.format}, install these packages, then preview it again:`;
   return h(
     "div",
     { className: "jse-install" },
     h("div", { textContent: intro }),
-    h("div", { className: "jse-note", textContent: "No kernel restart is needed." }),
-    ...section.options.map((option, i) => codeBlock(several ? `Option ${i + 1}: ${option.packages}` : option.packages, option.command)),
+    h("ul", {}, ...section.options.map((packages) => h("li", { textContent: packages.join(", ") }))),
   );
 }
 
@@ -124,8 +124,8 @@ function renderSection(section) {
   return box;
 }
 
-// A titled code block with a Copy button and an optional hint.
-function codeBlock(title, code, hint) {
+// A titled code block with a Copy button.
+function codeBlock(title, code) {
   const copyBtn = h("button", { className: "jse-btn", textContent: "Copy" });
   copyBtn.addEventListener("click", async () => {
     try {
@@ -140,15 +140,22 @@ function codeBlock(title, code, hint) {
     "div",
     { className: "jse-recipe" },
     h("div", { className: "jse-recipe-head" }, h("span", { textContent: title }), copyBtn),
-    ...(hint ? [h("div", { className: "jse-note", textContent: hint })] : []),
     h("pre", { className: "jse-code", textContent: code }),
   );
 }
 
-// Body of the "Python code" dialog for one recipe ({library, install, code}):
-// `install` is what to run once first (installing packages, setting up e.g.
-// a Spark session), empty when nothing is needed.
+// A recipe ({packages, code}) is named after the library it loads with, its
+// first package; one needing no package is plain Python.
+function recipeLibrary(recipe) {
+  return recipe.packages[0] ?? "Python";
+}
+
+// Body of the "Python code" dialog for one recipe: the code, and the packages
+// it needs (installing them is left to the user).
 function recipeBlocks(recipe) {
-  if (!recipe.install) return [codeBlock("Load", recipe.code)];
-  return [codeBlock("1. Set up", recipe.install, "Not done in this kernel yet: run this once in a cell first."), codeBlock("2. Load", recipe.code)];
+  const blocks = [codeBlock("Load", recipe.code)];
+  if (recipe.packages.length) {
+    blocks.push(h("div", { className: "jse-note", textContent: `Needs ${recipe.packages.join(", ")}` }));
+  }
+  return blocks;
 }

@@ -8,7 +8,7 @@ from __future__ import annotations
 from typing import Any
 
 from jupyter_storage_explorer._json import jsonable
-from jupyter_storage_explorer.formats.base import TablePreview
+from jupyter_storage_explorer.formats.preview import TablePreview
 
 
 def rows_note(
@@ -21,6 +21,11 @@ def rows_note(
         if total is not None
         else f"First {count:,} {unit}"
     )
+
+
+def with_sheets(note: str, sheets: list[str]) -> str:
+    """The note under a workbook's first sheet's table, mentioning the other sheets."""
+    return f"{note}; other sheets: {', '.join(sheets[1:])}" if len(sheets) > 1 else note
 
 
 def polars_table(df: Any, **kwargs: Any) -> TablePreview:

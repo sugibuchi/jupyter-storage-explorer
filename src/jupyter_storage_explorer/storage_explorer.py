@@ -36,11 +36,16 @@ from jupyter_storage_explorer.filesystems import (
     default_operations as _default_operations,
 )
 from jupyter_storage_explorer.formats import (
+    DEFAULT_SUPPORTS,
     DataFormat,
+    FormatSupport,
     PreviewLimits,
+    SupportChain,
     Text,
-    explorer_formats,
+    create_supports,
+    default_formats,
 )
+from jupyter_storage_explorer.formats.utils import format_icons
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
@@ -121,12 +126,21 @@ class StorageExplorer(
         data browser, see ``query_result``). False: closed until the user
         previews something.
     formats : sequence of DataFormat, optional
-        The formats files are previewed and queried as, replacing
-        ``default_formats()``. Cannot be combined with ``format_options``.
+        The formats files are detected as, replacing ``default_formats()``.
+    supports : sequence of FormatSupport classes or objects, optional
+        Libraries of your own handling formats' data (previews, the data
+        browser, "Python code"), e.g. ``[ParquetByDuckDB]``, tried before
+        ``default_supports()``: for each job, the first support for the
+        format that is installed does it (see
+        ``jupyter_storage_explorer.formats.FormatSupport``). Classes are
+        created with ``format_options``. To change the defaults themselves,
+        override ``default_supports`` in a subclass.
     format_options : mapping, optional
-        Keyword arguments to create every default format with, each using
-        those it takes, e.g. ``{"polars_storage_options": {...}}`` (see
-        "Format options" in docs/storage-explorer.md).
+        The supports' options, by library, then format name or ``"*"`` for
+        all formats, e.g. ``{"polars": {"*": {"storage_options": {...}},
+        "delta": {"use_pyarrow": True}}}``: each support class gets those of
+        its library (its ``use``'s package) that it takes (see "Format
+        options" in docs/storage-explorer.md).
     preview_limits : PreviewLimits, optional
         How much of a file previews read and show (bytes, rows).
     max_upload_bytes : int or None, default 10 MB
@@ -250,6 +264,11 @@ class StorageExplorer(
     # which JupyterLab's text editor opens even when it does not know the
     # file's type ("Open in JupyterLab", double-click).
     _text_formats = traitlets.List().tag(sync=True)
+    # Format name -> the icon of its files (DataFormat.file_icon), for the
+    # formats that set one; other files get their extension's (icons.js).
+    _format_icons = traitlets.Dict().tag(sync=True)
+    # Icon name -> SVG markup, for the formats' icons of their own.
+    _file_icon_svgs = traitlets.Dict().tag(sync=True)
     # Format name of the current directory itself (e.g. "delta"), or ""
     # if it cannot be previewed; enables the Preview button when nothing is selected.
     _current_format = traitlets.Unicode().tag(sync=True)
@@ -297,7 +316,8 @@ class StorageExplorer(
         height: str = "400px",
         open_preview: bool = False,
         formats: Sequence[DataFormat] | None = None,
-        format_options: Mapping[str, Any] | None = None,
+        supports: Sequence[type[FormatSupport] | FormatSupport] | None = None,
+        format_options: Mapping[str, Mapping[str, Mapping[str, Any]]] | None = None,
         preview_limits: PreviewLimits | None = None,
         max_upload_bytes: int | None = 10 * 1024 * 1024,
         download_to_jupyterlab_path: str = ".",
@@ -349,7 +369,16 @@ class StorageExplorer(
         # The launcher's settings file and the function creating it (see
         # _offer_settings); None in notebooks.
         self._settings_file: tuple[str, Callable[[], Any]] | None = None
-        self._formats = explorer_formats(formats, format_options)
+        self._formats = list(formats) if formats is not None else default_formats()
+        # How the formats' data is handled: each job by the first support
+        # installed (see formats/support.py).
+        self._supports = SupportChain(
+            create_supports(
+                [*(supports or ()), *self.default_supports()],
+                format_options,
+                [f.name for f in self._formats],
+            )
+        )
         self._preview_limits = preview_limits or PreviewLimits()
         # Files being received from the user's computer (see _jobs/incoming.py).
         self._incoming = IncomingFiles(max_upload_bytes)
@@ -372,10 +401,13 @@ class StorageExplorer(
         self._remembered: dict[str, str] = {}
         name = next(iter(self._filesystems))
         self._fs: AbstractFileSystem = self._filesystems[name].fs
+        icons, svgs = format_icons(self._formats)
         super().__init__(
             _height=height,
             _format_labels={f.name: f.label for f in self._formats},
             _text_formats=[f.name for f in self._formats if isinstance(f, Text)],
+            _format_icons=icons,
+            _file_icon_svgs=svgs,
             _max_upload_bytes=max_upload_bytes,
             _filesystem_names=list(self._filesystems),
             _explorer_id=uuid.uuid4().hex,
@@ -407,6 +439,21 @@ class StorageExplorer(
             can always do them.
         """
         return _default_operations()
+
+    @staticmethod
+    def default_supports() -> list[type[FormatSupport] | FormatSupport]:
+        """The supports tried after those given as ``supports``; override it
+        in a subclass to change them.
+
+        Returns
+        -------
+        list of FormatSupport classes or objects
+            By default ``jupyter_storage_explorer.formats.DEFAULT_SUPPORTS``:
+            polars, pandas, Spark, fsspec and Pillow for the default formats,
+            and the previews needing no package (text, JSON, images). Classes
+            are created with ``format_options``.
+        """
+        return list(DEFAULT_SUPPORTS)
 
     @traitlets.validate("_filesystem")
     def _validate_filesystem(self, proposal: dict[str, Any]) -> str:
@@ -759,7 +806,7 @@ class StorageExplorer(
         return {
             "path": path,
             "format": formats[0].name if formats else "",
-            "query": bool(formats) and formats[0].can_query(),
+            "query": bool(formats) and self._supports.can_query(formats[0]),
         }
 
     @traitlets.observe("_preview")

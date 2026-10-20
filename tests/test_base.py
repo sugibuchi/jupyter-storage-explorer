@@ -1,23 +1,29 @@
-"""Helpers of formats/base.py: targets, generated-code helpers, requirements and detection."""
+"""What formats share (formats/base.py, requirement.py): targets,
+generated-code helpers, requirements, detection and file icons (the
+supports: test_supports.py)."""
 
 from __future__ import annotations
-
-import types
 
 import polars
 import pytest
 
+from jupyter_storage_explorer import StorageExplorer
 from jupyter_storage_explorer.formats import (
+    FILE_ICONS,
     Csv,
     DeltaLake,
     Parquet,
+    Requirement,
     Text,
+    default_formats,
     detect,
-    format_args,
+    format_kwargs,
     matching_formats,
+    snippet_options,
+    spark_url,
 )
-from jupyter_storage_explorer.formats.base import snippet_options, spark_url
 from jupyter_storage_explorer.formats.requirements import Polars
+from jupyter_storage_explorer.formats.utils import format_icons
 
 
 class TestTarget:
@@ -49,10 +55,9 @@ class TestTarget:
         assert make_target("/a.txt", b"\xef\xbb\xbfhi").head_text(100)[0] == "hi"
 
 
-def test_format_args_leaves_out_none():
-    assert (
-        format_args("data.csv", sep=";", storage_options=None) == "'data.csv', sep=';'"
-    )
+def test_format_kwargs_leaves_out_none():
+    assert format_kwargs(sep=";", storage_options=None) == ", sep=';'"
+    assert format_kwargs(storage_options=None) == ""
 
 
 def test_spark_url():
@@ -91,16 +96,15 @@ class TestSnippetOptions:
 
 
 class TestRequirement:
-    def test_code_name_prefers_imported_name(self):
-        assert Polars().code_name({"polars": polars}) == "polars"
-        assert Polars().code_name({}) == "pl"
+    def test_installed_and_loaded(self):
+        assert Polars().is_installed()
+        assert Polars().load() is polars
 
-    def test_code_name_skips_names_bound_to_something_else(self):
-        assert Polars().get_module_name({"pl": 1}) is None
-        assert Polars().get_module_name({"pl": types.ModuleType("other")}) is None
-
-    def test_import_command(self):
-        assert Polars().import_command == "import polars as pl"
+    def test_missing(self):
+        missing = type(
+            "Missing", (Requirement,), {"package": "x", "import_name": "not_a_pkg"}
+        )
+        assert not missing().is_installed()
 
 
 class TestDetection:
@@ -129,3 +133,55 @@ class TestDetection:
 @pytest.mark.parametrize("name", ["DATA.CSV", "data.tsv"])
 def test_extensions_ignore_case(make_target, name):
     assert Csv().matches(make_target(f"/{name}", b"a\n"))
+
+
+class TestFileIcons:
+    """Each format's file_icon, sent to the frontend by format name; files of
+    formats without one get their extension's icon there (icons.js)."""
+
+    SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"/>'
+
+    def avro(self, icon):
+        return type("Avro", (Csv,), {"name": "avro", "file_icon": icon})()
+
+    def test_default_formats(self):
+        assert format_icons(default_formats()) == (
+            {
+                "parquet": "spreadsheet",
+                "csv": "spreadsheet",
+                "excel": "spreadsheet",
+                "json": "json",
+                "json-lines": "json",
+                "markdown": "markdown",
+                "image": "image",
+            },  # not Text (Python, YAML, ... by extension), nor Delta (folders)
+            {},
+        )
+
+    def test_one_of_jupyterlabs(self):
+        explorer = StorageExplorer(fs=None, formats=[self.avro("file"), Text()])
+        assert explorer._format_icons == {"avro": "file"}
+        assert explorer._file_icon_svgs == {}
+
+    def test_own_svg(self):
+        explorer = StorageExplorer(fs=None, formats=[self.avro(("avro", self.SVG))])
+        assert explorer._format_icons == {"avro": "avro"}
+        assert explorer._file_icon_svgs == {"avro": self.SVG}
+
+    @pytest.mark.parametrize(
+        ("icon", "error"),
+        [
+            ("avro", "unknown file_icon of format 'avro': 'avro'"),
+            (("json", SVG), "name it other than"),
+            (("avro", "<div/>"), "not SVG markup"),
+        ],
+    )
+    def test_invalid(self, icon, error):
+        assert "spreadsheet" in FILE_ICONS
+        with pytest.raises(ValueError, match=error):
+            format_icons([self.avro(icon)])
+
+    def test_one_name_per_svg(self):
+        other = type("Orc", (Csv,), {"name": "orc", "file_icon": ("avro", "<svg/>")})
+        with pytest.raises(ValueError, match="another icon is named 'avro'"):
+            format_icons([self.avro(("avro", self.SVG)), other()])

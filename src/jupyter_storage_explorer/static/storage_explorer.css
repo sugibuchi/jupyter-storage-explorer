@@ -364,8 +364,10 @@
   background: var(--jse-bg-alt);
 }
 
-.jse-install .jse-recipe {
-  margin: 8px 0;
+.jse-install ul {
+  margin: 6px 0 8px;
+  padding-left: 20px;
+  font-family: var(--jp-code-font-family, monospace);
 }
 
 .jse-section {

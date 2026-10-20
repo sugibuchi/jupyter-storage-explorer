@@ -72,12 +72,13 @@ class PreviewsMixin:
             if formats:
                 fmt = formats[0]
                 base["format"] = fmt.name
-                if fmt.can_query():
+                if self._supports.can_query(fmt):
                     base["query"] = self._open_query(path, fmt, target)
                 else:
-                    base["sections"] = [
-                        _section(s) for s in fmt.preview(target, self._preview_limits)
-                    ]
+                    # By the first support installed; with none, what to
+                    # install instead.
+                    preview = self._supports.preview(fmt, target, self._preview_limits)
+                    base["sections"] = [_section(preview)]
         except Exception as exc:
             base["error"] = error_text(exc)
         self._preview = base
@@ -122,17 +123,18 @@ class PreviewsMixin:
         Settings are remembered by URL, so they follow the data across
         explorers and tabs, with the mode last chosen for it.
         """
-        scan = functools.partial(fmt.scan, target.url, target.is_dir)
+        # By the first support installed (can_query()).
+        source = functools.partial(self._supports.query, fmt, target.url, target.is_dir)
         state = self._states.query(target.url)
         mode = state.mode if state is not None else "auto"
         fetch = self._fetch_rows
         try:
-            return DataQuery(scan, target.url, self._states, mode=mode, fetch=fetch)
+            return DataQuery(source, target.url, self._states, mode=mode, fetch=fetch)
         except ValueError:
             if mode != "live":
                 raise
             # "live" chosen when the format scanned lazily, and no longer does.
-            return DataQuery(scan, target.url, self._states, fetch=fetch)
+            return DataQuery(source, target.url, self._states, fetch=fetch)
 
     # --- Query data in a new tab: a DataExplorer of the same query, which the
     # launcher's JupyterLab extension shows in a tab of its own ---
@@ -148,7 +150,7 @@ class PreviewsMixin:
                 raise ValueError(f"{path} has no URL, so it cannot be queried")
             if content.get("format"):
                 formats = [f for f in formats if f.name == content["format"]]
-            if not formats or not formats[0].can_query():
+            if not formats or not self._supports.can_query(formats[0]):
                 raise ValueError(f"{_paths.basename(path)} cannot be queried")
             explorer = DataExplorer._of_query(
                 self._new_query(formats[0], target),
@@ -187,11 +189,15 @@ class PreviewsMixin:
         "query": whether it opens in the data browser}, or {"error"}."""
         try:
             target, formats = self._detect(path)
-            recipes = formats[0].recipes(target) if formats else []
+            recipes = self._supports.recipes(formats[0], target) if formats else []
         except Exception as exc:
             return {"error": error_text(exc)}
         return {
             "formats": [f.name for f in formats],
-            "recipes": [dataclasses.asdict(r) for r in recipes],
-            "query": bool(formats) and formats[0].can_query(),
+            # Requirements are classes: the frontend gets their packages.
+            "recipes": [
+                {"packages": [p.package for p in r.requirements], "code": r.code}
+                for r in recipes
+            ],
+            "query": bool(formats) and self._supports.can_query(formats[0]),
         }

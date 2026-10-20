@@ -5,6 +5,8 @@ from __future__ import annotations
 from explorers import path_of
 
 from jupyter_storage_explorer._query.settings import QuerySettings
+from jupyter_storage_explorer.formats import Requirement
+from jupyter_storage_explorer.formats.supports import CsvByPandas, CsvByPolars
 
 
 class TestPreview:
@@ -32,6 +34,17 @@ class TestPreview:
         mem_explorer._open_preview("/data/a.csv", "image")
         assert "cannot be previewed as image" in mem_explorer._preview["error"]
 
+    def test_install_hint(self, mem_explorer, monkeypatch):
+        # Packages missing: the explorer tells what to install, without
+        # calling the supports' preview.
+        monkeypatch.setattr(Requirement, "is_installed", lambda self: False)
+        monkeypatch.setattr(CsvByPolars, "preview", None)
+        monkeypatch.setattr(CsvByPandas, "preview", None)
+        mem_explorer._open_preview("/data/a.csv")
+        [hint] = mem_explorer._preview["sections"]
+        assert hint["kind"] == "install"
+        assert hint["options"] == [["polars"], ["pandas"]]
+
     def test_query_after_close(self, local):
         reply = local.request({"type": "query_rows", "rid": 1, "path": "gone"})
         assert reply["error"].startswith("the data is no longer open")
@@ -40,7 +53,8 @@ class TestPreview:
 def test_menu_info(mem_explorer):
     reply = mem_explorer.request({"type": "menu_info", "rid": 1, "path": "/data/a.csv"})
     assert reply["formats"] == ["csv", "text"]
-    assert [r["library"] for r in reply["recipes"]] == ["polars", "pandas", "pyspark"]
+    packages = [r["packages"] for r in reply["recipes"]]
+    assert packages == [["polars"], ["pandas"], ["pyspark"]]
     folder = mem_explorer.request(
         {"type": "menu_info", "rid": 1, "path": "/data/table"}
     )

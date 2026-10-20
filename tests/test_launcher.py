@@ -50,7 +50,12 @@ def system(tmp_path):
             return {"Lake": "memory://lake", "Scratch": "memory://scratch"}
 
         def format_options():
-            return {"polars_storage_options": {"a": 1}, "polars_delta_use_pyarrow": True}
+            return {
+                "polars": {
+                    "*": {"storage_options": {"a": 1}},
+                    "delta": {"use_pyarrow": True},
+                },
+            }
 
         def parameters():
             return {"max_upload_bytes": 1000, "height": "500px"}
@@ -72,7 +77,10 @@ class TestMerging:
                 return {"Mine": "memory://mine", "Scratch": None, "Lake": "memory://other"}
 
             def format_options():
-                return {"polars_storage_options": {"b": 2}}
+                return {
+                    "polars": {"*": {"storage_options": {"b": 2}}},
+                    "pandas": {"csv": {"storage_options": {"c": 3}}},
+                }
 
             def parameters():
                 return {"height": "fill"}
@@ -86,10 +94,14 @@ class TestMerging:
             "Lake": "memory://other",
             "Mine": "memory://mine",
         }
-        # Top level only: the user's dict replaces the system's.
+        # Option by option, a value replaced whole (the user's storage
+        # options replace the system's dict).
         assert settings.format_options == {
-            "polars_storage_options": {"b": 2},
-            "polars_delta_use_pyarrow": True,
+            "polars": {
+                "*": {"storage_options": {"b": 2}},
+                "delta": {"use_pyarrow": True},
+            },
+            "pandas": {"csv": {"storage_options": {"c": 3}}},
         }
         assert kwargs["format_options"] == settings.format_options
         assert kwargs["max_upload_bytes"] == 1000 and kwargs["height"] == "fill"
@@ -102,9 +114,13 @@ class TestMerging:
             """
             from jupyter_storage_explorer.filesystems import FsspecOperations
             from jupyter_storage_explorer.formats import Csv
+            from jupyter_storage_explorer.formats.supports import CsvByPandas
 
             def formats():
                 return [Csv()]
+
+            def supports():
+                return [CsvByPandas]
 
             def operations():
                 return [FsspecOperations()]
@@ -120,9 +136,13 @@ class TestMerging:
             """
             from jupyter_storage_explorer.filesystems.operation import FileSystemOperations
             from jupyter_storage_explorer.formats import Json
+            from jupyter_storage_explorer.formats.supports import JsonByPandas
 
             def formats():
                 return [Json()]
+
+            def supports():
+                return [JsonByPandas()]
 
             def operations():
                 return [FileSystemOperations()]
@@ -137,6 +157,8 @@ class TestMerging:
         assert names[:2] == ["json", "csv"]  # the user's first
         assert names[2:] == [f.name for f in default_formats()]
         # The explorer tries the defaults after them.
+        supports = [s if isinstance(s, type) else type(s) for s in kwargs["supports"]]
+        assert [s.__name__ for s in supports] == ["JsonByPandas", "CsvByPandas"]
         kinds = [type(o) for o in kwargs["operations"]]
         assert kinds == [FileSystemOperations, FsspecOperations]
         mappers = [type(m).__name__ for m in kwargs["filesystem_mappers"]]
@@ -290,6 +312,12 @@ class TestErrors:
                 "filesystems() must return a dict",
             ),
             ("def formats():\n    return 'csv'", "formats() must return a list"),
+            (
+                # The flat options of versions before 0.14.
+                "def format_options():\n"
+                "    return {'polars_storage_options': {'anon': True}}",
+                "'polars_storage_options' must map format names",
+            ),
             (
                 "def filesystems():\n    raise KeyError('LAKE_URL')",
                 "filesystems(): KeyError",
