@@ -283,8 +283,7 @@ class TestPasteFromElsewhere:
                         "path": "x",
                         "location": {
                             "kind": "fsspec",
-                            "fsspec_protocol": "http",
-                            "fsspec_url": "http://169.254.169.254/latest/meta-data/",
+                            "url": "http://169.254.169.254/latest/meta-data/",
                         },
                     }
                 ],

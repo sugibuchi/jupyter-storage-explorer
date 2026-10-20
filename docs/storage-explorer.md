@@ -361,8 +361,7 @@ explorer.query_result()  # the table in the data browser, with its filters; None
 
 Locations (`jupyter_storage_explorer.Location`) are immutable and compare equal when they name the same item: an
 `S3Location` has the bucket, key and endpoint, an `AbfsLocation` the account, container and path, a `LocalLocation` the
-plain path (`.os_path` in your system's form) and its machine. `.parent`, `.join("a", "b")` and `.name` move between
-them; `.to_json()` and `Location.from_json()` keep them.
+plain path (`.os_path` in your system's form) and its machine. `.to_json()` and `Location.from_json()` keep them.
 
 `on_change(f)` calls `f(explorer)` when the folder shown or the selection changes, and `on_query_change(f)` when
 `query_result()` does: another table opened in the preview panel (or none), other filters, sort or columns, or the data

@@ -140,24 +140,27 @@ sync.
 Where files are is a `Location` (`location.py`): independent of fsspec's implementations, so it travels to other
 kernels, files and libraries doing their own I/O. A frozen, keyword-only dataclass, normalized when made (hosts and
 accounts in lower case, endpoints as origins, no trailing "/"; whether it is a folder is not part of it), so equal
-locations name the same item and are dict keys; `protocol`, `url` (the common form, which the fsspec implementation
-also reads), `storage` (hashable: the location without its path), `name`, `parent`, `join(*parts)` (on its
-`path_field`), `to_json()`/`Location.from_json()` (`{"kind", "protocol", "url", ...fields}`; subclasses register by
-`kind`; an unknown kind becomes an `FsspecLocation`, the URL in the JSON being ignored for known kinds). The
+locations name the same item and are dict keys. A subclass gives only its fields, `kind` and `url` (the common form,
+which the fsspec implementation also reads); `protocol` comes from the URL, and `to_json()`/`Location.from_json()`
+(`{"kind", "url", ...fields}`; subclasses register by `kind`; an unknown kind becomes an `FsspecLocation`, the URL in
+the JSON being ignored for known kinds). Locations do not say which storage they are on: what one fsspec instance
+reaches depends on the implementation (adlfs reaches an account's containers; Azure has a file system per
+container), so only mappers tell it (`path_of`). The
 predefined ones are in `filesystems/locations.py`: `AbfsLocation` (account, container, path, endpoint suffix:
 `abfs://container@account.dfs.core.windows.net/path`; adlfs's `abfs://container/path` with an emulator),
 `S3Location` (bucket, key, endpoint or AWS partition: `s3://bucket/key`), `GcsLocation`, `SftpLocation` (host, port,
 user, path), `LocalLocation` (`path` as fsspec names it, "C:/x" on Windows, `os_path` the system's form, hostname
-and machine id: `file:///...`), `MemoryLocation` (path, process), `FsspecLocation` (fsspec's protocol and URL, for
-filesystems no mapper knows). Locations come from mappers (`filesystems/mapper.py`, the `filesystem_mappers=` argument,
+and machine id: `file:///...`), `MemoryLocation` (path, process), `FsspecLocation` (fsspec's URL, for filesystems
+no mapper knows). Locations come from mappers (`filesystems/mapper.py`, the `filesystem_mappers=` argument,
 then `default_mappers()` of `mappers.py`): a `FileSystemMapper` per fsspec implementation, matched by qualified class names through the MRO
 (so optional packages are not imported; tests fake s3fs, gcsfs, fsspec's SFTP and sshfs classes by `__module__`). It gives
-`to_location(fs, path)` (no credentials; locations are defined per storage, so implementations of one agree: SFTP's
-from fsspec's and from sshfs's `fs.storage_args`/`storage_options`; "" gives the top, whose `storage` tells what `fs`
-reaches; None for items without one) and `path_of(fs, location)`, the reverse, None unless `reaches(fs, location)`
-(same kind and storage as `fs`'s top). `MapperChain` (`mapper.py`, the explorer's `_mappers`: its mappers then the
-defaults) asks them: `location_of`, `path_in`, `same_filesystem` (tops of the same kind and storage, so the same
-storage opened with other credentials is one; unknown filesystems, `FsspecMapper`, compare as fsspec does) and
+`to_location(fs, path)` (no credentials; locations are defined per kind of storage, so implementations of one agree:
+SFTP's from fsspec's and from sshfs's `fs.storage_args`/`storage_options`; "" gives the top folder; None for items
+without one) and `path_of(fs, location)`, the reverse, None unless `fs` reaches it, which each concrete mapper decides
+from the location's fields and the instance's settings (the account and cloud, the endpoint or partition, the
+server, port and user, the machine, the process). `MapperChain` (`mapper.py`, the explorer's `_mappers`: its mappers
+then the defaults) asks them: `location_of`, `path_in`, `same_filesystem` (each reaches the other's top folder, so
+the same storage opened with other credentials is one; unknown filesystems, `FsspecMapper`, compare as fsspec does) and
 `locate(location, filesystems)`, for files pasted from another kernel: the first of the explorer's storages that
 reaches it, else, for kinds other than `FsspecLocation` (never those: the kernel would connect wherever a dropped
 URL points), `url_to_fs(location.url)` if it reaches it, else refused (so another kernel's memory or another

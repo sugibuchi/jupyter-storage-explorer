@@ -67,7 +67,12 @@ class AzureBlobMapper(FileSystemMapper):
         )
 
     def path_of(self, fs: AbstractFileSystem, location: Location) -> str | None:
-        if not self.reaches(fs, location):
+        # An instance reaches all the containers of its account (in its cloud).
+        here = self.to_location(fs, "")
+        if not isinstance(location, AbfsLocation) or (
+            location.account_name,
+            location.endpoint_suffix,
+        ) != (here.account_name, here.endpoint_suffix):
             return None
         return f"{location.container_name}/{location.path}".strip("/")
 
@@ -107,7 +112,12 @@ class S3Mapper(FileSystemMapper):
         return S3Location(bucket=bucket, key=key, partition=partition)
 
     def path_of(self, fs: AbstractFileSystem, location: Location) -> str | None:
-        if not self.reaches(fs, location):
+        # An instance reaches all the buckets of its endpoint (or partition).
+        here = self.to_location(fs, "")
+        if not isinstance(location, S3Location) or (
+            location.endpoint,
+            location.partition,
+        ) != (here.endpoint, here.partition):
             return None
         return f"{location.bucket}/{location.key}".strip("/")
 
@@ -127,7 +137,9 @@ class GCSMapper(FileSystemMapper):
         return GcsLocation(bucket=bucket, key=key, endpoint=endpoint)
 
     def path_of(self, fs: AbstractFileSystem, location: Location) -> str | None:
-        if not self.reaches(fs, location):
+        # An instance reaches all the buckets of its endpoint.
+        here = self.to_location(fs, "")
+        if not isinstance(location, GcsLocation) or location.endpoint != here.endpoint:
             return None
         return f"{location.bucket}/{location.key}".strip("/")
 
@@ -148,7 +160,16 @@ class LocalMapper(FileSystemMapper):
         return LocalLocation(path=path, **_machine())
 
     def path_of(self, fs: AbstractFileSystem, location: Location) -> str | None:
-        return location.path if self.reaches(fs, location) else None
+        # An instance reaches its machine's disk.
+        if not isinstance(location, LocalLocation):
+            return None
+        machine = _machine()
+        if (location.hostname, location.machine_id) != (
+            machine["hostname"],
+            machine["machine_id"],
+        ):
+            return None
+        return location.path
 
 
 @functools.cache
@@ -192,7 +213,10 @@ class MemoryMapper(FileSystemMapper):
         return MemoryLocation(path=path, process=_PROCESS)
 
     def path_of(self, fs: AbstractFileSystem, location: Location) -> str | None:
-        return location.path if self.reaches(fs, location) else None
+        # An instance reaches its process's memory.
+        if not isinstance(location, MemoryLocation) or location.process != _PROCESS:
+            return None
+        return location.path
 
 
 class SFTPMapper(FileSystemMapper):
@@ -215,7 +239,15 @@ class SFTPMapper(FileSystemMapper):
         return SftpLocation(path=path or "/", **self.server(fs))
 
     def path_of(self, fs: AbstractFileSystem, location: Location) -> str | None:
-        return location.path if self.reaches(fs, location) else None
+        # An instance reaches its server's tree for its user.
+        here = self.to_location(fs, "/")
+        if not isinstance(location, SftpLocation) or (
+            location.host,
+            location.port,
+            location.user,
+        ) != (here.host, here.port, here.user):
+            return None
+        return location.path
 
 
 class SSHFSMapper(SFTPMapper):
@@ -266,9 +298,10 @@ _DEFAULT = MapperChain(default_mappers())
 def same_filesystem(a: AbstractFileSystem, b: AbstractFileSystem) -> bool:
     """Whether two filesystem objects take the same paths to the same files.
 
-    They do if their mappers (``default_mappers()``) give them locations of
-    the same storage (``Location.storage``), and for filesystems wrapped in
-    ``DirFileSystem``s the same folders. Credentials are not part of it: the
+    They do if each reaches the other's top folder, as their mappers
+    (``default_mappers()``) tell (``FileSystemMapper.path_of``: e.g. the same
+    Azure account, S3 endpoint, or SFTP server and user), and for
+    filesystems wrapped in ``DirFileSystem``s the same folders. Credentials are not part of it: the
     same storage opened with two of them is one filesystem, and an operation
     within it (e.g. a server-side move) uses the source's. Filesystems no
     mapper knows compare as fsspec compares them, by their class and

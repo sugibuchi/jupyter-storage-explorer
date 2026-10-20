@@ -539,8 +539,7 @@ def drag_from_another_page_refused(x: Explorer) -> None:
                     "name": "catalog.json",
                     "location": {
                         "kind": "fsspec",
-                        "fsspec_protocol": "memory",
-                        "fsspec_url": "memory:///sales-lake/catalog.json",
+                        "url": "memory:///sales-lake/catalog.json",
                     },
                 }
             ],

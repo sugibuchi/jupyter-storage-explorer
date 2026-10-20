@@ -5,14 +5,15 @@ server's tree for one user) is not always what one fsspec instance reaches:
 an adlfs instance reaches all the containers of an account, an s3fs one all
 the buckets of an endpoint. So a ``FileSystemMapper`` describes instances,
 one fsspec implementation each: ``to_location``, the location of a path
-(``jupyter_storage_explorer.location``), and ``path_of``, the reverse, for
-the locations the instance reaches.
+(``jupyter_storage_explorer.location``), and ``path_of``, the reverse, which
+also tells whether the instance reaches a location at all, as only the
+implementation knows what one instance reaches.
 
-Locations are defined per storage, not per implementation: every mapper of
-an SFTP implementation gives ``SftpLocation``s, so that files copied from one
-are found again on another. Two instances giving locations of the same
-``storage`` take the same paths to the same files, whatever their
-credentials, so ``same_filesystem`` compares them.
+Locations are defined per kind of storage, not per implementation: every
+mapper of an SFTP implementation gives ``SftpLocation``s, so that files
+copied from one are found again on another. Two instances each reaching the
+other's top folder take the same paths to the same files, whatever their
+credentials, so ``same_filesystem`` asks that.
 
 ``MapperChain`` holds an explorer's mappers and asks them. Filesystems that
 wrap another one in a folder (fsspec's ``DirFileSystem``) are not mapped
@@ -45,8 +46,8 @@ class FileSystemMapper:
     Subclass it for a filesystem the defaults do not know, or know
     differently, and give an instance to ``StorageExplorer`` in
     ``filesystem_mappers``, tried before the defaults. Its locations are
-    usually of a ``Location`` subclass of its own, whose fields say which
-    storage they are on.
+    usually of a ``Location`` subclass of its own, whose fields say where
+    they are; its ``path_of`` tells which of them an instance reaches.
 
     Attributes
     ----------
@@ -63,9 +64,7 @@ class FileSystemMapper:
     ...     kind = "myfs"
     ...     server: str
     ...     path: str
-    ...     protocol = property(lambda self: "myfs")
     ...     url = property(lambda self: f"myfs://{self.server}{self.path}")
-    ...     storage = property(lambda self: ("myfs", self.server))
     >>> class MyMapper(FileSystemMapper):
     ...     classes = ("mypackage.MyFileSystem",)
     ...
@@ -73,7 +72,8 @@ class FileSystemMapper:
     ...         return MyLocation(server=fs.server, path=path)
     ...
     ...     def path_of(self, fs, location):
-    ...         if self.reaches(fs, location):
+    ...         # Only the server's files: what an instance reaches.
+    ...         if isinstance(location, MyLocation) and location.server == fs.server:
     ...             return location.path
     ...         return None
     >>> StorageExplorer(fs=my_filesystem, filesystem_mappers=[MyMapper()])
@@ -109,8 +109,7 @@ class FileSystemMapper:
         fs : AbstractFileSystem
             A filesystem this mapper ``matches``.
         path : str
-            A path of ``fs``, as fsspec lists it; "" for the top of the
-            storage, whose location tells the storage (``Location.storage``).
+            A path of ``fs``, as fsspec lists it; "" for its top folder.
 
         Returns
         -------
@@ -121,12 +120,16 @@ class FileSystemMapper:
             data", "Python code" or "Edit", and are not pasted in another
             kernel.
         """
-        return FsspecLocation(
-            fsspec_protocol=protocols(fs)[0], fsspec_url=fs.unstrip_protocol(path)
-        )
+        return FsspecLocation(url=fs.unstrip_protocol(path))
 
     def path_of(self, fs: AbstractFileSystem, location: Location) -> str | None:
-        """The reverse of ``to_location``: the path of ``location`` in ``fs``.
+        """The reverse of ``to_location``: the path of ``location`` in ``fs``,
+        if ``fs`` reaches it.
+
+        What an instance reaches depends on the implementation (adlfs reaches
+        all the containers of an account, Azure has a file system per
+        container), so mappers tell it here, from the location's fields and
+        the instance's settings, e.g. the account or the SFTP server and user.
 
         Parameters
         ----------
@@ -138,26 +141,15 @@ class FileSystemMapper:
         Returns
         -------
         str or None
-            The path, or None if ``fs`` does not reach it (see ``reaches``).
-            By default fsspec's path, for fsspec's URLs of one of the
-            filesystem's protocols.
+            The path, or None if ``fs`` does not reach it. By default
+            fsspec's path, for fsspec's URLs of one of the filesystem's
+            protocols.
         """
         if not isinstance(location, FsspecLocation):
             return None
         if location.protocol not in protocols(fs):
             return None
         return fs._strip_protocol(location.url) or fs.root_marker
-
-    def reaches(self, fs: AbstractFileSystem, location: Location) -> bool:
-        """Whether ``location`` is on the storage ``fs`` reaches: a location
-        of the same kind and ``storage`` as this mapper gives ``fs``'s top.
-        For ``path_of``."""
-        top = self.to_location(fs, "")
-        return (
-            top is not None
-            and type(top) is type(location)
-            and top.storage == location.storage
-        )
 
 
 class FsspecMapper(FileSystemMapper):
@@ -228,8 +220,8 @@ class MapperChain:
 
         The first of ``filesystems`` (an explorer's, the one shown first)
         that reaches it, with its options and credentials; else one fsspec
-        opens from its URL, with the environment's credentials, if it is that
-        storage (its mapper gives locations of the same storage). So files on
+        opens from its URL, with the environment's credentials, if that one
+        reaches it (as its mapper's ``path_of`` tells). So files on
         storages of the other kernel's own, its memory or another machine's
         disk, are never looked for in this one's.
 
@@ -271,7 +263,11 @@ class MapperChain:
         )
         if _FALLBACK in (mapper_a, mapper_b) or top_a is None or top_b is None:
             return inner_a == inner_b
-        return type(top_a) is type(top_b) and top_a.storage == top_b.storage
+        # Each reaches the other's top folder, as its own mapper tells.
+        return (
+            mapper_b.path_of(inner_b, top_a) is not None
+            and mapper_a.path_of(inner_a, top_b) is not None
+        )
 
 
 def _unwrap(fs: AbstractFileSystem) -> tuple[AbstractFileSystem, list[str]]:

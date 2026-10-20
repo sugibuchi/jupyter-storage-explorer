@@ -2,19 +2,15 @@
 Blob Storage and Data Lake Storage Gen2, Amazon S3 and S3-compatible stores,
 Google Cloud Storage, SFTP servers, the local disk, fsspec's memory
 filesystem, and fsspec's URLs for the filesystems no mapper knows. The
-mappers of mappers.py make them."""
+mappers of mappers.py make them, and tell which ones a filesystem reaches."""
 
 from __future__ import annotations
 
 import dataclasses
 import os
 import urllib.parse
-from typing import TYPE_CHECKING, Self
 
 from jupyter_storage_explorer.location import Location, trim
-
-if TYPE_CHECKING:
-    from collections.abc import Hashable
 
 
 def _set(location: Location, **values: object) -> None:
@@ -30,28 +26,8 @@ def origin(url: str) -> str:
     return f"{parts.scheme}://{parts.netloc}".lower()
 
 
-class _InContainer(Location):
-    """A location whose path starts with a container or bucket: ``join``,
-    ``parent`` and ``name`` see "container/path" as one path, so that the
-    top of the storage holds the containers."""
-
-    container_field = ""
-
-    @property
-    def _path(self) -> str:
-        return f"{getattr(self, self.container_field)}/{getattr(self, self.path_field)}".strip(
-            "/"
-        )
-
-    def _with_path(self, path: str) -> Self:
-        container, _, rest = path.strip("/").partition("/")
-        return dataclasses.replace(
-            self, **{self.container_field: container, self.path_field: rest}
-        )
-
-
 @dataclasses.dataclass(frozen=True, kw_only=True)
-class AbfsLocation(_InContainer):
+class AbfsLocation(Location):
     """A file or folder of an Azure storage account (Blob Storage, Data Lake
     Storage Gen2), as Hadoop and Spark name it:
     ``abfs://container@account.dfs.core.windows.net/path``, which adlfs reads
@@ -73,7 +49,6 @@ class AbfsLocation(_InContainer):
     """
 
     kind = "abfs"
-    container_field = "container_name"
 
     account_name: str
     container_name: str = ""
@@ -89,10 +64,6 @@ class AbfsLocation(_InContainer):
         )
 
     @property
-    def protocol(self) -> str:
-        return "abfs"
-
-    @property
     def url(self) -> str:
         if not self.container_name:
             return "abfs://"  # the account's containers, as adlfs lists them
@@ -101,17 +72,12 @@ class AbfsLocation(_InContainer):
         host = f"{self.account_name}.{self.endpoint_suffix}"
         return f"abfs://{self.container_name}@{host}/{self.path}"
 
-    @property
-    def storage(self) -> Hashable:
-        return ("abfs", self.account_name, self.endpoint_suffix)
-
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
-class _BucketLocation(_InContainer):
-    """``<protocol>://bucket/key``."""
+class _BucketLocation(Location):
+    """``<scheme>://bucket/key``."""
 
-    container_field = "bucket"
-    path_field = "key"
+    scheme = ""
 
     bucket: str = ""
     key: str = ""
@@ -126,7 +92,7 @@ class _BucketLocation(_InContainer):
 
     @property
     def url(self) -> str:
-        return f"{self.protocol}://{self._path}"
+        return f"{self.scheme}://{f'{self.bucket}/{self.key}'.strip('/')}"
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
@@ -150,6 +116,7 @@ class S3Location(_BucketLocation):
     """
 
     kind = "s3"
+    scheme = "s3"
 
     partition: str | None = "aws"
 
@@ -157,14 +124,6 @@ class S3Location(_BucketLocation):
         super().__post_init__()
         if self.endpoint:
             _set(self, partition=None)
-
-    @property
-    def protocol(self) -> str:
-        return "s3"
-
-    @property
-    def storage(self) -> Hashable:
-        return ("s3", self.endpoint or self.partition)
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
@@ -183,14 +142,7 @@ class GcsLocation(_BucketLocation):
     """
 
     kind = "gs"
-
-    @property
-    def protocol(self) -> str:
-        return "gs"
-
-    @property
-    def storage(self) -> Hashable:
-        return ("gs", self.endpoint)
+    scheme = "gs"
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
@@ -198,7 +150,7 @@ class SftpLocation(Location):
     """A file or folder of an SFTP server: ``sftp://user@host:port/path``.
 
     A server may show each user a tree of their own (a chroot), so the user
-    is part of the storage.
+    is part of where it is.
 
     Attributes
     ----------
@@ -227,17 +179,9 @@ class SftpLocation(Location):
         )
 
     @property
-    def protocol(self) -> str:
-        return "sftp"
-
-    @property
     def url(self) -> str:
         user = f"{self.user}@" if self.user else ""
         return f"sftp://{user}{self.host}:{self.port}{self.path}"
-
-    @property
-    def storage(self) -> Hashable:
-        return ("sftp", self.host, self.port, self.user)
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
@@ -268,10 +212,6 @@ class LocalLocation(Location):
         _set(self, path=trim(self.path), hostname=self.hostname.lower())
 
     @property
-    def protocol(self) -> str:
-        return "file"
-
-    @property
     def url(self) -> str:
         return f"file://{'' if self.path.startswith('/') else '/'}{self.path}"
 
@@ -280,10 +220,6 @@ class LocalLocation(Location):
         """The path in the system's form, e.g. "C:\\data\\a.csv" on Windows:
         what "Copy path" copies."""
         return os.path.normpath(self.path)
-
-    @property
-    def storage(self) -> Hashable:
-        return ("file", self.hostname, self.machine_id)
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
@@ -308,16 +244,8 @@ class MemoryLocation(Location):
         _set(self, path="/" + self.path.strip("/"))
 
     @property
-    def protocol(self) -> str:
-        return "memory"
-
-    @property
     def url(self) -> str:
         return f"memory://{self.path}"
-
-    @property
-    def storage(self) -> Hashable:
-        return ("memory", self.process)
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
@@ -330,35 +258,14 @@ class FsspecLocation(Location):
 
     Attributes
     ----------
-    fsspec_protocol : str
-        fsspec's protocol, e.g. "ftp".
-    fsspec_url : str
+    url : str
         fsspec's URL, ``fs.unstrip_protocol(path)``.
     """
 
     kind = "fsspec"
 
-    fsspec_protocol: str
-    fsspec_url: str
+    url: str
 
-    @property
-    def protocol(self) -> str:
-        return self.fsspec_protocol
-
-    @property
-    def url(self) -> str:
-        return self.fsspec_url
-
-    @property
-    def storage(self) -> Hashable:
-        return ("fsspec", self.fsspec_protocol)
-
-    @property
-    def _path(self) -> str:
-        return self.fsspec_url.partition("://")[2] or self.fsspec_url
-
-    def _with_path(self, path: str) -> Self:
-        prefix, sep, _ = self.fsspec_url.partition("://")
-        return dataclasses.replace(
-            self, fsspec_url=f"{prefix}{sep}{path}" if sep else path
-        )
+    def __post_init__(self) -> None:
+        if not isinstance(self.url, str):
+            raise TypeError("an fsspec location's url must be text")

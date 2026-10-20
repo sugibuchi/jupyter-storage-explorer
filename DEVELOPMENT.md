@@ -291,14 +291,17 @@ locations (`Location`, `location.py`) and back:
 
 - `to_location(fs, path)`: where a path is, independently of the implementation: e.g. an `AbfsLocation` (account,
   container, path) or an `SftpLocation` (host, port, user, path). Its `url` is shown by "Copy URL" and used in
-  "Python code", previews and the transfer policy. Its `storage` (the location without its path) tells which
-  storage the instance is connected to: two instances whose locations have the same storage are one storage, so the
-  explorer moves files between them within the storage, and finds files copied or dragged from another kernel on it.
-- `path_of(fs, location)`: the reverse, or None if the instance does not reach that location (`reaches`).
+  "Python code", previews and the transfer policy.
+- `path_of(fs, location)`: the reverse, or None if the instance does not reach that location. What one instance
+  reaches depends on the implementation (adlfs reaches all the containers of an account, though Azure has a file
+  system per container), so the mapper decides it from the location's fields and the instance's settings. Two
+  instances each reaching the other's top folder are one storage: the explorer moves files between them within the
+  storage, and finds files copied or dragged from another kernel on it.
 
 The predefined mappers (`filesystems/mappers.py`) and locations (`filesystems/locations.py`) cover Azure, S3, Google
 Cloud Storage, SFTP, local disks and memory; others get fsspec's URLs (`FsspecLocation`) and are told apart as fsspec
-compares them. A location of your own is a frozen, keyword-only dataclass of strings, integers and None:
+compares them. A location of your own is a frozen, keyword-only dataclass of strings, integers and None, with a
+`kind` and a `url` (its `protocol` comes from the URL):
 
 ```python
 import dataclasses
@@ -311,19 +314,11 @@ from jupyter_storage_explorer.filesystems import FileSystemMapper
 class MyLocation(Location):
     kind = "myfs"  # its name in JSON, unique
     server: str  # never credentials: locations are sent to the browser
-    path: str  # the field join, parent and name work on (path_field)
-
-    @property
-    def protocol(self):
-        return "myfs"
+    path: str
 
     @property
     def url(self):
         return f"myfs://{self.server}/{self.path.lstrip('/')}"
-
-    @property
-    def storage(self):
-        return ("myfs", self.server)
 
 
 class MyMapper(FileSystemMapper):
@@ -333,7 +328,10 @@ class MyMapper(FileSystemMapper):
         return MyLocation(server=fs.server.lower(), path=path)
 
     def path_of(self, fs, location):
-        return location.path if self.reaches(fs, location) else None
+        # An instance reaches its server's files.
+        if isinstance(location, MyLocation) and location.server == fs.server.lower():
+            return location.path
+        return None
 
 
 StorageExplorer(fs=my_fs, filesystem_mappers=[MyMapper()])

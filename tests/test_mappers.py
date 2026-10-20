@@ -155,10 +155,11 @@ class TestAzure:
         assert location.url == "abfs://c/k"
         assert location.account_name == "devstoreaccount1"
 
-    def test_the_top_holds_the_containers(self):
-        top = location_of(azure(), "")
-        assert top.join("data", "x.csv") == location_of(azure(), "data/x.csv")
-        assert location_of(azure(), "data").parent == top
+    def test_an_instance_reaches_its_accounts_containers(self):
+        """adlfs's file system is the account; Azure's would be a container."""
+        lake = azure()
+        for path in ("", "data", "logs/2026/x.csv"):
+            assert path_in(lake, location_of(lake, path)) == path
 
     def test_found_by_account(self):
         lake, other = azure(), azure("other")
@@ -187,19 +188,20 @@ class TestObjectStores:
         assert path_in(fs, location) == "bucket/k.csv"
 
     @pytest.mark.parametrize(
-        ("kwargs", "storage"),
+        ("kwargs", "where"),
         [
-            ({}, ("s3", "aws")),
-            ({"client_kwargs": {"region_name": "cn-north-1"}}, ("s3", "aws-cn")),
-            ({"endpoint_url": "HTTP://MinIO:9000/"}, ("s3", "http://minio:9000")),
+            ({}, (None, "aws")),
+            ({"client_kwargs": {"region_name": "cn-north-1"}}, (None, "aws-cn")),
+            ({"endpoint_url": "HTTP://MinIO:9000/"}, ("http://minio:9000", None)),
             (
                 {"client_kwargs": {"endpoint_url": "http://minio:9000"}},
-                ("s3", "http://minio:9000"),
+                ("http://minio:9000", None),
             ),
         ],
     )
-    def test_s3_storages(self, kwargs, storage):
-        assert location_of(S3FileSystem(**kwargs), "b/k").storage == storage
+    def test_s3_endpoints_and_partitions(self, kwargs, where):
+        location = location_of(S3FileSystem(**kwargs), "b/k")
+        assert (location.endpoint, location.partition) == where
 
     def test_s3_endpoints_are_told_apart(self):
         aws, minio = S3FileSystem(), S3FileSystem(endpoint_url="http://minio:9000")
@@ -242,7 +244,11 @@ class TestSSHFS:
             SSHFileSystem(host="server.example.com", username="alice", port=2222),
         ):
             location = location_of(fs, "/home/alice/x.txt")
-            assert location.storage == ("sftp", "server.example.com", 2222, "alice")
+            assert (location.host, location.port, location.user) == (
+                "server.example.com",
+                2222,
+                "alice",
+            )
             assert (
                 location.url == "sftp://alice@server.example.com:2222/home/alice/x.txt"
             )
@@ -290,10 +296,8 @@ class TestDirFileSystem:
 class TestUnknownFilesystems:
     def test_fsspec_urls(self):
         location = location_of(OtherFileSystem(), "/x")
-        assert location == FsspecLocation(
-            fsspec_protocol="other", fsspec_url="other:///x"
-        )
-        assert (location.protocol, location.url) == ("other", "other:///x")
+        assert location == FsspecLocation(url="other:///x")
+        assert location.protocol == "other"
 
     def test_the_first_with_the_protocol(self, memfs):
         """Nothing tells such filesystems apart: as before mappers."""
@@ -310,17 +314,10 @@ class TestUnknownFilesystems:
             opened.append,
         )
         for url in ("http://169.254.169.254/latest/meta-data/", "ftp://host/x"):
-            location = FsspecLocation(fsspec_protocol=url.split(":")[0], fsspec_url=url)
+            location = FsspecLocation(url=url)
             with pytest.raises(ValueError, match="not reachable from this kernel"):
                 locate(location, [memfs])
         assert opened == []
-
-    def test_a_url_sent_with_a_known_kind_is_not_used(self):
-        """An http URL sent as an S3 location: the URL comes from the fields."""
-        location = Location.from_json(
-            {"kind": "s3", "url": "http://169.254.169.254/latest/", "bucket": "b"}
-        )
-        assert location.url == "s3://b"
 
     def test_same_as_fsspec_compares(self):
         assert same_filesystem(OtherFileSystem("a"), OtherFileSystem("a"))
@@ -338,9 +335,7 @@ def test_mappers_given_first(memfs):
     class TestsLocation(Location):
         kind = "tests-memory"
         path: str
-        protocol = property(lambda self: "memory")
         url = property(lambda self: f"memory://tests{self.path}")
-        storage = property(lambda self: ("tests",))
 
     class Namespaced(FileSystemMapper):
         classes = ("fsspec.implementations.memory.MemoryFileSystem",)
@@ -349,7 +344,7 @@ def test_mappers_given_first(memfs):
             return TestsLocation(path=path)
 
         def path_of(self, fs, location):
-            return location.path if self.reaches(fs, location) else None
+            return location.path if isinstance(location, TestsLocation) else None
 
     mine = MapperChain([Namespaced(), *default_mappers()])
     assert mine.location_of(memfs, "/x").url == "memory://tests/x"
