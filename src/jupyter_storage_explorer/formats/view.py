@@ -5,8 +5,14 @@ to their ``kind``."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, ClassVar
+import logging
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any, ClassVar
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -42,10 +48,54 @@ class ViewLimits:
 
 @dataclass(frozen=True, kw_only=True)
 class View:
+    """What a support's ``view()`` returns: one of the subclasses below,
+    which the explorer shows by their ``kind``.
+
+    Parameters
+    ----------
+    title : str, default ""
+        Shown above the view.
+    note : str, default ""
+        Shown under the view, e.g. "First 100 rows of 1,234,567".
+    on_close : callable or None, default None
+        Called without arguments by ``close()``, once the explorer no longer
+        shows the view, to release what it holds (e.g. a database connection,
+        a temporary copy of the file). The data of a ``QueryView`` must stay
+        readable until then.
+
+    Examples
+    --------
+    >>> con = duckdb.connect(path, read_only=True)
+    >>> QueryView(data=con.table("orders"), on_close=con.close)
+    """
+
     kind: ClassVar[str]
     title: str = ""
-    # Shown under the view, e.g. "First 100 rows of 1,234,567".
     note: str = ""
+    on_close: Callable[[], object] | None = field(
+        default=None, repr=False, compare=False
+    )
+    _closed: bool = field(default=False, init=False, repr=False, compare=False)
+
+    def close(self) -> None:
+        """Call ``on_close``, the first time only.
+
+        The explorer calls it once it stops showing the view: another item
+        previewed, the preview panel or the view's tab closed, another storage
+        shown, the explorer closed, or the data browser's data read again
+        (once the new view is open). An error of ``on_close`` is logged, not
+        raised, so that it never keeps the next view from showing.
+        """
+        if self._closed:
+            return
+        # Frozen, as views are values; whether it was closed is not one.
+        object.__setattr__(self, "_closed", True)
+        if self.on_close is None:
+            return
+        try:
+            self.on_close()
+        except Exception:
+            log.exception("Closing a %s view failed", self.kind)
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -2,12 +2,22 @@
 
 from __future__ import annotations
 
+import dataclasses
+import itertools
+
+import pytest
 from explorers import make, path_of
 
+from jupyter_storage_explorer._explorer import previews
 from jupyter_storage_explorer._query.settings import QuerySettings
 from jupyter_storage_explorer._view_tab import ViewTab
 from jupyter_storage_explorer.data_explorer import DataExplorer
-from jupyter_storage_explorer.formats import PythonPackage, SupportChain, ViewLimits
+from jupyter_storage_explorer.formats import (
+    PythonPackage,
+    SupportChain,
+    TextView,
+    ViewLimits,
+)
 from jupyter_storage_explorer.formats.supports import CsvByPandas, CsvByPolars
 
 
@@ -154,6 +164,97 @@ class TestViewTab:
         )
         assert reply["error"] == "x.bin cannot be viewed in any format"
         assert not local._view_tabs
+
+
+class TestClose:
+    """Views are closed (``View.close``, calling their ``on_close``) once the
+    explorer no longer shows them."""
+
+    @pytest.fixture
+    def closed(self, monkeypatch):
+        """The titles of the views closed, each view titled by its number."""
+        closed, count = [], itertools.count(1)
+        view = SupportChain.view
+
+        def closing(self, *args, **kwargs):
+            title = str(next(count))
+            return dataclasses.replace(
+                view(self, *args, **kwargs),
+                title=title,
+                on_close=lambda: closed.append(title),
+            )
+
+        monkeypatch.setattr(SupportChain, "view", closing)
+        return closed
+
+    def test_preview_replaced(self, local, closed):
+        local.message({"type": "preview", "path": path_of(local, "notes.txt")})
+        local.message({"type": "preview", "path": path_of(local, "data.parquet")})
+        assert closed == ["1"]
+        local.message({"type": "preview", "path": path_of(local, "notes.txt")})
+        assert closed == ["1", "2"]  # the data browser's view, with its query
+        assert not local._queries
+
+    def test_panel_closed_by_the_frontend(self, local, closed):
+        local.message({"type": "preview", "path": path_of(local, "data.parquet")})
+        local._preview = {}
+        assert closed == ["1"]
+
+    def test_reload_closes_the_previous_view_only(self, local, closed):
+        path = path_of(local, "data.parquet")
+        local.message({"type": "preview", "path": path})
+        local.request({"type": "query_reload", "rid": 1, "path": path})
+        local.request({"type": "query_reload", "rid": 2, "path": path})
+        assert closed == ["1", "2"]
+        reply = local.request(
+            {"type": "query_rows", "rid": 3, "path": path, "offset": 0, "window": 1}
+        )
+        assert reply["rows"] == [[1]]
+        local._close_preview()
+        assert closed == ["1", "2", "3"]
+
+    def test_storage_switched(self, local, memfs, closed):
+        explorer = make(filesystems={"local": local._root, "memory": memfs})
+        explorer.message({"type": "preview", "path": path_of(explorer, "data.parquet")})
+        explorer._filesystem = "memory"
+        assert closed == ["1"]
+
+    def test_view_tabs(self, local, closed):
+        for name in ("notes.txt", "data.parquet"):
+            reply = local.request(
+                {"type": "view_tab", "rid": 1, "path": path_of(local, name)}
+            )
+            local.message({"type": "view_tab_closed", "model_id": reply["model_id"]})
+        assert closed == ["1", "2"]
+
+    def test_explorer_closed(self, local, closed):
+        local.message({"type": "preview", "path": path_of(local, "notes.txt")})
+        local.request(
+            {"type": "view_tab", "rid": 1, "path": path_of(local, "data.parquet")}
+        )
+        local.close()
+        assert sorted(closed) == ["1", "2"]
+        assert not local._view_tabs
+
+    def test_failed_preview_closes_its_view(self, local, closed, monkeypatch):
+        def failing(*args, **kwargs):
+            raise ValueError("cannot query")
+
+        monkeypatch.setattr(previews.DataQuery, "__init__", failing)
+        local.message({"type": "preview", "path": path_of(local, "data.parquet")})
+        assert local._preview["error"] == "cannot query"
+        assert closed == ["1"]
+
+
+def test_view_closed_once_and_errors_logged(caplog):
+    calls = []
+    view = TextView(text="x", on_close=lambda: calls.append(1))
+    view.close()
+    view.close()
+    assert calls == [1]
+    TextView(text="x", on_close=lambda: 1 / 0).close()
+    assert "Closing a text view failed" in caplog.text
+    assert "on_close" not in previews.section(view)
 
 
 def test_vendor(mem_explorer):

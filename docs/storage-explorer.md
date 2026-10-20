@@ -314,7 +314,9 @@ StorageExplorer("data", supports=[ParquetByDuckDB])
 
 Each method gets where the item is (`location`, which libraries doing their own I/O read: `library_url(location)`),
 the explorer's fsspec filesystem and the item's path in it (to read it through the explorer, e.g. for a text view), and
-whether it is a folder; `view` also gets `limits` (`ViewLimits`: bytes and rows to read). `recipe` returns code by
+whether it is a folder; `view` also gets `limits` (`ViewLimits`: bytes and rows to read). A view holding something to
+release, e.g. a database connection, takes it as `on_close` (`QueryView(data=..., on_close=con.close)`): the explorer
+calls it once it no longer shows the view. `recipe` returns code by
 title, e.g. `{"Load as DataFrame": "import duckdb\n..."}`, the title saying what the code does, not the library. `FormatSupport`'s docstring has the rules for writing one.
 
 ## Format options
