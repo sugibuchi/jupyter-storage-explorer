@@ -121,33 +121,26 @@ class TestDetection:
         memfs.pipe_file("/t/part-0.parquet", b"")
         item = make_item("/t")
         formats = [Parquet(), DeltaLake()]
-        assert isinstance(detect(*item.match_args, formats=formats), DeltaLake)
-        assert [
-            type(f) for f in matching_formats(*item.match_args, formats=formats)
-        ] == [
+        assert isinstance(detect(item, formats=formats), DeltaLake)
+        assert [type(f) for f in matching_formats(item, formats=formats)] == [
             DeltaLake,
             Parquet,
         ]
 
     def test_fallback_to_text(self, make_item):
         item = make_item("/a.csv", b"a,b\n")
-        assert [
-            type(f) for f in matching_formats(*item.match_args, formats=[Text(), Csv()])
-        ] == [
+        assert [type(f) for f in matching_formats(item, formats=[Text(), Csv()])] == [
             Csv,
             Text,
         ]
 
     def test_unknown(self, make_item):
-        assert (
-            detect(*make_item("/a.bin", b"\0").match_args, formats=[Text(), Csv()])
-            is None
-        )
+        assert detect(make_item("/a.bin", b"\0"), formats=[Text(), Csv()]) is None
 
 
 @pytest.mark.parametrize("name", ["DATA.CSV", "data.tsv"])
 def test_extensions_ignore_case(make_item, name):
-    assert Csv().matches(*make_item(f"/{name}", b"a\n").match_args)
+    assert Csv().matches(make_item(f"/{name}", b"a\n"))
 
 
 class TestFileIcons:

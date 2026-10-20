@@ -15,10 +15,7 @@ from jupyter_storage_explorer.formats.support import FormatSupport
 from jupyter_storage_explorer.formats.text import Csv, JsonLines
 
 if TYPE_CHECKING:
-    from fsspec import AbstractFileSystem
-
-    from jupyter_storage_explorer.location import Location
-
+    from jupyter_storage_explorer.formats.base import ItemContext
 
 # Spark (Hadoop) names for storage URLs: TLS "abfss" for Azure, as Spark
 # expects it (storage accounts usually require secure transfer); "s3a", the
@@ -55,18 +52,11 @@ class CsvByPySpark(FormatSupport):
         df = spark.read.csv({url}, header=True, inferSchema=True{kwargs})
         """)
 
-    def recipe(
-        self,
-        fmt: Csv,
-        location: Location,
-        fs: AbstractFileSystem,
-        path: str,
-        is_dir: bool,
-    ) -> dict[str, str]:
+    def recipe(self, fmt: Csv, ctx: ItemContext) -> dict[str, str]:
         return {
             AS_DATA_FRAME: self.data_frame_template.format(
-                url=repr(spark_url(location.url)),
-                kwargs=format_kwargs(sep=fmt.code_separator(fs, path)),
+                url=repr(spark_url(ctx.location.url)),
+                kwargs=format_kwargs(sep=fmt.code_separator(ctx.fs, ctx.path)),
             )
         }
 
@@ -84,17 +74,10 @@ class JsonLinesByPySpark(FormatSupport):
         df = spark.read.json({url})
         """)
 
-    def recipe(
-        self,
-        fmt: JsonLines,
-        location: Location,
-        fs: AbstractFileSystem,
-        path: str,
-        is_dir: bool,
-    ) -> dict[str, str]:
+    def recipe(self, fmt: JsonLines, ctx: ItemContext) -> dict[str, str]:
         return {
             AS_DATA_FRAME: self.data_frame_template.format(
-                url=repr(spark_url(location.url))
+                url=repr(spark_url(ctx.location.url))
             )
         }
 
@@ -112,17 +95,10 @@ class ParquetByPySpark(FormatSupport):
         df = spark.read.parquet({url})
         """)
 
-    def recipe(
-        self,
-        fmt: Parquet,
-        location: Location,
-        fs: AbstractFileSystem,
-        path: str,
-        is_dir: bool,
-    ) -> dict[str, str]:
+    def recipe(self, fmt: Parquet, ctx: ItemContext) -> dict[str, str]:
         return {
             AS_DATA_FRAME: self.data_frame_template.format(
-                url=repr(spark_url(location.url))
+                url=repr(spark_url(ctx.location.url))
             )
         }
 
@@ -142,16 +118,9 @@ class DeltaLakeByPySpark(FormatSupport):
         df = spark.read.format("delta").load({url})
         """)
 
-    def recipe(
-        self,
-        fmt: DeltaLake,
-        location: Location,
-        fs: AbstractFileSystem,
-        path: str,
-        is_dir: bool,
-    ) -> dict[str, str]:
+    def recipe(self, fmt: DeltaLake, ctx: ItemContext) -> dict[str, str]:
         return {
             AS_DATA_FRAME: self.data_frame_template.format(
-                url=repr(spark_url(location.url))
+                url=repr(spark_url(ctx.location.url))
             )
         }

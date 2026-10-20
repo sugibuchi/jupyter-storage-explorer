@@ -34,9 +34,8 @@ Python and `static/` changes need no build: restart the kernel. The launcher's J
 ## Tests
 
 The Python tests: fixtures in `tests/conftest.py` are `memfs` (a cleared fsspec memory filesystem), `make_item`
-(writes a file there and returns it as an `Item` of `tests/items.py`: its location, filesystem, path, info and
-listing, spread into formats' and supports' methods as `*item.match_args` and `*item.args`; `local_item` for a
-local file), and `mem_explorer` and `local` (explorers of those). Anything polars
+(writes a file there and returns it as formats and supports are given it, an `ItemContext`, made by
+`tests/items.py`'s `item_of`; `local_item` for a local file), and `mem_explorer` and `local` (explorers of those). Anything polars
 reads by URL (`query`, polars previews, the data browser) needs real local files (`tmp_path`), as polars cannot read
 `memory://`. The data browser's tests run each filter on polars, pandas, PyArrow, DuckDB and sqlframe (the PySpark API
 on DuckDB, which narwhals queries as it does Spark; real Spark needs Java, so it is not tested). The widget tests
@@ -287,7 +286,7 @@ The list's is cleared when another folder's listing arrives, not on the click, s
 unfiltered.
 
 **Formats** (`formats/`). Laid out as `filesystems/`: the interfaces `DataFormat` (`base.py`, with
-`detect`, `FILE_ICONS`, the helpers reading a file through its filesystem, `head_text`, `read_whole`,
+`ItemContext`, `detect`, `FILE_ICONS`, the helpers reading a file through its filesystem, `head_text`, `read_whole`,
 `file_size`, `name_of`, `child_names`, and the generated code's helpers), `FormatSupport` (`support.py`, with `SupportChain`, `Capability` and `Recipe`) and `PythonPackage`
 (`package.py`); a module per predefined format (`delta.py`, `parquet.py`, `excel.py`, `text.py`, `images.py`) and
 per library of the predefined supports in `supports/` (`polars.py`, `pandas.py`, `pyspark.py`, `fsspec.py`,
@@ -301,14 +300,16 @@ so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
 - `DataFormat` subclasses declare `name`, `label`, `priority`, `extensions`, `file_icon` (its files' icon in the list:
   one of `FILE_ICONS`, or `(name, svg)` for one of its own, shown as an `<img>` so its scripts never run; sent as
   `_format_icons` and `_file_icon_svgs`, checked by `format_icons()`; files of formats without one, e.g. Text's, get
-  their extension's icon, `FILE_ICON_EXTENSIONS` in `icons.js`) and implement `matches(location, fs, path, info,
-  children)`: cheap detection, called on every click (`children` the listing of a folder, None for a file; `fs` and
-  `path` the explorer's, to read more); directory formats (Delta, Parquet datasets) inspect `children`. `detect` and
-  `matching_formats` take the same and `formats=`. Parquet also takes
+  their extension's icon, `FILE_ICON_EXTENSIONS` in `icons.js`) and implement `matches(ctx)`: cheap detection, called on
+  every click. `ctx` is an `ItemContext` (`base.py`): a frozen dataclass of the item's `location`, the explorer's
+  `fs` and its `path` there (to read more), its fsspec `info` and `children` (a folder's listing, None for a file;
+  `is_dir`, `name`), one object rather than parameters so that it can grow without changing the methods'
+  signatures; directory formats (Delta, Parquet datasets) inspect `ctx.children`. `detect` and `matching_formats`
+  take a context and `formats=`. Parquet also takes
   Hive-style partition folders (`year=…/month=…/`), followed down one branch (one more `ls` per partition column,
   `_partitioned_layout`), and keeps each directory's `ParquetLayout` by location, for the supports
-  (`layout(location, fs, path)`: one not seen is detected then through `fs`; without `fs`, its own "*.parquet" files;
-  `data_url`, `first_files`). The highest
+  (`layout(ctx)`: one not seen is detected then from `ctx.children`; else its own "*.parquet" files;
+  `data_url(ctx)`, `first_files(ctx, n)`). The highest
   `priority` wins (Delta 20 > Parquet 10 > default 0 > Text -10). What supports share about a format is on it
   (`Csv.separator`, `Text.language`, `Image.mime_type`, `Parquet.data_url`, ...).
 - `FormatSupport` subclasses declare `format` (matched with `isinstance`, so subclasses too: `MarkdownByPython` comes
@@ -317,19 +318,20 @@ so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
   `"recipe"`; `Capability`; not "jobs" or "tasks", which are file operations here): the explorer reads only
   `capabilities`, so a method not listed is never called (no runtime check of that, by design: users are expected to
   generate supports with AI from the written rules in `FormatSupport`'s docstring, kept by
-  `test_capabilities_are_the_methods_implemented` for the defaults). Each method gets the detected format object first, then the item: its location (for
-  libraries doing their own I/O and for the code: `library_url(location)`; Spark's `spark_url(location.url)`, in `supports/pyspark.py`), the explorer's
-  fsspec filesystem and the item's path in it (to read it through the explorer, with its credentials), and `is_dir`;
-  `view`'s `limits` (`ViewLimits`) is keyword-only. Any may raise `FormatSupport.NotSupported`
+  `test_capabilities_are_the_methods_implemented` for the defaults). Each method gets the detected format object first, then the item's `ItemContext`
+  (`ctx`): its location (for libraries doing their own I/O and for the code: `library_url(ctx.location)`; Spark's
+  `spark_url(ctx.location.url)`, in `supports/pyspark.py`), the explorer's fsspec filesystem and the item's path in it
+  (to read it through the explorer, with its credentials); `view`'s `limits` (`ViewLimits`) is a keyword-only
+  argument of its own, not in the context. Any may raise `FormatSupport.NotSupported`
   for an item, and the next support is tried. Options are keyword-only `__init__` arguments, no `**kwargs`. Class
   names are `<Format>By<Library>`.
 - `SupportChain` (the explorer's `_supports`: `supports=` then `StorageExplorer.default_supports()`, i.e.
   `DEFAULT_SUPPORTS`, ordered format by format, most preferred first) calls them: `view` of the first support
   installed for the format (`installed`), `recipes` with the first support with `"recipe"` of each library (so one
   given replaces the default's), installed or not (the code may run elsewhere).
-- `view(fmt, location, fs, path, is_dir, *, limits)`: one `View` dataclass of `view.py`. A `QueryView` (`data`: any
+- `view(fmt, ctx, *, limits)`: one `View` dataclass of `view.py`. A `QueryView` (`data`: any
   dataframe narwhals supports, best lazy) opens the data browser (`_new_query`: the first view's data, then the view
-  again on reload, with the filesystem it was opened with); whether an item opens in the data browser is known only
+  again on reload, with the context it was opened with); whether an item opens in the data browser is known only
   once viewed, so the menu offers "Preview" and "View in a new tab" for whatever has a format. The others
   (`TableView`, `TextView`, `TreeView`, `MarkdownView`, `MediaView`...) are sent as the one item of the preview's
   `"sections"` (`section()`), which the frontend renders by `kind`. With no support installed, the chain returns an
@@ -344,8 +346,8 @@ so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
   `_query/data_query.py`'s `DataQuery` does filters, sort and paging as narwhals expressions, either on the data itself
   ("live") or on rows read into memory (queried with polars); behaviour such as regex syntax then follows the data's
   library.
-- `recipe(fmt, location, fs, path, is_dir)`: the code of "Python code", by title, e.g. `{"Load as LazyFrame": ...,
-  "Load as DataFrame": ...}` (`fs` and `path` only for what the code must know of the file, e.g. a CSV file's
+- `recipe(fmt, ctx)`: the code of "Python code", by title, e.g. `{"Load as LazyFrame": ...,
+  "Load as DataFrame": ...}` (`ctx.fs` and `ctx.path` only for what the code must know of the file, e.g. a CSV file's
   separator; titles never name the library: the chain makes a `Recipe` of each, adding the support's
   `requirements()`, and the frontend groups them in a submenu per library, the first package, and lists the packages
   under the code), run as it is in a new notebook: its imports (`import polars as

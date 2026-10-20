@@ -25,8 +25,8 @@ from jupyter_storage_explorer.formats.view import (
 if TYPE_CHECKING:
     from fsspec import AbstractFileSystem
 
+    from jupyter_storage_explorer.formats.base import ItemContext
     from jupyter_storage_explorer.formats.view import View, ViewLimits
-    from jupyter_storage_explorer.location import Location
 
 
 def _size_note(fs: AbstractFileSystem, path: str, limits: ViewLimits) -> str:
@@ -69,19 +69,10 @@ class TextByPython(FormatSupport):
     format = Text
     capabilities = ("view",)
 
-    def view(
-        self,
-        fmt: Text,
-        location: Location,
-        fs: AbstractFileSystem,
-        path: str,
-        is_dir: bool,
-        *,
-        limits: ViewLimits,
-    ) -> View:
-        text, truncated = head_text(fs, path, limits.max_bytes)
-        note = _size_note(fs, path, limits) if truncated else ""
-        return _text_view(text, fmt.language(path), note)
+    def view(self, fmt: Text, ctx: ItemContext, *, limits: ViewLimits) -> View:
+        text, truncated = head_text(ctx.fs, ctx.path, limits.max_bytes)
+        note = _size_note(ctx.fs, ctx.path, limits) if truncated else ""
+        return _text_view(text, fmt.language(ctx.path), note)
 
 
 class MarkdownByPython(FormatSupport):
@@ -91,18 +82,9 @@ class MarkdownByPython(FormatSupport):
     format = Markdown
     capabilities = ("view",)
 
-    def view(
-        self,
-        fmt: Markdown,
-        location: Location,
-        fs: AbstractFileSystem,
-        path: str,
-        is_dir: bool,
-        *,
-        limits: ViewLimits,
-    ) -> View:
-        text, truncated = head_text(fs, path, limits.max_bytes)
-        note = _size_note(fs, path, limits) if truncated else ""
+    def view(self, fmt: Markdown, ctx: ItemContext, *, limits: ViewLimits) -> View:
+        text, truncated = head_text(ctx.fs, ctx.path, limits.max_bytes)
+        note = _size_note(ctx.fs, ctx.path, limits) if truncated else ""
         return MarkdownView(text=text, note=note)
 
 
@@ -112,19 +94,12 @@ class JsonByPython(FormatSupport):
     format = Json
     capabilities = ("view",)
 
-    def view(
-        self,
-        fmt: Json,
-        location: Location,
-        fs: AbstractFileSystem,
-        path: str,
-        is_dir: bool,
-        *,
-        limits: ViewLimits,
-    ) -> View:
-        text, truncated = head_text(fs, path, limits.max_bytes)
+    def view(self, fmt: Json, ctx: ItemContext, *, limits: ViewLimits) -> View:
+        text, truncated = head_text(ctx.fs, ctx.path, limits.max_bytes)
         if truncated:
-            note = f"{_size_note(fs, path, limits)}; too large to show as a tree"
+            note = (
+                f"{_size_note(ctx.fs, ctx.path, limits)}; too large to show as a tree"
+            )
             return _text_view(text, "json", note)
         try:
             return TreeView(value=json.loads(text))
@@ -139,24 +114,15 @@ class ImageByPython(FormatSupport):
     format = Image
     capabilities = ("view",)
 
-    def view(
-        self,
-        fmt: Image,
-        location: Location,
-        fs: AbstractFileSystem,
-        path: str,
-        is_dir: bool,
-        *,
-        limits: ViewLimits,
-    ) -> View:
-        mime = fmt.mime_type(path)
-        size = file_size(fs, path)
+    def view(self, fmt: Image, ctx: ItemContext, *, limits: ViewLimits) -> View:
+        mime = fmt.mime_type(ctx.path)
+        size = file_size(ctx.fs, ctx.path)
         if size is not None and size <= limits.max_whole_file_bytes:
-            return MediaView(mime=mime, data=head(fs, path, size))
+            return MediaView(mime=mime, data=head(ctx.fs, ctx.path, size))
         # Too large to send through the kernel: let the browser fetch it, if the
         # storage can issue a temporary link.
         try:
-            return MediaView(mime=mime, src=fs.sign(path))
+            return MediaView(mime=mime, src=ctx.fs.sign(ctx.path))
         except NotImplementedError:
             limit = limits.max_whole_file_bytes // (1024 * 1024)
             raise ValueError(f"too large to view (over {limit} MB)") from None

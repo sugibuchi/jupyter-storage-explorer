@@ -17,10 +17,7 @@ from jupyter_storage_explorer.formats.text import Json, Text
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from fsspec import AbstractFileSystem
-
-    from jupyter_storage_explorer.location import Location
-
+    from jupyter_storage_explorer.formats.base import ItemContext
 
 READ_TEXT = "Read the text"
 LOAD_VALUE = "Load the JSON value"
@@ -54,17 +51,10 @@ class TextByFsspec(OpenedByFsspec):
             text = f.read()
         """)
 
-    def recipe(
-        self,
-        fmt: Text,
-        location: Location,
-        fs: AbstractFileSystem,
-        path: str,
-        is_dir: bool,
-    ) -> dict[str, str]:
+    def recipe(self, fmt: Text, ctx: ItemContext) -> dict[str, str]:
         return {
             READ_TEXT: self.text_template.format(
-                url=repr(library_url(location)), kwargs=self.code_kwargs()
+                url=repr(library_url(ctx.location)), kwargs=self.code_kwargs()
             )
         }
 
@@ -85,16 +75,9 @@ class JsonByFsspec(OpenedByFsspec):
             data = json.load(f)
         """)
 
-    def recipe(
-        self,
-        fmt: Json,
-        location: Location,
-        fs: AbstractFileSystem,
-        path: str,
-        is_dir: bool,
-    ) -> dict[str, str]:
+    def recipe(self, fmt: Json, ctx: ItemContext) -> dict[str, str]:
         return {
             LOAD_VALUE: self.value_template.format(
-                url=repr(library_url(location)), kwargs=self.code_kwargs()
+                url=repr(library_url(ctx.location)), kwargs=self.code_kwargs()
             )
         }

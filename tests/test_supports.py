@@ -146,7 +146,7 @@ class TestOptions:
 
 class TestChain:
     def view(self, chain, item):
-        return chain.view(Csv(), *item.args, limits=LIMITS)
+        return chain.view(Csv(), item, limits=LIMITS)
 
     def test_first_installed_views(self, make_item):
         missing = support(engine=Missing, view=lambda *a, **k: "missing")
@@ -190,7 +190,7 @@ class TestChain:
         path = tmp_path / "a.tsv"
         path.write_text("a\tb\n1\t2\n")
         view = SupportChain(default_supports()).view(
-            tsv(), *local_item(path).args, limits=LIMITS
+            tsv(), local_item(path), limits=LIMITS
         )
         assert isinstance(view, QueryView)
         assert view.data.collect().columns == ["a", "b"]
@@ -198,7 +198,7 @@ class TestChain:
     def test_recipes_of_every_support_installed_or_not(self, make_item, monkeypatch):
         monkeypatch.setattr(PythonPackage, "is_installed", lambda self: False)
         chain = SupportChain(default_supports())
-        recipes = chain.recipes(Csv(), *make_item("/a.csv", b"a\n").args)
+        recipes = chain.recipes(Csv(), make_item("/a.csv", b"a\n"))
         assert [(r.requirements[0].package, r.title) for r in recipes] == [
             ("polars", "Load as DataFrame"),
             ("pandas", "Load as DataFrame"),
@@ -210,9 +210,7 @@ class TestChain:
             capabilities=("recipe",),
             recipe=lambda *a, **k: {"Load lazily": "lazy", "Load eagerly": "eager"},
         )
-        recipes = SupportChain([several()]).recipes(
-            Csv(), *make_item("/a.csv", b"").args
-        )
+        recipes = SupportChain([several()]).recipes(Csv(), make_item("/a.csv", b""))
         assert [(r.title, r.code) for r in recipes] == [
             ("Load lazily", "lazy"),
             ("Load eagerly", "eager"),
@@ -221,7 +219,7 @@ class TestChain:
     def test_recipes_name_their_packages(self, make_item, memfs):
         memfs.pipe_file("/t/_delta_log/00000000000000000000.json", b"{}")
         chain = SupportChain(default_supports())
-        recipes = chain.recipes(DeltaLake(), *make_item("/t").args)
+        recipes = chain.recipes(DeltaLake(), make_item("/t"))
         packages = [[r.package for r in recipe.requirements] for recipe in recipes]
         assert packages == [
             ["polars", "deltalake"],
@@ -233,7 +231,7 @@ class TestChain:
         path = tmp_path / "a.parquet"
         pl.DataFrame({"a": [1, 2]}).write_parquet(path)
         view = SupportChain(default_supports()).view(
-            Parquet(), *local_item(path).args, limits=LIMITS
+            Parquet(), local_item(path), limits=LIMITS
         )
         assert view.data.collect()["a"].to_list() == [1, 2]
 
@@ -249,16 +247,14 @@ class TestExplorer:
             recipe=lambda *a, **k: {"Load as a duck": "duck"},
         )
         explorer = StorageExplorer(fs=mem_explorer._fs, supports=[duck])
-        recipes = explorer._supports.recipes(
-            Parquet(), *make_item("/a.parquet", b"").args
-        )
+        recipes = explorer._supports.recipes(Parquet(), make_item("/a.parquet", b""))
         assert (recipes[0].title, recipes[0].code) == ("Load as a duck", "duck")
         # and the defaults': polars (lazily and eagerly), pandas, pyspark.
         assert len(recipes) == 5
 
     def test_a_library_given_replaces_the_default_code(self, make_item):
         explorer = StorageExplorer(fs=None, supports=[CsvByPolars()])
-        recipes = explorer._supports.recipes(Csv(), *make_item("/a.csv", b"a\n").args)
+        recipes = explorer._supports.recipes(Csv(), make_item("/a.csv", b"a\n"))
         # Its recipes replace the default CsvByPolars': one each.
         assert [r.requirements[0].package for r in recipes] == [
             "polars",
