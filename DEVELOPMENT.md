@@ -414,6 +414,6 @@ under its library's name (`engine.package`, e.g. `"duckdb"`). Mark credentials s
 keys of a mapping such as storage options; the code gets options through `options.code_value(name)`, which leaves them
 out. A view holding something to release, e.g. a database connection, releases it in a function given to its
 `on_close` (`view.on_close(lambda view: con.close())`), as `StorageExplorer.on_change` takes one: the explorer calls it
-once it no longer shows the view. `recipe` returns code by title, e.g. `{"Load as DataFrame": "import duckdb\n..."}`,
+once it no longer shows the view, also when the kernel exits. `recipe` returns code by title, e.g. `{"Load as DataFrame": "import duckdb\n..."}`,
 the title saying what the code does, not the library. `FormatSupport`'s docstring has the rules for writing one. In
 `launcher.py`, return supports from `supports()`, and their options from `format_options()`.

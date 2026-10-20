@@ -235,6 +235,22 @@ class TestClose:
         assert sorted(closed) == ["1", "2"]
         assert not local._view_tabs
 
+    def test_kernel_exit(self, local, closed, monkeypatch):
+        # Every explorer's views, the preview's and its tabs' (data and other
+        # views), even after another explorer fails; no widget is closed, as
+        # no message reaches the page then.
+        local.message({"type": "preview", "path": path_of(local, "notes.txt")})
+        for name in ("data.parquet", "notes.txt"):
+            local.request({"type": "view_tab", "rid": 1, "path": path_of(local, name)})
+        failing = make(local._root)
+        failing.message({"type": "preview", "path": path_of(failing, "notes.txt")})
+        monkeypatch.setattr(failing, "_release_preview", lambda: 1 / 0, raising=False)
+        previews._close_views_at_exit()
+        assert sorted(closed) == ["1", "2", "3"]
+        assert len(local._view_tabs) == 2  # still open, only released
+        previews._close_views_at_exit()  # closing twice closes nothing more
+        assert sorted(closed) == ["1", "2", "3"]
+
     def test_failed_preview_closes_its_view(self, local, closed, monkeypatch):
         def failing(*args, **kwargs):
             raise ValueError("cannot query")

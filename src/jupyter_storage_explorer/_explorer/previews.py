@@ -3,12 +3,14 @@ menu's formats and code (a mixin of the class)."""
 
 from __future__ import annotations
 
+import atexit
 import base64
 import dataclasses
+import logging
 from typing import TYPE_CHECKING, Any, NamedTuple
 
 from jupyter_storage_explorer import _paths
-from jupyter_storage_explorer._explorer.common import error_text
+from jupyter_storage_explorer._explorer.common import error_text, explorers
 from jupyter_storage_explorer._json import jsonable
 from jupyter_storage_explorer._query.data_query import DataQuery
 from jupyter_storage_explorer._view_tab import ViewTab
@@ -25,6 +27,8 @@ from jupyter_storage_explorer.formats.base import matching_formats
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+log = logging.getLogger(__name__)
+
 
 class _Detected(NamedTuple):
     """An item of the storage shown with a location, as formats and supports
@@ -33,6 +37,21 @@ class _Detected(NamedTuple):
 
     ctx: ItemContext
     formats: list[DataFormat]
+
+
+def _close_views_at_exit() -> None:
+    """Close the views of the kernel's explorers as it exits (shut down or
+    restarted), so that what they hold is released: e.g. temporary copies of
+    files, connections. Each explorer's, even if another's fails. A kernel
+    killed outright runs no exit function."""
+    for explorer in list(explorers.values()):
+        try:
+            explorer._release_views()
+        except Exception:
+            log.exception("Closing the views of an explorer failed")
+
+
+atexit.register(_close_views_at_exit)
 
 
 def section(view: View) -> dict[str, Any]:
@@ -161,6 +180,14 @@ class PreviewsMixin:
             data.close()
         if view is not None:
             view.close()
+
+    def _release_views(self) -> None:
+        """Close the views the explorer shows, the preview panel's and its
+        tabs', without closing any widget: at the kernel's exit
+        (``_close_views_at_exit``), when no message reaches the page."""
+        self._release_preview()
+        for widget in list(self._view_tabs.values()):
+            widget._release()
 
     # --- The query in the preview panel, for query_result() and
     # on_query_change() ---

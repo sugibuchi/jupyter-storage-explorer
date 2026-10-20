@@ -306,11 +306,17 @@ class DataExplorer(anywidget.AnyWidget):
     def close(self) -> None:
         """Close the widget. A tab of a ``StorageExplorer``'s data ("View in
         a new tab") also closes the view its data came from (``View.close``)."""
+        self._release()
+        super().close()
+
+    def _release(self) -> None:
+        """Close the view the data came from, if any, without closing the
+        widget: when it closes, and at the kernel's exit (its comm is gone
+        then)."""
         # Also called on deletion, of explorers whose __init__ failed too.
         data = getattr(self, "_data", None)
         if data is not None:
             data.close()
-        super().close()
 
     def _on_custom_msg(
         self, _widget: Any, content: dict[str, Any], _buffers: Any

@@ -111,8 +111,9 @@ class View:
 
         The explorer calls it once it stops showing the view: another item
         previewed, the preview panel or the view's tab closed, another storage
-        shown, the explorer closed, or the data browser's data read again
-        (once the new view is open).
+        shown, the explorer closed, the data browser's data read again (once
+        the new view is open), or the kernel exiting (shut down or
+        restarted; not killed).
         """
         if self._closed:
             return

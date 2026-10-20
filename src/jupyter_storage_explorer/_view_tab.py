@@ -44,10 +44,15 @@ class ViewTab(anywidget.AnyWidget):
         self.on_msg(self._on_custom_msg)
 
     def close(self) -> None:
-        on_close, self._on_close = self._on_close, None
+        self._release()
+        super().close()
+
+    def _release(self) -> None:
+        """Close the view, without closing the widget: when it closes, and at
+        the kernel's exit."""
+        on_close, self._on_close = getattr(self, "_on_close", None), None
         if on_close is not None:
             on_close()
-        super().close()
 
     def _on_custom_msg(
         self, _widget: Any, content: dict[str, Any], buffers: Any

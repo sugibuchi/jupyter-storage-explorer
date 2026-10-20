@@ -347,7 +347,10 @@ so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
   The functions given to a view's `on_close(callback, *, remove=False)` (the widgets' `on_change` idiom; kept in a
   private field, not sent to the frontend) are called with the view by `View.close()`, the first time only, errors
   logged: the explorer closes a view once it no longer shows it (`_release_preview`: another preview, the panel closed,
-  another storage; a view tab closed; `StorageExplorer.close()`). A `QueryView`'s `DataQuery` owns it (its
+  another storage; a view tab closed; `StorageExplorer.close()`; the kernel's exit: `previews._close_views_at_exit`,
+  an `atexit` function over the `explorers` registry, calling each one's `_release_views()`, which closes the views
+  of the preview and the tabs, `_release()` of `DataExplorer` and `ViewTab`, without closing widgets). A
+  `QueryView`'s `DataQuery` owns it (its
   `on_close`): a reload's view replaces it, the previous one closed, and closing the query (`DataExplorer.close()` for
   a tab) closes the last.
   `_query/data_query.py`'s `DataQuery` does filters, sort and paging as narwhals expressions, either on the data itself
