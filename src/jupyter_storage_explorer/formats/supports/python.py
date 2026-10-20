@@ -1,8 +1,8 @@
 """The built-in views and code, which need no engine, only the explorer's
 own packages: text and code (highlighted), Markdown and JSON from the
 beginning of the file, and images, which the browser shows; and code reading
-text and JSON with fsspec, for any storage. Their options are the "python"
-entry of ``format_options``."""
+text and JSON with fsspec, and images with Pillow, for any storage. Their
+options are the "python" entry of ``format_options``."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from pygments.lexers import get_lexer_by_name
 from pygments.util import ClassNotFound
 
 from jupyter_storage_explorer.formats.images import Image
-from jupyter_storage_explorer.formats.packages import Fsspec
+from jupyter_storage_explorer.formats.packages import Fsspec, Pillow
 from jupyter_storage_explorer.formats.support import (
     FormatSupport,
     SupportOptions,
@@ -74,6 +74,7 @@ def _text_view(text: str, language: str | None, note: str = "") -> TextView:
 
 READ_TEXT = "Read the text"
 LOAD_VALUE = "Load the JSON value"
+OPEN_IMAGE = "Open the image"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -223,3 +224,34 @@ class ImageByPython(FormatSupport):
         except NotImplementedError:
             limit = limits.max_whole_file_bytes // (1024 * 1024)
             raise ValueError(f"too large to view (over {limit} MB)") from None
+
+
+class ImageByPillow(OpenedByFsspec):
+    """The image, read with fsspec and opened with Pillow; not SVG, which it
+    cannot read. Code only, apart from ``ImageByPython``: Pillow, which only
+    the code needs, would otherwise be needed to view images."""
+
+    format = Image
+    additional_requirements = (Fsspec(), Pillow())
+    capabilities = ("recipe",)
+
+    image_template = cleandoc("""
+        import fsspec
+        import PIL.Image
+
+        with fsspec.open({url}, 'rb'{kwargs}) as f:
+            img = PIL.Image.open(f)
+            img.load()
+        img
+        """)
+
+    def recipe(
+        self, fmt: Image, ctx: ItemContext, options: FsspecOptions
+    ) -> dict[str, str]:
+        if fmt.mime_type(ctx.path) == "image/svg+xml":
+            raise self.NotSupported
+        return {
+            OPEN_IMAGE: self.image_template.format(
+                url=repr(ctx.library_url), kwargs=options.code_kwargs()
+            )
+        }

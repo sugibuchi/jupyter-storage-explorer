@@ -18,18 +18,23 @@ from jupyter_storage_explorer.formats import (
     Csv,
     DeltaLake,
     Engine,
+    Excel,
     FormatSupport,
+    Image,
+    Json,
+    JsonLines,
+    Markdown,
     Parquet,
     PythonPackage,
     QueryView,
     SupportOptions,
+    Text,
     ViewLimits,
-    default_formats,
     default_supports,
     secret_dict_field,
     secret_field,
 )
-from jupyter_storage_explorer.formats.defaults import DEFAULT_FORMATS, DEFAULT_SUPPORTS
+from jupyter_storage_explorer.formats.defaults import DEFAULT_SUPPORTS
 from jupyter_storage_explorer.formats.supports import (
     CsvByPandas,
     CsvByPolars,
@@ -79,10 +84,25 @@ def options_by_class(format_options=None, location=ACCOUNT_A):
     return {type(s): chain.options_of(s, location) for s in chain.supports}
 
 
-def test_default_formats_are_new_objects():
-    first, second = default_formats(), default_formats()
-    assert [type(f) for f in first] == list(DEFAULT_FORMATS)
-    assert all(a is not b for a, b in zip(first, second, strict=True))
+def test_formats_are_the_supports():
+    # One of each, in the supports' order: those given first.
+    avro = type("Avro", (Csv,), {"name": "avro"})
+    chain = SupportChain([support(avro), *DEFAULT_SUPPORTS])
+    assert [type(f) for f in chain.formats] == [
+        avro,
+        DeltaLake,
+        Parquet,
+        Csv,
+        Excel,
+        Json,
+        JsonLines,
+        Markdown,
+        Text,
+        Image,
+    ]
+    # Each chain has its own: formats keep what detection finds.
+    other = SupportChain(DEFAULT_SUPPORTS).formats
+    assert all(f not in other for f in chain.formats)
 
 
 @pytest.mark.parametrize("cls", DEFAULT_SUPPORTS)
@@ -328,12 +348,12 @@ class TestSecrets:
         assert "account_key" not in recipe.code
 
     def test_formats_of_the_explorer(self):
-        # A format the explorer has, which no support's format names.
+        # The format of a support given, first, and its options.
         avro = type("Avro", (Csv,), {"name": "avro"})
         explorer = StorageExplorer(
             fs=None,
-            formats=[avro()],
-            format_options={"polars": {"avro": {}}},
+            supports=[support(avro)],
+            format_options={"python": {"avro": {}}},
         )
         assert explorer._formats[0].name == "avro"
 

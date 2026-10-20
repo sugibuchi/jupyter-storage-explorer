@@ -6,7 +6,13 @@ import pytest
 
 from jupyter_storage_explorer import StorageExplorer
 from jupyter_storage_explorer._explorer.icons import format_icons
-from jupyter_storage_explorer.formats import FILE_ICONS, Csv, Text, default_formats
+from jupyter_storage_explorer._explorer.supports import SupportChain
+from jupyter_storage_explorer.formats import (
+    FILE_ICONS,
+    Csv,
+    FormatSupport,
+    default_supports,
+)
 
 
 class TestFileIcons:
@@ -18,8 +24,15 @@ class TestFileIcons:
     def avro(self, icon):
         return type("Avro", (Csv,), {"name": "avro", "file_icon": icon})()
 
+    def explorer(self, icon):
+        """An explorer with a support of an Avro format: its format is the
+        explorer's."""
+        fmt = type(self.avro(icon))
+        avro = type("AvroByPython", (FormatSupport,), {"format": fmt})
+        return StorageExplorer(fs=None, supports=[avro])
+
     def test_default_formats(self):
-        assert format_icons(default_formats()) == (
+        assert format_icons(SupportChain(default_supports()).formats) == (
             {
                 "parquet": "spreadsheet",
                 "csv": "spreadsheet",
@@ -33,13 +46,13 @@ class TestFileIcons:
         )
 
     def test_one_of_jupyterlabs(self):
-        explorer = StorageExplorer(fs=None, formats=[self.avro("file"), Text()])
-        assert explorer._format_icons == {"avro": "file"}
+        explorer = self.explorer("file")
+        assert explorer._format_icons["avro"] == "file"
         assert explorer._file_icon_svgs == {}
 
     def test_own_svg(self):
-        explorer = StorageExplorer(fs=None, formats=[self.avro(("avro", self.SVG))])
-        assert explorer._format_icons == {"avro": "avro"}
+        explorer = self.explorer(("avro", self.SVG))
+        assert explorer._format_icons["avro"] == "avro"
         assert explorer._file_icon_svgs == {"avro": self.SVG}
 
     @pytest.mark.parametrize(

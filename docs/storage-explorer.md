@@ -108,6 +108,13 @@ the panel is open, clicking a file previews it; `open_preview=True` opens it fro
 
 <img src="figs/using-preview.png" width="562" alt="Preview in the status bar, and Preview as in the right-click menu of a Markdown file">
 
+### Switch engine
+
+Previews read data with an [engine](#engines), shown left of **Preview**: Polars, pandas or PySpark, each when
+installed. Click it to choose another; the preview open is shown again with it, and the choice is remembered.
+
+<img src="figs/using-engine.png" width="829" alt="The engines' menu, above the engine in the status bar">
+
 ### Right-click
 
 View *format* in new tab, Preview *format* (with the [engine](#engines) chosen; disabled if it cannot view the item);
@@ -293,7 +300,7 @@ StorageExplorer("s3://my-bucket/data", states=ExplorerStates("states.json", max_
 | Excel (`.xlsx`)                                              | `excel`      | First rows of the first sheet | ✓            | polars, pandas                                      |
 | Markdown                                                     | `markdown`   | Rendered                      |              | Python                                              |
 | Text, code, configuration (YAML, SQL, Python, …)             | `text`       | With syntax highlighting      |              | Python                                              |
-| Images (PNG, JPEG, GIF, SVG, …)                              | `image`      | Shown                         |              | Pillow                                              |
+| Images (PNG, JPEG, GIF, SVG, …)                              | `image`      | Shown                         |              | Python (Pillow)                                     |
 
 Folders of Parquet files written by Spark or Hive, partitioned or not, are supported; folders written by other tools
 may work, but are not guaranteed to.
@@ -330,8 +337,7 @@ StorageExplorer(
 | `polars` | `use_pyarrow`            | `delta`                                         | `scan_delta`'s `use_pyarrow`.                                                                                  |
 | `polars` | `pyarrow_options`        | `delta`                                         | `scan_delta`'s `pyarrow_options`.                                                                              |
 | `pandas` | `storage_options`        | `parquet`, `csv`, `json-lines`, `json`, `excel` | pandas' `storage_options` (fsspec's), in the code.                                                             |
-| `python` | `storage_options`        | `json`, `text` (also Markdown's code)           | `fsspec.open`'s keyword arguments, in the code.                                                                |
-| `pillow` | `storage_options`        | `image`                                         | `fsspec.open`'s keyword arguments, in the code (which reads the file with fsspec).                             |
+| `python` | `storage_options`        | `json`, `text` (also Markdown's code), `image`  | `fsspec.open`'s keyword arguments, in the code.                                                                |
 
 Options that look like credentials are left out of the code. A library, format or option name that no support takes is
 an error.
@@ -455,7 +461,6 @@ Filter by channel in the data browser, and the chart shows that channel's sales.
 | `filesystem_mappers=[...]`          | The locations of storages' paths, by which they are told apart, tried before the defaults; see [File transfer](#file-transfer-between-file-systems). |
 | `transfer_policy=[...]`             | Rules for transfers of files between storages; see [Transfer policy](#transfer-policy).                                               |
 | `states="states.json"`              | Where bookmarks and the data browser's settings are kept (a path or an `ExplorerStates`); see [Remembered states](#remembered-states). |
-| `formats=[...]`                     | The formats files are detected as, replacing the defaults (`default_formats()`).                                                      |
 | `supports=[...]`                    | Libraries of your own for formats, tried before the defaults; see [Another library for a format](../DEVELOPMENT.md#another-library-for-a-format). |
 | `format_options={...}`              | The engines' options (see [Format options](#format-options)).                                                                           |
 | `engine_preference=[...]`           | The engines' keys in the order they are offered, the first chosen until the user chooses (see [Engines](#engines)).                     |

@@ -1,6 +1,7 @@
-"""The explorer's supports (``SupportChain``): which support of a format does
-what, with which engine and options (``format_options``), the engines users
-choose from, and the "Python code" recipes the supports give (``Recipe``)."""
+"""The explorer's supports (``SupportChain``): the formats they handle, which
+support of a format does what, with which engine and options
+(``format_options``), the engines users choose from, and the "Python code"
+recipes the supports give (``Recipe``)."""
 
 from __future__ import annotations
 
@@ -73,14 +74,18 @@ class SupportChain:
     ``location.account_name``): it is called for each view and recipe, so
     keep it quick.
 
+    ``formats`` are the formats files are detected as: one of each
+    ``format`` of the supports, in their order (on a tie in priority, the
+    first wins: those of supports given before the defaults), so a format of
+    your own is given by giving a support of it.
+
     ``engines`` are those users choose from: the supports' engines that are
     installed and view something, those of ``engine_preference`` (keys)
     first, in its order, then the others by key. Without one,
     ``DEFAULT_ENGINE_PREFERENCE``.
 
     ValueError for an engine key no support has (in ``engine_preference``
-    or ``format_options``), a format neither in ``format_names`` nor of a
-    support, or an option no support of the engine (for that format) takes:
+    or ``format_options``), a format of no support, or an option no support of the engine (for that format) takes:
     a typo would otherwise be ignored. A function's options are checked when
     it is called. TypeError for an item that is no FormatSupport.
     """
@@ -90,7 +95,6 @@ class SupportChain:
         supports: Iterable[type[FormatSupport] | FormatSupport],
         format_options: FormatOptions | None = None,
         *,
-        format_names: Sequence[str] = (),
         engine_preference: Sequence[str] | None = None,
     ) -> None:
         self.supports = [_created(s) for s in supports]
@@ -101,9 +105,12 @@ class SupportChain:
         for support in self.supports:
             self._libraries.setdefault(support.library(), []).append(support)
         engine_keys = {s.engine.key for s in self.supports if s.engine is not None}
-        self._format_names = list(
-            dict.fromkeys([*format_names, *(s.format.name for s in self.supports)])
-        )
+        # One object of each format: formats keep what detection finds (e.g.
+        # a Parquet dataset's layout) for their supports.
+        self.formats: list[DataFormat] = [
+            cls() for cls in dict.fromkeys(s.format for s in self.supports)
+        ]
+        self._format_names = [f.name for f in self.formats]
         _check_options(self.format_options, self._libraries, self._format_names)
         if engine_preference is None:
             engine_preference = DEFAULT_ENGINE_PREFERENCE

@@ -79,8 +79,8 @@ explorer of exactly its own version (`launcher/hatch_build.py` sets its dependen
   them, imported from its modules by the package and the tests.
 - `jupyter-storage-explorer-launcher` (`launcher/`): a JupyterLab launcher item opening a tab whose kernel runs
   `launch()`. It merges every `storage-explorer/launcher.py` in Jupyter's config paths as layers, system to user
-  (their `filesystems()`, `formats()`, `supports()`, `format_options()` (merged by library, format, then option), `operations()`, `filesystem_mappers()`, `transfer_policy()`, `parameters()`;
-  `final()` names what later layers cannot change; a retired `style()` is ignored with a warning, `RETIRED`; see `load_settings`, tested in
+  (their `filesystems()`, `supports()`, `format_options()` (merged by library, format, then option), `operations()`, `filesystem_mappers()`, `transfer_policy()`, `parameters()`;
+  `final()` names what later layers cannot change; retired `style()` and `formats()` are ignored with a warning, `RETIRED`; see `load_settings`, tested in
   `tests/test_launcher.py`). The tab's explorer gets a settings button (`_offer_settings`, trait `_settings_path`;
   never in notebooks) opening the user's `launcher.py` through the `files.ts` drive, created from
   `launcher_template.py` if missing, once the user confirms (`"settings_open"`: `{"missing"}`, then with `"create"`; `"jupyterlab_get"`/`"jupyterlab_save"` with `"settings"` read
@@ -301,12 +301,13 @@ and the explorer's `detect` and `matching_formats`, not exported), `FormatSuppor
 fields, `_shown_options`; only what plugin authors use) and `PythonPackage`
 (`package.py`); a module per predefined format (`delta.py`, `parquet.py`, `excel.py`, `text.py`, `images.py`) and
 per library of the predefined supports, each with its `Engine`, in `supports/` (`polars.py`, `pandas.py`,
-`pyspark.py`, `pillow.py`; `python.py` for the supports without an engine, needing only the explorer's own packages:
-the built-in views, `TextByPython` and `JsonByPython` also with fsspec's code; named after the libraries, which they import only inside methods, through
+`pyspark.py`; `python.py` for the supports without an engine (library "python"): the built-in views, `TextByPython`
+and `JsonByPython` also with fsspec's code, and `ImageByPillow`'s code (apart, so that Pillow is not needed to view
+images); named after the libraries, which they import only inside methods, through
 `PythonPackage.load()`; exported by `formats.supports`, not `formats`); the predefined packages in `packages.py`, the
 views in `view.py` (`View`s, `ViewLimits`; `TableView`s, for plugins (the defaults give none), give their counts, `TableView.more`, `total` and `unit`, and the explorer words them in the note, `section()`'s
-`_rows_note`: presentation stays out of `formats`, which never imports `_explorer`), and the defaults in `defaults.py` (`DEFAULT_FORMATS`,
-`DEFAULT_SUPPORTS`). A format only detects; a support handles one format's data with one library,
+`_rows_note`: presentation stays out of `formats`, which never imports `_explorer`), and the defaults in `defaults.py` (`DEFAULT_SUPPORTS`;
+the formats are the supports'). A format only detects; a support handles one format's data with one library,
 so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
 - `DataFormat` subclasses declare `name`, `label`, `priority`, `extensions`, `file_icon` (its files' icon in the list:
   one of `FILE_ICONS`, or `(name, svg)` for one of its own, shown as an `<img>` so its scripts never run; sent as
@@ -324,7 +325,7 @@ so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
   `priority` wins (Delta 20 > Parquet 10 > default 0 > Text -10). What supports share about a format is on it
   (`Csv.separator`, `Text.language`, `Image.mime_type`, `Parquet.data_url`, ...).
 - `Engine` (`engine.py`; the predefined ones with their supports, exported by `formats.supports`: `PolarsEngine`,
-  `PandasEngine`, `PySparkEngine` (pyspark or databricks-connect), `PillowEngine`): a library users choose, with `key`
+  `PandasEngine`, `PySparkEngine` (pyspark or databricks-connect)): a library users choose, with `key`
   (`engine_preference`, `format_options`), `label` and `requirements`, `PythonPackage` instances: a tuple, all needed,
   or a tuple of tuples, alternatives (`alternatives()`, `packages()`: the first installed, `is_installed()`).
 - `FormatSupport` subclasses declare `format` (matched with `isinstance`, so subclasses too: `MarkdownByPython` comes
@@ -343,9 +344,11 @@ so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
   `PolarsOptions.storage()`); a library's supports share a base model (`PolarsOptions`, `PandasOptions`,
   `FsspecOptions`; exported by `formats.supports`). Supports take no `__init__` arguments: the chain creates those
   given as classes. Class names are `<Format>By<Library>`, options `<Library>Options` or `<Format>By<Library>Options`.
-- `SupportChain(supports, format_options, format_names=)` (`_explorer/supports.py`, with `Recipe` and the
+- `SupportChain(supports, format_options)` (`_explorer/supports.py`, with `Recipe` and the
   `format_options` checks; the explorer's `_supports`: `supports=` then `StorageExplorer.default_supports()`, i.e.
-  `DEFAULT_SUPPORTS`, ordered format by format, most preferred first) calls them, with their options:
+  `DEFAULT_SUPPORTS`, ordered format by format, most preferred first) has the explorer's `formats` (`_formats`: one
+  object of each support's `format`, in their order; there is no `formats=` argument) and calls the supports, with
+  their options:
   `of(fmt, capability)` lists the supports for the format with the capability whose packages are installed (empty:
   none of the registered ones can); `engines`: the installed engines with a view support, `engine_preference` (keys;
   default `DEFAULT_ENGINE_PREFERENCE`, polars) first, then by key; `viewers(fmt)`: the engine keys that can view it,

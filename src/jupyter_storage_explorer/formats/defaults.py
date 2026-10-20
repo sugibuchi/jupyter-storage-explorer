@@ -1,14 +1,10 @@
-"""The predefined formats and supports explorers use by default, in order of
-preference (``default_formats()``, ``default_supports()``)."""
+"""The predefined supports explorers use by default, in order of preference
+(``default_supports()``): the formats are theirs."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from jupyter_storage_explorer.formats.delta import DeltaLake
-from jupyter_storage_explorer.formats.excel import Excel
-from jupyter_storage_explorer.formats.images import Image
-from jupyter_storage_explorer.formats.parquet import Parquet
 from jupyter_storage_explorer.formats.supports.pandas import (
     CsvByPandas,
     ExcelByPandas,
@@ -16,7 +12,6 @@ from jupyter_storage_explorer.formats.supports.pandas import (
     JsonLinesByPandas,
     ParquetByPandas,
 )
-from jupyter_storage_explorer.formats.supports.pillow import ImageByPillow
 from jupyter_storage_explorer.formats.supports.polars import (
     CsvByPolars,
     DeltaLakeByPolars,
@@ -32,30 +27,15 @@ from jupyter_storage_explorer.formats.supports.pyspark import (
     ParquetByPySpark,
 )
 from jupyter_storage_explorer.formats.supports.python import (
+    ImageByPillow,
     ImageByPython,
     JsonByPython,
     MarkdownByPython,
     TextByPython,
 )
-from jupyter_storage_explorer.formats.text import Csv, Json, JsonLines, Markdown, Text
 
 if TYPE_CHECKING:
-    from jupyter_storage_explorer.formats.base import DataFormat
     from jupyter_storage_explorer.formats.support import FormatSupport
-
-# The formats explorers use unless given others; ``default_formats`` creates them.
-# On a tie in priority, the format listed first wins.
-DEFAULT_FORMATS: tuple[type[DataFormat], ...] = (
-    DeltaLake,
-    Parquet,
-    Csv,
-    Excel,
-    Json,
-    JsonLines,
-    Markdown,
-    Text,
-    Image,
-)
 
 # The supports explorers use after those they are given; ``default_supports``
 # creates them. In order of preference, format by format: for views, the
@@ -83,11 +63,6 @@ DEFAULT_SUPPORTS: tuple[type[FormatSupport], ...] = (
     ImageByPython,
     ImageByPillow,
 )
-
-
-def default_formats() -> list[DataFormat]:
-    """The ``DEFAULT_FORMATS``, created."""
-    return [cls() for cls in DEFAULT_FORMATS]
 
 
 def default_supports() -> list[FormatSupport]:

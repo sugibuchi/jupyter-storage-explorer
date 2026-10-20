@@ -34,16 +34,9 @@ def filesystems():
 #     }
 
 
-# Formats of your own (DataFormat subclasses), tried before the defaults.
-#
-# def formats():
-#     from my_formats import AvroFormat
-#
-#     return [AvroFormat()]
-
-
 # Libraries of your own handling formats' data (FormatSupport subclasses),
-# tried before the defaults.
+# tried before the defaults; their formats, e.g. one of your own, are
+# detected with the defaults'.
 #
 # def supports():
 #     from my_supports import ParquetByDuckDB

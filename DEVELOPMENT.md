@@ -415,9 +415,10 @@ doing their own I/O read `ctx.library_url`, a local file's plain path), the expl
 path in it (`ctx.fs`, `ctx.path`; `ctx.head_text(n)`, `ctx.head(n)` and `ctx.read_whole(limits)` read it through the
 explorer, e.g. for a text view), its info (`ctx.size`), its listing if it is a folder (`ctx.children`,
 `ctx.child_names`, `ctx.is_dir`); then its options, and `view` also `limits` (`ViewLimits`: bytes and rows to read).
-Formats' `matches(ctx)` gets the same context. A support's options are the fields of a frozen dataclass, its
+Formats' `matches(ctx)` gets the same context. A format of your own (a `DataFormat` subclass) is the `format` of
+your supports: explorers detect the formats of their supports. A support's options are the fields of a frozen dataclass, its
 `options_model` (a `SupportOptions` subclass, each field with a default), made from [`format_options`](docs/storage-explorer.md#format-options)
-under its engine's key (`engine.key`, e.g. `"duckdb"`). Mark credentials so that "Python code" never shows them:
+under its engine's key (`engine.key`, e.g. `"duckdb"`; `"python"` for a support without an engine). Mark credentials so that "Python code" never shows them:
 `secret_field(default=None)` for a whole value, `secret_dict_field(default=None, secret_keys=["connection_string"])` for
 keys of a mapping such as storage options; the code gets options through `options.code_value(name)`, which leaves them
 out. A view holding something to release, e.g. a database connection, releases it in a function given to its

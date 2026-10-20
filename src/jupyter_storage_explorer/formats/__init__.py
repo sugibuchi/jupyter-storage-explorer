@@ -10,12 +10,12 @@ module (delta.py, parquet.py, excel.py, text.py, images.py), the predefined
 supports and their engines one per library in the ``supports`` package
 (imported from there),
 and packages.py has the predefined packages. view.py has the views supports
-return. ``default_formats()`` and ``default_supports()`` (defaults.py) create
-those explorers use by default.
+return. ``default_supports()`` (defaults.py) creates those explorers use by
+default; the formats files are detected as are those of the supports.
 """
 
 from jupyter_storage_explorer.formats.base import FILE_ICONS, DataFormat, ItemContext
-from jupyter_storage_explorer.formats.defaults import default_formats, default_supports
+from jupyter_storage_explorer.formats.defaults import default_supports
 from jupyter_storage_explorer.formats.delta import DeltaLake
 from jupyter_storage_explorer.formats.engine import Engine
 from jupyter_storage_explorer.formats.excel import Excel
@@ -71,7 +71,6 @@ __all__ = [
     "TreeView",
     "View",
     "ViewLimits",
-    "default_formats",
     "default_supports",
     "format_kwargs",
     "secret_dict_field",

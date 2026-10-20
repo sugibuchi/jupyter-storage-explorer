@@ -142,10 +142,10 @@ FILE_ICONS = (
 class DataFormat:
     """How to recognise one kind of file or directory.
 
-    Subclass it for a format of your own, and give it to ``StorageExplorer``
-    (``formats=[MyFormat(), *default_formats()]``), with the supports
-    handling its data (``FormatSupport``: previews, the data browser, load
-    code), given as ``supports``. File formats usually only set
+    Subclass it for a format of your own, and give ``StorageExplorer`` the
+    supports handling its data (``FormatSupport``, whose ``format`` it is:
+    previews, the data browser, load code) as ``supports``: explorers detect
+    the formats of their supports, one object of each. File formats usually only set
     ``extensions``; directory formats (Delta Lake tables, Spark output,
     Hive-partitioned datasets, ...) override ``matches`` and inspect the
     folder's listing (``ctx.children``, ``ctx.child_names``). What detection

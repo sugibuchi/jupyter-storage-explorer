@@ -1,6 +1,6 @@
 """The pictures of "Using the explorer" in docs/storage-explorer.md:
-using-browse.png, using-filter.png, using-preview.png, using-right-click.png,
-using-properties.png and using-bookmarks.png.
+using-browse.png, using-filter.png, using-preview.png, using-engine.png,
+using-right-click.png, using-properties.png and using-bookmarks.png.
 
 uv run --group docs docs/scripts/using.py
 """
@@ -73,6 +73,21 @@ def make(lab: Lab) -> None:
             max(my1, sy1, py1),
         )
         shot(page, FIGS / "using-preview.png", area)
+        page.keyboard.press("Escape")
+
+        # Switch engine: a Parquet file selected, the engines' menu open above
+        # the status bar.
+        tree("curated").click()
+        page.wait_for_timeout(1500)
+        row("orders.parquet").click()
+        page.wait_for_timeout(1000)
+        engine = page.locator(".jse-engine-btn").first
+        engine.click()
+        page.wait_for_timeout(800)
+        _, ey0, ex1, ey1 = box(page.locator(".jse-status-bar").first)
+        _, my0, _, _ = box(menu)
+        area = (wx0, min(my0, ey0) - 6, ex1, ey1)
+        shot(page, FIGS / "using-engine.png", area)
         page.keyboard.press("Escape")
 
         # Right-click: a JSON Lines file.

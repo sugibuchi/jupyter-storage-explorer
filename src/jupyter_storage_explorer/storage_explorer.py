@@ -43,7 +43,6 @@ from jupyter_storage_explorer.formats import (
     FormatSupport,
     Text,
     ViewLimits,
-    default_formats,
 )
 from jupyter_storage_explorer.formats.defaults import DEFAULT_SUPPORTS
 
@@ -123,20 +122,21 @@ class StorageExplorer(
         while it is open, clicking a file previews it (tables open in the
         data browser, see ``query_result``). False: closed until the user
         previews something.
-    formats : sequence of DataFormat, optional
-        The formats files are detected as, replacing ``default_formats()``.
     supports : sequence of FormatSupport classes or objects, optional
         Libraries of your own handling formats' data (previews, the data
         browser, "Python code"), e.g. ``[ParquetByDuckDB]``, tried before
         ``default_supports()``: for each job, the first support for the
         format that is installed does it (see
         ``jupyter_storage_explorer.formats.FormatSupport``). Classes are
-        created without arguments. To change the defaults themselves,
-        override ``default_supports`` in a subclass.
+        created without arguments. The formats files are detected as are
+        those of the supports (their ``format``, one object of each), so a
+        format of your own comes with a support of it. To change the
+        defaults themselves, override ``default_supports`` in a subclass.
     format_options : mapping, optional
         The supports' options, by engine key (``"python"`` for the supports
-        without an engine), then format name or ``"*"`` for all formats, e.g. ``{"polars": {"*": {"storage_options": {...}},
-        "delta": {"use_pyarrow": True}}}``: each support gets those of its
+        without an engine), then format name or ``"*"`` for all formats,
+        e.g. ``{"polars": {"*": {"storage_options": {...}}, "delta":
+        {"use_pyarrow": True}}}``: each support gets those of its
         engine that its ``options_model`` has (see "Format options" in
         docs/storage-explorer.md). Instead of a dict of options, a function
         of the item's ``Location`` returning one, for options depending on
@@ -328,7 +328,6 @@ class StorageExplorer(
         filesystems: Mapping[str, AbstractFileSystem | str] | None = None,
         height: str = "400px",
         open_preview: bool = False,
-        formats: Sequence[DataFormat] | None = None,
         supports: Sequence[type[FormatSupport] | FormatSupport] | None = None,
         format_options: FormatOptions | None = None,
         engine_preference: Sequence[str] | None = None,
@@ -386,15 +385,15 @@ class StorageExplorer(
         # The launcher's settings file and the function creating it (see
         # _offer_settings); None in notebooks.
         self._settings_file: tuple[str, Callable[[], Any]] | None = None
-        self._formats = list(formats) if formats is not None else default_formats()
         # How the formats' data is handled: each job by the first support
-        # installed, with its options (see formats/support.py).
+        # installed, with its options (see formats/support.py); the formats
+        # files are detected as are the supports'.
         self._supports = SupportChain(
             [*(supports or ()), *self.default_supports()],
             format_options,
-            format_names=[f.name for f in self._formats],
             engine_preference=engine_preference,
         )
+        self._formats = self._supports.formats
         # The folder shown's format, if any (see _show_current_format).
         self._current_dir_format: DataFormat | None = None
         self._view_limits = view_limits or ViewLimits()
