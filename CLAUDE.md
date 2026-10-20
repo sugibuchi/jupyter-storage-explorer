@@ -338,7 +338,8 @@ so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
   `InstallView` naming the missing packages per support, so supports never check. `ViewLimits`: `max_bytes`,
   `max_display_rows` (table views' rows and the data browser's page size, sent as `"page_rows"`),
   `max_whole_file_bytes`, `max_live_rows` and `max_memory_rows` (the data browser's; `StorageExplorer(view_limits=)`).
-  A view's `on_close` (an `__init__` argument, not sent to the frontend) is called by `View.close()`, once only, errors
+  The functions given to a view's `on_close(callback, *, remove=False)` (the widgets' `on_change` idiom; kept in a
+  private field, not sent to the frontend) are called with the view by `View.close()`, the first time only, errors
   logged: the explorer closes a view once it no longer shows it (`_release_preview`: another preview, the panel closed,
   another storage; a view tab closed; `StorageExplorer.close()`). A `QueryView`'s `DataQuery` owns it (its
   `on_close`): a reload's view replaces it, the previous one closed, and closing the query (`DataExplorer.close()` for

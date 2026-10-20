@@ -57,45 +57,71 @@ class View:
         Shown above the view.
     note : str, default ""
         Shown under the view, e.g. "First 100 rows of 1,234,567".
-    on_close : callable or None, default None
-        Called without arguments by ``close()``, once the explorer no longer
-        shows the view, to release what it holds (e.g. a database connection,
-        a temporary copy of the file). The data of a ``QueryView`` must stay
-        readable until then.
-
-    Examples
-    --------
-    >>> con = duckdb.connect(path, read_only=True)
-    >>> QueryView(data=con.table("orders"), on_close=con.close)
     """
 
     kind: ClassVar[str]
     title: str = ""
     note: str = ""
-    on_close: Callable[[], object] | None = field(
-        default=None, repr=False, compare=False
+    # The functions given to on_close, and whether close() has called them.
+    # Frozen, as views are values; what is done once they are shown is not.
+    _close_callbacks: list[Callable[[View], Any]] = field(
+        default_factory=list, init=False, repr=False, compare=False
     )
     _closed: bool = field(default=False, init=False, repr=False, compare=False)
 
+    def on_close(
+        self, callback: Callable[[View], Any], *, remove: bool = False
+    ) -> None:
+        """Call a function when the view is closed (``close()``), to release
+        what it holds, e.g. a database connection or a temporary copy of the
+        file.
+
+        The data of a ``QueryView`` must stay readable until then.
+
+        Parameters
+        ----------
+        callback : callable
+            Called with the view, as ``callback(view)``, once, however often
+            it is given. Errors are logged, not raised, so that they never
+            keep the next view from showing, and do not stop the other
+            functions.
+        remove : bool, default False
+            Stop calling ``callback`` instead.
+
+        See Also
+        --------
+        close : Calls the functions.
+
+        Examples
+        --------
+        In a support's ``view()``, a DuckDB table closed with its connection:
+
+        >>> con = duckdb.connect(path, read_only=True)
+        >>> view = QueryView(data=con.table("orders"))
+        >>> view.on_close(lambda view: con.close())
+        """
+        if remove:
+            if callback in self._close_callbacks:
+                self._close_callbacks.remove(callback)
+        elif callback not in self._close_callbacks:
+            self._close_callbacks.append(callback)
+
     def close(self) -> None:
-        """Call ``on_close``, the first time only.
+        """Call the ``on_close`` functions, the first time only.
 
         The explorer calls it once it stops showing the view: another item
         previewed, the preview panel or the view's tab closed, another storage
         shown, the explorer closed, or the data browser's data read again
-        (once the new view is open). An error of ``on_close`` is logged, not
-        raised, so that it never keeps the next view from showing.
+        (once the new view is open).
         """
         if self._closed:
             return
-        # Frozen, as views are values; whether it was closed is not one.
         object.__setattr__(self, "_closed", True)
-        if self.on_close is None:
-            return
-        try:
-            self.on_close()
-        except Exception:
-            log.exception("Closing a %s view failed", self.kind)
+        for callback in list(self._close_callbacks):
+            try:
+                callback(self)
+            except Exception:
+                log.exception("Closing a %s view failed", self.kind)
 
 
 @dataclass(frozen=True, kw_only=True)
