@@ -246,19 +246,23 @@ def _is_plain(value: Any) -> bool:
     return False
 
 
-def snippet_options(options: Mapping[str, Any] | None) -> dict[str, Any]:
+def snippet_options(
+    options: Mapping[str, Any] | None, secret_keys: Iterable[str] = ()
+) -> dict[str, Any]:
     """Storage options fit to put in generated code; empty for None.
 
-    Leaves out options that look like credentials, and ones whose values are
-    objects rather than plain data (e.g. the filesystem a DirFileSystem wraps).
+    Leaves out ``secret_keys`` (at any depth), options that look like
+    credentials anyway, and ones whose values are objects rather than plain
+    data (e.g. the filesystem a DirFileSystem wraps).
     """
+    secret_keys = frozenset(secret_keys)
     out: dict[str, Any] = {}
     for key, value in (options or {}).items():
-        if _SECRET_OPTION.search(key):
+        if key in secret_keys or _SECRET_OPTION.search(key):
             continue
         if isinstance(value, Mapping):
             # Filtered key by key, keeping e.g. client_kwargs' endpoint_url.
-            out[key] = snippet_options(value)
+            out[key] = snippet_options(value, secret_keys)
         elif _is_plain(value):
             out[key] = value
     return out

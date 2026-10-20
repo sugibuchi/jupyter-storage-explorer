@@ -27,6 +27,8 @@ from jupyter_storage_explorer.formats import (
     ViewLimits,
     default_formats,
     default_supports,
+    secret_dict_field,
+    secret_field,
 )
 from jupyter_storage_explorer.formats.supports import (
     CsvByPandas,
@@ -158,6 +160,67 @@ class TestOptions:
     def test_not_a_support(self):
         with pytest.raises(TypeError, match="not a FormatSupport"):
             SupportChain([Csv])
+
+
+@dataclasses.dataclass(frozen=True, kw_only=True)
+class SecretOptions(SupportOptions):
+    password: str | None = secret_field(default=None)
+    storage_options: dict | None = secret_dict_field(
+        default=None, secret_keys=["shared_key"]
+    )
+    version: int = 1
+    engine: object = None
+
+
+class TestSecrets:
+    """Options marked secret never reach generated code (``code_value``)."""
+
+    def test_secret_field(self):
+        options = SecretOptions(password="hunter2")
+        assert options.code_value("password") is None
+        assert "hunter2" not in repr(options)  # nor tracebacks and logs
+
+    def test_secret_keys_at_any_depth(self):
+        options = SecretOptions(
+            storage_options={
+                "shared_key": "s1",
+                "account_name": "acct",
+                "client_kwargs": {"shared_key": "s2", "endpoint_url": "http://e"},
+            }
+        )
+        assert options.code_value("storage_options") == {
+            "account_name": "acct",
+            "client_kwargs": {"endpoint_url": "http://e"},
+        }
+
+    def test_credential_like_keys_left_out_anyway(self):
+        # Not declared, but named like a credential.
+        options = SecretOptions(storage_options={"sas_token": "t", "shared_key": "k"})
+        assert options.code_value("storage_options") is None  # nothing left
+
+    def test_plain_values(self):
+        options = SecretOptions(version=2, engine=object())
+        assert options.code_value("version") == 2
+        assert options.code_value("engine") is None  # not plain data
+
+    def test_metadata_kept(self):
+        [field] = [
+            f for f in dataclasses.fields(SecretOptions) if f.name == "storage_options"
+        ]
+        assert field.metadata["secret_keys"] == ("shared_key",)
+
+    def test_predefined_storage_options(self, make_item):
+        chain = SupportChain(
+            DEFAULT_SUPPORTS,
+            {"pandas": {"*": {"storage_options": {"account_key": "k", "anon": True}}}},
+        )
+        [recipe] = [
+            r
+            for r in chain.recipes(Csv(), make_item("/a.csv", b"a\n"))
+            if r.requirements[0].package == "pandas"
+        ]
+        assert "storage_options={'anon': True}" in recipe.code
+        assert "account_key" not in recipe.code
 
     def test_formats_of_the_explorer(self):
         # A format the explorer has, which no support's format names.

@@ -367,8 +367,12 @@ so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
 support gets its library's (`engine.package`) options for `"*"`, then for its `format.name`, only those its
 `options_model` has (`option_names()`), as an `options_model` object passed to each of its methods. Unknown
 libraries, formats (of the explorer's formats or the supports') and options (taken by no support of that library and
-format) are ValueErrors. Supports given as objects get options as classes do (they carry none). Storage options
-go into generated code through `snippet_options()`, which drops credential-looking keys and non-literal values. Spark
+format) are ValueErrors. Supports given as objects get options as classes do (they carry none). Secrets are
+declared on the fields (`support.py`): `secret_field(...)` (metadata `is_secret`; also `repr=False`) for a whole value,
+`secret_dict_field(..., secret_keys=[...])` for keys of a mapping (storage options); generated code gets options
+only through `SupportOptions.code_value(name)`, which drops secret fields, secret keys at any depth, and, through
+`snippet_options(value, secret_keys)`, credential-looking keys anyway (a safety net: storage options' keys come from
+many backends) and non-literal values. ruff's `extend-immutable-calls` (pyproject.toml) knows the two helpers. Spark
 snippets never get storage options (`spark_url()` rewrites `abfs`/`s3` to `abfss`/`s3a`).
 
 ## Conventions

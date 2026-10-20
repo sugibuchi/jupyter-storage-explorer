@@ -11,6 +11,7 @@ import dataclasses
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, TypeAlias
 
+from jupyter_storage_explorer.formats.base import snippet_options
 from jupyter_storage_explorer.formats.view import InstallView
 
 if TYPE_CHECKING:
@@ -47,6 +48,64 @@ class Recipe:
     code: str
 
 
+# Field metadata of options: the whole value is a secret (``secret_field``),
+# or these keys of a mapping are (``secret_dict_field``).
+IS_SECRET = "is_secret"
+SECRET_KEYS = "secret_keys"
+
+
+def secret_field(**kwargs: Any) -> Any:
+    """A field of options whose value is a secret, e.g. a password or a
+    credential object: ``dataclasses.field(**kwargs)``, marked so, and left
+    out of the options' ``repr``.
+
+    Generated code never shows it (``SupportOptions.code_value`` gives None).
+
+    Parameters
+    ----------
+    **kwargs
+        ``dataclasses.field``'s, e.g. ``default=None``.
+
+    Examples
+    --------
+    >>> @dataclass(frozen=True, kw_only=True)
+    ... class MyOptions(SupportOptions):
+    ...     password: str | None = secret_field(default=None)
+    """
+    metadata = {**kwargs.pop("metadata", {}), IS_SECRET: True}
+    kwargs.setdefault("repr", False)
+    return dataclasses.field(**kwargs, metadata=metadata)
+
+
+def secret_dict_field(*, secret_keys: Iterable[str], **kwargs: Any) -> Any:
+    """A field of options holding a mapping some of whose keys are secrets,
+    e.g. storage options with an account key: ``dataclasses.field(**kwargs)``,
+    naming them.
+
+    Generated code shows the mapping without them, at any depth
+    (``SupportOptions.code_value``), nor keys that look like credentials
+    anyway (``snippet_options``).
+
+    Parameters
+    ----------
+    secret_keys : iterable of str
+        The keys whose values are secrets, e.g. ``["connection_string",
+        "shared_key"]``.
+    **kwargs
+        ``dataclasses.field``'s, e.g. ``default=None``.
+
+    Examples
+    --------
+    >>> @dataclass(frozen=True, kw_only=True)
+    ... class MyOptions(SupportOptions):
+    ...     storage_options: Mapping[str, Any] | None = secret_dict_field(
+    ...         default=None, secret_keys=["connection_string", "shared_key"]
+    ...     )
+    """
+    metadata = {**kwargs.pop("metadata", {}), SECRET_KEYS: tuple(secret_keys)}
+    return dataclasses.field(**kwargs, metadata=metadata)
+
+
 @dataclass(frozen=True, kw_only=True)
 class SupportOptions:
     """The options of a support: none. The base of supports' options.
@@ -58,11 +117,17 @@ class SupportOptions:
     Subclasses of a library's options share them, e.g. its storage options,
     which ``format_options``' ``"*"`` then sets for all its formats.
 
+    Mark secrets with ``secret_field`` (a whole value) or
+    ``secret_dict_field`` (keys of a mapping), and give generated code the
+    options through ``code_value``, which leaves them out.
+
     Examples
     --------
     >>> @dataclass(frozen=True, kw_only=True)
     ... class DuckDBOptions(SupportOptions):
-    ...     config: Mapping[str, Any] | None = None
+    ...     config: Mapping[str, Any] | None = secret_dict_field(
+    ...         default=None, secret_keys=["s3_secret_access_key"]
+    ...     )
     >>> class ParquetByDuckDB(FormatSupport):
     ...     options_model = DuckDBOptions
     ...     def view(self, fmt, ctx, options, limits):
@@ -74,6 +139,29 @@ class SupportOptions:
     ...     format_options={"duckdb": {"*": {"config": {"threads": 4}}}},
     ... )
     """
+
+    def code_value(self, name: str) -> Any:
+        """Option ``name`` as generated code may show it: None for a secret
+        (``secret_field``) or an object that is not plain data; a mapping
+        without its secret keys (``secret_dict_field``) and keys that look
+        like credentials (see ``snippet_options``), None if nothing is left.
+
+        Parameters
+        ----------
+        name : str
+            A field's name.
+
+        Returns
+        -------
+        Any
+            The value to show, or None to leave the option out.
+        """
+        [field] = [f for f in dataclasses.fields(self) if f.name == name]
+        if field.metadata.get(IS_SECRET):
+            return None
+        secret_keys = field.metadata.get(SECRET_KEYS, ())
+        value = snippet_options({name: getattr(self, name)}, secret_keys).get(name)
+        return None if isinstance(value, dict) and not value else value
 
 
 class FormatSupport:

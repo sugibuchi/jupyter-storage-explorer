@@ -9,14 +9,18 @@ from typing import TYPE_CHECKING, Any
 from jupyter_storage_explorer.formats.base import (
     format_kwargs,
     library_url,
-    snippet_options,
 )
 from jupyter_storage_explorer.formats.delta import DeltaLake
 from jupyter_storage_explorer.formats.excel import Excel
 from jupyter_storage_explorer.formats.packages import DeltaLake as DeltaLakePackage
 from jupyter_storage_explorer.formats.packages import Fastexcel, Fsspec, Polars
 from jupyter_storage_explorer.formats.parquet import Parquet
-from jupyter_storage_explorer.formats.support import FormatSupport, SupportOptions
+from jupyter_storage_explorer.formats.support import (
+    FormatSupport,
+    SupportOptions,
+    secret_dict_field,
+    secret_field,
+)
 from jupyter_storage_explorer.formats.text import Csv, Json, JsonLines
 from jupyter_storage_explorer.formats.view import QueryView
 
@@ -43,8 +47,18 @@ class PolarsOptions(SupportOptions):
         polars' ``credential_provider``, for the data browser only.
     """
 
-    storage_options: Mapping[str, Any] | None = None
-    credential_provider: Any = "auto"
+    storage_options: Mapping[str, Any] | None = secret_dict_field(
+        default=None,
+        secret_keys=[
+            "aws_secret_access_key",
+            "aws_session_token",
+            "azure_storage_account_key",
+            "azure_storage_sas_key",
+            "azure_client_secret",
+            "google_service_account_key",
+        ],
+    )
+    credential_provider: Any = secret_field(default="auto")
 
     def storage(self) -> dict[str, Any]:
         """polars' keyword arguments reaching the storage."""
@@ -52,10 +66,6 @@ class PolarsOptions(SupportOptions):
             "storage_options": self.storage_options,
             "credential_provider": self.credential_provider,
         }
-
-    def code_storage_options(self) -> Mapping[str, Any] | None:
-        """The storage options fit to show in code (see ``snippet_options``), or None."""
-        return snippet_options(self.storage_options) or None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -69,7 +79,19 @@ class ExcelByPolarsOptions(SupportOptions):
         bytes with it; those that look like credentials are left out.
     """
 
-    fsspec_storage_options: Mapping[str, Any] | None = None
+    fsspec_storage_options: Mapping[str, Any] | None = secret_dict_field(
+        default=None,
+        secret_keys=[
+            "account_key",
+            "sas_token",
+            "connection_string",
+            "client_secret",
+            "key",
+            "secret",
+            "token",
+            "password",
+        ],
+    )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -132,7 +154,7 @@ class CsvByPolars(_PolarsByUrl):
     ) -> dict[str, str]:
         kwargs = format_kwargs(
             separator=fmt.code_separator(ctx.fs, ctx.path),
-            storage_options=options.code_storage_options(),
+            storage_options=options.code_value("storage_options"),
         )
         url = repr(library_url(ctx.location))
         return {AS_DATA_FRAME: self.data_frame_template.format(url=url, kwargs=kwargs)}
@@ -170,7 +192,7 @@ class JsonLinesByPolars(_PolarsByUrl):
         self, fmt: JsonLines, ctx: ItemContext, options: PolarsOptions
     ) -> dict[str, str]:
         url = repr(library_url(ctx.location))
-        kwargs = format_kwargs(storage_options=options.code_storage_options())
+        kwargs = format_kwargs(storage_options=options.code_value("storage_options"))
         return {
             AS_LAZY_FRAME: self.lazy_frame_template.format(url=url, kwargs=kwargs),
             AS_DATA_FRAME: self.data_frame_template.format(url=url, kwargs=kwargs),
@@ -234,7 +256,7 @@ class ExcelByPolars(FormatSupport):
     def recipe(
         self, fmt: Excel, ctx: ItemContext, options: ExcelByPolarsOptions
     ) -> dict[str, str]:
-        kwargs = format_kwargs(**snippet_options(options.fsspec_storage_options))
+        kwargs = format_kwargs(**(options.code_value("fsspec_storage_options") or {}))
         url = repr(library_url(ctx.location))
         return {AS_DATA_FRAME: self.data_frame_template.format(url=url, kwargs=kwargs)}
 
@@ -296,7 +318,7 @@ class ParquetByPolars(_PolarsByUrl):
         kwargs = format_kwargs(
             hive_partitioning=True if layout and layout.keys else None,
             hidden_file_prefix=[".", "_"] if hidden else None,
-            storage_options=options.code_storage_options(),
+            storage_options=options.code_value("storage_options"),
         )
         data_frame = (
             self.data_frame_scanned_template if hidden else self.data_frame_template
@@ -353,10 +375,10 @@ class DeltaLakeByPolars(_PolarsByUrl):
         url = repr(library_url(ctx.location))
         # Only the arguments that differ from scan_delta's (read_delta's) defaults.
         kwargs = format_kwargs(
-            storage_options=options.code_storage_options(),
-            delta_table_options=options.delta_table_options,
+            storage_options=options.code_value("storage_options"),
+            delta_table_options=options.code_value("delta_table_options"),
             use_pyarrow=True if options.use_pyarrow else None,
-            pyarrow_options=options.pyarrow_options,
+            pyarrow_options=options.code_value("pyarrow_options"),
         )
         return {
             AS_LAZY_FRAME: self.lazy_frame_template.format(url=url, kwargs=kwargs),

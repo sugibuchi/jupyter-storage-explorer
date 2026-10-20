@@ -318,7 +318,10 @@ it (`ctx.fs`, `ctx.path`: to read it through the explorer, e.g. for a text view)
 (`ctx.children`, `ctx.is_dir`); then its options, and `view` also `limits` (`ViewLimits`: bytes and rows to read).
 Formats' `matches(ctx)` gets the same context. A support's options are the fields of a frozen dataclass, its
 `options_model` (a `SupportOptions` subclass, each field with a default), made from [`format_options`](#format-options)
-under its library's name (`engine.package`, e.g. `"duckdb"`). A view holding something to release, e.g. a database connection, releases it in a function given to its
+under its library's name (`engine.package`, e.g. `"duckdb"`). Mark credentials so that "Python code" never shows them:
+`secret_field(default=None)` for a whole value, `secret_dict_field(default=None, secret_keys=["connection_string"])` for
+keys of a mapping such as storage options; the code gets options through `options.code_value(name)`, which leaves them
+out. A view holding something to release, e.g. a database connection, releases it in a function given to its
 `on_close` (`view.on_close(lambda view: con.close())`), as `StorageExplorer.on_change` takes one: the explorer calls it
 once it no longer shows the view. `recipe` returns code by
 title, e.g. `{"Load as DataFrame": "import duckdb\n..."}`, the title saying what the code does, not the library. `FormatSupport`'s docstring has the rules for writing one.

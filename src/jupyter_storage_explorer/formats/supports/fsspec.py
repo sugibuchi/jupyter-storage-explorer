@@ -9,10 +9,13 @@ from typing import TYPE_CHECKING, Any
 from jupyter_storage_explorer.formats.base import (
     format_kwargs,
     library_url,
-    snippet_options,
 )
 from jupyter_storage_explorer.formats.packages import Fsspec
-from jupyter_storage_explorer.formats.support import FormatSupport, SupportOptions
+from jupyter_storage_explorer.formats.support import (
+    FormatSupport,
+    SupportOptions,
+    secret_dict_field,
+)
 from jupyter_storage_explorer.formats.text import Json, Text
 
 if TYPE_CHECKING:
@@ -35,11 +38,23 @@ class FsspecOptions(SupportOptions):
         credentials are left out.
     """
 
-    storage_options: Mapping[str, Any] | None = None
+    storage_options: Mapping[str, Any] | None = secret_dict_field(
+        default=None,
+        secret_keys=[
+            "account_key",
+            "sas_token",
+            "connection_string",
+            "client_secret",
+            "key",
+            "secret",
+            "token",
+            "password",
+        ],
+    )
 
     def code_kwargs(self) -> str:
         """``{kwargs}`` of the template: the storage options fit to show."""
-        return format_kwargs(**snippet_options(self.storage_options))
+        return format_kwargs(**(self.code_value("storage_options") or {}))
 
 
 class OpenedByFsspec(FormatSupport):

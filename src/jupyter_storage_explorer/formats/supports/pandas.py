@@ -13,13 +13,16 @@ from jupyter_storage_explorer.formats.base import (
     head_text,
     library_url,
     read_whole,
-    snippet_options,
 )
 from jupyter_storage_explorer.formats.excel import Excel
 from jupyter_storage_explorer.formats.frames import rows_note, with_sheets
 from jupyter_storage_explorer.formats.packages import Openpyxl, Pandas, PyArrow
 from jupyter_storage_explorer.formats.parquet import Parquet
-from jupyter_storage_explorer.formats.support import FormatSupport, SupportOptions
+from jupyter_storage_explorer.formats.support import (
+    FormatSupport,
+    SupportOptions,
+    secret_dict_field,
+)
 from jupyter_storage_explorer.formats.text import Csv, Json, JsonLines
 from jupyter_storage_explorer.formats.view import TableView
 
@@ -58,11 +61,19 @@ class PandasOptions(SupportOptions):
         filesystem.
     """
 
-    storage_options: Mapping[str, Any] | None = None
-
-    def code_storage_options(self) -> Mapping[str, Any] | None:
-        """The storage options fit to show in code (see ``snippet_options``), or None."""
-        return snippet_options(self.storage_options) or None
+    storage_options: Mapping[str, Any] | None = secret_dict_field(
+        default=None,
+        secret_keys=[
+            "account_key",
+            "sas_token",
+            "connection_string",
+            "client_secret",
+            "key",
+            "secret",
+            "token",
+            "password",
+        ],
+    )
 
 
 class _PandasByUrl(FormatSupport):
@@ -103,7 +114,7 @@ class CsvByPandas(_PandasByUrl):
                 url=repr(library_url(ctx.location)),
                 kwargs=format_kwargs(
                     sep=fmt.code_separator(ctx.fs, ctx.path),
-                    storage_options=options.code_storage_options(),
+                    storage_options=options.code_value("storage_options"),
                 ),
             )
         }
@@ -138,7 +149,9 @@ class JsonLinesByPandas(_PandasByUrl):
         return {
             AS_DATA_FRAME: self.data_frame_template.format(
                 url=repr(library_url(ctx.location)),
-                kwargs=format_kwargs(storage_options=options.code_storage_options()),
+                kwargs=format_kwargs(
+                    storage_options=options.code_value("storage_options")
+                ),
             )
         }
 
@@ -161,7 +174,9 @@ class JsonByPandas(_PandasByUrl):
         return {
             AS_DATA_FRAME: self.data_frame_template.format(
                 url=repr(library_url(ctx.location)),
-                kwargs=format_kwargs(storage_options=options.code_storage_options()),
+                kwargs=format_kwargs(
+                    storage_options=options.code_value("storage_options")
+                ),
             )
         }
 
@@ -202,7 +217,9 @@ class ExcelByPandas(_PandasByUrl):
         return {
             AS_DATA_FRAME: self.data_frame_template.format(
                 url=repr(library_url(ctx.location)),
-                kwargs=format_kwargs(storage_options=options.code_storage_options()),
+                kwargs=format_kwargs(
+                    storage_options=options.code_value("storage_options")
+                ),
             )
         }
 
@@ -252,6 +269,8 @@ class ParquetByPandas(_PandasByUrl):
         return {
             AS_DATA_FRAME: self.data_frame_template.format(
                 url=repr(library_url(ctx.location)),
-                kwargs=format_kwargs(storage_options=options.code_storage_options()),
+                kwargs=format_kwargs(
+                    storage_options=options.code_value("storage_options")
+                ),
             )
         }

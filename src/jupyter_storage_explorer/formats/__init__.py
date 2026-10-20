@@ -39,6 +39,8 @@ from jupyter_storage_explorer.formats.support import (
     Recipe,
     SupportChain,
     SupportOptions,
+    secret_dict_field,
+    secret_field,
 )
 from jupyter_storage_explorer.formats.text import Csv, Json, JsonLines, Markdown, Text
 from jupyter_storage_explorer.formats.utils import (
@@ -102,5 +104,7 @@ __all__ = [
     "matching_formats",
     "name_of",
     "read_whole",
+    "secret_dict_field",
+    "secret_field",
     "snippet_options",
 ]
