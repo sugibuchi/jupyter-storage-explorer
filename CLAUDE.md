@@ -374,7 +374,7 @@ so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
 
 **Format options.** `format_options` is `{library: {format name or "*": {option: value}}}` (`SupportChain`,
 `FormatOptions`): a support gets its library's (`engine.package`) options for `"*"`, then for its `format.name`, only
-those its `options_model` has (`_option_names()`), as an `options_model` object passed to each of its methods. An entry
+those its `options_model` has (`options_model.option_names()`), as an `options_model` object passed to each of its methods. An entry
 may instead be a function of the item's `Location` returning the dict (options per storage, e.g. by
 `account_name`): `SupportChain.options_of(support, location)` calls it at each view and recipe, for the support
 called only, and checks what it returns then (format names are checked at once). The launcher merges layers option

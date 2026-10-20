@@ -197,6 +197,19 @@ class SupportOptions:
     ... )
     """
 
+    @classmethod
+    def option_names(cls) -> frozenset[str]:
+        """The options: the names of the fields, those ``format_options`` may
+        set.
+
+        Returns
+        -------
+        frozenset of str
+            E.g. ``{"storage_options", "credential_provider"}`` for
+            ``PolarsOptions``.
+        """
+        return frozenset(f.name for f in dataclasses.fields(cls))
+
     def code_value(self, name: str) -> Any:
         """Option ``name`` as generated code may show it: None for a secret
         (``secret_field``) or an object that is not plain data; a mapping
@@ -314,11 +327,6 @@ class FormatSupport:
     def library(cls) -> str:
         """The library "Python code" groups its recipes under: ``engine``'s package."""
         return cls.engine.package if cls.engine is not None else "python"
-
-    @classmethod
-    def _option_names(cls) -> frozenset[str]:
-        """The options it takes: the fields of ``options_model``."""
-        return frozenset(f.name for f in dataclasses.fields(cls.options_model))
 
     def view(
         self,
@@ -474,7 +482,7 @@ class SupportChain:
                     self._format_names,
                 )
             merged.update(values or {})
-        taken = support._option_names()
+        taken = support.options_model.option_names()
         return support.options_model(**{k: v for k, v in merged.items() if k in taken})
 
     def of(self, fmt: DataFormat, capability: Capability) -> list[FormatSupport]:
@@ -592,7 +600,7 @@ def _check_format_options(
     taken: set[str] = set()
     for support in supports:
         if name in (ALL_FORMATS, support.format.name):
-            taken |= support._option_names()
+            taken |= support.options_model.option_names()
     unknown = values.keys() - taken
     if unknown:
         raise ValueError(

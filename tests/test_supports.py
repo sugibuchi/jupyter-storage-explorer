@@ -169,6 +169,17 @@ class TestOptions:
         chain.recipes(Csv(), make_item("/a.csv", b""))
         assert seen == [DuckOptions(threads=4)]
 
+    def test_option_names(self):
+        assert SupportOptions.option_names() == frozenset()
+        assert PolarsOptions.option_names() == {
+            "storage_options",
+            "credential_provider",
+        }
+        assert DeltaLakeByPolarsOptions.option_names() >= {
+            "use_pyarrow",
+            "storage_options",
+        }
+
     def test_not_a_support(self):
         with pytest.raises(TypeError, match="not a FormatSupport"):
             SupportChain([Csv])
