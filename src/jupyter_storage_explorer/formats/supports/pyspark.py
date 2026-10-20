@@ -9,8 +9,8 @@ from typing import TYPE_CHECKING
 
 from jupyter_storage_explorer.formats.base import format_kwargs
 from jupyter_storage_explorer.formats.delta import DeltaLake
+from jupyter_storage_explorer.formats.packages import DeltaSpark, PySpark
 from jupyter_storage_explorer.formats.parquet import Parquet
-from jupyter_storage_explorer.formats.requirements import DeltaSpark, PySpark
 from jupyter_storage_explorer.formats.support import FormatSupport
 from jupyter_storage_explorer.formats.text import Csv, JsonLines
 
@@ -45,7 +45,7 @@ AS_DATA_FRAME = "Load as DataFrame"
 
 class CsvByPySpark(FormatSupport):
     format = Csv
-    use = PySpark
+    engine = PySpark
     capabilities = ("recipe",)
 
     data_frame_template = cleandoc("""
@@ -73,7 +73,7 @@ class CsvByPySpark(FormatSupport):
 
 class JsonLinesByPySpark(FormatSupport):
     format = JsonLines
-    use = PySpark
+    engine = PySpark
     capabilities = ("recipe",)
 
     # Spark reads JSON Lines (one record per line) by default.
@@ -101,7 +101,7 @@ class JsonLinesByPySpark(FormatSupport):
 
 class ParquetByPySpark(FormatSupport):
     format = Parquet
-    use = PySpark
+    engine = PySpark
     capabilities = ("recipe",)
 
     # A file or a folder of them; Spark finds partitions itself.
@@ -129,7 +129,7 @@ class ParquetByPySpark(FormatSupport):
 
 class DeltaLakeByPySpark(FormatSupport):
     format = DeltaLake
-    use = PySpark
+    engine = PySpark
     # Delta Lake set up in the Spark session (on Databricks, it is).
     additional_requirements = (DeltaSpark,)
     capabilities = ("recipe",)

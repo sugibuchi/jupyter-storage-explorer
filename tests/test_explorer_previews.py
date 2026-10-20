@@ -7,7 +7,7 @@ from explorers import make, path_of
 from jupyter_storage_explorer._query.settings import QuerySettings
 from jupyter_storage_explorer._view_tab import ViewTab
 from jupyter_storage_explorer.data_explorer import DataExplorer
-from jupyter_storage_explorer.formats import Requirement, SupportChain, ViewLimits
+from jupyter_storage_explorer.formats import PythonPackage, SupportChain, ViewLimits
 from jupyter_storage_explorer.formats.supports import CsvByPandas, CsvByPolars
 
 
@@ -68,7 +68,7 @@ class TestPreview:
     def test_install_hint(self, mem_explorer, monkeypatch):
         # Packages missing: the explorer tells what to install, without
         # calling the supports' view.
-        monkeypatch.setattr(Requirement, "is_installed", lambda self: False)
+        monkeypatch.setattr(PythonPackage, "is_installed", lambda self: False)
         monkeypatch.setattr(CsvByPolars, "view", None)
         monkeypatch.setattr(CsvByPandas, "view", None)
         mem_explorer._open_preview("/data/a.csv")

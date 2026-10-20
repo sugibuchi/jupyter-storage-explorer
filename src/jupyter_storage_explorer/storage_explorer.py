@@ -137,7 +137,7 @@ class StorageExplorer(
         The supports' options, by library, then format name or ``"*"`` for
         all formats, e.g. ``{"polars": {"*": {"storage_options": {...}},
         "delta": {"use_pyarrow": True}}}``: each support class gets those of
-        its library (its ``use``'s package) that it takes (see "Format
+        its library (its ``engine``'s package) that it takes (see "Format
         options" in docs/storage-explorer.md).
     view_limits : ViewLimits, optional
         How much views read and show, in the preview panel and in tabs:

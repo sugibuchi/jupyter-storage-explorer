@@ -288,11 +288,11 @@ unfiltered.
 
 **Formats** (`formats/`). Laid out as `filesystems/`: the interfaces `DataFormat` (`base.py`, with
 `detect`, `FILE_ICONS`, the helpers reading a file through its filesystem, `head_text`, `read_whole`,
-`file_size`, `name_of`, `child_names`, and the generated code's helpers), `FormatSupport` (`support.py`, with `SupportChain`, `Capability` and `Recipe`) and `Requirement`
-(`requirement.py`); a module per predefined format (`delta.py`, `parquet.py`, `excel.py`, `text.py`, `images.py`) and
+`file_size`, `name_of`, `child_names`, and the generated code's helpers), `FormatSupport` (`support.py`, with `SupportChain`, `Capability` and `Recipe`) and `PythonPackage`
+(`package.py`); a module per predefined format (`delta.py`, `parquet.py`, `excel.py`, `text.py`, `images.py`) and
 per library of the predefined supports in `supports/` (`polars.py`, `pandas.py`, `pyspark.py`, `fsspec.py`,
 `pillow.py`; `python.py` for those needing no package; named after the libraries, which they import only inside
-methods; exported by `formats.supports`, not `formats`); the predefined packages in `requirements.py`, the
+methods; exported by `formats.supports`, not `formats`); the predefined packages in `packages.py`, the
 views in `view.py` (`View`s, `ViewLimits`; tables made from dataframes in each library's support module, their notes in `frames.py`), the generated code's helpers in `base.py`
 (`snippet_options`, `format_kwargs`, `library_url`: a location as most libraries read it, a local
 file's plain path), and the defaults in `utils.py` (`DEFAULT_FORMATS`,
@@ -312,7 +312,7 @@ so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
   `priority` wins (Delta 20 > Parquet 10 > default 0 > Text -10). What supports share about a format is on it
   (`Csv.separator`, `Text.language`, `Image.mime_type`, `Parquet.data_url`, ...).
 - `FormatSupport` subclasses declare `format` (matched with `isinstance`, so subclasses too: `MarkdownByPython` comes
-  before `TextByPython`), `use` (the library's `Requirement`, None for none; names its code, `library()`, and its
+  before `TextByPython`), `engine` (the library's `PythonPackage`, None for none; names its code, `library()`, and its
   options), `additional_requirements`, and `capabilities`, the names of the methods it implements (`"view"`,
   `"recipe"`; `Capability`; not "jobs" or "tasks", which are file operations here): the explorer reads only
   `capabilities`, so a method not listed is never called (no runtime check of that, by design: users are expected to
@@ -348,11 +348,11 @@ so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
   attributes `*_template` (e.g. `lazy_frame_template`), written just before the method, an indented `inspect.cleandoc("""...""")`, with
   `str.format`: `{url}` (a repr) and `{kwargs}` (`format_kwargs`, the options; empty when none). Installing packages and
   configuring access to the storage (credentials, Spark's setup for Delta Lake) depend on the environment, so they are
-  left to the user. `Requirement`s (`requirements.py`) only say what a support needs (`package`, `import_name`,
+  left to the user. `PythonPackage`s (`packages.py`) only say what a support needs (`package`, `import_name`,
   `is_installed()`, `load()`).
 
 **Format options.** `format_options` is `{library: {format name or "*": {option: value}}}` (`create_supports`): a
-support class gets its library's (`use.package`) options for `"*"`, then for its `format.name`, only those its
+support class gets its library's (`engine.package`) options for `"*"`, then for its `format.name`, only those its
 `__init__` takes. Unknown libraries, formats (of the explorer's formats or the supports') and options (taken by no
 support of that library and format) are ValueErrors. Supports given as objects are used as they are. Storage options
 go into generated code through `snippet_options()`, which drops credential-looking keys and non-literal values. Spark

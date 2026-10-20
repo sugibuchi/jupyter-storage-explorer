@@ -23,8 +23,8 @@ from jupyter_storage_explorer.formats import (
     MarkdownView,
     MediaView,
     Parquet,
+    PythonPackage,
     QueryView,
-    Requirement,
     SupportChain,
     TableView,
     Text,
@@ -33,7 +33,7 @@ from jupyter_storage_explorer.formats import (
     ViewLimits,
     default_supports,
 )
-from jupyter_storage_explorer.formats.requirements import Pillow
+from jupyter_storage_explorer.formats.packages import Pillow
 from jupyter_storage_explorer.formats.supports import (
     CsvByPandas,
     DeltaLakeByPolars,
@@ -302,14 +302,14 @@ class TestViews:
         assert (media.mime, media.data) == ("image/png", b"\x89PNG")
 
     def test_install_hint_when_nothing_installed(self, make_item, monkeypatch):
-        monkeypatch.setattr(Requirement, "is_installed", lambda self: False)
+        monkeypatch.setattr(PythonPackage, "is_installed", lambda self: False)
         hint = view(Csv(), make_item("/a.csv", b"a\n"))
         assert isinstance(hint, InstallView)
         assert hint.options == [["polars"], ["pandas"]]
 
     def test_image_needs_no_package(self, make_item, monkeypatch):
         # The browser shows images itself: Pillow is for the load code only.
-        monkeypatch.setattr(Requirement, "is_installed", lambda self: False)
+        monkeypatch.setattr(PythonPackage, "is_installed", lambda self: False)
         assert isinstance(view(Image(), make_item("/a.png", b"\x89PNG")), MediaView)
 
 

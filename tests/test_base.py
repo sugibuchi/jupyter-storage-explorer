@@ -1,4 +1,4 @@
-"""What formats share (formats/base.py, requirement.py): reading files,
+"""What formats share (formats/base.py, package.py): reading files,
 generated-code helpers, requirements, detection and file icons (the
 supports: test_supports.py)."""
 
@@ -14,7 +14,7 @@ from jupyter_storage_explorer.formats import (
     Csv,
     DeltaLake,
     Parquet,
-    Requirement,
+    PythonPackage,
     Text,
     ViewLimits,
     child_names,
@@ -29,7 +29,7 @@ from jupyter_storage_explorer.formats import (
     read_whole,
     snippet_options,
 )
-from jupyter_storage_explorer.formats.requirements import Polars
+from jupyter_storage_explorer.formats.packages import Polars
 from jupyter_storage_explorer.formats.utils import format_icons
 
 
@@ -110,7 +110,7 @@ class TestRequirement:
 
     def test_missing(self):
         missing = type(
-            "Missing", (Requirement,), {"package": "x", "import_name": "not_a_pkg"}
+            "Missing", (PythonPackage,), {"package": "x", "import_name": "not_a_pkg"}
         )
         assert not missing().is_installed()
 

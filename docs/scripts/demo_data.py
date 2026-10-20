@@ -437,7 +437,7 @@ def supports() -> list[Any]:
     for support in result:
         # Only polars reads by URL; the others read the demo's own files,
         # so that files saved from JupyterLab show as saved.
-        uses_polars = support.use is not None and support.use.package == "polars"
+        uses_polars = support.engine is not None and support.engine.package == "polars"
         if uses_polars and "view" in support.capabilities:
             view = support.view
             support.view = lambda fmt, location, fs, path, is_dir, view=view, **kw: (

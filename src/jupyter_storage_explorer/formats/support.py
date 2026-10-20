@@ -17,10 +17,7 @@ if TYPE_CHECKING:
     from fsspec import AbstractFileSystem
 
     from jupyter_storage_explorer.formats.base import DataFormat
-    from jupyter_storage_explorer.formats.requirement import (
-        Requirement,
-        Requirements,
-    )
+    from jupyter_storage_explorer.formats.package import PythonPackage
     from jupyter_storage_explorer.formats.view import View, ViewLimits
     from jupyter_storage_explorer.location import Location
 
@@ -39,9 +36,9 @@ class Recipe:
     # What the code does, without the library's name, e.g. "Load as LazyFrame".
     title: str
     # The packages the code needs: the library it loads with first (its
-    # support's ``use``, which "Python code" groups recipes by), then the
+    # support's ``engine``, which "Python code" groups recipes by), then the
     # others (``additional_requirements``); empty for Python alone.
-    requirements: Requirements
+    requirements: tuple[type[PythonPackage], ...]
     # The imports, then the loading code. Installing the packages and
     # configuring access to the storage are left to the user: reaching a data
     # lake often needs configuration that depends on it.
@@ -80,24 +77,24 @@ class FormatSupport:
       explorer's filesystem, e.g. with ``head_text(fs, path, n)``), and
       whether it is a folder.
     - Options are keyword-only arguments of ``__init__``. Explorers create
-      the supports given as classes with the options of their ``use``'s
+      the supports given as classes with the options of their ``engine``'s
       package (``format_options={"polars": {"*": {...}, "parquet":
       {...}}}``), passing each only those its ``__init__`` takes; supports
       given as objects are used as they are.
-    - Import the packages through their ``Requirement``'s ``load()``, in the
+    - Import the packages through their ``PythonPackage``'s ``load()``, in the
       methods, never at the top of the module: they are optional.
 
     Attributes
     ----------
     format : type of DataFormat
         The format handled, e.g. ``Parquet``; its subclasses too.
-    use : type of Requirement or None
+    engine : type of PythonPackage or None
         The package (library) handling it, e.g. ``Polars``: what "Python
         code" groups the support's recipes under, and the key of its options
         in ``format_options`` (its ``package``, e.g. "polars"). None for a
         support needing no package (e.g. text viewed by Python itself),
         which takes no options.
-    additional_requirements : tuple of Requirement classes
+    additional_requirements : tuple of PythonPackage classes
         Other packages it needs, e.g. ``(DeltaSpark,)`` for Spark reading
         Delta Lake tables.
     capabilities : tuple of str
@@ -110,15 +107,15 @@ class FormatSupport:
 
     # See the class docstring.
     format: ClassVar[type[DataFormat]]
-    use: ClassVar[type[Requirement] | None] = None
-    additional_requirements: ClassVar[Requirements] = ()
+    engine: ClassVar[type[PythonPackage] | None] = None
+    additional_requirements: ClassVar[tuple[type[PythonPackage], ...]] = ()
     capabilities: ClassVar[tuple[Capability, ...]] = ()
 
     @classmethod
-    def requirements(cls) -> Requirements:
-        """``use`` and ``additional_requirements``: all the packages it needs."""
+    def requirements(cls) -> tuple[type[PythonPackage], ...]:
+        """``engine`` and ``additional_requirements``: all the packages it needs."""
         return (
-            *((cls.use,) if cls.use is not None else ()),
+            *((cls.engine,) if cls.engine is not None else ()),
             *cls.additional_requirements,
         )
 
@@ -129,8 +126,8 @@ class FormatSupport:
 
     @classmethod
     def library(cls) -> str:
-        """The library "Python code" groups its recipes under: ``use``'s package."""
-        return cls.use.package if cls.use is not None else "python"
+        """The library "Python code" groups its recipes under: ``engine``'s package."""
+        return cls.engine.package if cls.engine is not None else "python"
 
     def view(
         self,

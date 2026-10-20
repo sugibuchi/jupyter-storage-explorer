@@ -262,7 +262,7 @@ class PreviewsMixin:
             return {"error": error_text(exc)}
         return {
             "formats": [f.name for f in formats],
-            # Requirements are classes: the frontend gets their packages,
+            # Recipes' packages are classes: the frontend gets their names,
             # the first the library it groups the recipes by.
             "recipes": [
                 {

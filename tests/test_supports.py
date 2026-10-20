@@ -19,8 +19,8 @@ from jupyter_storage_explorer.formats import (
     FormatSupport,
     InstallView,
     Parquet,
+    PythonPackage,
     QueryView,
-    Requirement,
     SupportChain,
     ViewLimits,
     create_supports,
@@ -39,14 +39,14 @@ from jupyter_storage_explorer.formats.supports import (
 LIMITS = ViewLimits(max_display_rows=2)
 
 
-class Missing(Requirement):
+class Missing(PythonPackage):
     package = "not-a-package"
     import_name = "not_a_package"
 
 
-def support(fmt=Csv, use=None, capabilities=("view",), **methods):
+def support(fmt=Csv, engine=None, capabilities=("view",), **methods):
     """A support class of ``capabilities``, its methods ``methods``."""
-    attributes = {"format": fmt, "use": use, "capabilities": capabilities}
+    attributes = {"format": fmt, "engine": engine, "capabilities": capabilities}
     return type("Fake", (FormatSupport,), {**attributes, **methods})
 
 
@@ -149,7 +149,7 @@ class TestChain:
         return chain.view(Csv(), *item.args, limits=LIMITS)
 
     def test_first_installed_views(self, make_item):
-        missing = support(use=Missing, view=lambda *a, **k: "missing")
+        missing = support(engine=Missing, view=lambda *a, **k: "missing")
         first = support(view=lambda *a, **k: "first")
         second = support(view=lambda *a, **k: "second")
         chain = SupportChain([missing(), first(), second()])
@@ -175,7 +175,7 @@ class TestChain:
         assert self.view(chain, make_item("/a.csv", b"")) == "listed"
 
     def test_install_hint(self, make_item, monkeypatch):
-        monkeypatch.setattr(Requirement, "is_installed", lambda self: False)
+        monkeypatch.setattr(PythonPackage, "is_installed", lambda self: False)
         hint = self.view(SupportChain(default_supports()), make_item("/a.csv", b"a\n"))
         assert isinstance(hint, InstallView)
         assert hint.options == [["polars"], ["pandas"]]
@@ -196,7 +196,7 @@ class TestChain:
         assert view.data.collect().columns == ["a", "b"]
 
     def test_recipes_of_every_support_installed_or_not(self, make_item, monkeypatch):
-        monkeypatch.setattr(Requirement, "is_installed", lambda self: False)
+        monkeypatch.setattr(PythonPackage, "is_installed", lambda self: False)
         chain = SupportChain(default_supports())
         recipes = chain.recipes(Csv(), *make_item("/a.csv", b"a\n").args)
         assert [(r.requirements[0].package, r.title) for r in recipes] == [
@@ -244,7 +244,7 @@ class TestExplorer:
     def test_given_first(self, make_item, mem_explorer):
         duck = support(
             fmt=Parquet,
-            use=Missing,
+            engine=Missing,
             capabilities=("recipe",),
             recipe=lambda *a, **k: {"Load as a duck": "duck"},
         )

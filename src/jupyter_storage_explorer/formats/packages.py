@@ -1,32 +1,32 @@
-"""The predefined packages the supports use (``Requirement`` subclasses, see
-requirement.py)."""
+"""The predefined packages the supports use (``PythonPackage`` subclasses, see
+package.py)."""
 
 from __future__ import annotations
 
-from jupyter_storage_explorer.formats.requirement import Requirement
+from jupyter_storage_explorer.formats.package import PythonPackage
 
 
-class Fsspec(Requirement):
+class Fsspec(PythonPackage):
     package = "fsspec"
     import_name = "fsspec"
 
 
-class Polars(Requirement):
+class Polars(PythonPackage):
     package = "polars"
     import_name = "polars"
 
 
-class Pandas(Requirement):
+class Pandas(PythonPackage):
     package = "pandas"
     import_name = "pandas"
 
 
-class Pillow(Requirement):
+class Pillow(PythonPackage):
     package = "pillow"
     import_name = "PIL"
 
 
-class PySpark(Requirement):
+class PySpark(PythonPackage):
     """Spark, used only in load code."""
 
     package = "pyspark"
@@ -36,35 +36,35 @@ class PySpark(Requirement):
 # Optional dependencies of the packages above: installed, never imported by snippets.
 
 
-class DeltaSpark(Requirement):
+class DeltaSpark(PythonPackage):
     """Delta Lake for Spark, set up in the session (on Databricks, it is)."""
 
     package = "delta-spark"
     import_name = "delta"
 
 
-class PyArrow(Requirement):
+class PyArrow(PythonPackage):
     """Parquet engine for pandas."""
 
     package = "pyarrow"
     import_name = "pyarrow"
 
 
-class DeltaLake(Requirement):
+class DeltaLake(PythonPackage):
     """Delta Lake reader used by ``pl.read_delta``."""
 
     package = "deltalake"
     import_name = "deltalake"
 
 
-class Openpyxl(Requirement):
+class Openpyxl(PythonPackage):
     """Excel engine for pandas."""
 
     package = "openpyxl"
     import_name = "openpyxl"
 
 
-class Fastexcel(Requirement):
+class Fastexcel(PythonPackage):
     """Excel engine for polars."""
 
     package = "fastexcel"

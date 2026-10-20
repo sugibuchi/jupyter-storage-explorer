@@ -289,17 +289,17 @@ defaults, e.g. DuckDB for the data browser on Parquet:
 
 ```python
 from jupyter_storage_explorer import StorageExplorer
-from jupyter_storage_explorer.formats import FormatSupport, Parquet, QueryView, Requirement
+from jupyter_storage_explorer.formats import FormatSupport, Parquet, PythonPackage, QueryView
 
 
-class DuckDB(Requirement):
+class DuckDB(PythonPackage):
     package = "duckdb"
     import_name = "duckdb"
 
 
 class ParquetByDuckDB(FormatSupport):
     format = Parquet
-    use = DuckDB
+    engine = DuckDB
     capabilities = ("view",)
 
     def view(self, fmt, location, fs, path, is_dir, *, limits):

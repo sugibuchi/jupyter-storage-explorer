@@ -17,8 +17,8 @@ from jupyter_storage_explorer.formats.base import (
 )
 from jupyter_storage_explorer.formats.excel import Excel
 from jupyter_storage_explorer.formats.frames import rows_note, with_sheets
+from jupyter_storage_explorer.formats.packages import Openpyxl, Pandas, PyArrow
 from jupyter_storage_explorer.formats.parquet import Parquet
-from jupyter_storage_explorer.formats.requirements import Openpyxl, Pandas, PyArrow
 from jupyter_storage_explorer.formats.support import FormatSupport
 from jupyter_storage_explorer.formats.text import Csv, Json, JsonLines
 from jupyter_storage_explorer.formats.view import TableView
@@ -51,7 +51,7 @@ def _table(df: Any, **kwargs: Any) -> TableView:
 class _PandasByUrl(FormatSupport):
     """A format whose code pandas reads by URL, with storage options."""
 
-    use = Pandas
+    engine = Pandas
 
     def __init__(self, *, storage_options: Mapping[str, Any] | None = None) -> None:
         """``storage_options``: pandas' (fsspec's) in the code; ones that

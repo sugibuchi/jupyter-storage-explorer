@@ -12,9 +12,9 @@ from jupyter_storage_explorer.formats.base import (
 )
 from jupyter_storage_explorer.formats.delta import DeltaLake
 from jupyter_storage_explorer.formats.excel import Excel
+from jupyter_storage_explorer.formats.packages import DeltaLake as DeltaLakePackage
+from jupyter_storage_explorer.formats.packages import Fastexcel, Fsspec, Polars
 from jupyter_storage_explorer.formats.parquet import Parquet
-from jupyter_storage_explorer.formats.requirements import DeltaLake as DeltaLakePackage
-from jupyter_storage_explorer.formats.requirements import Fastexcel, Fsspec, Polars
 from jupyter_storage_explorer.formats.support import FormatSupport
 from jupyter_storage_explorer.formats.text import Csv, Json, JsonLines
 from jupyter_storage_explorer.formats.view import QueryView
@@ -34,7 +34,7 @@ AS_DATA_FRAME = "Load as DataFrame"
 class _PolarsByUrl(FormatSupport):
     """A format polars reads by URL, with the storage options of its readers."""
 
-    use = Polars
+    engine = Polars
 
     def __init__(
         self,
@@ -160,7 +160,7 @@ class JsonByPolars(FormatSupport):
     """Load code only: JSON is viewed as a tree (``JsonByPython``)."""
 
     format = Json
-    use = Polars
+    engine = Polars
     capabilities = ("recipe",)
 
     data_frame_template = cleandoc("""
@@ -184,7 +184,7 @@ class JsonByPolars(FormatSupport):
 
 class ExcelByPolars(FormatSupport):
     format = Excel
-    use = Polars
+    engine = Polars
     # fastexcel reads workbooks for polars; the code reads the bytes with fsspec.
     additional_requirements = (Fastexcel, Fsspec)
     capabilities = ("view", "recipe")

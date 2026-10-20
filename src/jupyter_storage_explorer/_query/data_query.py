@@ -15,7 +15,7 @@ from jupyter_storage_explorer._query.filters import (
     normalize_settings,
 )
 from jupyter_storage_explorer._query.settings import QuerySettings
-from jupyter_storage_explorer.formats.requirements import Polars
+from jupyter_storage_explorer.formats.packages import Polars
 
 if TYPE_CHECKING:
     from collections.abc import Callable

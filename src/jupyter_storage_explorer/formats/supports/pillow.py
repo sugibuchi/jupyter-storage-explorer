@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from jupyter_storage_explorer.formats.base import library_url
 from jupyter_storage_explorer.formats.images import Image
-from jupyter_storage_explorer.formats.requirements import Fsspec, Pillow
+from jupyter_storage_explorer.formats.packages import Fsspec, Pillow
 from jupyter_storage_explorer.formats.supports.fsspec import OpenedByFsspec
 
 if TYPE_CHECKING:
@@ -24,7 +24,7 @@ class ImageByPillow(OpenedByFsspec):
     and opened with Pillow; not SVG, which it cannot read."""
 
     format = Image
-    use = Pillow
+    engine = Pillow
     additional_requirements = (Fsspec,)
     capabilities = ("recipe",)
 

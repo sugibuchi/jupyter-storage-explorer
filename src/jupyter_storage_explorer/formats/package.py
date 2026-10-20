@@ -1,18 +1,18 @@
 """The packages a format's support needs to handle its data: the
-``Requirement`` interface (requirements.py has the predefined ones)."""
+``PythonPackage`` interface (packages.py has the predefined ones)."""
 
 from __future__ import annotations
 
 import importlib
 import importlib.util
-from typing import TYPE_CHECKING, ClassVar, TypeAlias
+from typing import TYPE_CHECKING, ClassVar
 
 if TYPE_CHECKING:
     import types
 
 
-class Requirement:
-    """A package a support needs (``FormatSupport.use``, ``additional_requirements``).
+class PythonPackage:
+    """A package a support needs (``FormatSupport.engine``, ``additional_requirements``).
 
     Subclasses declare ``package`` and ``import_name``.
     """
@@ -33,6 +33,3 @@ class Requirement:
         return importlib.import_module(
             f"{self.import_name}.{submodule}" if submodule else self.import_name
         )
-
-
-Requirements: TypeAlias = tuple[type[Requirement], ...]

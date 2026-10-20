@@ -2,11 +2,11 @@
 
 ``DataFormat`` (base.py, with the ``Target`` it looks at) detects a format,
 ``FormatSupport`` (support.py) handles its data with one library (views,
-recipes), and ``Requirement`` (requirement.py) is a
+recipes), and ``PythonPackage`` (package.py) is a
 package one needs. The predefined formats each have a module (delta.py,
 parquet.py, excel.py, text.py, images.py), the predefined supports one per
 library in the ``supports`` package (imported from there), and
-requirements.py has the predefined packages. view.py has the views
+packages.py has the predefined packages. view.py has the views
 supports return, and base.py helpers for the code they generate.
 ``default_formats()`` and ``default_supports()`` (utils.py) create those
 explorers use by default.
@@ -30,8 +30,8 @@ from jupyter_storage_explorer.formats.base import (
 from jupyter_storage_explorer.formats.delta import DeltaLake
 from jupyter_storage_explorer.formats.excel import Excel
 from jupyter_storage_explorer.formats.images import Image
+from jupyter_storage_explorer.formats.package import PythonPackage
 from jupyter_storage_explorer.formats.parquet import Parquet, ParquetLayout
-from jupyter_storage_explorer.formats.requirement import Requirement, Requirements
 from jupyter_storage_explorer.formats.support import (
     Capability,
     FormatSupport,
@@ -77,10 +77,9 @@ __all__ = [
     "MediaView",
     "Parquet",
     "ParquetLayout",
+    "PythonPackage",
     "QueryView",
     "Recipe",
-    "Requirement",
-    "Requirements",
     "SupportChain",
     "TableView",
     "Text",

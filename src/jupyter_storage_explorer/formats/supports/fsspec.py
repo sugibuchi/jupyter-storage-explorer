@@ -10,7 +10,7 @@ from jupyter_storage_explorer.formats.base import (
     library_url,
     snippet_options,
 )
-from jupyter_storage_explorer.formats.requirements import Fsspec
+from jupyter_storage_explorer.formats.packages import Fsspec
 from jupyter_storage_explorer.formats.support import FormatSupport
 from jupyter_storage_explorer.formats.text import Json, Text
 
@@ -44,7 +44,7 @@ class TextByFsspec(OpenedByFsspec):
     """The text, for Text formats (code, logs, Markdown, ...)."""
 
     format = Text
-    use = Fsspec
+    engine = Fsspec
     capabilities = ("recipe",)
 
     text_template = cleandoc("""
@@ -73,7 +73,7 @@ class JsonByFsspec(OpenedByFsspec):
     """The JSON value, with Python's json."""
 
     format = Json
-    use = Fsspec
+    engine = Fsspec
     capabilities = ("recipe",)
 
     value_template = cleandoc("""
