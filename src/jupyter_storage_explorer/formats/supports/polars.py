@@ -7,7 +7,7 @@ from inspect import cleandoc
 from typing import TYPE_CHECKING, Any
 
 from jupyter_storage_explorer.formats.delta import DeltaLake
-from jupyter_storage_explorer.formats.engines import PolarsEngine
+from jupyter_storage_explorer.formats.engine import Engine
 from jupyter_storage_explorer.formats.excel import Excel
 from jupyter_storage_explorer.formats.packages import DeltaLake as DeltaLakePackage
 from jupyter_storage_explorer.formats.packages import Fastexcel, Fsspec, Polars
@@ -30,6 +30,12 @@ if TYPE_CHECKING:
 
 AS_LAZY_FRAME = "Load as LazyFrame"
 AS_DATA_FRAME = "Load as DataFrame"
+
+
+class PolarsEngine(Engine):
+    key = "polars"
+    label = "Polars"
+    requirements = (Polars(),)
 
 
 @dataclass(frozen=True, kw_only=True)

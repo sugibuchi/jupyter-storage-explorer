@@ -1,4 +1,4 @@
-"""Engines (formats/engine.py, engines.py): which are offered, in which order,
+"""Engines (formats/engine.py, the predefined ones in formats/supports/): which are offered, in which order,
 which views an item, and the explorer's choice of one."""
 
 from __future__ import annotations
@@ -16,12 +16,11 @@ from jupyter_storage_explorer.formats import (
     FormatSupport,
     Markdown,
     Parquet,
-    PySparkEngine,
     PythonPackage,
     default_supports,
 )
 from jupyter_storage_explorer.formats.packages import DatabricksConnect, PySpark
-from jupyter_storage_explorer.formats.supports import DeltaLakeByPolars
+from jupyter_storage_explorer.formats.supports import DeltaLakeByPolars, PySparkEngine
 
 
 class Installed(PythonPackage):
@@ -165,8 +164,9 @@ class TestExplorer:
         # Another engine: the preview open is viewed again with it.
         local._engine = "pandas"
         assert local._preview["engine"] == "pandas"
-        [table] = local._preview["sections"]
-        assert table["kind"] == "table"
+        assert "query" in local._preview  # the data browser, on pandas
+        query = next(iter(local._queries.values()))
+        assert query.implementation.is_pandas()
 
     def test_preview_as(self, local):
         local._engine = "pandas"

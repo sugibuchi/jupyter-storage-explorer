@@ -9,7 +9,6 @@ from jupyter_storage_explorer.formats.delta import DeltaLake
 from jupyter_storage_explorer.formats.excel import Excel
 from jupyter_storage_explorer.formats.images import Image
 from jupyter_storage_explorer.formats.parquet import Parquet
-from jupyter_storage_explorer.formats.supports.fsspec import JsonByFsspec, TextByFsspec
 from jupyter_storage_explorer.formats.supports.pandas import (
     CsvByPandas,
     ExcelByPandas,
@@ -34,8 +33,10 @@ from jupyter_storage_explorer.formats.supports.pyspark import (
 )
 from jupyter_storage_explorer.formats.supports.python import (
     ImageByPython,
+    JsonByFsspec,
     JsonByPython,
     MarkdownByPython,
+    TextByFsspec,
     TextByPython,
 )
 from jupyter_storage_explorer.formats.text import Csv, Json, JsonLines, Markdown, Text

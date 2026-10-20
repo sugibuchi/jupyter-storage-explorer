@@ -315,6 +315,7 @@ class PreviewsMixin:
         limits = self._view_limits
         options = {
             "fetch": self._fetch_rows,
+            "cut": lambda: current[0].more,
             "max_live_rows": limits.max_live_rows,
             "max_memory_rows": limits.max_memory_rows,
             "page_rows": limits.max_display_rows,

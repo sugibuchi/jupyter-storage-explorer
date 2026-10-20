@@ -376,6 +376,12 @@ class TestModes:
         with pytest.raises(ValueError, match="live mode needs lazy data"):
             mode_query(BIG.to_pandas(), mode="live")
 
+    def test_eager_data_of_the_first_rows(self):
+        # The source read only the first rows (e.g. pandas, by a support):
+        # noted as rows held in memory are.
+        query = mode_query(BIG.to_pandas(), cut=lambda: True)
+        assert query.memory == {"rows": 50, "cut": True}
+
     def test_unknown_mode(self):
         with pytest.raises(ValueError, match="mode must be one of"):
             mode_query(mode="online")

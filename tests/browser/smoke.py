@@ -363,7 +363,7 @@ def engines(x: Explorer) -> None:
     # Another engine: the preview open is viewed again with it.
     choose("pandas")
     expect(badge).to_have_text("Parquet · pandas")
-    expect(panel.locator(".jse-section-table")).to_be_visible()  # its first rows
+    expect(panel.locator(".jse-query")).to_be_visible()  # on pandas' rows
     # "Preview as": each format and engine that can view the item.
     x.row("orders.parquet").click(button="right")
     x.menu_item("Preview as").hover()

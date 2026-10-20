@@ -132,10 +132,20 @@ class QueryView(View):
     ``data`` is any dataframe narwhals supports, best lazy (e.g. a polars
     LazyFrame or a Spark DataFrame), so the browser reads only the rows it
     shows; eager ones are queried in memory.
+
+    Parameters
+    ----------
+    data : dataframe
+        The data.
+    more : bool, default False
+        ``data`` is eager and holds only the first rows of the item's (e.g.
+        ``ViewLimits.max_memory_rows`` of them, read with pandas): the data
+        browser says so.
     """
 
     kind: ClassVar[str] = "query"
     data: Any
+    more: bool = False
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -1,4 +1,5 @@
-"""Formats handled with pandas: views of their first rows, and load code."""
+"""Formats handled with pandas: the data browser, on the first rows (pandas
+reads eagerly), and load code."""
 
 from __future__ import annotations
 
@@ -7,8 +8,7 @@ from dataclasses import dataclass
 from inspect import cleandoc
 from typing import TYPE_CHECKING, Any
 
-from jupyter_storage_explorer._json import jsonable
-from jupyter_storage_explorer.formats.engines import PandasEngine
+from jupyter_storage_explorer.formats.engine import Engine
 from jupyter_storage_explorer.formats.excel import Excel
 from jupyter_storage_explorer.formats.packages import Openpyxl, Pandas, PyArrow
 from jupyter_storage_explorer.formats.parquet import Parquet
@@ -19,7 +19,7 @@ from jupyter_storage_explorer.formats.support import (
     secret_dict_field,
 )
 from jupyter_storage_explorer.formats.text import Csv, Json, JsonLines
-from jupyter_storage_explorer.formats.view import TableView
+from jupyter_storage_explorer.formats.view import QueryView
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -28,20 +28,25 @@ if TYPE_CHECKING:
     from jupyter_storage_explorer.formats.view import View, ViewLimits
 
 AS_DATA_FRAME = "Load as DataFrame"
-# Data files read for a directory's view: enough for the first rows.
-_VIEW_FILES = 10
 
 
-def _table(df: Any, **kwargs: Any) -> TableView:
-    """A pandas DataFrame as a table view."""
-    # Object dtype makes NaN/NaT/NA replaceable with None.
-    cells = df.astype(object).where(df.notna(), None)
-    return TableView(
-        columns=[str(c) for c in df.columns],
-        rows=[[jsonable(v) for v in row] for row in cells.itertuples(index=False)],
-        dtypes=[str(t) for t in df.dtypes],
-        **kwargs,
-    )
+def _rows(limits: ViewLimits) -> int:
+    """Rows read for the data browser: pandas reads eagerly, so at most
+    ``max_memory_rows``, and one more, which tells whether there are more."""
+    return limits.max_memory_rows + 1
+
+
+def _query_view(df: Any, limits: ViewLimits) -> QueryView:
+    """The rows read (see ``_rows``) in the data browser, which says when
+    they are only the first of the data."""
+    more = len(df) > limits.max_memory_rows
+    return QueryView(data=df.head(limits.max_memory_rows), more=more)
+
+
+class PandasEngine(Engine):
+    key = "pandas"
+    label = "pandas"
+    requirements = (Pandas(),)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -86,14 +91,12 @@ class CsvByPandas(_PandasByUrl):
         self, fmt: Csv, ctx: ItemContext, options: PandasOptions, limits: ViewLimits
     ) -> View:
         pd = Pandas().load()
-        text, truncated = ctx.head_text(limits.max_bytes)
-        df = pd.read_csv(
-            io.StringIO(text),
-            sep=fmt.separator(ctx.name, text),
-            nrows=limits.max_display_rows,
-        )
-        more = truncated or len(df) == limits.max_display_rows
-        return _table(df, more=more)
+        # The separator, from the beginning; the rows, read through the
+        # explorer's filesystem, so any storage works.
+        text, _ = ctx.head_text(limits.max_bytes)
+        with ctx.fs.open(ctx.path, "rb") as f:
+            df = pd.read_csv(f, sep=fmt.separator(ctx.name, text), nrows=_rows(limits))
+        return _query_view(df, limits)
 
     data_frame_template = cleandoc("""
         import pandas as pd
@@ -127,10 +130,9 @@ class JsonLinesByPandas(_PandasByUrl):
         limits: ViewLimits,
     ) -> View:
         pd = Pandas().load()
-        text, truncated = ctx.head_text(limits.max_bytes)
-        df = pd.read_json(io.StringIO(text), lines=True, nrows=limits.max_display_rows)
-        more = truncated or len(df) == limits.max_display_rows
-        return _table(df, more=more, unit="records")
+        with ctx.fs.open(ctx.path, "rt", encoding="utf-8") as f:
+            df = pd.read_json(f, lines=True, nrows=_rows(limits))
+        return _query_view(df, limits)
 
     data_frame_template = cleandoc("""
         import pandas as pd
@@ -184,18 +186,12 @@ class ExcelByPandas(_PandasByUrl):
     def view(
         self, fmt: Excel, ctx: ItemContext, options: PandasOptions, limits: ViewLimits
     ) -> View:
+        # The first sheet, as polars reads it (ExcelByPolars).
         pd = Pandas().load()
-        workbook = pd.ExcelFile(io.BytesIO(ctx.read_whole(limits)), engine="openpyxl")
-        name = workbook.sheet_names[0]
-        # One extra row tells whether there are more.
-        df = workbook.parse(name, nrows=limits.max_display_rows + 1)
-        others = workbook.sheet_names[1:]
-        return _table(
-            df.head(limits.max_display_rows),
-            title=name,
-            more=len(df) > limits.max_display_rows,
-            note=f"other sheets: {', '.join(others)}" if others else "",
+        df = pd.read_excel(
+            io.BytesIO(ctx.read_whole(limits)), engine="openpyxl", nrows=_rows(limits)
         )
+        return _query_view(df, limits)
 
     data_frame_template = cleandoc("""
         import pandas as pd
@@ -225,15 +221,19 @@ class ParquetByPandas(_PandasByUrl):
         self, fmt: Parquet, ctx: ItemContext, options: PandasOptions, limits: ViewLimits
     ) -> View:
         pa_dataset = PyArrow().load("dataset")
-        # pyarrow reads through the browser's fsspec filesystem, so any storage
-        # works. For a directory, given its first few files, of one partition
-        # if it is partitioned (with its columns from the folders' names):
-        # pyarrow would otherwise search all subdirectories.
+        # pyarrow reads through the explorer's fsspec filesystem, so any
+        # storage works. A directory's data files are those polars reads
+        # (Parquet.data_url): its partition folders' (their columns from the
+        # folders' names), not its other folders' (e.g. Spark's "_temporary").
         options: dict[str, Any] = {}
         if not ctx.is_dir:
             source: Any = ctx.path
         else:
-            source = fmt.first_files(ctx, _VIEW_FILES)
+            source = sorted(
+                path
+                for path in ctx.fs.glob(fmt.data_url(ctx, ctx.path))
+                if not path.rstrip("/").rsplit("/", 1)[-1].startswith((".", "_"))
+            )
             if fmt.layout(ctx).keys:
                 options = {"partitioning": "hive", "partition_base_dir": ctx.path}
         if not source:
@@ -241,11 +241,7 @@ class ParquetByPandas(_PandasByUrl):
         dataset = pa_dataset.dataset(
             source, filesystem=ctx.fs, format="parquet", **options
         )
-        df = dataset.head(limits.max_display_rows).to_pandas()
-        if ctx.is_dir:
-            return _table(df, more=len(df) == limits.max_display_rows)
-        total = dataset.count_rows()
-        return _table(df, more=len(df) < total, total=total)
+        return _query_view(dataset.head(_rows(limits)).to_pandas(), limits)
 
     data_frame_template = cleandoc("""
         import pandas as pd

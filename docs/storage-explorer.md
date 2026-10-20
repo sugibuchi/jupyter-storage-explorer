@@ -232,8 +232,10 @@ polars reads the data with the credentials in the environment, not the explorer'
 
 ### Engines
 
-Previews and view tabs read the data with an *engine*, a library: **Polars** (the data browser), **pandas** (the
-first rows), each when installed. The status bar shows the engine chosen, left of **Preview**; click it to choose
+Previews and view tabs read the data with an *engine*, a library, each when installed: **Polars**, **pandas** and
+**PySpark**, all in the data browser. pandas reads files whole, so it gets their first 100,000 rows (`max_memory_rows`
+of [`view_limits`](#storageexplorer-options)). PySpark reads with the Spark session running in the kernel, or one it
+starts, and with Spark's own storage settings, not the explorer's. The status bar shows the engine chosen, left of **Preview**; click it to choose
 another, and the preview open is shown again with it. Text, Markdown, JSON and images, which the
 engines do not handle, are shown by the explorer itself whatever the engine. When the engine chosen cannot view an
 item (e.g. a Delta table, with polars but not `deltalake`), Preview is disabled: **Preview as** and **View in new tab

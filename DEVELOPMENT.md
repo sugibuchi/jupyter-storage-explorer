@@ -376,7 +376,7 @@ A *support* handles a format's data with an engine: a `FormatSupport` subclass, 
 it implements: `"view"`, returning what to show (a `QueryView` of data for the data browser, or e.g. a `TableView` or
 `TextView`), and `"recipe"`, the code of "Python code" by title. Its `engine` is an `Engine` subclass, the library users
 choose in the explorer's status bar (with its `key`, `label` and `requirements`, `PythonPackage` instances): one of
-`formats`' (`PolarsEngine`, `PandasEngine`, `PySparkEngine`, ...) or one of your own. Supports given as `supports` are
+`formats.supports`' (`PolarsEngine`, `PandasEngine`, `PySparkEngine`, ...) or one of your own. Supports given as `supports` are
 tried before the defaults, e.g. DuckDB for the data browser on Parquet:
 
 ```python

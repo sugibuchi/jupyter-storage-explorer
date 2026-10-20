@@ -1,18 +1,29 @@
-"""Views needing no package: text and code (highlighted), Markdown and
-JSON from the beginning of the file, and images, which the browser shows."""
+"""What needs no package beyond the explorer's own: the built-in views (no
+engine) of text and code (highlighted), Markdown and JSON from the beginning
+of the file, and images, which the browser shows; and code reading text and
+JSON with fsspec, for any storage (``FsspecEngine``)."""
 
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING
+from dataclasses import dataclass
+from inspect import cleandoc
+from typing import TYPE_CHECKING, Any
 
 from pygments import highlight
 from pygments.formatters import HtmlFormatter
 from pygments.lexers import get_lexer_by_name
 from pygments.util import ClassNotFound
 
+from jupyter_storage_explorer.formats.engine import Engine
 from jupyter_storage_explorer.formats.images import Image
-from jupyter_storage_explorer.formats.support import FormatSupport
+from jupyter_storage_explorer.formats.packages import Fsspec
+from jupyter_storage_explorer.formats.support import (
+    FormatSupport,
+    SupportOptions,
+    format_kwargs,
+    secret_dict_field,
+)
 from jupyter_storage_explorer.formats.text import Json, Markdown, Text
 from jupyter_storage_explorer.formats.view import (
     MarkdownView,
@@ -22,8 +33,9 @@ from jupyter_storage_explorer.formats.view import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from jupyter_storage_explorer.formats.base import ItemContext
-    from jupyter_storage_explorer.formats.support import SupportOptions
     from jupyter_storage_explorer.formats.view import View, ViewLimits
 
 
@@ -133,3 +145,104 @@ class ImageByPython(FormatSupport):
         except NotImplementedError:
             limit = limits.max_whole_file_bytes // (1024 * 1024)
             raise ValueError(f"too large to view (over {limit} MB)") from None
+
+
+# --- Code reading files with fsspec ---
+
+READ_TEXT = "Read the text"
+LOAD_VALUE = "Load the JSON value"
+
+
+class FsspecEngine(Engine):
+    """Files read with fsspec: code only (text, JSON values)."""
+
+    key = "fsspec"
+    label = "fsspec"
+    requirements = (Fsspec(),)
+
+
+@dataclass(frozen=True, kw_only=True)
+class FsspecOptions(SupportOptions):
+    """The options of code opening the file with ``fsspec.open``.
+
+    Attributes
+    ----------
+    storage_options : mapping or None, default None
+        ``fsspec.open``'s keyword arguments in the code; those that look like
+        credentials are left out.
+    """
+
+    storage_options: Mapping[str, Any] | None = secret_dict_field(
+        default=None,
+        secret_keys=[
+            "account_key",
+            "sas_token",
+            "connection_string",
+            "client_secret",
+            "key",
+            "secret",
+            "token",
+            "password",
+        ],
+    )
+
+    def code_kwargs(self) -> str:
+        """``{kwargs}`` of the template: the storage options fit to show."""
+        return format_kwargs(**(self.code_value("storage_options") or {}))
+
+
+class OpenedByFsspec(FormatSupport):
+    """Code opening the file with ``fsspec.open`` (also for libraries reading
+    the file opened, e.g. Pillow)."""
+
+    options_model = FsspecOptions
+
+
+class TextByFsspec(OpenedByFsspec):
+    """The text, for Text formats (code, logs, Markdown, ...)."""
+
+    format = Text
+    engine = FsspecEngine
+    capabilities = ("recipe",)
+
+    text_template = cleandoc("""
+        import fsspec
+
+        with fsspec.open({url}, 'rt'{kwargs}) as f:
+            text = f.read()
+        """)
+
+    def recipe(
+        self, fmt: Text, ctx: ItemContext, options: FsspecOptions
+    ) -> dict[str, str]:
+        return {
+            READ_TEXT: self.text_template.format(
+                url=repr(ctx.library_url), kwargs=options.code_kwargs()
+            )
+        }
+
+
+class JsonByFsspec(OpenedByFsspec):
+    """The JSON value, with Python's json."""
+
+    format = Json
+    engine = FsspecEngine
+    capabilities = ("recipe",)
+
+    value_template = cleandoc("""
+        import json
+
+        import fsspec
+
+        with fsspec.open({url}, 'rt'{kwargs}) as f:
+            data = json.load(f)
+        """)
+
+    def recipe(
+        self, fmt: Json, ctx: ItemContext, options: FsspecOptions
+    ) -> dict[str, str]:
+        return {
+            LOAD_VALUE: self.value_template.format(
+                url=repr(ctx.library_url), kwargs=options.code_kwargs()
+            )
+        }

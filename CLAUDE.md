@@ -300,11 +300,11 @@ and the explorer's `detect` and `matching_formats`, not exported), `FormatSuppor
 `SupportOptions`, `Capability`, `FormatOptions`, and the generated code's helpers: `format_kwargs`, the secret
 fields, `_shown_options`; only what plugin authors use) and `PythonPackage`
 (`package.py`); a module per predefined format (`delta.py`, `parquet.py`, `excel.py`, `text.py`, `images.py`) and
-per library of the predefined supports in `supports/` (`polars.py`, `pandas.py`, `pyspark.py`, `fsspec.py`,
-`pillow.py`; `python.py` for those needing no package; named after the libraries, which they import only inside
-methods; exported by `formats.supports`, not `formats`); the predefined packages in `packages.py`, the
-views in `view.py` (`View`s, `ViewLimits`; tables made from dataframes in each library's support module, which
-give their counts, `TableView.more`, `total` and `unit`, and the explorer words them in the note, `section()`'s
+per library of the predefined supports, each with its `Engine`, in `supports/` (`polars.py`, `pandas.py`,
+`pyspark.py`, `pillow.py`; `python.py` for what needs no package beyond the explorer's own: the built-in views and
+fsspec's code, `FsspecEngine`; named after the libraries, which they import only inside methods, through
+`PythonPackage.load()`; exported by `formats.supports`, not `formats`); the predefined packages in `packages.py`, the
+views in `view.py` (`View`s, `ViewLimits`; `TableView`s, for plugins (the defaults give none), give their counts, `TableView.more`, `total` and `unit`, and the explorer words them in the note, `section()`'s
 `_rows_note`: presentation stays out of `formats`, which never imports `_explorer`), and the defaults in `defaults.py` (`DEFAULT_FORMATS`,
 `DEFAULT_SUPPORTS`). A format only detects; a support handles one format's data with one library,
 so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
@@ -323,8 +323,8 @@ so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
   `data_url(ctx)`, `first_files(ctx, n)`). The highest
   `priority` wins (Delta 20 > Parquet 10 > default 0 > Text -10). What supports share about a format is on it
   (`Csv.separator`, `Text.language`, `Image.mime_type`, `Parquet.data_url`, ...).
-- `Engine` (`engine.py`; predefined in `engines.py`, exported by `formats`: `PolarsEngine`, `PandasEngine`,
-  `PySparkEngine` (pyspark or databricks-connect), `FsspecEngine`, `PillowEngine`): a library users choose, with `key`
+- `Engine` (`engine.py`; the predefined ones with their supports, exported by `formats.supports`: `PolarsEngine`,
+  `PandasEngine`, `PySparkEngine` (pyspark or databricks-connect), `FsspecEngine`, `PillowEngine`): a library users choose, with `key`
   (`engine_preference`, `format_options`), `label` and `requirements`, `PythonPackage` instances: a tuple, all needed,
   or a tuple of tuples, alternatives (`alternatives()`, `packages()`: the first installed, `is_installed()`).
 - `FormatSupport` subclasses declare `format` (matched with `isinstance`, so subclasses too: `MarkdownByPython` comes
@@ -356,7 +356,9 @@ so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
   view); `recipes` with the first support with `"recipe"` of each library
   (so one given replaces the default's), installed or not (the code may run elsewhere; `_registered`).
 - `view(fmt, ctx, options, limits)`: one `View` dataclass of `view.py`. A `QueryView` (`data`: any
-  dataframe narwhals supports, best lazy) opens the data browser (`_new_query`: the first view's data, then the view
+  dataframe narwhals supports, best lazy; `more`: eager data of the first rows only, e.g. pandas' `max_memory_rows`,
+  which the browser notes as rows cut in memory, `DataQuery(cut=)`; PySpark's read the URL in the kernel's Spark
+  session, `spark_session()`, faked with sqlframe in `tests/test_pyspark_views.py`) opens the data browser (`_new_query`: the first view's data, then the view
   again on reload, with the context it was opened with); whether an item opens in the data browser is known only
   once viewed, so the menu offers "Preview" and "View in a new tab" for whatever has a format. The others
   (`TableView`, `TextView`, `TreeView`, `MarkdownView`, `MediaView`...) are sent as the one item of the preview's

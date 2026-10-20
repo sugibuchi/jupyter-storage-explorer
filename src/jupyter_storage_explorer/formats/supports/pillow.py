@@ -5,16 +5,24 @@ from __future__ import annotations
 from inspect import cleandoc
 from typing import TYPE_CHECKING
 
-from jupyter_storage_explorer.formats.engines import PillowEngine
+from jupyter_storage_explorer.formats.engine import Engine
 from jupyter_storage_explorer.formats.images import Image
-from jupyter_storage_explorer.formats.packages import Fsspec
-from jupyter_storage_explorer.formats.supports.fsspec import OpenedByFsspec
+from jupyter_storage_explorer.formats.packages import Fsspec, Pillow
+from jupyter_storage_explorer.formats.supports.python import OpenedByFsspec
 
 if TYPE_CHECKING:
     from jupyter_storage_explorer.formats.base import ItemContext
-    from jupyter_storage_explorer.formats.supports.fsspec import FsspecOptions
+    from jupyter_storage_explorer.formats.supports.python import FsspecOptions
 
 OPEN_IMAGE = "Open the image"
+
+
+class PillowEngine(Engine):
+    """Images opened with Pillow: code only (the browser shows images itself)."""
+
+    key = "pillow"
+    label = "Pillow"
+    requirements = (Pillow(),)
 
 
 class ImageByPillow(OpenedByFsspec):

@@ -25,7 +25,6 @@ from jupyter_storage_explorer.formats import (
     Parquet,
     PythonPackage,
     QueryView,
-    TableView,
     Text,
     TextView,
     TreeView,
@@ -199,6 +198,8 @@ def test_delta_detection(make_item, memfs):
 
 
 LIMITS = ViewLimits(max_display_rows=2)
+# pandas reads at most max_memory_rows rows.
+PANDAS_LIMITS = ViewLimits(max_memory_rows=2)
 
 
 def view(fmt, item, limits=LIMITS):
@@ -224,11 +225,14 @@ class TestViews:
         assert df.rows() == [(1, 2), (3, 4)]
 
     def test_csv_with_pandas(self, make_item):
+        # pandas reads through the item's fsspec filesystem, eagerly: the
+        # first max_memory_rows rows, in the data browser.
         item = make_item("/a.csv", b"x;y\n1;2\n3;4\n5;6\n")
-        table = CsvByPandas().view(Csv(), item, PandasOptions(), LIMITS)
-        assert isinstance(table, TableView)
-        assert table.columns == ["x", "y"]
-        assert table.rows == [[1, 2], [3, 4]]  # max_display_rows
+        query = CsvByPandas().view(Csv(), item, PandasOptions(), PANDAS_LIMITS)
+        assert isinstance(query, QueryView)
+        assert list(query.data.columns) == ["x", "y"]  # the separator detected
+        assert query.data.values.tolist() == [[1, 2], [3, 4]]
+        assert query.more
 
     def test_json_tree(self, make_item):
         tree = view(Json(), make_item("/a.json", b'{"a": [1, 2]}'))
@@ -243,15 +247,20 @@ class TestViews:
     def test_json_lines_with_pandas(self, make_item):
         lines = b"".join(json.dumps({"i": i}).encode() + b"\n" for i in range(5))
         item = make_item("/a.jsonl", lines)
-        table = JsonLinesByPandas().view(JsonLines(), item, PandasOptions(), LIMITS)
-        assert table.rows == [[0], [1]]
+        query = JsonLinesByPandas().view(
+            JsonLines(), item, PandasOptions(), PANDAS_LIMITS
+        )
+        assert query.data["i"].tolist() == [0, 1]
+        assert query.more
 
     def test_parquet_file_with_pandas(self, make_item):
         # pyarrow reads through the item's fsspec filesystem, so memory:// works.
         item = make_item("/a.parquet", parquet_bytes(pl.DataFrame({"a": [1, 2, 3]})))
-        table = ParquetByPandas().view(Parquet(), item, PandasOptions(), LIMITS)
-        assert table.rows == [[1], [2]]
-        assert (table.more, table.total) == (True, 3)  # the explorer notes them
+        query = ParquetByPandas().view(Parquet(), item, PandasOptions(), PANDAS_LIMITS)
+        assert query.data["a"].tolist() == [1, 2]
+        assert query.more
+        whole = ParquetByPandas().view(Parquet(), item, PandasOptions(), LIMITS)
+        assert (whole.data["a"].tolist(), whole.more) == ([1, 2, 3], False)
 
     def test_parquet_file_in_the_data_browser(self, tmp_path):
         path = tmp_path / "a.parquet"
@@ -266,10 +275,9 @@ class TestViews:
 
     def test_excel_with_pandas(self, make_item):
         item = make_item("/a.xlsx", self.workbook())
-        table = ExcelByPandas().view(Excel(), item, PandasOptions(), LIMITS)
-        assert table.title == "one"
-        assert table.rows == [[1], [2]]
-        assert "other sheets: two" in table.note
+        # The first sheet, as with polars.
+        query = ExcelByPandas().view(Excel(), item, PandasOptions(), PANDAS_LIMITS)
+        assert (query.data["a"].tolist(), query.more) == ([1, 2], True)
 
     def workbook(self) -> bytes:
         buffer = io.BytesIO()
@@ -548,11 +556,10 @@ class TestPartitionedParquetReading:
         fmt = Parquet()
         item = make_item("/t")
         assert fmt.matches(item)
-        table = ParquetByPandas().view(
-            fmt, item, PandasOptions(), ViewLimits(max_display_rows=5)
-        )
-        assert table.columns == ["a", "year"]
-        assert table.rows == [[2025, 2025], [2025, 2025]]
+        query = ParquetByPandas().view(fmt, item, PandasOptions(), LIMITS)
+        # Every partition, its column from the folders' names.
+        assert list(query.data.columns) == ["a", "year"]
+        assert query.data["year"].astype(int).tolist() == [2025, 2025, 2026, 2026]
 
     def test_code(self, make_item, memfs):
         memfs.pipe_file("/t/year=2025/month=1/part-0.parquet", b"")
