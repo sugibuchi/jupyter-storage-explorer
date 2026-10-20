@@ -17,6 +17,7 @@ from jupyter_storage_explorer.formats import (
     Capability,
     Csv,
     DeltaLake,
+    Engine,
     FormatSupport,
     Parquet,
     PythonPackage,
@@ -47,9 +48,17 @@ from jupyter_storage_explorer.formats.supports import (
 LIMITS = ViewLimits(max_display_rows=2)
 
 
-class Missing(PythonPackage):
+class MissingPackage(PythonPackage):
     package = "not-a-package"
     import_name = "not_a_package"
+
+
+class Missing(Engine):
+    """An engine whose package is not installed."""
+
+    key = "not-a-package"
+    label = "Missing"
+    requirements = (MissingPackage(),)
 
 
 def support(fmt=Csv, engine=None, capabilities=("view",), **methods):
@@ -117,7 +126,7 @@ class TestOptions:
     @pytest.mark.parametrize(
         ("options", "error"),
         [
-            ({"polar": {}}, r"unknown library 'polar'; choose from \[.*'polars'"),
+            ({"polar": {}}, r"unknown engine 'polar'; choose from \[.*'polars'"),
             ({"polars": {"parq": {}}}, r"\['polars'\]\['parq'\]: unknown format"),
             (
                 {"polars": {"*": {"storge_options": 1}}},
@@ -327,7 +336,8 @@ class TestSecrets:
 
 class TestChain:
     def view(self, chain, item):
-        return chain.view(Csv(), item, LIMITS)
+        """The view by the first engine viewing CSV, else the built-in views."""
+        return chain.view(Csv(), item, LIMITS, (chain.viewers(Csv()) or [None])[0])
 
     def test_first_installed_views(self, make_item):
         missing = support(engine=Missing, view=lambda *a, **k: "missing")
@@ -363,7 +373,7 @@ class TestChain:
 
     def test_view_without_a_support_is_an_error_of_the_caller(self, make_item):
         # Callers check of() first: none at all is not the item's fault.
-        with pytest.raises(RuntimeError, match=r"check of\(\) first"):
+        with pytest.raises(RuntimeError, match=r"check viewers\(\) first"):
             self.view(SupportChain([]), make_item("/a.csv", b""))
 
     def test_none_can_view_the_item(self, make_item):
@@ -379,7 +389,9 @@ class TestChain:
         tsv = type("Tsv", (Csv,), {"name": "tsv"})
         path = tmp_path / "a.tsv"
         path.write_text("a\tb\n1\t2\n")
-        view = SupportChain(default_supports()).view(tsv(), local_item(path), LIMITS)
+        view = SupportChain(default_supports()).view(
+            tsv(), local_item(path), LIMITS, "polars"
+        )
         assert isinstance(view, QueryView)
         assert view.data.collect().columns == ["a", "b"]
 
@@ -419,7 +431,7 @@ class TestChain:
         path = tmp_path / "a.parquet"
         pl.DataFrame({"a": [1, 2]}).write_parquet(path)
         view = SupportChain(default_supports()).view(
-            Parquet(), local_item(path), LIMITS
+            Parquet(), local_item(path), LIMITS, "polars"
         )
         assert view.data.collect()["a"].to_list() == [1, 2]
 

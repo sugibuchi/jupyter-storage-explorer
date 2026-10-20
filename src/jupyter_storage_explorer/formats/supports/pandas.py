@@ -8,6 +8,7 @@ from inspect import cleandoc
 from typing import TYPE_CHECKING, Any
 
 from jupyter_storage_explorer._json import jsonable
+from jupyter_storage_explorer.formats.engines import PandasEngine
 from jupyter_storage_explorer.formats.excel import Excel
 from jupyter_storage_explorer.formats.packages import Openpyxl, Pandas, PyArrow
 from jupyter_storage_explorer.formats.parquet import Parquet
@@ -73,7 +74,7 @@ class PandasOptions(SupportOptions):
 class _PandasByUrl(FormatSupport):
     """A format whose code pandas reads by URL, with storage options."""
 
-    engine = Pandas
+    engine = PandasEngine
     options_model = PandasOptions
 
 
@@ -177,7 +178,7 @@ class JsonByPandas(_PandasByUrl):
 
 class ExcelByPandas(_PandasByUrl):
     format = Excel
-    additional_requirements = (Openpyxl,)  # pandas' Excel engine
+    additional_requirements = (Openpyxl(),)  # pandas' Excel engine
     capabilities = ("view", "recipe")
 
     def view(
@@ -217,7 +218,7 @@ class ExcelByPandas(_PandasByUrl):
 
 class ParquetByPandas(_PandasByUrl):
     format = Parquet
-    additional_requirements = (PyArrow,)  # pandas' Parquet engine
+    additional_requirements = (PyArrow(),)  # pandas' Parquet engine
     capabilities = ("view", "recipe")
 
     def view(

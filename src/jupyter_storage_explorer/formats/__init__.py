@@ -3,8 +3,9 @@
 ``DataFormat`` (base.py, with the ``ItemContext`` it looks at, which reads
 the item) detects a format, ``FormatSupport`` (support.py, with its
 ``SupportOptions`` and ``format_kwargs`` for the code it generates) handles
-its data with one library (views, recipes), and ``PythonPackage``
-(package.py) is a package one needs. The predefined formats each have a
+its data with one engine (views, recipes), an ``Engine`` (engine.py; the
+predefined ones in engines.py) is a library users choose, and
+``PythonPackage`` (package.py) is a package one needs. The predefined formats each have a
 module (delta.py, parquet.py, excel.py, text.py, images.py), the predefined
 supports one per library in the ``supports`` package (imported from there),
 and packages.py has the predefined packages. view.py has the views supports
@@ -15,6 +16,14 @@ those explorers use by default.
 from jupyter_storage_explorer.formats.base import FILE_ICONS, DataFormat, ItemContext
 from jupyter_storage_explorer.formats.defaults import default_formats, default_supports
 from jupyter_storage_explorer.formats.delta import DeltaLake
+from jupyter_storage_explorer.formats.engine import Engine
+from jupyter_storage_explorer.formats.engines import (
+    FsspecEngine,
+    PandasEngine,
+    PillowEngine,
+    PolarsEngine,
+    PySparkEngine,
+)
 from jupyter_storage_explorer.formats.excel import Excel
 from jupyter_storage_explorer.formats.images import Image
 from jupyter_storage_explorer.formats.package import PythonPackage
@@ -46,9 +55,11 @@ __all__ = [
     "Csv",
     "DataFormat",
     "DeltaLake",
+    "Engine",
     "Excel",
     "FormatOptions",
     "FormatSupport",
+    "FsspecEngine",
     "Image",
     "ItemContext",
     "Json",
@@ -56,8 +67,12 @@ __all__ = [
     "Markdown",
     "MarkdownView",
     "MediaView",
+    "PandasEngine",
     "Parquet",
     "ParquetLayout",
+    "PillowEngine",
+    "PolarsEngine",
+    "PySparkEngine",
     "PythonPackage",
     "QueryView",
     "SupportOptions",

@@ -27,6 +27,7 @@ from jupyter_storage_explorer.formats.base import matching_formats
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+    from types import EllipsisType
 
 log = logging.getLogger(__name__)
 
@@ -99,20 +100,59 @@ class PreviewsMixin:
         )
         return _Detected(ctx, matching_formats(ctx, formats=self._formats))
 
-    def _viewer(self, fmt: DataFormat, item: _Detected) -> Callable[[], View]:
-        """Views ``item`` as ``fmt`` (by the first support installed), each
-        time it is called: on the storage it is on (its context's), also
-        after switching storages. ValueError if no support installed views
-        the format."""
-        if not self._supports.of(fmt, "view"):
+    def _engine_label(self, key: str | None) -> str:
+        """The label of the engine of ``key``, e.g. "Polars"; "" for the
+        built-in views (None)."""
+        if key is None:
+            return ""
+        engine = next((e for e in self._supports.engines if e.key == key), None)
+        return engine.label if engine is not None else key
+
+    def _view_engine(
+        self, fmt: DataFormat, name: str, engine: str | EllipsisType | None = ...
+    ) -> str | None:
+        """The engine viewing an item named ``name`` as ``fmt``: ``engine``
+        (a key; None for the built-in views) if given, "Preview as"; by
+        default (...), the one chosen (``_engine``), or the built-in views
+        for formats it does not handle. ValueError if that cannot view it."""
+        if engine is not ...:
+            if engine not in self._supports.viewers(fmt):
+                with_ = self._engine_label(engine) or "the built-in views"
+                raise ValueError(f"{name} cannot be viewed as {fmt.label} with {with_}")
+            return engine
+        try:
+            return self._supports.engine_for(fmt, self._engine or None)
+        except LookupError:
+            if not self._engine:
+                raise ValueError(
+                    f"{name} cannot be viewed as {fmt.label}: "
+                    f"no library viewing it is installed"
+                ) from None
             raise ValueError(
-                f"{item.ctx.name} cannot be viewed as {fmt.label}: "
-                f"no library viewing it is installed"
-            )
+                f"{name} cannot be viewed as {fmt.label} with "
+                f"{self._engine_label(self._engine)}: choose another engine in "
+                f'"Preview as"'
+            ) from None
+
+    def _viewable(self, fmt: DataFormat) -> bool:
+        """Whether ``fmt`` can be viewed with the engine chosen (or the
+        built-in views): the Preview button's, and the menu's."""
+        try:
+            self._supports.engine_for(fmt, self._engine or None)
+        except LookupError:
+            return False
+        return True
+
+    def _viewer(
+        self, fmt: DataFormat, item: _Detected, engine: str | None
+    ) -> Callable[[], View]:
+        """Views ``item`` as ``fmt`` with ``engine`` (a key; None for the
+        built-in views; see ``_view_engine``), each time it is called: on
+        the storage it is on (its context's), also after switching storages."""
         limits = self._view_limits
 
         def view() -> View:
-            return self._supports.view(fmt, item.ctx, limits)
+            return self._supports.view(fmt, item.ctx, limits, engine)
 
         return view
 
@@ -133,17 +173,26 @@ class PreviewsMixin:
             raise ValueError(f"{_paths.basename(path)} cannot be viewed {what}")
         return item, formats[0]
 
-    def _open_preview(self, path: str, format: str | None = None) -> None:
+    def _open_preview(
+        self,
+        path: str,
+        format: str | None = None,
+        engine: str | EllipsisType | None = ...,
+    ) -> None:
         """Preview the file or directory at ``path`` in the preview panel: the
         data browser for a ``QueryView``, else the view's section.
 
         ``format`` names one of the formats matching it (e.g. "text" for a JSON
-        file); by default the best match is used.
+        file); by default the best match is used. ``engine`` (a key; None for
+        the built-in views) views it instead of the one chosen (see
+        ``_view_engine``).
         """
         base = {
             "path": path,
             "name": _paths.basename(path),
             "format": None,
+            "engine": None,
+            "engine_label": "",
             "sections": [],
             "error": "",
         }
@@ -163,7 +212,9 @@ class PreviewsMixin:
             if formats:
                 fmt = formats[0]
                 base["format"] = fmt.name
-                viewer = self._viewer(fmt, item)
+                key = self._view_engine(fmt, item.ctx.name, engine)
+                base["engine"], base["engine_label"] = key, self._engine_label(key)
+                viewer = self._viewer(fmt, item, key)
                 view = viewer()
                 if isinstance(view, QueryView):
                     data = self._new_query(view, viewer, item)
@@ -292,9 +343,12 @@ class PreviewsMixin:
         data: DataQuery | None = None
         try:
             item, fmt = self._formats_of(path, content.get("format") or None)
-            viewer = self._viewer(fmt, item)
+            engine = content.get("engine", ...)
+            key = self._view_engine(fmt, item.ctx.name, engine)
+            viewer = self._viewer(fmt, item, key)
             view = viewer()
             title = _paths.basename(path)
+            label = " · ".join(filter(None, [fmt.label, self._engine_label(key)]))
             if isinstance(view, QueryView):
                 data = self._new_query(view, viewer, item)
                 widget: DataExplorer | ViewTab = DataExplorer._of_query(
@@ -302,12 +356,12 @@ class PreviewsMixin:
                     self._states,
                     data.key,
                     title=title,
-                    label=fmt.label,
+                    label=label,
                     height="fill",
                 )
             else:
                 widget = ViewTab(
-                    section(view), title=title, label=fmt.label, on_close=view.close
+                    section(view), title=title, label=label, on_close=view.close
                 )
         except Exception as exc:
             if data is not None:
@@ -338,22 +392,44 @@ class PreviewsMixin:
         return data.handle(content) or {}
 
     def _menu_info(self, path: str) -> dict[str, Any]:
-        """Answer "menu_info", the right-click menu's: {"formats": names of
-        those matching ("Preview as"), "recipes": load code ("Python code",
-        by library)}, or {"error"}."""
+        """Answer "menu_info", the right-click menu's, or {"error"}:
+        "formats", the names of those matching; "view", the best format and
+        the engine viewing it ("Preview", "View in a new tab"; None if the
+        engine chosen cannot); "views", each format and engine that can
+        ("Preview as", "View in new tab as"); "recipes", the best format's
+        load code ("Python code"), with their engine's label."""
         try:
             item = self._detect(path)
             formats = item.formats if item is not None else []
             recipes = self._supports.recipes(formats[0], item.ctx) if formats else []
         except Exception as exc:
             return {"error": error_text(exc)}
+        view = None
+        if formats and self._viewable(formats[0]):
+            key = self._supports.engine_for(formats[0], self._engine or None)
+            view = {"format": formats[0].name, "engine": key}
         return {
             "formats": [f.name for f in formats],
-            # Recipes' packages are classes: the frontend gets their names,
-            # the first the library it groups the recipes by.
+            "view": view,
+            "views": [
+                {
+                    "format": f.name,
+                    "engine": key,
+                    "label": " ".join(
+                        filter(
+                            None,
+                            [f.label, f"({self._engine_label(key)})" if key else ""],
+                        )
+                    ),
+                }
+                for f in formats
+                for key in self._supports.viewers(f)
+            ],
+            # The frontend gets the packages' names, listed under the code.
             "recipes": [
                 {
                     "title": r.title,
+                    "engine": r.engine.label if r.engine is not None else "Python",
                     "packages": [p.package for p in r.requirements],
                     "code": r.code,
                 }

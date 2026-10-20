@@ -7,6 +7,7 @@ from inspect import cleandoc
 from typing import TYPE_CHECKING, Any
 
 from jupyter_storage_explorer.formats.delta import DeltaLake
+from jupyter_storage_explorer.formats.engines import PolarsEngine
 from jupyter_storage_explorer.formats.excel import Excel
 from jupyter_storage_explorer.formats.packages import DeltaLake as DeltaLakePackage
 from jupyter_storage_explorer.formats.packages import Fastexcel, Fsspec, Polars
@@ -115,7 +116,7 @@ class DeltaLakeByPolarsOptions(PolarsOptions):
 class _PolarsByUrl(FormatSupport):
     """A format polars reads by URL, with the storage options of its readers."""
 
-    engine = Polars
+    engine = PolarsEngine
     options_model = PolarsOptions
 
 
@@ -198,7 +199,7 @@ class JsonByPolars(FormatSupport):
     """Load code only: JSON is viewed as a tree (``JsonByPython``)."""
 
     format = Json
-    engine = Polars
+    engine = PolarsEngine
     capabilities = ("recipe",)
 
     data_frame_template = cleandoc("""
@@ -217,9 +218,12 @@ class JsonByPolars(FormatSupport):
 
 class ExcelByPolars(FormatSupport):
     format = Excel
-    engine = Polars
+    engine = PolarsEngine
     # fastexcel reads workbooks for polars; the code reads the bytes with fsspec.
-    additional_requirements = (Fastexcel, Fsspec)
+    additional_requirements = (
+        Fastexcel(),
+        Fsspec(),
+    )
     capabilities = ("view", "recipe")
     options_model = ExcelByPolarsOptions
 
@@ -328,7 +332,7 @@ class DeltaLakeByPolars(_PolarsByUrl):
     format = DeltaLake
     # polars reads the table with deltalake (delta-rs), which reads cloud
     # storage itself, by default with credentials from the environment.
-    additional_requirements = (DeltaLakePackage,)
+    additional_requirements = (DeltaLakePackage(),)
     capabilities = ("view", "recipe")
     options_model = DeltaLakeByPolarsOptions
 

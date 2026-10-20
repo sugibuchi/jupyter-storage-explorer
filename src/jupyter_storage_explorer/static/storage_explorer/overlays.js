@@ -163,10 +163,29 @@ function createMenu(widgetEl) {
     document.addEventListener("keydown", onKey, true);
   }
 
+  // Separators only between visible rows: none first, last or doubled, as
+  // rows hidden until the kernel answers (a folder's "Preview", "Python
+  // code") can leave a group with nothing shown.
+  function tidySeparators() {
+    let seen = false;
+    let pending = null;
+    for (const child of el.children) {
+      if (child.classList.contains("jse-menu-sep")) {
+        child.hidden = true;
+        if (seen) pending = child;
+      } else if (!child.hidden) {
+        if (pending) pending.hidden = false;
+        pending = null;
+        seen = true;
+      }
+    }
+  }
+
   // Places the menu at the pointer, kept inside the widget. Called again when
   // rows appear later ("Preview as").
   function place() {
     if (el.hidden) return;
+    tidySeparators();
     const box = widgetEl.getBoundingClientRect();
     const x = Math.min(at.x - box.left, box.width - el.offsetWidth - 4);
     const y = Math.min(at.y - box.top, box.height - el.offsetHeight - 4);

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from inspect import cleandoc
 from typing import TYPE_CHECKING, Any
 
-from jupyter_storage_explorer.formats.packages import Fsspec
+from jupyter_storage_explorer.formats.engines import FsspecEngine
 from jupyter_storage_explorer.formats.support import (
     FormatSupport,
     SupportOptions,
@@ -65,7 +65,7 @@ class TextByFsspec(OpenedByFsspec):
     """The text, for Text formats (code, logs, Markdown, ...)."""
 
     format = Text
-    engine = Fsspec
+    engine = FsspecEngine
     capabilities = ("recipe",)
 
     text_template = cleandoc("""
@@ -89,7 +89,7 @@ class JsonByFsspec(OpenedByFsspec):
     """The JSON value, with Python's json."""
 
     format = Json
-    engine = Fsspec
+    engine = FsspecEngine
     capabilities = ("recipe",)
 
     value_template = cleandoc("""

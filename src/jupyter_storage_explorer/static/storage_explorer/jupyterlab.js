@@ -87,8 +87,9 @@ function createJupyterLab(x) {
   // and the kernel lets it go when the tab closes.
   const canOpenViewTab = () => Boolean(globalThis[JUPYTERLAB]?.openWidget);
 
-  async function openViewTab(path, format = null) {
-    const reply = await request({ type: "view_tab", path, format });
+  // `format` and `engine` as for the preview (preview.js's open).
+  async function openViewTab(path, format = null, engine = undefined) {
+    const reply = await request({ type: "view_tab", path, format, ...(engine === undefined ? {} : { engine }) });
     if (reply.error) {
       x.flash(`Cannot open a tab: ${reply.error}`);
       return;

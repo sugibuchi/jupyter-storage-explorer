@@ -202,8 +202,9 @@ LIMITS = ViewLimits(max_display_rows=2)
 
 
 def view(fmt, item, limits=LIMITS):
-    """``fmt``'s view of ``item``, by the support the explorer would pick."""
-    return CHAIN.view(fmt, item, limits)
+    """``fmt``'s view of ``item``, by the support the explorer would pick:
+    its first engine's (Polars), else the built-in views'."""
+    return CHAIN.view(fmt, item, limits, CHAIN.viewers(fmt)[0])
 
 
 def data(fmt, item):

@@ -189,7 +189,8 @@ function render({ model, el }) {
     "change:_current_format": x.preview.updateButton,
     "change:_selected_format": x.preview.updateButton,
     "change:_unsafe_mode": x.unsafe.render,
-    "change:_settings_path": x.toolbar.renderSettings,
+    "change:_engines": x.toolbar.renderSettings,
+    "change:_engine": x.toolbar.renderSettings,
     "msg:custom": onCustomMsg,
   };
   for (const [event, handler] of Object.entries(handlers)) model.on(event, handler);

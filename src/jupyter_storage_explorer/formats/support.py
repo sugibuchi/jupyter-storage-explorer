@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
     from jupyter_storage_explorer.formats.base import DataFormat, ItemContext
+    from jupyter_storage_explorer.formats.engine import Engine
     from jupyter_storage_explorer.formats.package import PythonPackage
     from jupyter_storage_explorer.formats.view import View, ViewLimits
 
@@ -225,9 +226,11 @@ class FormatSupport:
     (``supports=[ParquetByDuckDB]``): supports given are tried before the
     defaults. To view an item (the preview panel, "View in a new tab"), an
     explorer uses the first support for the format (``isinstance`` of
-    ``format``) whose packages are installed and that lists "view" in
-    ``capabilities``; "Python code" shows the recipes of the first support
-    listing "recipe" of each library, installed or not.
+    ``format``) of the engine chosen (by the user, or the first of
+    ``engine_preference``) whose packages are installed and that lists
+    "view" in ``capabilities``; "Preview as" offers the other engines. "Python
+    code" shows the recipes of the first support listing "recipe" of each
+    engine, installed or not.
 
     Rules for a subclass:
 
@@ -256,7 +259,7 @@ class FormatSupport:
       its options, an ``options_model``.
     - Options are the fields of ``options_model`` (see ``SupportOptions``),
       never ``__init__`` arguments: explorers create supports without
-      arguments, and give each the options of its ``engine``'s package
+      arguments, and give each the options of its engine's ``key``
       (``format_options={"polars": {"*": {...}, "parquet": {...}}}``),
       those of its model's fields.
     - Import the packages through their ``PythonPackage``'s ``load()``, in the
@@ -266,15 +269,15 @@ class FormatSupport:
     ----------
     format : type of DataFormat
         The format handled, e.g. ``Parquet``; its subclasses too.
-    engine : type of PythonPackage or None
-        The package (library) handling it, e.g. ``Polars``: what "Python
-        code" groups the support's recipes under, and the key of its options
-        in ``format_options`` (its ``package``, e.g. "polars"). None for a
-        support needing no package (e.g. text viewed by Python itself),
-        which takes no options.
-    additional_requirements : tuple of PythonPackage classes
-        Other packages it needs, e.g. ``(DeltaSpark,)`` for Spark reading
-        Delta Lake tables.
+    engine : type of Engine or None
+        The library handling it, e.g. ``PolarsEngine``: what users choose to
+        view with, what "Python code" names, and the key of its options in
+        ``format_options`` (its ``key``, e.g. "polars"). None for the
+        built-in views needing no package (text, JSON, images), used for the
+        formats the engine chosen does not handle; they take no options.
+    additional_requirements : tuple of PythonPackage
+        Other packages it needs besides its engine's, as instances, e.g.
+        ``(DeltaSpark(),)`` for Spark reading Delta Lake tables.
     capabilities : tuple of str
         The methods it implements: "view", "recipe" (see above).
     options_model : type of SupportOptions, default SupportOptions
@@ -287,28 +290,30 @@ class FormatSupport:
 
     # See the class docstring.
     format: ClassVar[type[DataFormat]]
-    engine: ClassVar[type[PythonPackage] | None] = None
-    additional_requirements: ClassVar[tuple[type[PythonPackage], ...]] = ()
+    engine: ClassVar[type[Engine] | None] = None
+    additional_requirements: ClassVar[tuple[PythonPackage, ...]] = ()
     capabilities: ClassVar[tuple[Capability, ...]] = ()
     options_model: ClassVar[type[SupportOptions]] = SupportOptions
 
     @classmethod
-    def requirements(cls) -> tuple[type[PythonPackage], ...]:
-        """``engine`` and ``additional_requirements``: all the packages it needs."""
-        return (
-            *((cls.engine,) if cls.engine is not None else ()),
-            *cls.additional_requirements,
-        )
+    def requirements(cls) -> tuple[PythonPackage, ...]:
+        """All the packages it needs: its engine's (``Engine.packages``),
+        then ``additional_requirements``."""
+        engine = cls.engine.packages() if cls.engine is not None else ()
+        return (*engine, *cls.additional_requirements)
 
     @classmethod
     def is_installed(cls) -> bool:
-        """Whether all of ``requirements()`` are installed in the kernel."""
-        return all(r().is_installed() for r in cls.requirements())
+        """Whether its engine and ``additional_requirements`` are installed."""
+        return (cls.engine is None or cls.engine.is_installed()) and all(
+            p.is_installed() for p in cls.additional_requirements
+        )
 
     @classmethod
     def library(cls) -> str:
-        """The library "Python code" groups its recipes under: ``engine``'s package."""
-        return cls.engine.package if cls.engine is not None else "python"
+        """Its engine's ``key`` ("python" for the built-in views): its
+        options' key in ``format_options``."""
+        return cls.engine.key if cls.engine is not None else "python"
 
     def view(
         self,

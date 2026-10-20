@@ -439,11 +439,20 @@
 }
 
 /* After Unsafe mode, in the launcher's tabs only. */
+/* The settings menu's button: the engine chosen's label, then the icon. */
 .jse-settings-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   margin-right: 2px;
+  white-space: nowrap;
 }
 
-.jse-settings-btn[hidden] {
+.jse-engine-label {
+  color: var(--jse-fg-muted);
+}
+
+.jse-engine-label[hidden] {
   display: none;
 }
 

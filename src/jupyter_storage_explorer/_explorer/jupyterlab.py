@@ -133,5 +133,8 @@ class JupyterLabFilesMixin:
         ):
             self._update_entry(path)
             if self._preview.get("path") == path:
-                self._open_preview(path, self._preview.get("format"))
+                # As it was previewed: the same format and engine.
+                self._open_preview(
+                    path, self._preview.get("format"), self._preview.get("engine", ...)
+                )
         return {"model": model}

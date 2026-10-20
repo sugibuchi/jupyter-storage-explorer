@@ -36,14 +36,15 @@ class FoldersMixin:
             self._error = f"Cannot list {path}: {exc}"
             self._show_listing(self._make_listing(path, []))
             self._selected = []
-            self._current_format = ""
+            self._current_dir_format = None
+            self._show_current_format()
             return
         self._error = ""
         self._set_children(path, infos)
         self._show_listing(self._make_listing(path, infos))
         self._selected = []
-        fmt = self._directory_format(path, infos)
-        self._current_format = fmt.name if fmt is not None else ""
+        self._current_dir_format = self._directory_format(path, infos)
+        self._show_current_format()
 
     def _ancestors(self, path: str) -> list[str]:
         """Directories from the root down to (but excluding) ``path``."""
@@ -231,6 +232,12 @@ class FoldersMixin:
         except Exception:
             return ""  # detection is best-effort
         return fmt.name if fmt is not None else ""
+
+    def _show_current_format(self) -> None:
+        """``_current_format``: the folder's format, if it can be viewed with
+        the engine chosen (the Preview button, with nothing selected)."""
+        fmt = self._current_dir_format
+        self._current_format = fmt.name if fmt and self._viewable(fmt) else ""
 
     def _directory_format(
         self, path: str, infos: list[dict[str, Any]]

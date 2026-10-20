@@ -134,15 +134,20 @@ class StorageExplorer(
         created without arguments. To change the defaults themselves,
         override ``default_supports`` in a subclass.
     format_options : mapping, optional
-        The supports' options, by library, then format name or ``"*"`` for
-        all formats, e.g. ``{"polars": {"*": {"storage_options": {...}},
+        The supports' options, by engine key, then format name or ``"*"``
+        for all formats, e.g. ``{"polars": {"*": {"storage_options": {...}},
         "delta": {"use_pyarrow": True}}}``: each support gets those of its
-        library (its ``engine``'s package) that its ``options_model`` has
-        (see "Format options" in docs/storage-explorer.md). Instead of a
-        dict of options, a function of the item's ``Location`` returning
-        one, for options depending on where the data is, e.g.
-        ``{"polars": {"*": lambda location: {"storage_options":
-        keys[location.account_name]}}}``.
+        engine that its ``options_model`` has (see "Format options" in
+        docs/storage-explorer.md). Instead of a dict of options, a function
+        of the item's ``Location`` returning one, for options depending on
+        where the data is, e.g. ``{"polars": {"*": lambda location:
+        {"storage_options": keys[location.account_name]}}}``.
+    engine_preference : sequence of str, optional
+        The engines' keys (``Engine.key``, e.g. ``["pandas", "polars"]``) in
+        the order the settings menu offers them; the first is used until
+        the user chooses another (a choice remembered in ``states``). Those
+        not installed are left out; the other engines installed follow, by
+        key. Default: ``["polars"]``, then the others.
     view_limits : ViewLimits, optional
         How much views read and show, in the preview panel and in tabs:
         bytes and rows of a file's beginning, the data browser's page size and
@@ -305,9 +310,15 @@ class StorageExplorer(
     _explorer_id = traitlets.Unicode().tag(sync=True)
     # Absolute folder on the kernel's machine "Download to JupyterLab" copies into.
     _download_to_jupyterlab_path = traitlets.Unicode().tag(sync=True)
-    # The settings file the toolbar's settings button opens in JupyterLab, for
-    # its title; "" (no button) unless the launcher offers it (_offer_settings).
+    # The settings file the settings menu's "Edit settings" opens in
+    # JupyterLab; "" (no such item) unless the launcher offers it
+    # (_offer_settings).
     _settings_path = traitlets.Unicode().tag(sync=True)
+    # The engines to choose from in the settings menu, in order:
+    # [{"key", "label"}]; and the key of the one chosen ("" if there is none),
+    # which previews use. The frontend sets _engine when the user chooses.
+    _engines = traitlets.List().tag(sync=True)
+    _engine = traitlets.Unicode().tag(sync=True)
 
     def __init__(
         self,
@@ -320,6 +331,7 @@ class StorageExplorer(
         formats: Sequence[DataFormat] | None = None,
         supports: Sequence[type[FormatSupport] | FormatSupport] | None = None,
         format_options: FormatOptions | None = None,
+        engine_preference: Sequence[str] | None = None,
         view_limits: ViewLimits | None = None,
         max_upload_bytes: int | None = 10 * 1024 * 1024,
         download_to_jupyterlab_path: str = ".",
@@ -381,7 +393,10 @@ class StorageExplorer(
             [*(supports or ()), *self.default_supports()],
             format_options,
             format_names=[f.name for f in self._formats],
+            engine_preference=engine_preference,
         )
+        # The folder shown's format, if any (see _show_current_format).
+        self._current_dir_format: DataFormat | None = None
         self._view_limits = view_limits or ViewLimits()
         # Files being received from the user's computer (see _jobs/incoming.py).
         self._incoming = IncomingFiles(max_upload_bytes)
@@ -422,6 +437,15 @@ class StorageExplorer(
         )
         self.on_msg(self._on_custom_msg)
         explorers[self._explorer_id] = self
+        # The engines, and the one chosen: the user's last if still offered,
+        # else the first; before the first listing, which tells what can be
+        # previewed with it. Not a choice of the user's: _on_engine ignores it.
+        engines = self._supports.engines
+        self._engines = [{"key": e.key, "label": e.label} for e in engines]
+        keys = [e.key for e in engines]
+        remembered = self._states.engine
+        self._engine = remembered if remembered in keys else (keys[0] if keys else "")
+        self._engine_ready = True
         self._filesystem = name  # shows its top level (see _on_filesystem)
         if open_preview:
             self._preview = {"empty": True}
@@ -815,7 +839,9 @@ class StorageExplorer(
         return {
             "expand": lambda c: self._load_children(c["path"]),
             "refresh": lambda c: self._refresh(),
-            "preview": lambda c: self._open_preview(c["path"], c.get("format")),
+            "preview": lambda c: self._open_preview(
+                c["path"], c.get("format"), c.get("engine", ...)
+            ),
             # Answered with one "download" message per file, its bytes attached.
             "download": lambda c: self._download(c["paths"]),
             "job_cancel": self._cancel_job,
@@ -838,7 +864,8 @@ class StorageExplorer(
         self._changed()
 
     def _format_of_selection(self, selected: list[str]) -> dict[str, Any]:
-        """``_selected_format`` for the items selected."""
+        """``_selected_format`` for the items selected: the item's best
+        format, if the engine chosen can view it."""
         if len(selected) != 1:
             return {}
         path = selected[0]
@@ -847,10 +874,34 @@ class StorageExplorer(
             formats = item.formats if item is not None else []
         except Exception:
             formats = []  # detection is best-effort; a failure just means no preview
+        viewable = bool(formats) and self._viewable(formats[0])
         return {
             "path": path,
-            "format": formats[0].name if formats else "",
+            "format": formats[0].name if viewable else "",
         }
+
+    @traitlets.validate("_engine")
+    def _validate_engine(self, proposal: dict[str, Any]) -> str:
+        keys = [e["key"] for e in self._engines]
+        if proposal["value"] not in keys and (keys or proposal["value"]):
+            raise traitlets.TraitError(
+                f"unknown engine {proposal['value']!r}; choose from {keys}"
+            )
+        return proposal["value"]
+
+    @traitlets.observe("_engine")
+    def _on_engine(self, change: dict[str, Any]) -> None:
+        """The user chose another engine (the settings menu): remember it,
+        and show what can be previewed with it, the preview open included."""
+        if not getattr(self, "_engine_ready", False):
+            return  # set up by __init__
+        if change["new"] and change["new"] != self._states.engine:
+            self._states.remember_engine(change["new"])
+        self._selected_format = self._format_of_selection(self._selected)
+        self._show_current_format()
+        preview = self._preview
+        if preview.get("path") and not preview.get("loading"):
+            self._open_preview(preview["path"], preview.get("format"))
 
     @traitlets.observe("_preview")
     def _on_preview(self, change: dict[str, Any]) -> None:

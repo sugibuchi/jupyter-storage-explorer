@@ -12,21 +12,27 @@ if TYPE_CHECKING:
 
 
 class PythonPackage:
-    """A package a support needs (``FormatSupport.engine``, ``additional_requirements``).
+    """A package an engine or a support needs (``Engine.requirements``,
+    ``FormatSupport.additional_requirements``), given as an instance, e.g.
+    ``Polars()``.
 
     Subclasses declare ``package`` and ``import_name``.
     """
 
     package: ClassVar[str]  # pip name, e.g. "scikit-learn"
-    # Top-level module the package provides, e.g. "sklearn". Not dotted:
-    # finding "a.b" imports "a".
+    # The module the package provides, e.g. "sklearn": best top-level, as
+    # finding "a.b" imports "a"; dotted when "a" is a namespace other packages
+    # share (e.g. "databricks.connect").
     import_name: ClassVar[str]
 
     def is_installed(self) -> bool:
         # The import system caches directory listings, so a package installed
         # with %pip in the running kernel would otherwise still look missing.
         importlib.invalidate_caches()
-        return importlib.util.find_spec(self.import_name) is not None
+        try:
+            return importlib.util.find_spec(self.import_name) is not None
+        except ModuleNotFoundError:  # "a" of "a.b" missing
+            return False
 
     def load(self, submodule: str | None = None) -> types.ModuleType:
         """Import the package, or one of its submodules (e.g. ``"dataset"`` for pyarrow.dataset)."""

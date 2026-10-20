@@ -372,14 +372,16 @@ a complete example.
 
 ### Another library for a format
 
-A *support* handles a format's data with a library: a `FormatSupport` subclass, listing in `capabilities` the methods it
-implements: `"view"`, returning what to show (a `QueryView` of data for the data browser, or e.g. a `TableView` or
-`TextView`), and `"recipe"`, the code of "Python code" by title. Supports given as `supports` are tried before the
-defaults, e.g. DuckDB for the data browser on Parquet:
+A *support* handles a format's data with an engine: a `FormatSupport` subclass, listing in `capabilities` the methods
+it implements: `"view"`, returning what to show (a `QueryView` of data for the data browser, or e.g. a `TableView` or
+`TextView`), and `"recipe"`, the code of "Python code" by title. Its `engine` is an `Engine` subclass, the library users
+choose in the explorer's settings menu (with its `key`, `label` and `requirements`, `PythonPackage` instances): one of
+`formats`' (`PolarsEngine`, `PandasEngine`, `PySparkEngine`, ...) or one of your own. Supports given as `supports` are
+tried before the defaults, e.g. DuckDB for the data browser on Parquet:
 
 ```python
 from jupyter_storage_explorer import StorageExplorer
-from jupyter_storage_explorer.formats import FormatSupport, Parquet, PythonPackage, QueryView
+from jupyter_storage_explorer.formats import Engine, FormatSupport, Parquet, PythonPackage, QueryView
 
 
 class DuckDB(PythonPackage):
@@ -387,9 +389,15 @@ class DuckDB(PythonPackage):
     import_name = "duckdb"
 
 
+class DuckDBEngine(Engine):
+    key = "duckdb"
+    label = "DuckDB"
+    requirements = (DuckDB(),)  # or alternatives: ((A(),), (B(),))
+
+
 class ParquetByDuckDB(FormatSupport):
     format = Parquet
-    engine = DuckDB
+    engine = DuckDBEngine
     capabilities = ("view",)
 
     def view(self, fmt, ctx, options, limits):
@@ -409,11 +417,12 @@ explorer, e.g. for a text view), its info (`ctx.size`), its listing if it is a f
 `ctx.child_names`, `ctx.is_dir`); then its options, and `view` also `limits` (`ViewLimits`: bytes and rows to read).
 Formats' `matches(ctx)` gets the same context. A support's options are the fields of a frozen dataclass, its
 `options_model` (a `SupportOptions` subclass, each field with a default), made from [`format_options`](docs/storage-explorer.md#format-options)
-under its library's name (`engine.package`, e.g. `"duckdb"`). Mark credentials so that "Python code" never shows them:
+under its engine's key (`engine.key`, e.g. `"duckdb"`). Mark credentials so that "Python code" never shows them:
 `secret_field(default=None)` for a whole value, `secret_dict_field(default=None, secret_keys=["connection_string"])` for
 keys of a mapping such as storage options; the code gets options through `options.code_value(name)`, which leaves them
 out. A view holding something to release, e.g. a database connection, releases it in a function given to its
 `on_close` (`view.on_close(lambda view: con.close())`), as `StorageExplorer.on_change` takes one: the explorer calls it
 once it no longer shows the view, also when the kernel exits. `recipe` returns code by title, e.g. `{"Load as DataFrame": "import duckdb\n..."}`,
 the title saying what the code does, not the library. `FormatSupport`'s docstring has the rules for writing one. In
-`launcher.py`, return supports from `supports()`, and their options from `format_options()`.
+`launcher.py`, return supports from `supports()`, and their options from `format_options()`; `engine_preference`
+(in `parameters()`) puts DuckDB first.

@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
 def make(lab: Lab) -> None:
     with lab.page(1250, 1000) as page:
-        lab.open_notebook(page, _lab.explorer_source(height="300px"))
+        lab.open_notebook(page, _lab.explorer_source(height="400px"))
         page.wait_for_selector(".jse-tree .jse-node", timeout=60000)
         page.wait_for_timeout(1500)
         # The widget in view, the notebook's cell input scrolled away.

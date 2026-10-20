@@ -197,8 +197,14 @@ def browse(x: Explorer) -> None:
     expect(x.el.locator(".jse-crumb").last).to_have_text("curated")
     x.el.locator(".jse-crumb", has_text="/sales-lake").click()
     expect(x.names.first).to_have_text("curated")
-    # Launcher settings: only in the launcher's tabs (see launcher_settings).
-    expect(x.el.locator(".jse-settings-btn")).to_be_hidden()
+    # The settings menu: the engine, in every explorer; "Edit settings" only
+    # in the launcher's tabs (see launcher_settings).
+    settings = x.el.locator(".jse-settings-btn")
+    expect(settings).to_contain_text("Polars")
+    settings.click()
+    expect(x.menu_item("Engine")).to_be_visible()
+    expect(x.menu_item("Edit settings")).to_have_count(0)
+    settings.click()
 
 
 @check
@@ -330,17 +336,51 @@ def python_code(x: Explorer) -> None:
     x.go("curated")
     x.row("orders.parquet").click(button="right")
     x.menu_item("Python code").hover()
-    # A submenu per library, its recipes by title.
-    x.el.locator(".jse-submenu .jse-menu-item", has_text="polars").first.hover()
-    x.el.locator(".jse-submenu .jse-submenu .jse-menu-item:visible").filter(
-        has_text="Load as DataFrame"
+    # Each recipe by title, with its engine.
+    x.el.locator(".jse-submenu .jse-menu-item:visible").filter(
+        has_text="Load as DataFrame (Polars)"
     ).click()
     dialog = x.el.locator(".jse-dialog:visible")
-    expect(dialog).to_contain_text("Load as DataFrame (polars)")
+    expect(dialog).to_contain_text("Load as DataFrame (Polars)")
     expect(dialog).to_contain_text("read_parquet")
     expect(dialog).to_contain_text("Needs polars")
     dialog.press("Escape")
     expect(dialog).to_be_hidden()
+
+
+@check
+def engines(x: Explorer) -> None:
+    # Previews use the engine chosen in the settings menu: Polars first.
+    settings = x.el.locator(".jse-settings-btn")
+    panel = x.el.locator(".jse-preview-panel")
+    badge = panel.locator(".jse-badge")
+    x.go("curated")
+    x.menu(x.row("orders.parquet"), "Preview Parquet")
+    expect(badge).to_have_text("Parquet · Polars")
+    expect(panel.locator(".jse-query")).to_be_visible()  # the data browser
+
+    def choose(engine: str) -> None:
+        settings.click()
+        x.menu_item("Engine").hover()
+        x.el.locator(".jse-submenu .jse-menu-item:visible", has_text=engine).click()
+        expect(settings).to_contain_text(engine)
+
+    # Another engine: the preview open is viewed again with it.
+    choose("pandas")
+    expect(badge).to_have_text("Parquet · pandas")
+    expect(panel.locator(".jse-section-table")).to_be_visible()  # its first rows
+    # "Preview as": each format and engine that can view the item.
+    x.row("orders.parquet").click(button="right")
+    x.menu_item("Preview as").hover()
+    x.el.locator(
+        ".jse-submenu .jse-menu-item:visible", has_text="Parquet (Polars)"
+    ).click()
+    expect(badge).to_have_text("Parquet · Polars")
+    # A format pandas does not handle: the built-in view, whatever the engine.
+    x.go("pipelines")
+    x.menu(x.row("README.md"), "Preview Markdown")
+    expect(badge).to_have_text("Markdown")
+    choose("Polars")
 
 
 @check
@@ -887,7 +927,7 @@ def markdown_preview_sanitized(x: Explorer) -> None:
 def view_in_new_tab(x: Explorer) -> None:
     # Data: the data browser, a DataExplorer, in the tab.
     x.go("curated")
-    x.menu(x.row("orders.parquet"), "View in a new tab")
+    x.menu(x.row("orders.parquet"), "View Parquet in new tab")
     tab = x.page.locator(".jse-query-tab")
     expect(tab.locator(".jse-query-status")).to_have_text("Rows 1–100 / 2,400")
     expect(x.page.locator(".lm-TabBar-tab.jp-mod-current")).to_contain_text(
@@ -898,7 +938,7 @@ def view_in_new_tab(x: Explorer) -> None:
     x.back_to_notebook()
     # Other views: a ViewTab, rendered as in the preview panel.
     x.go("pipelines")
-    x.menu(x.row("README.md"), "View in a new tab")
+    x.menu(x.row("README.md"), "View Markdown in new tab")
     view = x.page.locator(".jse-query-tab .jse-view-tab")
     expect(view.locator(".jse-markdown")).to_contain_text("Sales lake")
     x.page.locator(".lm-TabBar-tab.jp-mod-current .lm-TabBar-tabCloseIcon").click()
@@ -1036,12 +1076,18 @@ def launcher_settings(lab: Lab, page: Page) -> None:
         tab = open_launcher_tab(lab, page)
         path.unlink()  # read when the tab started
         dialog = tab.locator(".jse-dialog:visible")
+        edit = tab.locator(
+            ".jse-menu:not(.jse-submenu) > .jse-menu-item:visible",
+            has_text="Edit settings",
+        )
         tab.locator(".jse-settings-btn").click()
+        edit.click()
         expect(dialog).to_contain_text("Create your launcher settings")
         dialog.get_by_role("button", name="Cancel").click()
         expect(dialog).to_be_hidden()
         assert not path.exists()
         tab.locator(".jse-settings-btn").click()
+        edit.click()
         dialog.get_by_role("button", name="Create").click()
         editor = page.locator(".jp-FileEditor .cm-content").first
         expect(editor).to_contain_text("def filesystems():")

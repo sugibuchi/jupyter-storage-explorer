@@ -38,10 +38,11 @@ Then see [Using the explorer](https://github.com/sugibuchi/jupyter-storage-explo
 
 Click the ⚙ button at the right of the tab's toolbar.
 
-<img src="https://raw.githubusercontent.com/sugibuchi/jupyter-storage-explorer/main/launcher/figs/settings-button.png" width="152" alt="The settings button (a gear) after Unsafe mode in the tab's toolbar">
+<img src="https://raw.githubusercontent.com/sugibuchi/jupyter-storage-explorer/main/launcher/figs/settings-button.png" width="195" alt="The settings button (a gear) after Unsafe mode in the tab's toolbar">
 
-It opens your settings, a Python file (`launcher.py`), in JupyterLab's editor; if you have none, it offers to create
-one from a template with an example of each setting.
+Its menu chooses the **Engine** previews use (its label is shown beside the button), and **Edit settings** opens your
+settings, a Python file (`launcher.py`), in JupyterLab's editor; if you have none, it offers to create one from a
+template with an example of each setting.
 
 <img src="https://raw.githubusercontent.com/sugibuchi/jupyter-storage-explorer/main/launcher/figs/settings-editor.png" width="834" alt="launcher.py, created from the template, open in JupyterLab's editor beside the Storage Explorer tab">
 
@@ -69,7 +70,7 @@ The file has some of these functions, all optional:
 | `filesystems()`        | `{name: URL or fsspec filesystem}`                                                        |
 | `formats()`            | Formats of your own (`DataFormat`), tried before the defaults                             |
 | `supports()`           | [Libraries of your own for formats](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/DEVELOPMENT.md#another-library-for-a-format) (`FormatSupport`), tried before the defaults |
-| `format_options()`     | The libraries' options, by library and format ([Format options](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#format-options)) |
+| `format_options()`     | The engines' options, by engine and format ([Format options](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#format-options)) |
 | `operations()`         | File operations of your own (`FileSystemOperations`), tried before the defaults           |
 | `filesystem_mappers()` | The locations of storages' paths (`FileSystemMapper`), by which [storages are told apart](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#file-transfer-between-file-systems) |
 | `transfer_policy()`    | Rules of a [transfer policy](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#transfer-policy) |
@@ -104,7 +105,7 @@ A later layer changes an earlier one's settings this way:
 |-------------------------------------------------|------------------------------------------------|
 | `filesystems()`                                 | By name: added or replaced; `None` removes one |
 | `parameters()`                                  | By name                                        |
-| `format_options()`                              | By library, format, then option                |
+| `format_options()`                              | By engine, format, then option                 |
 | `formats()`, `supports()`, `operations()`, `filesystem_mappers()` | Later layers' first, all before the defaults |
 | `transfer_policy()`                             | Later layers' rules first, so they decide first |
 

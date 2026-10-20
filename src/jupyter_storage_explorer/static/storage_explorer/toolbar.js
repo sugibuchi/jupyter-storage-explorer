@@ -1,14 +1,20 @@
 // The toolbar: bookmarks, Up, Refresh, the folder's path, Unsafe mode, and
-// in the launcher's tabs, their settings.
+// the settings menu: the engine previews use, and in the launcher's tabs,
+// their settings file.
 
 function createToolbar(x) {
   const { model } = x;
   const upBtn = iconButton("up", "Parent directory");
   const refreshBtn = iconButton("refresh", "Refresh");
   const pathEl = h("div", { className: "jse-path" });
-  // Opens the launcher's settings file in JupyterLab's editor: only in its
-  // tabs (the kernel sets _settings_path), with the launcher's extension.
-  const settingsBtn = iconButton("settings", "Edit launcher settings", "jse-settings-btn");
+  // The settings menu's button: the engine chosen's label, then the icon.
+  const engineLabel = h("span", { className: "jse-engine-label" });
+  const settingsBtn = h(
+    "button",
+    { className: "jse-btn jse-settings-btn", title: "Settings: the engine previews use", ariaLabel: "Settings" },
+    engineLabel,
+    icon("settings"),
+  );
   const el = h("div", { className: "jse-toolbar" }, x.bookmarks.button, upBtn, refreshBtn, pathEl, x.unsafe.el, settingsBtn);
 
   // The current folder's path, a crumb per folder from the root.
@@ -33,15 +39,60 @@ function createToolbar(x) {
     if (chain.length > 1) x.navigate(chain[chain.length - 2]);
   });
   refreshBtn.addEventListener("click", () => model.send({ type: "refresh" }));
-  settingsBtn.addEventListener("click", () => void x.jupyterlab.openSettings());
 
-  function renderSettings() {
-    const path = model.get("_settings_path");
-    settingsBtn.hidden = !path || !x.jupyterlab.canOpenSettings();
-    settingsBtn.title = `Edit launcher settings (${visible(path)})\nReload the web browser, then open the explorer tab again to apply the changes.`;
+  // The engine chosen ({key, label}), or undefined if none is installed.
+  const selectedEngine = () => model.get("_engines").find((e) => e.key === model.get("_engine"));
+
+  function chooseEngine(key) {
+    // The kernel remembers it, and previews again with it (_on_engine).
+    model.set("_engine", key);
+    model.save_changes();
   }
 
-  return { el, renderPath, renderSettings };
+  // "Engine", a submenu of the engines, the one chosen checked; "Edit
+  // settings" in the launcher's tabs only (the kernel sets _settings_path),
+  // with the launcher's extension: it opens their settings file.
+  function showMenu() {
+    const engines = model.get("_engines");
+    const chosen = model.get("_engine");
+    const items = [
+      {
+        label: "Engine",
+        icon: "code",
+        submenu: (sub) =>
+          sub.replaceChildren(
+            ...x.menu.rows(
+              engines.length
+                ? engines.map((e) => ({ label: e.label, icon: e.key === chosen ? "check" : undefined, action: () => chooseEngine(e.key) }))
+                : [{ label: "No engine installed", disabled: true }],
+            ),
+          ),
+      },
+    ];
+    const path = model.get("_settings_path");
+    if (path && x.jupyterlab.canOpenSettings()) {
+      items.push({
+        label: "Edit settings",
+        icon: "edit",
+        title: `${visible(path)}\nReload the web browser, then open the explorer tab again to apply the changes.`,
+        action: () => void x.jupyterlab.openSettings(),
+      });
+    }
+    x.menu.showBelow(settingsBtn, items);
+  }
+
+  settingsBtn.addEventListener("click", () => {
+    if (x.menu.isOpenFrom(settingsBtn)) x.menu.hide();
+    else showMenu();
+  });
+
+  function renderSettings() {
+    const engine = selectedEngine();
+    engineLabel.textContent = engine ? engine.label : "";
+    engineLabel.hidden = !engine;
+  }
+
+  return { el, renderPath, renderSettings, selectedEngine };
 }
 
 // "Unsafe mode": while on, risky operations are offered (today: moving,

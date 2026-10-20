@@ -129,12 +129,6 @@ function codeBlock(title, code) {
   );
 }
 
-// A recipe ({title, packages, code}) is listed under the library it loads with,
-// its first package; one needing no package is plain Python.
-function recipeLibrary(recipe) {
-  return recipe.packages[0] ?? "Python";
-}
-
 // Body of the "Python code" dialog for one recipe: the code, and the packages
 // it needs (installing them is left to the user).
 function recipeBlocks(recipe) {

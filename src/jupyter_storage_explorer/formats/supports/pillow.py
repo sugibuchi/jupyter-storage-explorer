@@ -5,8 +5,9 @@ from __future__ import annotations
 from inspect import cleandoc
 from typing import TYPE_CHECKING
 
+from jupyter_storage_explorer.formats.engines import PillowEngine
 from jupyter_storage_explorer.formats.images import Image
-from jupyter_storage_explorer.formats.packages import Fsspec, Pillow
+from jupyter_storage_explorer.formats.packages import Fsspec
 from jupyter_storage_explorer.formats.supports.fsspec import OpenedByFsspec
 
 if TYPE_CHECKING:
@@ -21,8 +22,8 @@ class ImageByPillow(OpenedByFsspec):
     and opened with Pillow; not SVG, which it cannot read."""
 
     format = Image
-    engine = Pillow
-    additional_requirements = (Fsspec,)
+    engine = PillowEngine
+    additional_requirements = (Fsspec(),)
     capabilities = ("recipe",)
 
     image_template = cleandoc("""

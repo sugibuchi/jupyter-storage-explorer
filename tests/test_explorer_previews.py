@@ -76,12 +76,15 @@ class TestPreview:
         mem_explorer._open_preview("/data/a.csv", "image")
         assert "cannot be previewed as image" in mem_explorer._preview["error"]
 
-    def test_no_library_installed(self, mem_explorer, monkeypatch):
-        # No support installed for the format: an error, without calling the
-        # supports' view, in the panel and for a tab.
+    def test_no_library_installed(self, memfs, monkeypatch):
+        # No engine installed: an error, without calling the supports' view,
+        # in the panel and for a tab.
+        memfs.pipe_file("/data/a.csv", b"x,y\n1,2\n")
         monkeypatch.setattr(PythonPackage, "is_installed", lambda self: False)
         monkeypatch.setattr(CsvByPolars, "view", None)
         monkeypatch.setattr(CsvByPandas, "view", None)
+        mem_explorer = make("/", fs=memfs)
+        assert mem_explorer._engines == []
         mem_explorer._open_preview("/data/a.csv")
         assert mem_explorer._preview["error"] == (
             "a.csv cannot be viewed as CSV: no library viewing it is installed"
@@ -126,7 +129,7 @@ class TestViewTab:
         tab = local._view_tabs[reply["model_id"]]
         assert isinstance(tab, DataExplorer)
         # Labelled with the file's format, as in the preview, not its library.
-        assert (tab._height, tab._library) == ("fill", "Parquet")
+        assert (tab._height, tab._library) == ("fill", "Parquet · Polars")
         assert tab.settings.to_dict()["sort"] == {"column": "a", "descending": True}
         # Its settings are remembered by location, as the preview's.
         tab._data.handle(

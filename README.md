@@ -125,7 +125,7 @@ widget in JupyterLab's main area, in a notebook or a tab of its own, with room f
   without opening and closing tabs.
 - **Tables, not just files**: Delta Lake tables and partitioned Parquet datasets are recognised as tables, not
   folders. Open them in the data browser to choose among hundreds of columns and filter and sort the data where it
-  lives.
+  lives, with the engine you choose (Polars, pandas, or one of your own).
 - **From browsing to code**: copy ready-to-run code to load a file or table with polars, pandas, PySpark and more, or
   the URLs of the files you selected, ready for any library. In Python, `folder_location` and `selected_locations`
   give the folder shown and the files selected, with their URLs.

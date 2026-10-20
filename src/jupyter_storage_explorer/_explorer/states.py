@@ -1,4 +1,5 @@
-"""What explorers remember: bookmarks, and the data browser's recent queries.
+"""What explorers remember: bookmarks, the data browser's recent queries, and
+the engine chosen.
 
 One ``ExplorerStates`` is shared by the explorers in the kernel unless they are
 given their own (``StorageExplorer(states=...)``). With a path, it is kept in a
@@ -13,7 +14,8 @@ same file::
         "queries": [  # the most recent first
             {"url": "s3://bucket/sales/2024.parquet", "location": {...},
              "settings": {...}, "mode": "live"}
-        ]
+        ],
+        "engine": "polars"  # the key of the engine chosen, if any
     }
 
 where "location" is ``Location.to_json()`` and "settings" are in the form of
@@ -46,7 +48,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
 
 # The keys this version reads and writes; others are kept as they are.
-_KNOWN_KEYS = ("bookmarks", "queries")
+_KNOWN_KEYS = ("bookmarks", "queries", "engine")
 
 
 @dataclass(frozen=True)
@@ -80,11 +82,12 @@ class Bookmark:
 
 
 class ExplorerStates:
-    """What explorers remember: bookmarks, and how data was last queried.
+    """What explorers remember: bookmarks, how data was last queried, and the
+    engine chosen.
 
-    ``StorageExplorer`` reads its bookmarks here, and the data browser
-    restores the filters, sort order, hidden columns, widths
-    and mode a dataset was last shown with. Only the ``max_queries`` datasets
+    ``StorageExplorer`` reads its bookmarks here, and the engine its user
+    chose last (``engine``); the data browser restores the filters, sort
+    order, hidden columns, widths and mode a dataset was last shown with. Only the ``max_queries`` datasets
     queried last are remembered.
 
     Parameters
@@ -126,6 +129,8 @@ class ExplorerStates:
         # In the file's form: {"url", "location" (if any), "settings":
         # QuerySettings.to_dict(), "mode"}, the most recent first.
         self._queries: list[dict[str, Any]] = []
+        # The key of the engine chosen last, if any.
+        self._engine: str | None = None
         # Keys of the file this version does not know, written back as they are.
         self._others: dict[str, Any] = {}
         self.reload()
@@ -160,6 +165,7 @@ class ExplorerStates:
         ]
         queries = (_read_query(q) for q in _list(data.get("queries")))
         self._queries = [q for q in queries if q is not None][: self.max_queries]
+        self._engine = _text(data.get("engine"))
         self._others = {k: v for k, v in data.items() if k not in _KNOWN_KEYS}
 
     @contextlib.contextmanager
@@ -186,6 +192,7 @@ class ExplorerStates:
             **self._others,
             "bookmarks": [_bookmark_entry(b) for b in self._bookmarks],
             "queries": self._queries,
+            **({"engine": self._engine} if self._engine is not None else {}),
         }
         self.path.parent.mkdir(parents=True, exist_ok=True)
         fd, temp = tempfile.mkstemp(
@@ -260,6 +267,26 @@ class ExplorerStates:
                 for b in self._bookmarks
                 if (b.filesystem, b.path) != (filesystem, path)
             ]
+
+    # --- The engine chosen ---
+
+    @property
+    def engine(self) -> str | None:
+        """The key of the engine the user chose last, e.g. "polars"; None if
+        none was chosen. Explorers start with it when they have it, else with
+        their first engine."""
+        return self._engine
+
+    def remember_engine(self, key: str) -> None:
+        """Remember the engine chosen (and write the file, if any).
+
+        Parameters
+        ----------
+        key : str
+            Its key, e.g. "polars".
+        """
+        with self._changing():
+            self._engine = key
 
     # --- Queries ---
 

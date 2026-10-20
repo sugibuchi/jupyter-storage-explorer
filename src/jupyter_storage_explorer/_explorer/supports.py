@@ -1,6 +1,6 @@
 """The explorer's supports (``SupportChain``): which support of a format does
-what, with which options (``format_options``), and the "Python code"
-recipes they give (``Recipe``)."""
+what, with which engine and options (``format_options``), the engines users
+choose from, and the "Python code" recipes the supports give (``Recipe``)."""
 
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
     from jupyter_storage_explorer.formats import ItemContext, View, ViewLimits
     from jupyter_storage_explorer.formats.base import DataFormat
+    from jupyter_storage_explorer.formats.engine import Engine
     from jupyter_storage_explorer.formats.package import PythonPackage
     from jupyter_storage_explorer.formats.support import (
         Capability,
@@ -25,19 +26,29 @@ if TYPE_CHECKING:
 # In format_options, the options of a library for all formats.
 ALL_FORMATS = "*"
 
+# The engines offered first when the explorer is given no engine_preference:
+# polars views data in the data browser (pandas gives tables of first rows).
+DEFAULT_ENGINE_PREFERENCE = ("polars",)
+
+
+def engine_key(support: FormatSupport) -> str | None:
+    """The key of a support's engine; None for the built-in views."""
+    return support.engine.key if support.engine is not None else None
+
 
 @dataclass(frozen=True, kw_only=True)
 class Recipe:
     """One way to load the data in a notebook, e.g. as a polars LazyFrame:
-    one of a support's ``recipe()`` codes, with its title and requirements
-    (see ``SupportChain.recipes``)."""
+    one of a support's ``recipe()`` codes, with its title, engine and
+    requirements (see ``SupportChain.recipes``)."""
 
     # What the code does, without the library's name, e.g. "Load as LazyFrame".
     title: str
-    # The packages the code needs: the library it loads with first (its
-    # support's ``engine``, which "Python code" groups recipes by), then the
-    # others (``additional_requirements``); empty for Python alone.
-    requirements: tuple[type[PythonPackage], ...]
+    # The engine it loads with, which "Python code" names; None for none.
+    engine: type[Engine] | None
+    # The packages the code needs: its engine's, then the support's others
+    # (``additional_requirements``); empty for Python alone.
+    requirements: tuple[PythonPackage, ...]
     # The imports, then the loading code. Installing the packages and
     # configuring access to the storage are left to the user: reaching a data
     # lake often needs configuration that depends on it.
@@ -47,24 +58,30 @@ class Recipe:
 class SupportChain:
     """The supports of an explorer, in order, and what is done with them: for
     each capability, the first support for the format that is installed and
-    has it (see ``FormatSupport``), with its options.
+    has it (see ``FormatSupport``), of the engine asked for, with its
+    options.
 
     Supports given as classes are created (without arguments). Each gets an
-    ``options_model`` made from ``format_options``, by library (its
-    ``engine``'s package), then format name, or ``"*"`` for all formats, e.g.
-    ``{"polars": {"*": {"storage_options": {...}}, "delta": {"use_pyarrow":
-    True}}}``: those of its library for all formats, then for its format
-    (``format.name``), each only if its model has the field. Instead of a
-    dict, an entry may be a function of the item's ``Location`` returning
-    one, for options depending on where the data is (e.g. an Azure
-    account's credentials, by ``location.account_name``): it is called for
-    each view and recipe, so keep it quick.
+    ``options_model`` made from ``format_options``, by engine key, then
+    format name, or ``"*"`` for all formats, e.g. ``{"polars": {"*":
+    {"storage_options": {...}}, "delta": {"use_pyarrow": True}}}``: those of
+    its engine for all formats, then for its format (``format.name``), each
+    only if its model has the field. Instead of a dict, an entry may be a
+    function of the item's ``Location`` returning one, for options depending
+    on where the data is (e.g. an Azure account's credentials, by
+    ``location.account_name``): it is called for each view and recipe, so
+    keep it quick.
 
-    ValueError for a library no support has, a format neither in
-    ``format_names`` nor of a support, or an option no support of the
-    library (for that format) takes: a typo would otherwise be ignored. A
-    function's options are checked when it is called. TypeError for an item
-    that is no FormatSupport.
+    ``engines`` are those users choose from: the supports' engines that are
+    installed and view something, those of ``engine_preference`` (keys)
+    first, in its order, then the others by key. Without one,
+    ``DEFAULT_ENGINE_PREFERENCE``.
+
+    ValueError for an engine key no support has (in ``engine_preference``
+    or ``format_options``), a format neither in ``format_names`` nor of a
+    support, or an option no support of the engine (for that format) takes:
+    a typo would otherwise be ignored. A function's options are checked when
+    it is called. TypeError for an item that is no FormatSupport.
     """
 
     def __init__(
@@ -73,10 +90,11 @@ class SupportChain:
         format_options: FormatOptions | None = None,
         *,
         format_names: Sequence[str] = (),
+        engine_preference: Sequence[str] | None = None,
     ) -> None:
         self.supports = [_created(s) for s in supports]
         self.format_options = format_options or {}
-        # The supports of each library, and the format names options may
+        # The supports of each engine, and the format names options may
         # name: what options are checked against.
         self._libraries: dict[str, list[FormatSupport]] = {}
         for support in self.supports:
@@ -86,6 +104,16 @@ class SupportChain:
             dict.fromkeys([*format_names, *(s.format.name for s in self.supports)])
         )
         _check_options(self.format_options, self._libraries, self._format_names)
+        if engine_preference is None:
+            engine_preference = DEFAULT_ENGINE_PREFERENCE
+        else:
+            unknown = [k for k in engine_preference if k not in self._libraries]
+            if unknown:
+                raise ValueError(
+                    f"engine_preference: unknown engines {unknown}; "
+                    f"choose from {sorted(self._libraries)}"
+                )
+        self.engines = _ordered_engines(self.supports, engine_preference)
 
     def options_of(self, support: FormatSupport, location: Location) -> SupportOptions:
         """The options of ``support`` for the item at ``location``: those of
@@ -127,15 +155,42 @@ class SupportChain:
         explorer may call. Empty if none of the supports can."""
         return [s for s in self._registered(fmt, capability) if s.is_installed()]
 
-    def view(self, fmt: DataFormat, ctx: ItemContext, limits: ViewLimits) -> View:
-        """The view of the first support of ``of(fmt, "view")`` that views the
-        item (see ``FormatSupport.view``). ValueError if each of them refuses
-        it (``NotSupported``); RuntimeError if there is none: callers check
-        ``of`` first."""
-        supports = self.of(fmt, "view")
+    def viewers(self, fmt: DataFormat) -> list[str | None]:
+        """The engines that can view ``fmt`` (their supports installed), in
+        the order of ``engines``, then None if the built-in views can: for
+        "Preview as"."""
+        keys = {engine_key(s) for s in self.of(fmt, "view")}
+        return [e.key for e in self.engines if e.key in keys] + (
+            [None] if None in keys else []
+        )
+
+    def engine_for(self, fmt: DataFormat, engine: str | None) -> str | None:
+        """The engine viewing ``fmt`` when ``engine`` is chosen: that engine,
+        if it handles the format; else, for a format it does not handle at
+        all (e.g. Markdown for polars), None for the built-in views. LookupError
+        if neither can view it: an engine handling the format does not leave
+        it to another (the user picks one in "Preview as")."""
+        registered = self._registered(fmt, "view")
+        if any(engine_key(s) == engine for s in registered):
+            if any(engine_key(s) == engine for s in self.of(fmt, "view")):
+                return engine
+        elif any(engine_key(s) is None for s in self.of(fmt, "view")):
+            return None
+        raise LookupError(engine)
+
+    def view(
+        self, fmt: DataFormat, ctx: ItemContext, limits: ViewLimits, engine: str | None
+    ) -> View:
+        """The view of the first support of ``engine`` (a key; None for the
+        built-in views) installed for ``fmt`` that views the item (see
+        ``FormatSupport.view``). ValueError if each of them refuses it
+        (``NotSupported``); RuntimeError if there is none: callers check
+        ``viewers`` or ``engine_for`` first."""
+        supports = [s for s in self.of(fmt, "view") if engine_key(s) == engine]
         if not supports:
             raise RuntimeError(
-                f"no support installed views {fmt.label}; check of() first"
+                f"no support of {engine or 'the built-in views'} installed views "
+                f"{fmt.label}; check viewers() first"
             )
         for support in supports:
             options = self.options_of(support, ctx.location)
@@ -147,9 +202,9 @@ class SupportChain:
 
     def recipes(self, fmt: DataFormat, ctx: ItemContext) -> list[Recipe]:
         """The recipes of the supports with "recipe" for ``fmt``, installed or
-        not (the code may run elsewhere): of each library, those of the first
+        not (the code may run elsewhere): of each engine, those of the first
         support that has code for the item, so a support given before the
-        defaults replaces the default one of its library."""
+        defaults replaces the default one of its engine."""
         recipes: list[Recipe] = []
         libraries: set[str] = set()
         for support in self._registered(fmt, "recipe"):
@@ -162,7 +217,12 @@ class SupportChain:
                 continue
             libraries.add(support.library())
             recipes += [
-                Recipe(title=title, requirements=support.requirements(), code=code)
+                Recipe(
+                    title=title,
+                    engine=support.engine,
+                    requirements=support.requirements(),
+                    code=code,
+                )
                 for title, code in codes.items()
             ]
         return recipes
@@ -186,7 +246,7 @@ def _check_options(
     for library, by_format in format_options.items():
         if library not in libraries:
             raise ValueError(
-                f"format_options: unknown library {library!r}; "
+                f"format_options: unknown engine {library!r}; "
                 f"choose from {sorted(libraries)}"
             )
         if not isinstance(by_format, dict):
@@ -230,3 +290,23 @@ def _check_format_options(
         raise ValueError(
             f"{where}: unknown options {sorted(unknown)}; choose from {sorted(taken)}"
         )
+
+
+def _ordered_engines(
+    supports: Sequence[FormatSupport], preference: Sequence[str]
+) -> list[type[Engine]]:
+    """The engines of ``supports`` users choose from: installed, viewing
+    something (a support of theirs with "view" installed), ``preference``'s
+    first, in its order, then the others by key."""
+    engines: dict[str, type[Engine]] = {}
+    for support in supports:
+        engine = support.engine
+        if (
+            engine is not None
+            and "view" in support.capabilities
+            and support.is_installed()
+        ):
+            engines.setdefault(engine.key, engine)
+    first = [engines[k] for k in dict.fromkeys(preference) if k in engines]
+    rest = sorted((e for e in engines.values() if e not in first), key=lambda e: e.key)
+    return first + rest

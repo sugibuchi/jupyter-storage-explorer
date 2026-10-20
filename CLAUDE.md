@@ -323,9 +323,13 @@ so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
   `data_url(ctx)`, `first_files(ctx, n)`). The highest
   `priority` wins (Delta 20 > Parquet 10 > default 0 > Text -10). What supports share about a format is on it
   (`Csv.separator`, `Text.language`, `Image.mime_type`, `Parquet.data_url`, ...).
+- `Engine` (`engine.py`; predefined in `engines.py`, exported by `formats`: `PolarsEngine`, `PandasEngine`,
+  `PySparkEngine` (pyspark or databricks-connect), `FsspecEngine`, `PillowEngine`): a library users choose, with `key`
+  (`engine_preference`, `format_options`), `label` and `requirements`, `PythonPackage` instances: a tuple, all needed,
+  or a tuple of tuples, alternatives (`alternatives()`, `packages()`: the first installed, `is_installed()`).
 - `FormatSupport` subclasses declare `format` (matched with `isinstance`, so subclasses too: `MarkdownByPython` comes
-  before `TextByPython`), `engine` (the library's `PythonPackage`, None for none; names its code, `library()`, and its
-  options), `additional_requirements`, and `capabilities`, the names of the methods it implements (`"view"`,
+  before `TextByPython`), `engine` (an `Engine` class; None for the built-in views, engine-neutral: used for the
+  formats the engine chosen does not handle; `library()` is its key, "python" for none), `additional_requirements` (`PythonPackage` instances, besides the engine's), and `capabilities`, the names of the methods it implements (`"view"`,
   `"recipe"`; `Capability`; not "jobs" or "tasks", which are file operations here): the explorer reads only
   `capabilities`, so a method not listed is never called (no runtime check of that, by design: users are expected to
   generate supports with AI from the written rules in `FormatSupport`'s docstring, kept by
@@ -343,9 +347,13 @@ so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
   `format_options` checks; the explorer's `_supports`: `supports=` then `StorageExplorer.default_supports()`, i.e.
   `DEFAULT_SUPPORTS`, ordered format by format, most preferred first) calls them, with their options:
   `of(fmt, capability)` lists the supports for the format with the capability whose packages are installed (empty:
-  none of the registered ones can); `view` of the first of `of(fmt, "view")` that views the item (ValueError if each
-  refuses it; RuntimeError, the caller's error, if `of` is empty: the explorer checks `of` first, in `_viewer`, and
-  reports "no library viewing it is installed"); `recipes` with the first support with `"recipe"` of each library
+  none of the registered ones can); `engines`: the installed engines with a view support, `engine_preference` (keys;
+  default `DEFAULT_ENGINE_PREFERENCE`, polars) first, then by key; `viewers(fmt)`: the engine keys that can view it,
+  then None for the built-in views ("Preview as"); `engine_for(fmt, engine)`: the engine chosen if it handles the
+  format (no fallback to another engine: LookupError if its support is not installed), else the built-in views;
+  `view(fmt, ctx, limits, engine)` with that engine's supports (ValueError if each refuses it; RuntimeError, the
+  caller's error, if it has none: the explorer resolves the engine first, `_view_engine`, and reports why it cannot
+  view); `recipes` with the first support with `"recipe"` of each library
   (so one given replaces the default's), installed or not (the code may run elsewhere; `_registered`).
 - `view(fmt, ctx, options, limits)`: one `View` dataclass of `view.py`. A `QueryView` (`data`: any
   dataframe narwhals supports, best lazy) opens the data browser (`_new_query`: the first view's data, then the view
@@ -379,6 +387,20 @@ so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
   configuring access to the storage (credentials, Spark's setup for Delta Lake) depend on the environment, so they are
   left to the user. `PythonPackage`s (`packages.py`) only say what a support needs (`package`, `import_name`,
   `is_installed()`, `load()`).
+
+**Engines in the explorer.** `StorageExplorer(engine_preference=)` orders the chain's `engines`, synced as
+`_engines` (`[{"key", "label"}]`); `_engine` is the one chosen: the user's last (`ExplorerStates.engine`, its JSON
+"engine") if still offered, else the first; the frontend sets it from the settings menu (toolbar.js: the ⚙ button,
+with the engine's label, opens "Engine ▸" and, in launcher tabs, "Edit settings"), `_on_engine` remembers it
+(`remember_engine`; not the value `__init__` sets, `_engine_ready`) and shows again what can be previewed
+(`_selected_format`, `_current_format` via `_viewable`, and the preview open). Requests "preview" and "view_tab"
+take an optional "engine" (a key, or null for the built-in views; absent: the one chosen, `...` in Python), the
+preview keeps "engine" and "engine_label" (its badge, "Parquet · Polars"), and "menu_info" answers "view" (the best
+format and its engine, or None: "Preview <format>" disabled), "views" ("Preview as", "View in new tab as":
+"CSV (pandas)") and recipes with their engine's label ("Load as DataFrame (Polars)"). The right-click menu
+(item_menu.js): View/Preview <format>; View in new tab as, Preview as, Python code; Copy, Cut, Copy URL/path,
+Paste; Edit (JupyterLab's editor), Rename, Create a folder, Delete; downloads; Properties, bookmark. The menu hides
+separators left without visible rows around them (`tidySeparators`, overlays.js).
 
 **Format options.** `format_options` is `{library: {format name or "*": {option: value}}}` (`SupportChain`,
 `FormatOptions`): a support gets its library's (`engine.package`) options for `"*"`, then for its `format.name`, only
