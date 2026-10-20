@@ -177,12 +177,11 @@ class TestClose:
         view = SupportChain.view
 
         def closing(self, *args, **kwargs):
-            title = str(next(count))
-            return dataclasses.replace(
-                view(self, *args, **kwargs),
-                title=title,
-                on_close=lambda: closed.append(title),
+            viewed = dataclasses.replace(
+                view(self, *args, **kwargs), title=str(next(count))
             )
+            viewed.on_close(lambda v: closed.append(v.title))
+            return viewed
 
         monkeypatch.setattr(SupportChain, "view", closing)
         return closed
@@ -248,13 +247,28 @@ class TestClose:
 
 def test_view_closed_once_and_errors_logged(caplog):
     calls = []
-    view = TextView(text="x", on_close=lambda: calls.append(1))
+    view = TextView(text="x")
+    record = calls.append
+    view.on_close(lambda v: 1 / 0)
+    view.on_close(record)
+    view.on_close(record)  # once, however often given
     view.close()
     view.close()
-    assert calls == [1]
-    TextView(text="x", on_close=lambda: 1 / 0).close()
+    assert calls == [view]  # after the failing one, which was logged
     assert "Closing a text view failed" in caplog.text
-    assert "on_close" not in previews.section(view)
+    removed = TextView(text="x")
+    removed.on_close(record)
+    removed.on_close(record, remove=True)
+    removed.close()
+    assert calls == [view]
+    assert previews.section(view) == {
+        "kind": "text",
+        "title": "",
+        "note": "",
+        "text": "x",
+        "language": None,
+        "html": None,
+    }
 
 
 def test_vendor(mem_explorer):

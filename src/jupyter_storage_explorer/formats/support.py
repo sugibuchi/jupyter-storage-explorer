@@ -67,9 +67,10 @@ class FormatSupport:
     - ``view()`` returns a ``QueryView`` of the data for the data browser
       (filters, sort, pages), or a view of what it read, e.g. a
       ``TableView`` of the first rows, a ``TextView``. A view holding
-      something to release (a connection, a temporary file) is given it as
-      ``on_close``, which the explorer calls once it no longer shows the
-      view; until then, a ``QueryView``'s data must stay readable.
+      something to release (a connection, a temporary file) releases it in
+      a function given to its ``on_close()``, which the explorer calls once
+      it no longer shows the view; until then, a ``QueryView``'s data must
+      stay readable.
     - A method may raise ``NotSupported`` for a particular item (e.g. an
       image format the library cannot read): the next support is then
       tried, and for "recipe", the support's code is left out.
