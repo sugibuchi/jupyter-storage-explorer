@@ -127,8 +127,8 @@ widget in JupyterLab's main area, in a notebook or a tab of its own, with room f
   folders. Open them in the data browser to choose among hundreds of columns and filter and sort the data where it
   lives.
 - **From browsing to code**: copy ready-to-run code to load a file or table with polars, pandas, PySpark and more, or
-  the URLs of the files you selected, ready for any library. In Python, `folder_url` and `selected_urls` give the
-  folder shown and the files selected.
+  the URLs of the files you selected, ready for any library. In Python, `folder_location` and `selected_locations`
+  give the folder shown and the files selected, with their URLs.
 - **Part of your notebook**: explorers are widgets, placed in your notebook next to your analysis. Your code can
   follow what you browse (`on_change()`, `on_query_change()`): a chart of the file you click, redrawn as you filter it
   in the data browser (`query_result()`). `DataExplorer` brings the same data browser to any dataframe, and gives the

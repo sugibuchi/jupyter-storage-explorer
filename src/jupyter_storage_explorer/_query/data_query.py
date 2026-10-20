@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from jupyter_storage_explorer._explorer.states import ExplorerStates
+    from jupyter_storage_explorer.location import Location
 
 MODES = ("auto", "live", "memory")
 
@@ -29,18 +30,6 @@ def _memory_backend() -> str | None:
     """The library data in memory is queried with: polars when it is installed,
     as it is faster and the same for all data; otherwise the data's own."""
     return "polars" if Polars().is_installed() else None
-
-
-def as_lazy(frame: Any) -> nw.LazyFrame:
-    """A dataframe of any library narwhals supports, as a narwhals LazyFrame.
-
-    Eager dataframes (pandas, PyArrow, ...) are queried in memory (see
-    ``_memory_backend``).
-    """
-    data = nw.from_native(frame)
-    if isinstance(data, nw.DataFrame):
-        return data.lazy(_memory_backend())
-    return data
 
 
 def fetch_rows(lf: nw.LazyFrame, offset: int, length: int) -> nw.DataFrame:
@@ -124,7 +113,7 @@ class DataQuery:
     def __init__(
         self,
         source: Any,
-        key: str,
+        key: Location | str,
         states: ExplorerStates,
         *,
         mode: str = "auto",

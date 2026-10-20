@@ -7,15 +7,19 @@ same file::
 
     {
         "bookmarks": [
-            {"filesystem": "Lake", "path": "bucket/sales", "url": "s3://bucket/sales"}
+            {"filesystem": "Lake", "path": "bucket/sales",
+             "url": "s3://bucket/sales", "location": {"kind": "s3", ...}}
         ],
         "queries": [  # the most recent first
-            {"url": "s3://bucket/sales/2024.parquet", "settings": {...}, "mode": "live"}
+            {"url": "s3://bucket/sales/2024.parquet", "location": {...},
+             "settings": {...}, "mode": "live"}
         ]
     }
 
-where "settings" are in the form of ``QuerySettings.to_dict()``. Other keys,
-e.g. written by a later version, are kept as they are.
+where "location" is ``Location.to_json()`` and "settings" are in the form of
+``QuerySettings.to_dict()``. Entries written before locations have a "url"
+only; a query's still matches the location of that URL. Other keys, e.g.
+written by a later version, are kept as they are.
 """
 
 from __future__ import annotations
@@ -35,6 +39,8 @@ from jupyter_storage_explorer._query.settings import (
     QuerySettings,
     QueryState,
 )
+from jupyter_storage_explorer.filesystems.locations import LocalLocation
+from jupyter_storage_explorer.location import Location
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -56,13 +62,21 @@ class Bookmark:
     path : str
         The folder, as fsspec names it on that storage.
     url : str or None
-        Its location when it was bookmarked (see ``StorageExplorer._url``),
-        for "Copy URL"; None if it had none.
+        Its URL: its location's, or for a bookmark made with a URL only
+        (e.g. before locations), that URL.
+    location : Location or None
+        Its location when it was bookmarked, for "Copy URL" and "Copy path";
+        None if it had none, or for a bookmark made with a URL only.
     """
 
     filesystem: str
     path: str
     url: str | None = None
+    location: Location | None = None
+
+    def __post_init__(self) -> None:
+        if self.location is not None:
+            object.__setattr__(self, "url", self.location.url)
 
 
 class ExplorerStates:
@@ -97,7 +111,7 @@ class ExplorerStates:
     Examples
     --------
     >>> states = ExplorerStates("~/.jupyter/storage-explorer-states.json")
-    >>> states.add_bookmark("Lake", "bucket/sales", "s3://bucket/sales")
+    >>> states.add_bookmark("Lake", "bucket/sales", S3Location(bucket="bucket", key="sales"))
     >>> StorageExplorer(filesystems={"Lake": s3}, states=states)
     """
 
@@ -109,8 +123,8 @@ class ExplorerStates:
         self.path = pathlib.Path(path).expanduser() if path is not None else None
         self.max_queries = max_queries
         self._bookmarks: list[Bookmark] = []
-        # In the file's form: {"url", "settings": QuerySettings.to_dict(), "mode"},
-        # the most recent first.
+        # In the file's form: {"url", "location" (if any), "settings":
+        # QuerySettings.to_dict(), "mode"}, the most recent first.
         self._queries: list[dict[str, Any]] = []
         # Keys of the file this version does not know, written back as they are.
         self._others: dict[str, Any] = {}
@@ -138,7 +152,7 @@ class ExplorerStates:
         if not isinstance(data, dict):
             raise ValueError(f"{self.path} must hold a JSON object")
         self._bookmarks = [
-            Bookmark(b["filesystem"], b["path"], b.get("url"))
+            Bookmark(b["filesystem"], b["path"], _text(b.get("url")), _location(b))
             for b in _list(data.get("bookmarks"))
             if isinstance(b, dict)
             and isinstance(b.get("filesystem"), str)
@@ -170,10 +184,7 @@ class ExplorerStates:
             return
         data = {
             **self._others,
-            "bookmarks": [
-                {"filesystem": b.filesystem, "path": b.path, "url": b.url}
-                for b in self._bookmarks
-            ],
+            "bookmarks": [_bookmark_entry(b) for b in self._bookmarks],
             "queries": self._queries,
         }
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -202,7 +213,9 @@ class ExplorerStates:
         """
         return list(self._bookmarks)
 
-    def add_bookmark(self, filesystem: str, path: str, url: str | None = None) -> None:
+    def add_bookmark(
+        self, filesystem: str, path: str, location: Location | str | None = None
+    ) -> None:
         """Bookmark a folder (and write the file, if any).
 
         Parameters
@@ -211,14 +224,18 @@ class ExplorerStates:
             The storage's name in the explorer (see ``Bookmark``).
         path : str
             The folder, as fsspec names it on that storage.
-        url : str, optional
-            Its location, for "Copy URL".
+        location : Location or str, optional
+            Its location, for "Copy URL" and "Copy path"; or its URL alone,
+            for "Copy URL".
 
         Notes
         -----
-        A folder already bookmarked keeps its place; its URL is updated.
+        A folder already bookmarked keeps its place; its location is updated.
         """
-        bookmark = Bookmark(filesystem, path, url)
+        if isinstance(location, str):
+            bookmark = Bookmark(filesystem, path, url=location)
+        else:
+            bookmark = Bookmark(filesystem, path, location=location)
         with self._changing():
             for i, b in enumerate(self._bookmarks):
                 if (b.filesystem, b.path) == (filesystem, path):
@@ -256,13 +273,13 @@ class ExplorerStates:
         """
         return [_query_state(q) for q in self._queries]
 
-    def query(self, url: str) -> QueryState | None:
+    def query(self, key: Location | str) -> QueryState | None:
         """How the data browser last showed a dataset.
 
         Parameters
         ----------
-        url : str
-            The dataset's location.
+        key : Location or str
+            The dataset's location, or another key it is remembered by.
 
         Returns
         -------
@@ -270,12 +287,12 @@ class ExplorerStates:
             None if it is not remembered.
         """
         for q in self._queries:
-            if q["url"] == url:
+            if _is_query_of(q, key):
                 return _query_state(q)
         return None
 
     def remember_query(
-        self, url: str, settings: QuerySettings, mode: str = "auto"
+        self, key: Location | str, settings: QuerySettings, mode: str = "auto"
     ) -> None:
         """Remember how a dataset is shown (and write the file, if any).
 
@@ -285,8 +302,8 @@ class ExplorerStates:
 
         Parameters
         ----------
-        url : str
-            The dataset's location.
+        key : Location or str
+            The dataset's location, or another key to remember it by.
         settings : QuerySettings
             Its filters, sort order, hidden columns and widths.
         mode : {"auto", "live", "memory"}, default "auto"
@@ -299,28 +316,70 @@ class ExplorerStates:
         """
         if mode not in MODES:
             raise ValueError(f"mode must be one of {MODES}, not {mode!r}")
-        entry = {"url": url, "settings": settings.to_dict(), "mode": mode}
+        entry: dict[str, Any] = {"url": key.url if isinstance(key, Location) else key}
+        if isinstance(key, Location):
+            entry["location"] = key.to_json()
+        entry |= {"settings": settings.to_dict(), "mode": mode}
         forget = entry["settings"] == DEFAULT_SETTINGS and mode == "auto"
-        if forget and all(q["url"] != url for q in self._queries):
+        if forget and not any(_is_query_of(q, key) for q in self._queries):
             return  # nothing remembered, nothing to forget (and no file to write)
         with self._changing():
-            rest = [q for q in self._queries if q["url"] != url]
+            rest = [q for q in self._queries if not _is_query_of(q, key)]
             self._queries = rest if forget else [entry, *rest][: self.max_queries]
 
-    def forget_query(self, url: str) -> None:
+    def forget_query(self, key: Location | str) -> None:
         """Forget how a dataset was shown (and write the file, if any).
 
         Parameters
         ----------
-        url : str
-            The dataset's location.
+        key : Location or str
+            The dataset's location, or the key it is remembered by.
         """
         with self._changing():
-            self._queries = [q for q in self._queries if q["url"] != url]
+            self._queries = [q for q in self._queries if not _is_query_of(q, key)]
 
 
 def _list(value: Any) -> list[Any]:
     return value if isinstance(value, list) else []
+
+
+def _text(value: Any) -> str | None:
+    return value if isinstance(value, str) else None
+
+
+def _location(entry: dict[str, Any]) -> Location | None:
+    """The location of a bookmark or query entry of the file; None if it has
+    none (written before locations) or it cannot be read."""
+    if entry.get("location") is None:
+        return None
+    try:
+        return Location.from_json(entry["location"])
+    except ValueError:
+        return None
+
+
+def _bookmark_entry(bookmark: Bookmark) -> dict[str, Any]:
+    entry = {
+        "filesystem": bookmark.filesystem,
+        "path": bookmark.path,
+        "url": bookmark.url,
+    }
+    if bookmark.location is not None:
+        entry["location"] = bookmark.location.to_json()
+    return entry
+
+
+def _is_query_of(entry: dict[str, Any], key: Location | str) -> bool:
+    """Whether a "queries" entry is the one of ``key``: of a string, an entry
+    with that URL (or key); of a location, an entry of that location, or one
+    with a URL only (remembered by a URL, or before locations, when a local
+    file's was its plain path) if it is the location's."""
+    if not isinstance(key, Location):
+        return entry["url"] == key
+    if "location" in entry:
+        return entry["location"] == key.to_json()
+    urls = {key.url, key.path} if isinstance(key, LocalLocation) else {key.url}
+    return entry["url"] in urls
 
 
 def _read_query(entry: Any) -> dict[str, Any] | None:
@@ -337,11 +396,10 @@ def _read_query(entry: Any) -> dict[str, Any] | None:
     except (AttributeError, TypeError, ValueError):
         return None
     mode = entry.get("mode")
-    return {
-        "url": entry["url"],
-        "settings": settings,
-        "mode": mode if mode in MODES else "auto",
-    }
+    read: dict[str, Any] = {"url": entry["url"]}
+    if (location := _location(entry)) is not None:
+        read["location"] = location.to_json()  # as this version writes it
+    return read | {"settings": settings, "mode": mode if mode in MODES else "auto"}
 
 
 def _query_state(entry: dict[str, Any]) -> QueryState:

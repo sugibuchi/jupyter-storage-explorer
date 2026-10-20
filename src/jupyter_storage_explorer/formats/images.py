@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from jupyter_storage_explorer.formats.base import DataFormat, Target
+from jupyter_storage_explorer.formats.base import DataFormat, name_of
 
 
 class Image(DataFormat):
@@ -16,6 +16,6 @@ class Image(DataFormat):
     extensions = tuple(mime_types)
     file_icon = "image"
 
-    def mime_type(self, target: Target) -> str:
-        """The file's media type, by its extension."""
-        return self.mime_types["." + target.name.lower().rsplit(".", 1)[-1]]
+    def mime_type(self, path: str) -> str:
+        """The media type of the file at `path`, by its extension."""
+        return self.mime_types["." + name_of(path).lower().rsplit(".", 1)[-1]]

@@ -115,15 +115,32 @@ function createItemMenu(x) {
         },
       );
     }
-    // Locations are copied only as URLs: fsspec's paths can differ from the
-    // storage's own notion of a path (e.g. abfs's "container/key"). Files'
-    // URLs also come with "Copy" below, so "Copy URL" is for folders, which
-    // "Copy" leaves to unsafe mode.
-    if (withUrls && !files) {
+    // Locations are copied as URLs, and on a local disk as plain paths too:
+    // elsewhere fsspec's paths can differ from the storage's own notion of a
+    // path (e.g. abfs's "container/key"). "Copy" below also puts files' URLs
+    // on the clipboard, so "Copy URL" is for folders, which "Copy" leaves to
+    // unsafe mode; on a local disk, "Copy" gives paths, so it is for files too.
+    const local = model.get("_local_paths");
+    if (withUrls && (!files || local)) {
       open.push({
         label: `Copy ${count}URL${count ? "s" : ""}`,
         icon: "link",
-        action: async () => x.copyText(await x.urlsOf(targets), count ? `${count}URLs` : "URL"),
+        action: async () =>
+          x.copyText(
+            (await x.locationsOf(targets)).map((l) => l.url),
+            count ? `${count}URLs` : "URL",
+          ),
+      });
+    }
+    if (withUrls && local) {
+      open.push({
+        label: `Copy ${count}path${count ? "s" : ""}`,
+        icon: "file",
+        action: async () =>
+          x.copyText(
+            (await x.locationsOf(targets)).map((l) => l.path),
+            count ? `${count}paths` : "path",
+          ),
       });
     }
 

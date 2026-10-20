@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from explorers import entries, make, path_of, storage, without_ids
+from explorers import copied, entries, make, path_of, storage, without_ids
 from fsspec.implementations.dirfs import DirFileSystem
 
 
@@ -161,7 +161,7 @@ class TestPaste:
                     "rid": 1,
                     "explorer": source._explorer_id,
                     "filesystem": storage(source),
-                    "files": [{"path": p, "url": source._url(p)} for p in files],
+                    "files": [copied(source, p) for p in files],
                     "dest": dest,
                     "if_exists": if_exists,
                 }
@@ -242,12 +242,18 @@ class TestPaste:
                 "type": "paste",
                 "rid": 1,
                 "explorer": "elsewhere",
-                "filesystem": {
-                    "name": "default",
-                    "protocol": "memory",
-                    "identifier": {},
-                },
-                "files": [{"path": "/x.csv", "url": "memory:///missing/x.csv"}],
+                "filesystem": {"name": "default"},
+                "files": [
+                    {
+                        "path": "/x.csv",
+                        # Another kernel's memory.
+                        "location": {
+                            "kind": "memory",
+                            "path": "/missing/x.csv",
+                            "process": "another-kernel",
+                        },
+                    }
+                ],
                 "dest": local._root,
             }
         )
@@ -271,9 +277,15 @@ class TestPasteFromElsewhere:
                 "type": "paste",
                 "rid": 1,
                 "explorer": "elsewhere",
-                "filesystem": {"name": "web", "protocol": "http", "identifier": {}},
+                "filesystem": {"name": "web"},
                 "files": [
-                    {"path": "x", "url": "http://169.254.169.254/latest/meta-data/"}
+                    {
+                        "path": "x",
+                        "location": {
+                            "kind": "fsspec",
+                            "url": "http://169.254.169.254/latest/meta-data/",
+                        },
+                    }
                 ],
                 "dest": local._root,
             }
@@ -294,7 +306,7 @@ class TestCut:
                     "rid": 1,
                     "explorer": source._explorer_id,
                     "filesystem": storage(source),
-                    "files": [{"path": p, "url": source._url(p)} for p in files],
+                    "files": [copied(source, p) for p in files],
                     "dest": dest,
                     "cut": True,
                     **content,
@@ -327,7 +339,7 @@ class TestCut:
     def test_between_the_storages_of_an_explorer(self, memfs, tmp_path):
         memfs.pipe_file("/m/a.txt", b"a")
         explorer = make(filesystems={"mem": "memory:///m", "local": str(tmp_path)})
-        files = [{"path": "/m/a.txt", "url": "memory:///m/a.txt"}]
+        files = [copied(explorer, "/m/a.txt", "mem")]
         explorer._filesystem = "local"
         reply = without_ids(
             explorer.request(
@@ -439,7 +451,7 @@ class TestFolderOperations:
         assert reply == {"deleted": [], "errors": ["/: the top folder is not deleted"]}
 
     def test_paste_within_the_filesystem(self, explorer):
-        files = [{"path": "/data/sub", "url": explorer._url("/data/sub")}]
+        files = [copied(explorer, "/data/sub")]
         content = {
             "explorer": explorer._explorer_id,
             "filesystem": storage(explorer),
@@ -462,7 +474,7 @@ class TestFolderOperations:
             "paste",
             explorer=explorer._explorer_id,
             filesystem=storage(explorer),
-            files=[{"path": "/data/sub", "url": explorer._url("/data/sub")}],
+            files=[copied(explorer, "/data/sub")],
             dest=local._root,
             unsafe=True,
         )

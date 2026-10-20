@@ -26,9 +26,22 @@ class TestBookmarks:
             "filesystem": "default",
             "path": "/data",
             "url": "memory:///data",
+            "local_path": None,  # for "Copy path": local folders only
             "label": "[default] /data",
         }
-        assert mem_explorer._states.bookmarks[0].url == "memory:///data"
+        [kept] = mem_explorer._states.bookmarks
+        assert kept.location == mem_explorer._location_of("/data")
+        assert kept.url == "memory:///data"
+
+    def test_local_folder_has_a_path_to_copy(self, tmp_path):
+        (tmp_path / "sub").mkdir()
+        local = make(str(tmp_path))
+        sub = path_of(local, "sub")
+        [bookmark] = local.request({"type": "bookmark_add", "rid": 1, "path": sub})[
+            "bookmarks"
+        ]
+        assert bookmark["local_path"] == str(tmp_path / "sub")
+        assert bookmark["url"].startswith("file:///")
 
     @pytest.mark.parametrize("path", ["/data/a.csv", "/missing"])
     def test_only_folders(self, mem_explorer, path):
@@ -176,7 +189,9 @@ class TestStatesFile:
         )
         explorer.message({"type": "preview", "path": path})  # opened again
         assert explorer._queries[path].mode == "memory"
-        explorer._states.remember_query(explorer._url(path), QuerySettings(), "live")
+        explorer._states.remember_query(
+            explorer._location_of(path), QuerySettings(), "live"
+        )
         explorer.message({"type": "preview", "path": path})
         assert explorer._queries[path].mode == "live"
 

@@ -14,7 +14,7 @@ together with the same version (from the git tags). The launcher requires the ex
 | Path                                                           | Contents                                                                     |
 |----------------------------------------------------------------|------------------------------------------------------------------------------|
 | `src/jupyter_storage_explorer/`                                | The widgets: `storage_explorer.py`, `data_explorer.py`.                      |
-| `src/jupyter_storage_explorer/filesystems/`                    | Filesystems' URLs and identities (mappers) and file operations: interfaces users extend, and the default ones. |
+| `src/jupyter_storage_explorer/filesystems/`                    | Filesystems' locations (mappers) and file operations: interfaces users extend, and the default ones.           |
 | `src/jupyter_storage_explorer/formats/`                        | The formats files are previewed, queried and loaded as.                      |
 | `src/jupyter_storage_explorer/_explorer/`                      | `StorageExplorer`'s features, as mixins of the class.                        |
 | `src/jupyter_storage_explorer/_jobs/`                          | File operations planned and run as jobs, without the widget.                 |
@@ -286,36 +286,52 @@ JupyterLab's custom CSS applies to every page: notebooks, consoles and the launc
 
 ### Filesystem mappers
 
-A `FileSystemMapper` (`filesystems/mapper.py`) describes the filesystems of one fsspec implementation:
+A `FileSystemMapper` (`filesystems/mapper.py`) turns the paths of one fsspec implementation's filesystems into
+locations (`Location`, `location.py`) and back:
 
-- `identifier(fs)`: which storage the instance is connected to, e.g. the account for Azure or the server and user
-  for SFTP. Two instances with the same identifier are the same storage, so the explorer moves files between them
-  within the storage, and finds files copied or dragged from another kernel on it.
-- `to_url(fs, path)`: the URL of a path, shown by "Copy URL" and used in "Python code", previews and the transfer
-  policy.
-- `path_of(fs, url)`: the reverse.
+- `to_location(fs, path)`: where a path is, independently of the implementation: e.g. an `AbfsLocation` (account,
+  container, path) or an `SftpLocation` (host, port, user, path). Its `url` is shown by "Copy URL" and used in
+  "Python code", previews and the transfer policy.
+- `path_of(fs, location)`: the reverse, or None if the instance does not reach that location. What one instance
+  reaches depends on the implementation (adlfs reaches all the containers of an account, though Azure has a file
+  system per container), so the mapper decides it from the location's fields and the instance's settings. Two
+  instances each reaching the other's top folder are one storage: the explorer moves files between them within the
+  storage, and finds files copied or dragged from another kernel on it.
 
-The predefined mappers (`filesystems/mappers.py`) cover Azure, S3, Google Cloud Storage, SFTP, local disks and memory;
-others get fsspec's URLs and are told apart as fsspec compares them.
+The predefined mappers (`filesystems/mappers.py`) and locations (`filesystems/locations.py`) cover Azure, S3, Google
+Cloud Storage, SFTP, local disks and memory; others get fsspec's URLs (`FsspecLocation`) and are told apart as fsspec
+compares them. A location of your own is a frozen, keyword-only dataclass of strings, integers and None, with a
+`kind` and a `url` (its `protocol` comes from the URL):
 
 ```python
-from jupyter_storage_explorer import StorageExplorer
+import dataclasses
+
+from jupyter_storage_explorer import Location, StorageExplorer
 from jupyter_storage_explorer.filesystems import FileSystemMapper
 
 
+@dataclasses.dataclass(frozen=True, kw_only=True)
+class MyLocation(Location):
+    kind = "myfs"  # its name in JSON, unique
+    server: str  # never credentials: locations are sent to the browser
+    path: str
+
+    @property
+    def url(self):
+        return f"myfs://{self.server}/{self.path.lstrip('/')}"
+
+
 class MyMapper(FileSystemMapper):
-    protocol = "myfs"
     classes = ("mypackage.MyFileSystem",)  # matched by name, subclasses too
 
-    def identifier(self, fs):
-        return {"server": fs.server.lower()}  # never credentials
+    def to_location(self, fs, path):
+        return MyLocation(server=fs.server.lower(), path=path)
 
-    def to_url(self, fs, path):
-        return f"myfs://{fs.server.lower()}/{path.lstrip('/')}"
-
-    def path_of(self, fs, url):
-        scheme, _, rest = url.partition("://")
-        return rest.partition("/")[2] if scheme == "myfs" else None
+    def path_of(self, fs, location):
+        # An instance reaches its server's files.
+        if isinstance(location, MyLocation) and location.server == fs.server.lower():
+            return location.path
+        return None
 
 
 StorageExplorer(fs=my_fs, filesystem_mappers=[MyMapper()])

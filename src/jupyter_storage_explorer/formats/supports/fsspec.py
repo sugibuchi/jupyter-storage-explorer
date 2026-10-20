@@ -5,7 +5,11 @@ from __future__ import annotations
 from inspect import cleandoc
 from typing import TYPE_CHECKING, Any
 
-from jupyter_storage_explorer.formats.base import format_kwargs, snippet_options
+from jupyter_storage_explorer.formats.base import (
+    format_kwargs,
+    library_url,
+    snippet_options,
+)
 from jupyter_storage_explorer.formats.requirements import Fsspec
 from jupyter_storage_explorer.formats.support import FormatSupport
 from jupyter_storage_explorer.formats.text import Json, Text
@@ -13,7 +17,9 @@ from jupyter_storage_explorer.formats.text import Json, Text
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from jupyter_storage_explorer.formats.base import Target
+    from fsspec import AbstractFileSystem
+
+    from jupyter_storage_explorer.location import Location
 
 
 class OpenedByFsspec(FormatSupport):
@@ -44,9 +50,16 @@ class TextByFsspec(OpenedByFsspec):
             text = f.read()
         """)
 
-    def recipe(self, fmt: Text, target: Target) -> str:
+    def recipe(
+        self,
+        fmt: Text,
+        location: Location,
+        fs: AbstractFileSystem,
+        path: str,
+        is_dir: bool,
+    ) -> str:
         return self.recipe_template.format(
-            url=repr(target.url), kwargs=self.code_kwargs()
+            url=repr(library_url(location)), kwargs=self.code_kwargs()
         )
 
 
@@ -66,7 +79,14 @@ class JsonByFsspec(OpenedByFsspec):
             data = json.load(f)
         """)
 
-    def recipe(self, fmt: Json, target: Target) -> str:
+    def recipe(
+        self,
+        fmt: Json,
+        location: Location,
+        fs: AbstractFileSystem,
+        path: str,
+        is_dir: bool,
+    ) -> str:
         return self.recipe_template.format(
-            url=repr(target.url), kwargs=self.code_kwargs()
+            url=repr(library_url(location)), kwargs=self.code_kwargs()
         )

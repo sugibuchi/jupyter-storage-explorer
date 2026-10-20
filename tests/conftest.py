@@ -1,19 +1,20 @@
-"""Shared fixtures: filesystems with data in them, and targets to detect formats on."""
+"""Shared fixtures: filesystems with data in them, and items to detect formats on."""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import fsspec
 import polars as pl
 import pytest
 from explorers import Explorer, make
 from fsspec.implementations.memory import MemoryFileSystem
-
-from jupyter_storage_explorer.formats.base import Target
+from items import Item, item_of
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+    from jupyter_storage_explorer.location import Location
 
 
 @pytest.fixture(autouse=True)
@@ -37,21 +38,16 @@ def memfs() -> MemoryFileSystem:
 
 
 @pytest.fixture
-def make_target(memfs: MemoryFileSystem) -> Callable[..., Target]:
-    """Write a file (``data``) or list a directory on ``memfs`` and return its Target."""
+def make_item(memfs: MemoryFileSystem) -> Callable[..., Item]:
+    """Write a file (``data``) or list a directory on ``memfs`` and return it
+    as an ``Item``; ``location`` instead of its own, e.g. an S3 one."""
 
-    def make(path: str, data: bytes | None = None, url: str | None = None) -> Target:
+    def make(
+        path: str, data: bytes | None = None, location: Location | None = None
+    ) -> Item:
         if data is not None:
             memfs.pipe_file(path, data)
-        info: dict[str, Any] = memfs.info(path)
-        children = memfs.ls(path, detail=True) if info["type"] == "directory" else None
-        return Target(
-            fs=memfs,
-            path=path,
-            url=url or f"memory://{path.lstrip('/')}",
-            info=info,
-            children=children,
-        )
+        return item_of(memfs, path, location)
 
     return make
 

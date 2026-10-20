@@ -13,6 +13,7 @@ from jupyter_storage_explorer._explorer.common import (
 from jupyter_storage_explorer._jobs import properties
 from jupyter_storage_explorer._jobs.tasks import FileTasks, Plan
 from jupyter_storage_explorer._jobs.transfer_policy import computer_url
+from jupyter_storage_explorer.location import Location
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -43,7 +44,7 @@ class FileRequestsMixin:
             }
             try:
                 refused = self._transfer_policy.error(
-                    self._location(self._fs, path),
+                    self._policy_url(self._fs, path),
                     computer_url(_paths.basename(path)),
                 )
                 if refused is not None:
@@ -96,7 +97,7 @@ class FileRequestsMixin:
     def _paste_request(self, content: dict[str, Any]) -> dict[str, Any]:
         """Answer "paste": files copied (or with "cut", cut) in the explorer
         ``content["explorer"]``, from its storage ``content["filesystem"]``
-        ({"name", "protocol", "identifier"}, see ``_storage_identity``)."""
+        ({"name"})."""
         return self._plan_request(
             lambda: self._paste_plan(
                 content["files"],
@@ -120,8 +121,8 @@ class FileRequestsMixin:
         folders: bool,
         cut: bool,
     ) -> Plan:
-        """Plan pasting ``files`` ({"path", "url"}, as copied) into ``dest``
-        (see ``FileTasks.paste``)."""
+        """Plan pasting ``files`` ({"path", "location"}, as copied: the
+        location's JSON) into ``dest`` (see ``FileTasks.paste``)."""
         sources, errors, urls = self._paste_sources(files, explorer, filesystem, cut)
         return self._tasks(urls).paste(
             sources, dest, if_exists, folders=folders, cut=cut, errors=errors
@@ -137,16 +138,16 @@ class FileRequestsMixin:
         list[tuple[AbstractFileSystem, str]], list[str], dict[tuple[int, str], str]
     ]:
         """The (filesystem, path) of files copied in explorer ``explorer``, from
-        its storage ``filesystem`` ({"name", "protocol", "identifier"}),
-        errors for those not found, and their URLs as copied (by their
-        explorer's ``_url``), for the policy (see ``_tasks``).
+        its storage ``filesystem`` ({"name"}), errors for those not found, and
+        their URLs as copied (their locations'), for the policy (see
+        ``_tasks``).
 
         If that explorer is in this kernel, its filesystem object is used, as
         it is (credentials included). Otherwise it is in another kernel and
-        the files' URLs and their filesystem's identifier tell where they are
-        (see ``MapperChain.locate``), on the first of this explorer's
-        storages that reaches them (the one shown first), so with its
-        credentials, else on one fsspec opens.
+        the files' locations tell where they are (see
+        ``MapperChain.locate``): on the first of this explorer's storages
+        that reaches them (the one shown first), so with its credentials,
+        else on one fsspec opens.
         """
         filesystem = filesystem or {}
         source = explorers.get(explorer or "")
@@ -158,21 +159,22 @@ class FileRequestsMixin:
         others = [fs for fs, _ in self._filesystems.values() if fs is not self._fs]
         sources, errors, urls = [], [], {}
         for file in files:
-            path, url = file.get("path"), file.get("url")
+            path, url = file.get("path"), None
             try:
+                location = (
+                    Location.from_json(file["location"])
+                    if file.get("location") is not None
+                    else None
+                )
+                url = location.url if location is not None else None
                 if entry is not None:
                     fs, root = entry
                     if cut and _paths.norm(path) == _paths.norm(root):
                         raise ValueError("the top folder is not moved")
-                elif url is None or "protocol" not in filesystem:
+                elif location is None:
                     raise ValueError("its location is unknown")
                 else:
-                    fs, path = self._mappers.locate(
-                        url,
-                        filesystem["protocol"],
-                        filesystem.get("identifier") or {},
-                        [self._fs, *others],
-                    )
+                    fs, path = self._mappers.locate(location, [self._fs, *others])
             except Exception as exc:
                 errors.append(f"{_paths.basename(path or url or '')}: {exc}")
                 continue
@@ -219,7 +221,7 @@ class FileRequestsMixin:
             name = _paths.safe_name(content["name"])
             target = _paths.join(content["dest"], name)
             refused = self._transfer_policy.error(
-                computer_url(name), self._location(self._fs, target)
+                computer_url(name), self._policy_url(self._fs, target)
             )
             if refused is not None:
                 raise PermissionError(refused)

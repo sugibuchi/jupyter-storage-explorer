@@ -7,6 +7,7 @@ from typing import get_args
 
 import polars as pl
 import pytest
+from items import local_item
 
 from jupyter_storage_explorer import StorageExplorer
 from jupyter_storage_explorer.formats import (
@@ -144,89 +145,105 @@ class TestOptions:
 
 
 class TestChain:
-    def test_first_installed_previews(self, make_target):
-        missing = support(use=Missing, preview=lambda *a: "missing")
-        first = support(preview=lambda *a: "first")
-        second = support(preview=lambda *a: "second")
+    def test_first_installed_previews(self, make_item):
+        missing = support(use=Missing, preview=lambda *a, **k: "missing")
+        first = support(preview=lambda *a, **k: "first")
+        second = support(preview=lambda *a, **k: "second")
         chain = SupportChain([missing(), first(), second()])
-        assert chain.preview(Csv(), make_target("/a.csv", b""), LIMITS) == "first"
+        assert (
+            chain.preview(Csv(), *make_item("/a.csv", b"").args, limits=LIMITS)
+            == "first"
+        )
 
-    def test_not_supported_tries_the_next(self, make_target):
-        def refuse(self, *args):
+    def test_not_supported_tries_the_next(self, make_item):
+        def refuse(self, *args, **kwargs):
             raise self.NotSupported
 
         chain = SupportChain(
-            [support(preview=refuse)(), support(preview=lambda *a: "next")()]
+            [support(preview=refuse)(), support(preview=lambda *a, **k: "next")()]
         )
-        assert chain.preview(Csv(), make_target("/a.csv", b""), LIMITS) == "next"
+        assert (
+            chain.preview(Csv(), *make_item("/a.csv", b"").args, limits=LIMITS)
+            == "next"
+        )
 
-    def test_only_its_jobs(self, make_target):
+    def test_only_its_jobs(self, make_item):
         # A method not in capabilities is never called.
         chain = SupportChain(
             [
-                support(capabilities=(), preview=lambda *a: "not listed")(),
-                support(preview=lambda *a: "listed")(),
+                support(capabilities=(), preview=lambda *a, **k: "not listed")(),
+                support(preview=lambda *a, **k: "listed")(),
             ]
         )
-        assert chain.preview(Csv(), make_target("/a.csv", b""), LIMITS) == "listed"
+        assert (
+            chain.preview(Csv(), *make_item("/a.csv", b"").args, limits=LIMITS)
+            == "listed"
+        )
 
-    def test_install_hint(self, make_target, monkeypatch):
+    def test_install_hint(self, make_item, monkeypatch):
         monkeypatch.setattr(Requirement, "is_installed", lambda self: False)
         chain = SupportChain(default_supports())
-        hint = chain.preview(Csv(), make_target("/a.csv", b"a\n"), LIMITS)
+        hint = chain.preview(Csv(), *make_item("/a.csv", b"a\n").args, limits=LIMITS)
         assert isinstance(hint, InstallPreview)
         assert hint.options == [["polars"], ["pandas"]]
         assert not chain.can_query(Csv())
 
-    def test_none_can_preview(self, make_target):
+    def test_none_can_preview(self, make_item):
         with pytest.raises(ValueError, match="cannot be previewed as CSV"):
-            SupportChain([]).preview(Csv(), make_target("/a.csv", b""), LIMITS)
+            SupportChain([]).preview(
+                Csv(), *make_item("/a.csv", b"").args, limits=LIMITS
+            )
 
-    def test_format_subclasses(self, make_target):
+    def test_format_subclasses(self, make_item):
         tsv = type("Tsv", (Csv,), {"name": "tsv"})
         chain = SupportChain(default_supports())
         assert chain.can_query(tsv())
         assert not chain.can_query(Text())
 
-    def test_recipes_of_every_support_installed_or_not(self, make_target, monkeypatch):
+    def test_recipes_of_every_support_installed_or_not(self, make_item, monkeypatch):
         monkeypatch.setattr(Requirement, "is_installed", lambda self: False)
         chain = SupportChain(default_supports())
-        recipes = chain.recipes(Csv(), make_target("/a.csv", b"a\n"))
+        recipes = chain.recipes(Csv(), *make_item("/a.csv", b"a\n").args)
         assert [r.requirements[0].package for r in recipes] == [
             "polars",
             "pandas",
             "pyspark",
         ]
 
-    def test_recipes_name_their_packages(self, make_target, memfs):
+    def test_recipes_name_their_packages(self, make_item, memfs):
         memfs.pipe_file("/t/_delta_log/00000000000000000000.json", b"{}")
         chain = SupportChain(default_supports())
-        recipes = chain.recipes(DeltaLake(), make_target("/t"))
+        recipes = chain.recipes(DeltaLake(), *make_item("/t").args)
         packages = [[r.package for r in recipe.requirements] for recipe in recipes]
         assert packages == [["polars", "deltalake"], ["pyspark", "delta-spark"]]
 
     def test_query(self, tmp_path):
         path = tmp_path / "a.parquet"
         pl.DataFrame({"a": [1, 2]}).write_parquet(path)
-        lf = SupportChain(default_supports()).query(Parquet(), str(path), False)
+        lf = SupportChain(default_supports()).query(Parquet(), *local_item(path).args)
         assert lf.collect()["a"].to_list() == [1, 2]
 
 
 class TestExplorer:
     """``supports`` are tried before the explorer's ``default_supports()``."""
 
-    def test_given_first(self, make_target, mem_explorer):
+    def test_given_first(self, make_item, mem_explorer):
         duck = support(
-            fmt=Parquet, use=Missing, capabilities=("recipe",), recipe=lambda *a: "duck"
+            fmt=Parquet,
+            use=Missing,
+            capabilities=("recipe",),
+            recipe=lambda *a, **k: "duck",
         )
         explorer = StorageExplorer(fs=mem_explorer._fs, supports=[duck])
-        recipes = explorer._supports.recipes(Parquet(), make_target("/a.parquet", b""))
+        recipes = explorer._supports.recipes(
+            Parquet(), *make_item("/a.parquet", b"").args
+        )
         assert recipes[0].code == "duck"
         assert len(recipes) == 4  # and the defaults' polars, pandas, pyspark
 
-    def test_a_library_given_replaces_the_default_code(self, make_target):
+    def test_a_library_given_replaces_the_default_code(self, make_item):
         explorer = StorageExplorer(fs=None, supports=[CsvByPolars()])
-        recipes = explorer._supports.recipes(Csv(), make_target("/a.csv", b"a\n"))
+        recipes = explorer._supports.recipes(Csv(), *make_item("/a.csv", b"a\n").args)
         assert [r.requirements[0].package for r in recipes] == [
             "polars",
             "pandas",

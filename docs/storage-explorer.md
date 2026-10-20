@@ -109,9 +109,10 @@ the panel is open, clicking a file previews it; `open_preview=True` opens it fro
 
 ### Right-click
 
-Open in JupyterLab (to edit), Preview as, Query data in new tab, Python code to load the data, Copy URL; Copy, Cut,
-Paste; Create a folder, Rename, Delete; Download to local or to JupyterLab; Properties, Add bookmark. Preview and Python
-code are offered for what has a format, e.g. not a plain folder.
+Open in JupyterLab (to edit), Preview as, Query data in new tab, Python code to load the data, Copy URL (and on a local
+disk Copy path); Copy, Cut, Paste; Create a folder, Rename, Delete; Download to local or to JupyterLab; Properties, Add
+bookmark. Preview and Python code are offered for what has a format, e.g. not a plain folder. Local files' URLs are
+`file:///` URLs, e.g. `file:///home/jovyan/x.csv`; Copy path gives the plain path, as Copy puts it on the clipboard.
 
 <img src="figs/using-right-click.png" width="385" alt="The right-click menu of a JSON Lines file">
 
@@ -124,8 +125,8 @@ of files and folders, their total size, and the oldest and newest files.
 
 ### Bookmarks
 
-Right-click a folder → **Add bookmark**. ☆ lists them; click one to open it, right-click it for Copy URL and Delete
-bookmark.
+Right-click a folder → **Add bookmark**. ☆ lists them; click one to open it, right-click it for Copy URL (Copy path
+for a local folder) and Delete bookmark.
 
 <img src="figs/using-bookmarks.png" width="308" alt="The bookmarks menu">
 
@@ -193,7 +194,7 @@ StorageExplorer(filesystems={...}, transfer_policy=[
 ])
 ```
 
-URLs are those of "Copy URL"; files through JupyterLab's file browser are `jupyterlab://<absolute path>`, e.g.
+URLs are those of "Copy URL" (`file:///...` for local files); files through JupyterLab's file browser are `jupyterlab://<absolute path>`, e.g.
 `jupyterlab:///home/jovyan/x.csv`, and files on your computer `browser:///<name>`. A pattern left out matches any URL.
 A folder is checked as one item, by its own URL. It prevents mistakes; it is not a security boundary. For the launcher's
 tabs, use `transfer_policy()` in [its configuration](../launcher/README.md#configuration).
@@ -299,16 +300,19 @@ class ParquetByDuckDB(FormatSupport):
     use = DuckDB
     capabilities = ("query",)
 
-    def query(self, fmt, url, is_dir):
+    def query(self, fmt, location, fs, path, is_dir):
         # A folder's data files, as detection found them.
-        partitioned = is_dir and bool(fmt.layout(url).keys)
-        return DuckDB().load().read_parquet(fmt.data_url(url, is_dir), hive_partitioning=partitioned)
+        partitioned = is_dir and bool(fmt.layout(location, fs, path).keys)
+        url = fmt.data_url(location, fs, path, is_dir)
+        return DuckDB().load().read_parquet(url, hive_partitioning=partitioned)
 
 
 StorageExplorer("data", supports=[ParquetByDuckDB])
 ```
 
-`FormatSupport`'s docstring has the rules for writing one.
+Each method gets where the item is (`location`, which libraries doing their own I/O read: `library_url(location)`),
+the explorer's fsspec filesystem and the item's path in it (to read it through the explorer, e.g. for a preview), and
+whether it is a folder. `FormatSupport`'s docstring has the rules for writing one.
 
 ## Format options
 
@@ -353,8 +357,14 @@ explorer
 ```python
 explorer.folder_url  # the URL of the folder shown, e.g. to pass to polars or pandas
 explorer.selected_urls  # the URLs of the selected items
+explorer.folder_location  # where the folder shown is: its .url, and a local folder's .path
+explorer.selected_locations  # the same for the selected items
 explorer.query_result()  # the table in the data browser, with its filters; None if none
 ```
+
+Locations (`jupyter_storage_explorer.Location`) are immutable and compare equal when they name the same item: an
+`S3Location` has the bucket, key and endpoint, an `AbfsLocation` the account, container and path, a `LocalLocation` the
+plain path (`.os_path` in your system's form) and its machine. `.to_json()` and `Location.from_json()` keep them.
 
 `on_change(f)` calls `f(explorer)` when the folder shown or the selection changes, and `on_query_change(f)` when
 `query_result()` does: another table opened in the preview panel (or none), other filters, sort or columns, or the data
@@ -434,7 +444,7 @@ Filter by channel in the data browser, and the chart shows that channel's sales.
 | `max_browser_items=20_000`          | Folders with more items are filtered, sorted and paged by the kernel, one page at a time, instead of the browser (`None`: never).     |
 | `fetch_rows=...`                    | How the data browser reads pages; see [Reading pages](#reading-pages).                                                                |
 | `operations=[...]`                  | File operation extensions, tried before the defaults; see [File operation extensions](#file-operation-extensions).                   |
-| `filesystem_mappers=[...]`          | How storages are told apart and their URLs, tried before the defaults; see [File transfer](#file-transfer-between-file-systems).    |
+| `filesystem_mappers=[...]`          | The locations of storages' paths, by which they are told apart, tried before the defaults; see [File transfer](#file-transfer-between-file-systems). |
 | `transfer_policy=[...]`             | Rules for transfers of files between storages; see [Transfer policy](#transfer-policy).                                               |
 | `states="states.json"`              | Where bookmarks and the data browser's settings are kept (a path or an `ExplorerStates`); see [Remembered states](#remembered-states). |
 | `formats=[...]`                     | The formats files are detected as, replacing the defaults (`default_formats()`).                                                      |

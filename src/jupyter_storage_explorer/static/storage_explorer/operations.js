@@ -182,28 +182,25 @@ function createClipboard(x) {
       x.flash(`Turn on unsafe mode to ${cut ? "cut" : "copy"} folders`);
       return;
     }
-    const urls = await x.urlsOf(targets);
+    const locations = await x.locationsOf(targets);
     globalThis[CLIPBOARD] = {
       // Pasted in an explorer of the same kernel, they are read with this
-      // explorer's filesystem; otherwise from their URLs, on the filesystem
-      // of this one's identifier.
+      // explorer's filesystem; otherwise where their locations say.
       explorer: model.get("_explorer_id"),
       filesystem: x.storage(),
       cut,
       // Pasting folders needs unsafe mode again.
       folders: hasFolders,
-      files: targets.map(({ path }, i) => {
-        const url = urls[i];
-        return { path, url, name: basename(url) };
-      }),
+      files: targets.map(({ path }, i) => ({ path, name: basename(path), location: locations[i]?.location ?? null })),
     };
     const what = `${cut ? "Cut" : "Copied"} ${targets.length === 1 ? globalThis[CLIPBOARD].files[0].name : `${targets.length} items`}`;
     try {
-      await navigator.clipboard.writeText(urls.join("\n"));
+      // For pasting elsewhere: local items' plain paths, others' URLs.
+      await navigator.clipboard.writeText(locations.map((l, i) => l?.path ?? l?.url ?? targets[i].path).join("\n"));
       x.flash(what);
     } catch {
-      // Paste still works; only the URLs are not on the system clipboard.
-      x.flash(`${what} (the browser denied clipboard access for the URLs)`);
+      // Paste still works; only the text is not on the system clipboard.
+      x.flash(`${what} (the browser denied clipboard access for their locations)`);
     }
   }
 

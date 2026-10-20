@@ -80,20 +80,20 @@ class JobsMixin:
             return None
         source_url = urls.get((id(source_fs), _paths.norm(source)))
         if source_url is None:
-            source_url = self._location(source_fs, source)
+            source_url = self._policy_url(source_fs, source)
         return self._transfer_policy.error(
-            source_url, self._location(target_fs, target)
+            source_url, self._policy_url(target_fs, target)
         )
 
-    def _location(self, fs: AbstractFileSystem | None, path: str) -> str:
-        """``path``'s URL for the policy: ``_url``'s on the filesystem shown,
-        else (another storage, files without a URL) its mapper's, or fsspec's; for
-        fs None, the Jupyter server's disk through JupyterLab's file browser,
+    def _policy_url(self, fs: AbstractFileSystem | None, path: str) -> str:
+        """``path``'s URL for the policy: its location's (from the mapper of
+        its filesystem), else, for files without one, fsspec's; for fs None,
+        the Jupyter server's disk through JupyterLab's file browser,
         ``jupyterlab_url``'s."""
         if fs is None:
             return jupyterlab_url(path)
-        if (url := self._mappers.url_of(fs, path)) is not None:
-            return url
+        if (location := self._mappers.location_of(fs, path)) is not None:
+            return location.url
         return fs.unstrip_protocol(path)
 
     def _start(self, plan: Plan) -> dict[str, Any]:

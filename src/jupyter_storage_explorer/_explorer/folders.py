@@ -6,10 +6,7 @@ from typing import Any
 
 from jupyter_storage_explorer import _infos, _paths
 from jupyter_storage_explorer._explorer.listing import Listing
-from jupyter_storage_explorer.formats import (
-    DataFormat,
-    Target,
-)
+from jupyter_storage_explorer.formats import DataFormat
 from jupyter_storage_explorer.formats import detect as detect_format
 
 
@@ -74,7 +71,7 @@ class FoldersMixin:
             if info.get("type") == "directory":
                 child = _paths.norm(info["name"])
                 dirs.append({"name": _paths.basename(child), "path": child})
-                if self._url(child) is None:
+                if self._location_of(child) is None:
                     dirs[-1]["no_url"] = True
         dirs.sort(key=lambda d: d["name"].lower())
         self._tree = {**self._tree, path: dirs}
@@ -88,9 +85,9 @@ class FoldersMixin:
         "format", an index into "formats", whose first name is "" (none; all
         folders). Paths are not sent: an entry's is "dir" joined with its name,
         unless "paths" (otherwise None) gives them all, for a filesystem that
-        names them differently. URLs are not sent either, as most are never
-        used: the frontend asks for them ("urls") when copying; "no_url" lists
-        the indexes of the entries without one (see _url).
+        names them differently. Locations are not sent either, as most are never
+        used: the frontend asks for them ("locations") when copying; "no_url`r
+        lists the indexes of the entries without one (see _location_of).
         """
         listing: dict[str, Any] = {
             "dir": path,
@@ -121,7 +118,7 @@ class FoldersMixin:
             listing["ctimes"].append(None if ctime is None else int(ctime))
             listing["format"].append(format_index[fmt])
             paths.append(entry["path"])
-            if self._url(entry["path"]) is None:
+            if self._location_of(entry["path"]) is None:
                 listing["no_url"].append(i)
         if any(
             p != _paths.join(path, n)
@@ -225,11 +222,13 @@ class FoldersMixin:
         unrecognised files.
         """
         path = _paths.norm(info["name"])
-        if info.get("type") == "directory" or (url := self._url(path)) is None:
+        location = self._location_of(path)
+        if info.get("type") == "directory" or location is None:
             return ""
-        target = Target(fs=self._fs, path=path, url=url, info=info)
         try:
-            fmt = detect_format(target, self._formats)
+            fmt = detect_format(
+                location, self._fs, path, info, None, formats=self._formats
+            )
         except Exception:
             return ""  # detection is best-effort
         return fmt.name if fmt is not None else ""
@@ -238,19 +237,15 @@ class FoldersMixin:
         self, path: str, infos: list[dict[str, Any]]
     ) -> DataFormat | None:
         """The format of directory ``path`` given its listing, if any."""
-        url = self._url(path)
-        if url is None:
+        location = self._location_of(path)
+        if location is None:
             return None
         # The listing is all directory formats need, so skip fetching the
         # directory's own info.
-        target = Target(
-            fs=self._fs,
-            path=path,
-            url=url,
-            info={"name": path, "type": "directory"},
-            children=infos,
-        )
+        info = {"name": path, "type": "directory"}
         try:
-            return detect_format(target, self._formats)
+            return detect_format(
+                location, self._fs, path, info, infos, formats=self._formats
+            )
         except Exception:
             return None  # detection is best-effort; a failure just means no preview

@@ -71,7 +71,7 @@ The file has some of these functions, all optional:
 | `supports()`           | [Libraries of your own for formats](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#another-library-for-a-format) (`FormatSupport`), tried before the defaults |
 | `format_options()`     | The libraries' options, by library and format ([Format options](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#format-options)) |
 | `operations()`         | File operations of your own (`FileSystemOperations`), tried before the defaults           |
-| `filesystem_mappers()` | [How storages are told apart](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#file-transfer-between-file-systems) and their URLs (`FileSystemMapper`) |
+| `filesystem_mappers()` | The locations of storages' paths (`FileSystemMapper`), by which [storages are told apart](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#file-transfer-between-file-systems) |
 | `transfer_policy()`    | Rules of a [transfer policy](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#transfer-policy) |
 | `parameters()`         | Other `StorageExplorer` arguments ([StorageExplorer options](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#storageexplorer-options)), e.g. `{"height": "fill"}` |
 

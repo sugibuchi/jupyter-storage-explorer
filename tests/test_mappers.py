@@ -1,7 +1,9 @@
-"""fs_mappers: what filesystems reach, their URLs and back, and where files
-copied in another kernel are."""
+"""filesystems/mapper.py and mappers.py: the locations of filesystems' paths
+and back, and where files copied in another kernel are."""
 
 from __future__ import annotations
+
+import dataclasses
 
 import fsspec
 import pytest
@@ -9,23 +11,29 @@ from adlfs import AzureBlobFileSystem
 from fsspec import AbstractFileSystem
 from fsspec.implementations.dirfs import DirFileSystem
 
+from jupyter_storage_explorer import Location
 from jupyter_storage_explorer.filesystems import (
+    AbfsLocation,
     FileSystemMapper,
+    FsspecLocation,
+    GcsLocation,
+    LocalLocation,
     MapperChain,
+    MemoryLocation,
+    S3Location,
+    SftpLocation,
     default_mappers,
     same_filesystem,
 )
 
 chain = MapperChain(default_mappers())
-default_url, default_location = chain.url_of, chain.locate
-path_in, storage_of = chain.path_in, chain.storage_of
+location_of, path_in = chain.location_of, chain.path_in
 
 
-def locate(url, source, filesystems):
-    """Where an explorer with ``filesystems`` finds ``url``, copied from
-    filesystem ``source`` (maybe in another kernel)."""
-    sent = storage_of(source)
-    return default_location(url, sent["protocol"], sent["identifier"], filesystems)
+def locate(location, filesystems):
+    """Where an explorer with ``filesystems`` finds ``location``, sent from
+    another kernel (as JSON)."""
+    return chain.locate(Location.from_json(location.to_json()), filesystems)
 
 
 def azure(account="lake", key="a2V5", **kwargs):
@@ -80,94 +88,90 @@ class OtherFileSystem(AbstractFileSystem):
 
 
 class TestLocal:
-    def test_plain_paths(self, tmp_path):
+    def test_url_and_plain_path(self, tmp_path):
         fs = fsspec.filesystem("file")
-        assert default_url(fs, str(tmp_path)) == str(tmp_path)
+        path = fs._strip_protocol(str(tmp_path))
+        location = location_of(fs, path)
+        assert isinstance(location, LocalLocation)
+        assert location.path == path
+        assert location.url == f"file://{'' if path.startswith('/') else '/'}{path}"
+        assert location.os_path == str(tmp_path)
+        assert fs._strip_protocol(location.url) == path  # fsspec reads the URL
 
-    def test_identifier_is_the_machine(self):
-        identifier = storage_of(fsspec.filesystem("file"))
-        assert identifier["protocol"] == "file"
-        assert identifier["identifier"]["hostname"]
+    def test_the_machine(self):
+        location = location_of(fsspec.filesystem("file"), "/x")
+        assert location.hostname
 
     def test_round_trip(self, tmp_path):
         fs = fsspec.filesystem("file")
         path = fs._strip_protocol(str(tmp_path))
-        assert locate(default_url(fs, path), fs, [fs]) == (fs, path)
+        assert locate(location_of(fs, path), [fs]) == (fs, path)
 
     def test_another_machine_is_refused(self, tmp_path):
         fs = fsspec.filesystem("file")
+        elsewhere = dataclasses.replace(location_of(fs, "/x"), hostname="elsewhere")
         with pytest.raises(ValueError, match="not reachable from this kernel"):
-            default_location(str(tmp_path), "file", {"hostname": "elsewhere"}, [fs])
+            locate(elsewhere, [fs])
 
 
 class TestMemory:
     def test_url(self, memfs):
-        assert default_url(memfs, "/a/b.csv") == "memory:///a/b.csv"
+        assert location_of(memfs, "/a/b.csv").url == "memory:///a/b.csv"
 
     def test_the_first_that_reaches_it(self, memfs):
         other = DirFileSystem("/sub", memfs)
         local = fsspec.filesystem("file")
-        assert locate("memory:///x", memfs, [local, other, memfs]) == (memfs, "/x")
+        location = location_of(memfs, "/x")
+        assert locate(location, [local, other, memfs]) == (memfs, "/x")
 
     def test_else_opened_by_fsspec(self, memfs):
-        fs, path = locate("memory:///x", memfs, [])
+        fs, path = locate(location_of(memfs, "/x"), [])
         assert fs is memfs and path == "/x"
 
     def test_another_process_is_refused(self, memfs):
         """fsspec would open this process's memory: not where the files are."""
         with pytest.raises(ValueError, match="not reachable from this kernel"):
-            default_location("memory:///x", "memory", {"process": "other"}, [memfs])
+            locate(MemoryLocation(path="/x", process="other"), [memfs])
 
 
 class TestAzure:
     def test_urls_name_the_account(self):
-        assert (
-            default_url(azure(), "data/raw/x.csv")
-            == "abfs://data@lake.dfs.core.windows.net/raw/x.csv"
+        location = location_of(azure(), "data/raw/x.csv")
+        assert location == AbfsLocation(
+            account_name="lake", container_name="data", path="raw/x.csv"
         )
+        assert location.url == "abfs://data@lake.dfs.core.windows.net/raw/x.csv"
 
     def test_other_cloud_keeps_its_domain(self):
         fs = azure("acc", account_host="acc.blob.core.chinacloudapi.cn")
-        assert default_url(fs, "c/k") == "abfs://c@acc.dfs.core.chinacloudapi.cn/k"
+        assert location_of(fs, "c/k").url == "abfs://c@acc.dfs.core.chinacloudapi.cn/k"
 
     def test_without_known_host_adlfs_urls(self, monkeypatch):
         fs = azure("devstoreaccount1")
         monkeypatch.setattr(
             fs, "account_url", "http://127.0.0.1:10000/devstoreaccount1"
         )
-        assert default_url(fs, "c/k") == "abfs://c/k"
+        location = location_of(fs, "c/k")
+        assert location.url == "abfs://c/k"
+        assert location.account_name == "devstoreaccount1"
 
-    def test_identifier_is_the_account_name(self):
-        assert storage_of(azure()) == {
-            "protocol": "abfs",
-            "identifier": {"account_name": "lake"},
-        }
+    def test_an_instance_reaches_its_accounts_containers(self):
+        """adlfs's file system is the account; Azure's would be a container."""
+        lake = azure()
+        for path in ("", "data", "logs/2026/x.csv"):
+            assert path_in(lake, location_of(lake, path)) == path
 
     def test_found_by_account(self):
         lake, other = azure(), azure("other")
-        url = "abfs://data@lake.dfs.core.windows.net/raw/x.csv"
-        assert locate(url, lake, [other, lake]) == (lake, "data/raw/x.csv")
+        location = location_of(lake, "data/raw/x.csv")
+        assert locate(location, [other, lake]) == (lake, "data/raw/x.csv")
 
-    def test_short_urls_are_read_with_the_identifier(self):
-        """adlfs's own URLs leave the account out: the identifier tells it."""
-        lake = azure()
-        assert locate("abfs://data/raw/x.csv", lake, [lake]) == (lake, "data/raw/x.csv")
-
-    def test_another_accounts_url_is_not_read(self):
-        lake = azure()
-        assert (
-            path_in(
-                lake,
-                "abfs",
-                {"account_name": "lake"},
-                "abfs://d@other.dfs.core.windows.net/x",
-            )
-            is None
-        )
+    def test_another_accounts_location_is_not_read(self):
+        assert path_in(azure(), location_of(azure("other"), "d/x")) is None
 
     def test_else_opened_by_fsspec(self):
-        url = "abfs://data@fresh.dfs.core.windows.net/raw/x.csv"
-        fs, path = locate(url, azure("fresh"), [azure()])
+        location = location_of(azure("fresh"), "data/raw/x.csv")
+        fs, path = locate(location, [azure()])
         assert (fs.account_name, path) == ("fresh", "data/raw/x.csv")
 
     def test_credentials_are_not_part_of_it(self):
@@ -178,66 +182,59 @@ class TestAzure:
 class TestObjectStores:
     def test_s3(self):
         fs = S3FileSystem()
-        assert default_url(fs, "bucket/k.csv") == "s3://bucket/k.csv"
-        assert storage_of(fs)["identifier"] == {"partition": "aws"}
-        assert (
-            path_in(fs, "s3", {"partition": "aws"}, "s3a://bucket/k.csv")
-            == "bucket/k.csv"
-        )
+        location = location_of(fs, "bucket/k.csv")
+        assert location == S3Location(bucket="bucket", key="k.csv", partition="aws")
+        assert location.url == "s3://bucket/k.csv"
+        assert path_in(fs, location) == "bucket/k.csv"
 
     @pytest.mark.parametrize(
-        ("kwargs", "identifier"),
+        ("kwargs", "where"),
         [
-            ({"client_kwargs": {"region_name": "cn-north-1"}}, {"partition": "aws-cn"}),
-            ({"endpoint_url": "HTTP://MinIO:9000/"}, {"endpoint": "http://minio:9000"}),
+            ({}, (None, "aws")),
+            ({"client_kwargs": {"region_name": "cn-north-1"}}, (None, "aws-cn")),
+            ({"endpoint_url": "HTTP://MinIO:9000/"}, ("http://minio:9000", None)),
             (
                 {"client_kwargs": {"endpoint_url": "http://minio:9000"}},
-                {"endpoint": "http://minio:9000"},
+                ("http://minio:9000", None),
             ),
         ],
     )
-    def test_s3_identifiers(self, kwargs, identifier):
-        assert storage_of(S3FileSystem(**kwargs))["identifier"] == identifier
+    def test_s3_endpoints_and_partitions(self, kwargs, where):
+        location = location_of(S3FileSystem(**kwargs), "b/k")
+        assert (location.endpoint, location.partition) == where
 
     def test_s3_endpoints_are_told_apart(self):
         aws, minio = S3FileSystem(), S3FileSystem(endpoint_url="http://minio:9000")
         assert not same_filesystem(aws, minio)
-        with pytest.raises(ValueError, match="not reachable"):
-            locate("s3://bucket/k.csv", minio, [aws])
+        on_minio = location_of(minio, "bucket/k.csv")
+        assert on_minio.url == location_of(aws, "bucket/k.csv").url
+        assert on_minio != location_of(aws, "bucket/k.csv")
+        assert path_in(aws, on_minio) is None
 
     def test_gcs(self):
-        fs = GCSFileSystem()
-        assert default_url(fs, "bucket/k.csv") == "gs://bucket/k.csv"
-        assert storage_of(fs) == {"protocol": "gs", "identifier": {}}
-        emulator = GCSFileSystem("http://localhost:4443")
-        assert storage_of(emulator)["identifier"] == {
-            "endpoint": "http://localhost:4443"
-        }
+        location = location_of(GCSFileSystem(), "bucket/k.csv")
+        assert location == GcsLocation(bucket="bucket", key="k.csv")
+        assert location.url == "gs://bucket/k.csv"
+        emulator = location_of(GCSFileSystem("http://localhost:4443"), "b/k")
+        assert emulator.endpoint == "http://localhost:4443"
 
 
 class TestSFTP:
     def test_host_port_and_user(self):
         fs = SFTPFileSystem("Server.example.com", username="alice", port=2222)
-        assert storage_of(fs)["identifier"] == {
-            "host": "server.example.com",
-            "port": 2222,
-            "user": "alice",
-        }
-        url = default_url(fs, "/home/alice/x.txt")
-        assert url == "sftp://alice@server.example.com:2222/home/alice/x.txt"
-        assert locate(url, fs, [fs]) == (fs, "/home/alice/x.txt")
+        location = location_of(fs, "/home/alice/x.txt")
+        assert location == SftpLocation(
+            host="server.example.com", port=2222, user="alice", path="/home/alice/x.txt"
+        )
+        assert location.url == "sftp://alice@server.example.com:2222/home/alice/x.txt"
+        assert locate(location, [fs]) == (fs, "/home/alice/x.txt")
 
     def test_users_are_told_apart(self):
         """A server may show each user a tree of their own."""
         alice = SFTPFileSystem("server", username="alice")
         bob = SFTPFileSystem("server", username="bob")
         assert not same_filesystem(alice, bob)
-        assert (
-            path_in(
-                bob, "sftp", storage_of(alice)["identifier"], "sftp://alice@server:22/x"
-            )
-            is None
-        )
+        assert path_in(bob, location_of(alice, "/x")) is None
 
 
 class TestSSHFS:
@@ -246,51 +243,45 @@ class TestSSHFS:
             SSHFileSystem("Server.example.com", username="alice", port=2222),
             SSHFileSystem(host="server.example.com", username="alice", port=2222),
         ):
-            assert storage_of(fs) == {
-                "protocol": "sftp",
-                "identifier": {
-                    "host": "server.example.com",
-                    "port": 2222,
-                    "user": "alice",
-                },
-            }
-            url = default_url(fs, "/home/alice/x.txt")
-            assert url == "sftp://alice@server.example.com:2222/home/alice/x.txt"
+            location = location_of(fs, "/home/alice/x.txt")
+            assert (location.host, location.port, location.user) == (
+                "server.example.com",
+                2222,
+                "alice",
+            )
+            assert (
+                location.url == "sftp://alice@server.example.com:2222/home/alice/x.txt"
+            )
 
     def test_one_storage_with_fsspecs_sftp(self):
         """Files copied from one implementation are found on the other."""
         sshfs = SSHFileSystem("server", username="alice")
         sftp = SFTPFileSystem("server", username="alice")
-        url = default_url(sftp, "/x.txt")
-        assert locate(url, sftp, [sshfs]) == (sshfs, "/x.txt")
-        assert locate(url, sshfs, [sftp]) == (sftp, "/x.txt")
+        assert locate(location_of(sftp, "/x.txt"), [sshfs]) == (sshfs, "/x.txt")
+        assert locate(location_of(sshfs, "/x.txt"), [sftp]) == (sftp, "/x.txt")
         assert same_filesystem(sshfs, sftp)
 
 
 class TestDirFileSystem:
-    """Views of a folder of another filesystem: its URLs, under the folder."""
+    """Views of a folder of another filesystem: its locations, under the folder."""
 
-    def test_urls_of_the_filesystem_wrapped(self, memfs):
+    def test_locations_of_the_filesystem_wrapped(self, memfs):
         view = DirFileSystem("/base", memfs)
-        assert default_url(view, "x.txt") == "memory:///base/x.txt"
-        assert storage_of(view) == storage_of(memfs)
+        assert location_of(view, "x.txt") == location_of(memfs, "/base/x.txt")
 
     def test_found_in_the_view(self, memfs):
         view = DirFileSystem("/base", memfs)
-        assert locate("memory:///base/sub/x.txt", memfs, [view]) == (view, "sub/x.txt")
+        location = location_of(memfs, "/base/sub/x.txt")
+        assert locate(location, [view]) == (view, "sub/x.txt")
 
     def test_not_outside_its_folder(self, memfs):
         view = DirFileSystem("/base", memfs)
-        assert (
-            path_in(view, *storage_of(memfs).values(), "memory:///other/x.txt") is None
-        )
+        assert path_in(view, location_of(memfs, "/other/x.txt")) is None
 
     def test_nested(self, memfs):
         view = DirFileSystem("b", DirFileSystem("/a", memfs))
-        assert default_url(view, "x.txt") == "memory:///a/b/x.txt"
-        assert (
-            path_in(view, *storage_of(memfs).values(), "memory:///a/b/x.txt") == "x.txt"
-        )
+        assert location_of(view, "x.txt").url == "memory:///a/b/x.txt"
+        assert path_in(view, location_of(memfs, "/a/b/x.txt")) == "x.txt"
 
     def test_same_filesystem_by_folder(self, memfs):
         assert same_filesystem(
@@ -304,13 +295,15 @@ class TestDirFileSystem:
 
 class TestUnknownFilesystems:
     def test_fsspec_urls(self):
-        assert default_url(OtherFileSystem(), "/x") == "other:///x"
-        assert storage_of(OtherFileSystem()) == {"protocol": "other", "identifier": {}}
+        location = location_of(OtherFileSystem(), "/x")
+        assert location == FsspecLocation(url="other:///x")
+        assert location.protocol == "other"
 
     def test_the_first_with_the_protocol(self, memfs):
         """Nothing tells such filesystems apart: as before mappers."""
         b = OtherFileSystem("b")
-        assert locate("other:///x", OtherFileSystem("a"), [memfs, b]) == (b, "/x")
+        location = location_of(OtherFileSystem("a"), "/x")
+        assert locate(location, [memfs, b]) == (b, "/x")
 
     def test_never_opened_from_the_url(self, memfs, monkeypatch):
         """Without a mapper, nothing tells whether a filesystem opened from a
@@ -321,19 +314,10 @@ class TestUnknownFilesystems:
             opened.append,
         )
         for url in ("http://169.254.169.254/latest/meta-data/", "ftp://host/x"):
+            location = FsspecLocation(url=url)
             with pytest.raises(ValueError, match="not reachable from this kernel"):
-                default_location(url, url.split(":")[0], {}, [memfs])
+                locate(location, [memfs])
         assert opened == []
-
-    def test_claiming_a_mapped_protocol_does_not_help(self, memfs):
-        """An http URL sent as an S3 file: the filesystem it opens is not S3."""
-        with pytest.raises(ValueError, match="not reachable from this kernel"):
-            default_location(
-                "http://169.254.169.254/latest/meta-data/",
-                "s3",
-                {"partition": "aws"},
-                [memfs],
-            )
 
     def test_same_as_fsspec_compares(self):
         assert same_filesystem(OtherFileSystem("a"), OtherFileSystem("a"))
@@ -346,23 +330,23 @@ def test_same_filesystem(memfs):
     assert not same_filesystem(memfs, fsspec.filesystem("file"))
 
 
-def test_unreachable(memfs):
-    with pytest.raises(ValueError, match="not reachable from this kernel"):
-        default_location("nope://x", "nope", {}, [memfs])
-
-
 def test_mappers_given_first(memfs):
+    @dataclasses.dataclass(frozen=True, kw_only=True)
+    class TestsLocation(Location):
+        kind = "tests-memory"
+        path: str
+        url = property(lambda self: f"memory://tests{self.path}")
+
     class Namespaced(FileSystemMapper):
-        protocol = "memory"
         classes = ("fsspec.implementations.memory.MemoryFileSystem",)
 
-        def identifier(self, fs):
-            return {"namespace": "tests"}
+        def to_location(self, fs, path):
+            return TestsLocation(path=path)
 
-        def to_url(self, fs, path):
-            return f"memory://tests{path}"
+        def path_of(self, fs, location):
+            return location.path if isinstance(location, TestsLocation) else None
 
     mine = MapperChain([Namespaced(), *default_mappers()])
-    assert mine.url_of(memfs, "/x") == "memory://tests/x"
-    assert mine.storage_of(memfs)["identifier"] == {"namespace": "tests"}
-    assert default_url(memfs, "/x") == "memory:///x"
+    assert mine.location_of(memfs, "/x").url == "memory://tests/x"
+    assert mine.locate(TestsLocation(path="/x"), [memfs]) == (memfs, "/x")
+    assert location_of(memfs, "/x").url == "memory:///x"

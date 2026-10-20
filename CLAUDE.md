@@ -33,8 +33,10 @@ Python and `static/` changes need no build: restart the kernel. The launcher's J
 
 ## Tests
 
-The Python tests: fixtures in `tests/conftest.py` are `memfs` (a cleared fsspec memory filesystem), `make_target`
-(writes a file there and returns its `Target`), and `mem_explorer` and `local` (explorers of those). Anything polars
+The Python tests: fixtures in `tests/conftest.py` are `memfs` (a cleared fsspec memory filesystem), `make_item`
+(writes a file there and returns it as an `Item` of `tests/items.py`: its location, filesystem, path, info and
+listing, spread into formats' and supports' methods as `*item.match_args` and `*item.args`; `local_item` for a
+local file), and `mem_explorer` and `local` (explorers of those). Anything polars
 reads by URL (`query`, polars previews, the data browser) needs real local files (`tmp_path`), as polars cannot read
 `memory://`. The data browser's tests run each filter on polars, pandas, PyArrow, DuckDB and sqlframe (the PySpark API
 on DuckDB, which narwhals queries as it does Spark; real Spark needs Java, so it is not tested). The widget tests
@@ -62,9 +64,10 @@ explorer of exactly its own version (`launcher/hatch_build.py` sets its dependen
   and `DataExplorer` (a dataframe given by the user, any library narwhals supports, with `QuerySettings`). Runtime
   dependencies are only anywidget, fsspec, narwhals, pygments, traitlets; polars, pandas, pyarrow, deltalake, fastexcel,
   openpyxl, Pillow, PySpark are all optional and probed at run time. The "abfs" extra adds adlfs and the Data Lake SDK,
-  for `filesystems/abfs.py`. Its top level has the widgets (`storage_explorer.py`, `data_explorer.py`) and small
+  for `filesystems/abfs.py`. Its top level has the widgets (`storage_explorer.py`, `data_explorer.py`), the
+  `Location` interface (`location.py`) and small
   private helpers (`_paths`, `_infos`, `_json`, `_static`, `_callbacks`); the rest is in packages: public, `filesystems/`
-  (`mapper.py`: the `FileSystemMapper` interface and `MapperChain`; `mappers.py`: the predefined mappers;
+  (`locations.py`: the predefined locations; `mapper.py`: the `FileSystemMapper` interface and `MapperChain`; `mappers.py`: the predefined mappers;
   `operation.py`: the `FileSystemOperations` interface; `operations.py`: the predefined operations; `abfs.py`: the
   opt-in Data Lake operation) and `formats/`; private, `_explorer/`
   (`StorageExplorer`'s mixins, with `states.py`, `listing.py` and `jupyterlab_files.py`), `_jobs/` (`tasks.py`:
@@ -112,7 +115,8 @@ the traits' observers; `_query_changed`: the query shown in the preview panel an
 data browser's replies and on `_preview` changes, not while one loads).
 
 `StorageExplorer` keeps its state (set up in `__init__`), the messages' routing, the traitlets observers (they must be
-on the class itself), the URLs (`_url`, from its `MapperChain`) and the fsspec calls. Its features are mixins in `_explorer/`,
+on the class itself), the locations of paths (`_location_of`, from its `MapperChain`; `_url`, its URL; `_location_reply`, what the
+frontend gets) and the fsspec calls. Its features are mixins in `_explorer/`,
 listed before `AnyWidget` in its bases, which only hold methods: `FoldersMixin` (`folders.py`: the list and the tree),
 `PreviewsMixin` (`previews.py`: previews, the data browser, query tabs, the right-click menu's formats),
 `BookmarksMixin`, `JupyterLabFilesMixin` (`jupyterlab.py`), `JobsMixin` (`jobs.py`: running file operations as jobs,
@@ -134,21 +138,35 @@ so their order rarely matters. Third-party code is vendored in `static/vendor/`.
 sync.
 
 **Storage.** Everything is an fsspec filesystem; `StorageExplorer` can hold several named ones (`filesystems=`).
-What a filesystem reaches and its URLs come from mappers (`filesystems/mapper.py`, the `filesystem_mappers=` argument,
+Where files are is a `Location` (`location.py`): independent of fsspec's implementations, so it travels to other
+kernels, files and libraries doing their own I/O. A frozen, keyword-only dataclass, normalized when made (hosts and
+accounts in lower case, endpoints as origins, no trailing "/"; whether it is a folder is not part of it), so equal
+locations name the same item and are dict keys. A subclass gives only its fields, `kind` and `url` (the common form,
+which the fsspec implementation also reads); `protocol` comes from the URL, and `to_json()`/`Location.from_json()`
+(`{"kind", "url", ...fields}`; subclasses register by `kind`; an unknown kind becomes an `FsspecLocation`, the URL in
+the JSON being ignored for known kinds). Locations do not say which storage they are on: what one fsspec instance
+reaches depends on the implementation (adlfs reaches an account's containers; Azure has a file system per
+container), so only mappers tell it (`path_of`). The
+predefined ones are in `filesystems/locations.py`: `AbfsLocation` (account, container, path, endpoint suffix:
+`abfs://container@account.dfs.core.windows.net/path`; adlfs's `abfs://container/path` with an emulator),
+`S3Location` (bucket, key, endpoint or AWS partition: `s3://bucket/key`), `GcsLocation`, `SftpLocation` (host, port,
+user, path), `LocalLocation` (`path` as fsspec names it, "C:/x" on Windows, `os_path` the system's form, hostname
+and machine id: `file:///...`), `MemoryLocation` (path, process), `FsspecLocation` (fsspec's URL, for filesystems
+no mapper knows). Locations come from mappers (`filesystems/mapper.py`, the `filesystem_mappers=` argument,
 then `default_mappers()` of `mappers.py`): a `FileSystemMapper` per fsspec implementation, matched by qualified class names through the MRO
 (so optional packages are not imported; tests fake s3fs, gcsfs, fsspec's SFTP and sshfs classes by `__module__`). It gives
-`identifier(fs)` (JSON, no credentials; defined per protocol, so implementations of one protocol agree: adlfs
-`{"account_name"}`, s3fs the endpoint or AWS partition, gcsfs `{}`, SFTP (fsspec's, and sshfs's from `fs.storage_args`/`storage_options`) host, port and user, local disk the machine,
-memory the process), `to_url` (plain paths for local files, `abfs://container@account.dfs.core.windows.net/...` for
-Azure, `s3://`, `gs://`, `sftp://user@host:port/...`; None for items without a URL) and `path_of`, the reverse.
-`MapperChain` (`mapper.py`, the explorer's `_mappers`: its mappers then the defaults) asks them: `url_of`, `storage_of` (`{"protocol", "identifier"}`,
-synced as `_storage_identity` and sent with files copied or dragged), `same_filesystem` (equal protocol and identifier,
-so the same storage opened with other credentials is one; unknown filesystems, `FsspecMapper`, compare as fsspec does)
-and `locate`, for files pasted from another kernel: the first of the explorer's storages whose mapper accepts the
-identifier and parses the URL, else, for protocols a mapper knows (never others: the kernel would connect wherever a dropped URL points),
-`url_to_fs(url)` if it has the same identifier, else refused (so another
-kernel's memory or another machine's disk is never read). `DirFileSystem`s are not mapped: the chain unwraps them, so
-their URLs are those of the filesystem they wrap, and `same_filesystem` also compares their folders. File operations
+`to_location(fs, path)` (no credentials; locations are defined per kind of storage, so implementations of one agree:
+SFTP's from fsspec's and from sshfs's `fs.storage_args`/`storage_options`; "" gives the top folder; None for items
+without one) and `path_of(fs, location)`, the reverse, None unless `fs` reaches it, which each concrete mapper decides
+from the location's fields and the instance's settings (the account and cloud, the endpoint or partition, the
+server, port and user, the machine, the process). `MapperChain` (`mapper.py`, the explorer's `_mappers`: its mappers
+then the defaults) asks them: `location_of`, `path_in`, `same_filesystem` (each reaches the other's top folder, so
+the same storage opened with other credentials is one; unknown filesystems, `FsspecMapper`, compare as fsspec does) and
+`locate(location, filesystems)`, for files pasted from another kernel: the first of the explorer's storages that
+reaches it, else, for kinds other than `FsspecLocation` (never those: the kernel would connect wherever a dropped
+URL points), `url_to_fs(location.url)` if it reaches it, else refused (so another kernel's memory or another
+machine's disk is never read). `DirFileSystem`s are not mapped: the chain unwraps them, so
+their locations are those of the filesystem they wrap, and `same_filesystem` also compares their folders. File operations
 are told by `FileTasks` with `move`'s and `copy`'s required keyword `same` (the explorer's chain); outside an
 explorer, callers pass it themselves (e.g. the module-level `same_filesystem`, of the default mappers).
 
@@ -213,11 +231,11 @@ and `dest` both `fullmatch`, with their named groups capturing the same text in 
 patterns must have the same group names) apply to every copy and move, within a filesystem as well as between
 filesystems. They are checked in the kernel only, per item as it is planned: `FileTasks._refused` calls its `check`
 (the explorer's `_transfer_error`) from `_plan_moves`, `rename`, `_plan_copies` and `download`, and refused items
-become errors while the others go on. URLs come from `_location` (the mappers' `url_of`, else fsspec's; files pasted keep
-the URL they were copied with, from `_paste_sources`). Transfers with the user's computer use `computer_url(name)`
+become errors while the others go on. URLs come from `_policy_url` (the location's, else fsspec's; files pasted keep
+the URL of the location they were copied with, from `_paste_sources`). Transfers with the user's computer use `computer_url(name)`
 (`browser:///<name>`): checked in `_download` and `_upload_chunk`. Transfers with JupyterLab's file browser (uploads
-from it, both downloads to the server) pass filesystem None to `check` for that side, which `_location` makes
-`jupyterlab_url(path)` (`jupyterlab://<absolute path>`), unlike the explorer's own local storage (plain paths). Not a
+from it, both downloads to the server) pass filesystem None to `check` for that side, which `_policy_url` makes
+`jupyterlab_url(path)` (`jupyterlab://<absolute path>`), unlike the explorer's own local storage (`file:///`). Not a
 security boundary.
 
 **Between explorers and with JupyterLab.** Drags of items from the list carry one type,
@@ -233,15 +251,20 @@ drags from others' before the drop by `explorer`) and
 functions (`canOpen`, `open`,
 `openWidget`) under `"jupyter-storage-explorer.jupyterlab"`, which the explorer offers ("Open in JupyterLab", "Query
 data in new tab") only when they are there. Explorers on a page may be in different kernels (notebooks). The
-clipboard names the explorer and storage copied from: an explorer of the same kernel is found in `explorers` (by
-`_explorer_id`) and its filesystem object used as it is (`_paste_sources`); otherwise the files' URLs are read back
-with `MapperChain.locate`, from the identifier sent with them. After pasting files cut in another explorer, the frontend dispatches a
+clipboard names the explorer and storage copied from (`{name}`), and each file's path and location (its JSON, from
+the `"locations"` request: `_location_reply`): an explorer of the same kernel is found in `explorers` (by
+`_explorer_id`) and its filesystem object used as it is (`_paste_sources`); otherwise the files' locations are found
+with `MapperChain.locate`. Copy also puts local items' plain paths (`os_path`), others' URLs, on the system clipboard;
+"Copy path" (and the bookmarks menu's) is offered on local storages (trait `_local_paths`). After pasting files cut in another explorer, the frontend dispatches a
 `"jupyter-storage-explorer:changed"` event on `globalThis`, so that explorer asks its kernel to show what is left
 (`"changed"`, `_sources_changed`).
 
 **States** (`_explorer/states.py`). `ExplorerStates` keeps what explorers remember: bookmarks (storage name, folder, and
-its URL when bookmarked, as `_url` only resolves the storage shown) and the data browser's queries (URL, settings, mode
-chosen), the most recent first, at most `max_queries`. One in memory (`default_states`) is shared by the kernel's
+its location when bookmarked, as `_location_of` only resolves the storage shown) and the data browser's queries
+(keyed by location, or a string such as `DataExplorer`'s; URL, location JSON, settings, mode chosen), the most recent
+first, at most `max_queries`. Entries with a URL only (from strings, or written before locations, when local files'
+URLs were plain paths) still match a location of that URL or plain path (`_is_query_of`), and are rewritten with
+the location at their next change. One in memory (`default_states`) is shared by the kernel's
 explorers unless `states=` gives another, or a file's path (`explorer_states`: one object per file in the kernel). With
 a path it is a JSON file shared with other kernels (each launcher tab is one; the launcher defaults to
 `<jupyter_config_dir>/storage-explorer/states.json`): read again when an explorer is created and before each change,
@@ -252,7 +275,7 @@ bookmarks (star) menu opens (`"bookmarks"`, ...), as other explorers may have ch
 **Lists.** The file list is filtered (by name), sorted and paged (100 per page) in the browser, from the full listing
 the kernel sends; the selection survives filtering and paging. Folders can hold tens of thousands of items, so the
 listing (`_listing`, see `_make_listing`) is sent as columns, without paths or URLs: the frontend joins paths and asks
-for URLs (`"urls"`) when copying, and sorts once per listing, not per keystroke. Folders of more than
+for locations (`"locations"`) when copying and for tooltips, and sorts once per listing, not per keystroke. Folders of more than
 `max_browser_items` are handled by the kernel instead (`_explorer/listing.py`): `_listing` then only gives their size
 and a version, and the frontend asks for pages (`"list"`), filtering the rows shown while it waits; sorting and filters
 there follow the browser's as closely as Python allows (natural order ignoring case and accents; Python's `re`). Filters
@@ -260,24 +283,29 @@ there follow the browser's as closely as Python allows (natural order ignoring c
 The list's is cleared when another folder's listing arrives, not on the click, so the previous folder's items never show
 unfiltered.
 
-**Formats** (`formats/`). Laid out as `filesystems/`: the interfaces `DataFormat` (`base.py`, with `Target`,
-`Recipe`, `detect`, `FILE_ICONS`, and the generated code's helpers), `FormatSupport` (`support.py`, with `SupportChain` and `Capability`) and `Requirement`
+**Formats** (`formats/`). Laid out as `filesystems/`: the interfaces `DataFormat` (`base.py`, with
+`detect`, `FILE_ICONS`, the helpers reading a file through its filesystem, `head_text`, `read_whole`,
+`file_size`, `name_of`, `child_names`, and the generated code's helpers), `FormatSupport` (`support.py`, with `SupportChain`, `Capability` and `Recipe`) and `Requirement`
 (`requirement.py`); a module per predefined format (`delta.py`, `parquet.py`, `excel.py`, `text.py`, `images.py`) and
 per library of the predefined supports in `supports/` (`polars.py`, `pandas.py`, `pyspark.py`, `fsspec.py`,
 `pillow.py`; `python.py` for those needing no package; named after the libraries, which they import only inside
 methods; exported by `formats.supports`, not `formats`); the predefined packages in `requirements.py`, the
-previews in `preview.py` (tables from dataframes in `frames.py`), the generated code's helpers in `base.py`
-(`snippet_options`, `format_kwargs`, `spark_url`), and the defaults in `utils.py` (`DEFAULT_FORMATS`,
+previews in `preview.py` (tables made from dataframes in each library's support module, their notes in `frames.py`), the generated code's helpers in `base.py`
+(`snippet_options`, `format_kwargs`, `library_url`: a location as most libraries read it, a local
+file's plain path), and the defaults in `utils.py` (`DEFAULT_FORMATS`,
 `DEFAULT_SUPPORTS`, `create_supports`). A format only detects; a support handles one format's data with one library,
 so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
 - `DataFormat` subclasses declare `name`, `label`, `priority`, `extensions`, `file_icon` (its files' icon in the list:
   one of `FILE_ICONS`, or `(name, svg)` for one of its own, shown as an `<img>` so its scripts never run; sent as
   `_format_icons` and `_file_icon_svgs`, checked by `format_icons()`; files of formats without one, e.g. Text's, get
-  their extension's icon, `FILE_ICON_EXTENSIONS` in `icons.js`) and implement `matches(target)`: cheap detection,
-  called on every click; directory formats (Delta, Parquet datasets) inspect `target.children`. Parquet also takes
+  their extension's icon, `FILE_ICON_EXTENSIONS` in `icons.js`) and implement `matches(location, fs, path, info,
+  children)`: cheap detection, called on every click (`children` the listing of a folder, None for a file; `fs` and
+  `path` the explorer's, to read more); directory formats (Delta, Parquet datasets) inspect `children`. `detect` and
+  `matching_formats` take the same and `formats=`. Parquet also takes
   Hive-style partition folders (`year=…/month=…/`), followed down one branch (one more `ls` per partition column,
-  `_partitioned_layout`), and keeps each directory's `ParquetLayout` by URL for the supports' `query`, which gets the
-  URL only (`layout(url)`; a URL it has not seen is detected again through fsspec, `_discover`). The highest
+  `_partitioned_layout`), and keeps each directory's `ParquetLayout` by location, for the supports
+  (`layout(location, fs, path)`: one not seen is detected then through `fs`; without `fs`, its own "*.parquet" files;
+  `data_url`, `first_files`). The highest
   `priority` wins (Delta 20 > Parquet 10 > default 0 > Text -10). What supports share about a format is on it
   (`Csv.separator`, `Text.language`, `Image.mime_type`, `Parquet.data_url`, ...).
 - `FormatSupport` subclasses declare `format` (matched with `isinstance`, so subclasses too: `MarkdownByPython` comes
@@ -286,21 +314,26 @@ so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
   `"query"`, `"recipe"`; `Capability`; not "jobs" or "tasks", which are file operations here): the explorer reads only
   `capabilities`, so a method not listed is never called (no runtime check of that, by design: users are expected to
   generate supports with AI from the written rules in `FormatSupport`'s docstring, kept by
-  `test_capabilities_are_the_methods_implemented` for the defaults). Each method gets the detected format object first; any may raise `FormatSupport.NotSupported`
-  for a target, and the next support is tried. Options are keyword-only `__init__` arguments, no `**kwargs`. Class
+  `test_capabilities_are_the_methods_implemented` for the defaults). Each method gets the detected format object first, then the item: its location (for
+  libraries doing their own I/O and for the code: `library_url(location)`; Spark's `spark_url(location.url)`, in `supports/pyspark.py`), the explorer's
+  fsspec filesystem and the item's path in it (to read it through the explorer, with its credentials), and `is_dir`;
+  `preview`'s `limits` is keyword-only. Any may raise `FormatSupport.NotSupported`
+  for an item, and the next support is tried. Options are keyword-only `__init__` arguments, no `**kwargs`. Class
   names are `<Format>By<Library>`.
 - `SupportChain` (the explorer's `_supports`: `supports=` then `StorageExplorer.default_supports()`, i.e.
   `DEFAULT_SUPPORTS`, ordered format by format, most preferred first) calls them: `preview` and `query` of the
   first support installed for the format (`installed`; `can_query`), `recipes` with the first support with `"recipe"` of each library (so one given replaces the default's),
   installed or not (the code may run elsewhere).
-- `preview(fmt, target, limits)`: one `Preview` dataclass (`TablePreview`, `TextPreview`, `TreePreview`,
+- `preview(fmt, location, fs, path, is_dir, *, limits)`: one `Preview` dataclass (`TablePreview`, `TextPreview`, `TreePreview`,
   `MediaPreview`...) that the frontend renders by `kind` (sent as the one item of the preview's `"sections"`). With no support installed, the chain returns an
   `InstallPreview` naming the missing packages per support, so supports never check.
-- `query(fmt, url, is_dir)`: any dataframe narwhals supports, for the data browser (`_new_query`).
+- `query(fmt, location, fs, path, is_dir)`: any dataframe narwhals supports, for the data browser (`_new_query`,
+  which keeps the filesystem it was opened with for reloads).
   `_query/data_query.py`'s `DataQuery` does filters, sort and paging as narwhals expressions, either on the data itself
   ("live") or on rows read into memory (queried with polars); behaviour such as regex syntax then follows the data's
   library.
-- `recipe(fmt, target)`: the code of the "Python code" snippet (a `str`; the chain makes the `Recipe`, adding
+- `recipe(fmt, location, fs, path, is_dir)`: the code (`fs` and `path` only for what the code must know of the
+  file, e.g. a CSV file's separator) of the "Python code" snippet (a `str`; the chain makes the `Recipe`, adding
   the support's `requirements()`: the frontend gets their packages, names the recipe after the first, "Load with
   polars", and lists them under the code), run as it is in a new notebook: its imports (`import polars as
   pl`, whatever the notebook has), and a Spark session (`SparkSession.builder.getOrCreate()`). It fills a class
@@ -323,7 +356,7 @@ snippets never get storage options (`spark_url()` rewrites `abfs`/`s3` to `abfss
 - Docstrings of the public API, what users construct, call, subclass or override (`StorageExplorer`, `DataExplorer`,
   `fetch_rows` (the `fetch_rows=` default of both), `QuerySettings`, `ExplorerStates` (with `Bookmark`,
   `QueryState`), `FileSystemOperations` and its subclasses (with `_copy_file`, `_move_file`), `Measurement`,
-  `Progress`, `DataFormat`, `FormatSupport`, `FileSystemMapper` and its subclasses, `MapperChain`, `same_filesystem`), are in numpy style:
+  `Progress`, `DataFormat`, `FormatSupport`, `Location` and its subclasses, `FileSystemMapper` and its subclasses, `MapperChain`, `same_filesystem`), are in numpy style:
   `Parameters`, `Returns`, `Raises`, `Attributes`, `See Also`, `Examples`. Internal ones (underscore names,
   `DataQuery`, `FileTasks`, `JobRunner`, the mixins, ...) stay prose.
 - `from __future__ import annotations` everywhere, with type-only imports under `TYPE_CHECKING` (ruff `TC` rules).

@@ -5,12 +5,15 @@ from __future__ import annotations
 from inspect import cleandoc
 from typing import TYPE_CHECKING
 
+from jupyter_storage_explorer.formats.base import library_url
 from jupyter_storage_explorer.formats.images import Image
 from jupyter_storage_explorer.formats.requirements import Fsspec, Pillow
 from jupyter_storage_explorer.formats.supports.fsspec import OpenedByFsspec
 
 if TYPE_CHECKING:
-    from jupyter_storage_explorer.formats.base import Target
+    from fsspec import AbstractFileSystem
+
+    from jupyter_storage_explorer.location import Location
 
 
 class ImageByPillow(OpenedByFsspec):
@@ -32,9 +35,16 @@ class ImageByPillow(OpenedByFsspec):
         img
         """)
 
-    def recipe(self, fmt: Image, target: Target) -> str:
-        if target.name.lower().endswith(".svg"):
+    def recipe(
+        self,
+        fmt: Image,
+        location: Location,
+        fs: AbstractFileSystem,
+        path: str,
+        is_dir: bool,
+    ) -> str:
+        if fmt.mime_type(path) == "image/svg+xml":
             raise self.NotSupported
         return self.recipe_template.format(
-            url=repr(target.url), kwargs=self.code_kwargs()
+            url=repr(library_url(location)), kwargs=self.code_kwargs()
         )

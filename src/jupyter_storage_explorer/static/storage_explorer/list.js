@@ -191,13 +191,13 @@ function createList(x) {
   }
 
   // --- Tooltips, as JupyterLab's file browser's: name, size, times, format
-  // and URL. The listing does not carry URLs, so those of the rows shown are
-  // asked for in one request as they are drawn, before any hover (a title
-  // set while the pointer rests on a row would not show), and kept by
-  // storage and path: a URL, or the request's promise while it is out. Items
-  // without one show their path ---
+  // and URL. The listing does not carry locations, so those of the rows shown
+  // are asked for in one request as they are drawn, before any hover (a
+  // title set while the pointer rests on a row would not show), and kept by
+  // storage and path: a location (see x.locationsOf), or the request's
+  // promise while it is out. Items without one show their path ---
 
-  const tooltipUrls = new Map();
+  const tooltipLocations = new Map();
 
   function tooltip(entry, location) {
     const lines = [`Name: ${visible(entry.name)}`];
@@ -209,30 +209,33 @@ function createList(x) {
     return lines.join("\n");
   }
 
-  // An item's URL if the list has it already (asked for as its row was drawn), else null.
-  function urlOf(entry) {
-    const known = hasUrl(entry) ? tooltipUrls.get(`${model.get("_filesystem")}\n${entry.path}`) : null;
-    return typeof known === "string" ? known : null;
+  // An item's location if the list has it already (asked for as its row was
+  // drawn), else null.
+  function locationOf(entry) {
+    const known = hasUrl(entry) ? tooltipLocations.get(`${model.get("_filesystem")}\n${entry.path}`) : null;
+    return known instanceof Promise ? null : (known ?? null);
   }
 
   function setTooltips(rows) {
     const filesystem = model.get("_filesystem");
     const key = (entry) => `${filesystem}\n${entry.path}`;
-    const missing = rows.map(([, entry]) => entry).filter((e) => hasUrl(e) && !tooltipUrls.has(key(e)));
+    const missing = rows.map(([, entry]) => entry).filter((e) => hasUrl(e) && !tooltipLocations.has(key(e)));
     if (missing.length) {
-      const asked = x.urlsOf(missing).then(
-        (urls) => missing.forEach((e, i) => tooltipUrls.set(key(e), urls[i] ?? e.path)),
-        () => missing.forEach((e) => tooltipUrls.delete(key(e))), // asked again when drawn again
+      const asked = x.locationsOf(missing).then(
+        (locations) => missing.forEach((e, i) => tooltipLocations.set(key(e), locations[i])),
+        () => missing.forEach((e) => tooltipLocations.delete(key(e))), // asked again when drawn again
       );
-      missing.forEach((e) => tooltipUrls.set(key(e), asked));
+      missing.forEach((e) => tooltipLocations.set(key(e), asked));
     }
+    // The URL, or the path of items without one.
+    const shown = (entry) => (hasUrl(entry) ? (tooltipLocations.get(key(entry))?.url ?? entry.path) : entry.path);
     for (const [tr, entry] of rows) {
-      const known = hasUrl(entry) ? tooltipUrls.get(key(entry)) : entry.path;
-      if (typeof known === "string") {
-        tr.title = tooltip(entry, known);
-      } else {
+      const known = hasUrl(entry) ? tooltipLocations.get(key(entry)) : null;
+      if (known instanceof Promise) {
         tr.title = tooltip(entry, null);
-        known.then(() => (tr.title = tooltip(entry, tooltipUrls.get(key(entry)))));
+        known.then(() => (tr.title = tooltip(entry, shown(entry))));
+      } else {
+        tr.title = tooltip(entry, shown(entry));
       }
     }
   }
@@ -433,7 +436,7 @@ function createList(x) {
     renderStatus,
     flash,
     entriesAt,
-    urlOf,
+    locationOf,
     dispose: () => clearTimeout(flashTimer),
   };
 }

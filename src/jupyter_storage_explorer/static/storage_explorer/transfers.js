@@ -14,7 +14,7 @@ const ITEMS_TYPE = "application/x-jupyter-storage-explorer-items";
 // The drag of items running on this page, if any: {id, explorer, unsafe,
 // items}, set by the explorer it starts in and cleared as it ends. `items` are
 // as Copy puts them on the clipboard (see copyFiles: {explorer, filesystem:
-// {name, protocol, identifier}, folders, files: [{path, url, name}]}),
+// {name}, folders, files: [{path, name, location}]}),
 // `unsafe` whether unsafe mode was on as it started. A drop is taken only if
 // it carries this id: drags work between the explorers of one page
 // (notebooks, launcher tabs, maybe in other kernels), never from elsewhere.
@@ -306,12 +306,12 @@ function createTransfers(x) {
       id,
       explorer,
       unsafe: folders,
-      // With their URLs, which another kernel finds them by (known from the list's tooltips).
+      // With their locations, which another kernel finds them by (known from the list's tooltips).
       items: {
         explorer,
         filesystem: x.storage(),
         folders: items.some(isFolder),
-        files: items.map((e) => ({ path: e.path, url: x.list.urlOf(e), name: e.name })),
+        files: items.map((e) => ({ path: e.path, name: e.name, location: x.list.locationOf(e)?.location ?? null })),
       },
     };
     ev.dataTransfer.setData(ITEMS_TYPE, id);
