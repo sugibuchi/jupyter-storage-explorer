@@ -302,19 +302,21 @@ class ParquetByDuckDB(FormatSupport):
     engine = DuckDB
     capabilities = ("view",)
 
-    def view(self, fmt, location, fs, path, is_dir, *, limits):
+    def view(self, fmt, ctx, *, limits):
         # A folder's data files, as detection found them.
-        partitioned = is_dir and bool(fmt.layout(location, fs, path).keys)
-        url = fmt.data_url(location, fs, path, is_dir)
+        partitioned = ctx.is_dir and bool(fmt.layout(ctx).keys)
+        url = fmt.data_url(ctx)
         return QueryView(data=DuckDB().load().read_parquet(url, hive_partitioning=partitioned))
 
 
 StorageExplorer("data", supports=[ParquetByDuckDB])
 ```
 
-Each method gets where the item is (`location`, which libraries doing their own I/O read: `library_url(location)`),
-the explorer's fsspec filesystem and the item's path in it (to read it through the explorer, e.g. for a text view), and
-whether it is a folder; `view` also gets `limits` (`ViewLimits`: bytes and rows to read). A view holding something to
+Each method gets the format detected and the item, an `ItemContext` (`ctx`): where it is (`ctx.location`, which
+libraries doing their own I/O read: `library_url(ctx.location)`), the explorer's fsspec filesystem and the item's path in
+it (`ctx.fs`, `ctx.path`: to read it through the explorer, e.g. for a text view), its info, its listing if it is a folder
+(`ctx.children`, `ctx.is_dir`); `view` also gets `limits` (`ViewLimits`: bytes and rows to read). Formats' `matches(ctx)`
+gets the same. A view holding something to
 release, e.g. a database connection, takes it as `on_close` (`QueryView(data=..., on_close=con.close)`): the explorer
 calls it once it no longer shows the view. `recipe` returns code by
 title, e.g. `{"Load as DataFrame": "import duckdb\n..."}`, the title saying what the code does, not the library. `FormatSupport`'s docstring has the rules for writing one.

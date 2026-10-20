@@ -6,7 +6,7 @@ from typing import Any
 
 from jupyter_storage_explorer import _infos, _paths
 from jupyter_storage_explorer._explorer.listing import Listing
-from jupyter_storage_explorer.formats import DataFormat
+from jupyter_storage_explorer.formats import DataFormat, ItemContext
 from jupyter_storage_explorer.formats import detect as detect_format
 
 
@@ -223,10 +223,11 @@ class FoldersMixin:
         location = self._location_of(path)
         if info.get("type") == "directory" or location is None:
             return ""
+        ctx = ItemContext(
+            location=location, fs=self._fs, path=path, info=info, children=None
+        )
         try:
-            fmt = detect_format(
-                location, self._fs, path, info, None, formats=self._formats
-            )
+            fmt = detect_format(ctx, formats=self._formats)
         except Exception:
             return ""  # detection is best-effort
         return fmt.name if fmt is not None else ""
@@ -241,9 +242,10 @@ class FoldersMixin:
         # The listing is all directory formats need, so skip fetching the
         # directory's own info.
         info = {"name": path, "type": "directory"}
+        ctx = ItemContext(
+            location=location, fs=self._fs, path=path, info=info, children=infos
+        )
         try:
-            return detect_format(
-                location, self._fs, path, info, infos, formats=self._formats
-            )
+            return detect_format(ctx, formats=self._formats)
         except Exception:
             return None  # detection is best-effort; a failure just means no preview

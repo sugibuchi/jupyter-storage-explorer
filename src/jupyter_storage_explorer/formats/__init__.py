@@ -1,6 +1,6 @@
 """Formats: how explorers detect each kind of data, and handle it with libraries.
 
-``DataFormat`` (base.py, with the ``Target`` it looks at) detects a format,
+``DataFormat`` (base.py, with the ``ItemContext`` it looks at) detects a format,
 ``FormatSupport`` (support.py) handles its data with one library (views,
 recipes), and ``PythonPackage`` (package.py) is a
 package one needs. The predefined formats each have a module (delta.py,
@@ -15,6 +15,7 @@ explorers use by default.
 from jupyter_storage_explorer.formats.base import (
     FILE_ICONS,
     DataFormat,
+    ItemContext,
     child_names,
     detect,
     file_size,
@@ -70,6 +71,7 @@ __all__ = [
     "FormatSupport",
     "Image",
     "InstallView",
+    "ItemContext",
     "Json",
     "JsonLines",
     "Markdown",

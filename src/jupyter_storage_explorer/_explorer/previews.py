@@ -15,6 +15,7 @@ from jupyter_storage_explorer._view_tab import ViewTab
 from jupyter_storage_explorer.data_explorer import DataExplorer
 from jupyter_storage_explorer.formats import (
     DataFormat,
+    ItemContext,
     MediaView,
     QueryView,
     View,
@@ -24,16 +25,13 @@ from jupyter_storage_explorer.formats import (
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from jupyter_storage_explorer.location import Location
-
 
 class _Detected(NamedTuple):
-    """An item of the storage shown with a location, and the formats it
-    matches, best first (see ``PreviewsMixin._detect``)."""
+    """An item of the storage shown with a location, as formats and supports
+    are given it, and the formats it matches, best first (see
+    ``PreviewsMixin._detect``)."""
 
-    path: str
-    location: Location
-    is_dir: bool
+    ctx: ItemContext
     formats: list[DataFormat]
 
 
@@ -64,21 +62,19 @@ class PreviewsMixin:
             return None
         info = self._info(path)
         children = self._ls(path) if info.get("type") == "directory" else None
-        formats = matching_formats(
-            location, self._fs, path, info, children, formats=self._formats
+        ctx = ItemContext(
+            location=location, fs=self._fs, path=path, info=info, children=children
         )
-        return _Detected(path, location, children is not None, formats)
+        return _Detected(ctx, matching_formats(ctx, formats=self._formats))
 
     def _viewer(self, fmt: DataFormat, item: _Detected) -> Callable[[], View]:
         """Views ``item`` as ``fmt`` (by the first support installed; with
         none, what to install), each time it is called: on the storage it is
-        on, also after switching storages."""
-        fs, limits = self._fs, self._view_limits
+        on (its context's), also after switching storages."""
+        limits = self._view_limits
 
         def view() -> View:
-            return self._supports.view(
-                fmt, item.location, fs, item.path, item.is_dir, limits=limits
-            )
+            return self._supports.view(fmt, item.ctx, limits=limits)
 
         return view
 
@@ -208,7 +204,7 @@ class PreviewsMixin:
             again = viewer()
             if not isinstance(again, QueryView):
                 again.close()
-                raise ValueError(f"{_paths.basename(item.path)} cannot be queried now")
+                raise ValueError(f"{item.ctx.name} cannot be queried now")
             previous, current[0] = current[0], again
             previous.close()
             return again.data
@@ -216,7 +212,7 @@ class PreviewsMixin:
         def close() -> None:
             current[0].close()
 
-        key = item.location
+        key = item.ctx.location
         state = self._states.query(key)
         mode = state.mode if state is not None else "auto"
         limits = self._view_limits
@@ -274,7 +270,11 @@ class PreviewsMixin:
                 view.close()
             return {"error": error_text(exc)}
         self._view_tabs[widget.model_id] = widget
-        return {"model_id": widget.model_id, "title": title, "url": item.location.url}
+        return {
+            "model_id": widget.model_id,
+            "title": title,
+            "url": item.ctx.location.url,
+        }
 
     def _view_tab_closed(self, model_id: str) -> None:
         """The tab of a "view_tab" closed: its widget is no longer kept, and
@@ -298,13 +298,7 @@ class PreviewsMixin:
         try:
             item = self._detect(path)
             formats = item.formats if item is not None else []
-            recipes = (
-                self._supports.recipes(
-                    formats[0], item.location, self._fs, path, item.is_dir
-                )
-                if formats
-                else []
-            )
+            recipes = self._supports.recipes(formats[0], item.ctx) if formats else []
         except Exception as exc:
             return {"error": error_text(exc)}
         return {

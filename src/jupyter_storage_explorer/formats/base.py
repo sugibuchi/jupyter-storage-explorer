@@ -1,4 +1,5 @@
-"""The base of formats: the ``DataFormat`` interface and ``detect``; helpers
+"""The base of formats: the ``DataFormat`` interface, ``ItemContext`` (the
+item formats and supports are given) and ``detect``; helpers
 reading a file through its fsspec filesystem (``head_text``,
 ``read_whole``, ...); and helpers for the code
 supports generate ("Python code"): storage options fit to show, keyword
@@ -10,6 +11,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from jupyter_storage_explorer.filesystems.locations import LocalLocation
@@ -21,6 +23,54 @@ if TYPE_CHECKING:
 
     from jupyter_storage_explorer.formats.view import ViewLimits
     from jupyter_storage_explorer.location import Location
+
+
+@dataclass(frozen=True, kw_only=True)
+class ItemContext:
+    """A file or folder, as formats (``DataFormat.matches``) and supports
+    (``FormatSupport.view``, ``recipe``) are given it.
+
+    One object rather than parameters, so that what they are given can grow
+    without changing their signatures.
+
+    Parameters
+    ----------
+    location : Location
+        Where it is, independently of fsspec: what libraries doing their own
+        I/O read (``library_url(ctx.location)``), and what formats keep what
+        they find by (e.g. a Parquet dataset's layout).
+    fs : AbstractFileSystem
+        The explorer's filesystem it is on, with its credentials, to read it
+        through (e.g. ``head_text(ctx.fs, ctx.path, n)``).
+    path : str
+        Its path in ``fs``.
+    info : mapping
+        fsspec's info of it (``fs.info(path)``).
+    children : sequence of mapping or None
+        A folder's listing (fsspec's ``ls(path, detail=True)`` entries); None
+        for a file.
+
+    Attributes
+    ----------
+    is_dir : bool
+        Whether it is a folder (``children`` is not None).
+    name : str
+        The last part of its path, e.g. "a.csv".
+    """
+
+    location: Location
+    fs: AbstractFileSystem
+    path: str
+    info: Mapping[str, Any]
+    children: Sequence[Mapping[str, Any]] | None
+
+    @property
+    def is_dir(self) -> bool:
+        return self.children is not None
+
+    @property
+    def name(self) -> str:
+        return name_of(self.path)
 
 
 # --- Reading a file through its fsspec filesystem, for detection and views ---
@@ -101,7 +151,7 @@ class DataFormat:
     code), given as ``supports``. File formats usually only set
     ``extensions``; directory formats (Delta Lake tables, Spark output,
     Hive-partitioned datasets, ...) override ``matches`` and inspect the
-    folder's listing (``children``). What detection finds and supports need
+    folder's listing (``ctx.children``). What detection finds and supports need
     (e.g. a Parquet dataset's partition layout) is kept by the format, by
     location: supports are given the format.
 
@@ -136,71 +186,42 @@ class DataFormat:
     extensions: ClassVar[tuple[str, ...]] = ()
     file_icon: ClassVar[str | tuple[str, str] | None] = None
 
-    def matches(
-        self,
-        location: Location,
-        fs: AbstractFileSystem,
-        path: str,
-        info: Mapping[str, Any],
-        children: Sequence[Mapping[str, Any]] | None,
-    ) -> bool:
+    def matches(self, ctx: ItemContext) -> bool:
         """Whether a file or folder is in this format.
 
         Called on every click, so it must be cheap: look at the name, or the
-        folder's listing (``children``), not at the contents.
+        folder's listing (``ctx.children``), not at the contents.
 
         Parameters
         ----------
-        location : Location
-            Where it is: what the format keeps what it finds by (e.g. a
-            dataset's layout), for the supports, which get the location.
-        fs : AbstractFileSystem
-            The filesystem it is on, to read more if needed.
-        path : str
-            Its path in ``fs``.
-        info : mapping
-            fsspec's info of it (``fs.info(path)``).
-        children : sequence of mapping or None
-            A folder's listing (fsspec's ``ls(path, detail=True)`` entries);
-            None for a file.
+        ctx : ItemContext
+            The file or folder: its location (what the format keeps what it
+            finds by, e.g. a dataset's layout, for the supports), filesystem
+            and path (to read more if needed), info and listing.
 
         Returns
         -------
         bool
             By default: a file whose name ends with one of ``extensions``.
         """
-        return children is None and name_of(path).lower().endswith(self.extensions)
+        return not ctx.is_dir and ctx.name.lower().endswith(self.extensions)
 
 
 def matching_formats(
-    location: Location,
-    fs: AbstractFileSystem,
-    path: str,
-    info: Mapping[str, Any],
-    children: Sequence[Mapping[str, Any]] | None,
-    *,
-    formats: Iterable[DataFormat],
+    ctx: ItemContext, *, formats: Iterable[DataFormat]
 ) -> list[DataFormat]:
     """All ``formats`` that match the item (see ``DataFormat.matches``),
     highest priority first (ties keep their order)."""
-    found = (f for f in formats if f.matches(location, fs, path, info, children))
+    found = (f for f in formats if f.matches(ctx))
     return sorted(found, key=lambda f: -f.priority)
 
 
-def detect(
-    location: Location,
-    fs: AbstractFileSystem,
-    path: str,
-    info: Mapping[str, Any],
-    children: Sequence[Mapping[str, Any]] | None,
-    *,
-    formats: Iterable[DataFormat],
-) -> DataFormat | None:
+def detect(ctx: ItemContext, *, formats: Iterable[DataFormat]) -> DataFormat | None:
     """The highest-priority of ``formats`` that matches the item (see
     ``DataFormat.matches``), if any. On a tie, the format listed first wins."""
     best = None
     for fmt in formats:
-        if not fmt.matches(location, fs, path, info, children):
+        if not fmt.matches(ctx):
             continue
         if best is None or fmt.priority > best.priority:
             best = fmt
