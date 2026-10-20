@@ -111,18 +111,18 @@ def _normalize_filter(f: dict[str, Any], kind: str) -> dict[str, Any] | None:
         return {"op": op}
     if op == "range":
         # Bounds may be given as numbers or dates (from Python, see QuerySettings).
-        bounds = {b: _as_text(f.get(b)) for b in ("min", "max")}
+        bounds = {b: as_text(f.get(b)) for b in ("min", "max")}
         if not any(v.strip() for v in bounds.values()):
             return None  # no bound: nothing to filter
         normalized: dict[str, Any] = {"op": op, **bounds}
     else:
-        normalized = {"op": op, "value": _as_text(f.get("value"))}
+        normalized = {"op": op, "value": as_text(f.get("value"))}
     if kind == "text" and op in _CASE_OPS:
         normalized["case_sensitive"] = bool(f.get("case_sensitive", True))
     return normalized
 
 
-def _as_text(value: Any) -> str:
+def as_text(value: Any) -> str:
     """A filter value as the frontend's text: "" for none, ISO for dates,
     "true"/"false" for booleans."""
     if value is None:

@@ -8,7 +8,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
-from jupyter_storage_explorer._query.filters import _as_text
+from jupyter_storage_explorer._query.filters import as_text
 
 DEFAULT_SETTINGS: dict[str, Any] = {
     "filters": {},
@@ -100,7 +100,7 @@ class QuerySettings:
         --------
         from_json : The settings back from this text.
         """
-        return json.dumps(self.to_dict(), indent=indent, default=_as_text)
+        return json.dumps(self.to_dict(), indent=indent, default=as_text)
 
     @classmethod
     def from_json(cls, text: str) -> QuerySettings:
