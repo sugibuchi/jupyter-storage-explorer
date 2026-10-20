@@ -187,17 +187,6 @@ class TreeView(View):
 
 
 @dataclass(frozen=True, kw_only=True)
-class InstallView(View):
-    """Shown instead of a view when the packages to read the format are missing."""
-
-    kind: ClassVar[str] = "install"
-    format: str  # e.g. "Delta Lake table"
-    # One per set of requirements that could view it, most preferred first:
-    # the names of its packages still missing, e.g. ["polars", "deltalake"].
-    options: list[list[str]]
-
-
-@dataclass(frozen=True, kw_only=True)
 class MediaView(View):
     """Content the browser renders natively (image, PDF, audio, video), chosen by ``mime``.
 

@@ -11,6 +11,7 @@ import pytest
 from items import local_item
 
 from jupyter_storage_explorer import StorageExplorer
+from jupyter_storage_explorer._explorer.supports import SupportChain
 from jupyter_storage_explorer.filesystems import AbfsLocation
 from jupyter_storage_explorer.formats import (
     Capability,
@@ -27,7 +28,6 @@ from jupyter_storage_explorer.formats import (
     secret_dict_field,
     secret_field,
 )
-from jupyter_storage_explorer.formats.support import SupportChain
 from jupyter_storage_explorer.formats.supports import (
     CsvByPandas,
     CsvByPolars,
@@ -43,7 +43,6 @@ from jupyter_storage_explorer.formats.supports import (
     TextByPython,
 )
 from jupyter_storage_explorer.formats.utils import DEFAULT_FORMATS, DEFAULT_SUPPORTS
-from jupyter_storage_explorer.formats.view import InstallView
 
 LIMITS = ViewLimits(max_display_rows=2)
 
@@ -356,15 +355,24 @@ class TestChain:
         )
         assert self.view(chain, make_item("/a.csv", b"")) == "listed"
 
-    def test_install_hint(self, make_item, monkeypatch):
+    def test_of_lists_the_installed_only(self, monkeypatch):
+        chain = SupportChain(default_supports())
+        assert [type(s) for s in chain.of(Csv(), "view")] == [CsvByPolars, CsvByPandas]
         monkeypatch.setattr(PythonPackage, "is_installed", lambda self: False)
-        hint = self.view(SupportChain(default_supports()), make_item("/a.csv", b"a\n"))
-        assert isinstance(hint, InstallView)
-        assert hint.options == [["polars"], ["pandas"]]
+        assert chain.of(Csv(), "view") == []  # none of the registered supports can
 
-    def test_none_can_view(self, make_item):
-        with pytest.raises(ValueError, match="cannot be viewed as CSV"):
+    def test_view_without_a_support_is_an_error_of_the_caller(self, make_item):
+        # Callers check of() first: none at all is not the item's fault.
+        with pytest.raises(RuntimeError, match=r"check of\(\) first"):
             self.view(SupportChain([]), make_item("/a.csv", b""))
+
+    def test_none_can_view_the_item(self, make_item):
+        def refuse(self, *args, **kwargs):
+            raise self.NotSupported
+
+        chain = SupportChain([support(view=refuse)()])
+        with pytest.raises(ValueError, match="cannot be viewed as CSV"):
+            self.view(chain, make_item("/a.csv", b""))
 
     def test_format_subclasses(self, tmp_path):
         """A subclass of a format is viewed by its supports."""

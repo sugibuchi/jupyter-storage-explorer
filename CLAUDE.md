@@ -73,9 +73,9 @@ explorer of exactly its own version (`launcher/hatch_build.py` sets its dependen
   `FileTasks`; `runner.py`: `JobRunner`; `incoming.py`, `properties.py`, `transfer_policy.py`) and `_query/`
   (`filters.py`, `settings.py`: `QuerySettings`, `QueryState`; `data_query.py`: `DataQuery`, `fetch_rows`). Users import
   from the top level, `filesystems`, `formats` and `formats.supports` only, whose `__all__` are the public API:
-  what users construct, subclass, call or annotate with. The explorer's machinery (`SupportChain`, `Recipe`,
-  `InstallView`, `OperationChain`, `detect`, `matching_formats`, the `DEFAULT_*` tuples) stays out of them,
-  imported from its modules by the package and the tests.
+  what users construct, subclass, call or annotate with. The explorer's machinery (`SupportChain` and `Recipe`,
+  in `_explorer/supports.py`; `OperationChain`, `detect`, `matching_formats`, the `DEFAULT_*` tuples) stays out of
+  them, imported from its modules by the package and the tests.
 - `jupyter-storage-explorer-launcher` (`launcher/`): a JupyterLab launcher item opening a tab whose kernel runs
   `launch()`. It merges every `storage-explorer/launcher.py` in Jupyter's config paths as layers, system to user
   (their `filesystems()`, `formats()`, `supports()`, `format_options()` (merged by library, format, then option), `operations()`, `filesystem_mappers()`, `transfer_policy()`, `parameters()`;
@@ -292,8 +292,8 @@ unfiltered.
 `ItemContext`, which reads the item for formats and supports (`head`, `head_text`, `read_whole`; `name`, `size`,
 `child_names`, `library_url`: the location as most libraries read it, a local file's plain path), `FILE_ICONS`,
 and the explorer's `detect` and `matching_formats`, not exported), `FormatSupport` (`support.py`, with
-`SupportOptions`, `SupportChain`, `Capability`, `Recipe`, and the generated code's helpers: `format_kwargs`, the
-secret fields, `_shown_options`) and `PythonPackage`
+`SupportOptions`, `Capability`, `FormatOptions`, and the generated code's helpers: `format_kwargs`, the secret
+fields, `_shown_options`; only what plugin authors use) and `PythonPackage`
 (`package.py`); a module per predefined format (`delta.py`, `parquet.py`, `excel.py`, `text.py`, `images.py`) and
 per library of the predefined supports in `supports/` (`polars.py`, `pandas.py`, `pyspark.py`, `fsspec.py`,
 `pillow.py`; `python.py` for those needing no package; named after the libraries, which they import only inside
@@ -334,18 +334,21 @@ so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
   `PolarsOptions.storage()`); a library's supports share a base model (`PolarsOptions`, `PandasOptions`,
   `FsspecOptions`; exported by `formats.supports`). Supports take no `__init__` arguments: the chain creates those
   given as classes. Class names are `<Format>By<Library>`, options `<Library>Options` or `<Format>By<Library>Options`.
-- `SupportChain(supports, format_options, format_names=)` (the explorer's `_supports`: `supports=` then
-  `StorageExplorer.default_supports()`, i.e. `DEFAULT_SUPPORTS`, ordered format by format, most preferred first;
-  `supports` and `options`, one each, by position) calls them, with their options: `view` of the first support
-  installed for the format (`installed`), `recipes` with the first support with `"recipe"` of each library (so one
-  given replaces the default's), installed or not (the code may run elsewhere).
+- `SupportChain(supports, format_options, format_names=)` (`_explorer/supports.py`, with `Recipe` and the
+  `format_options` checks; the explorer's `_supports`: `supports=` then `StorageExplorer.default_supports()`, i.e.
+  `DEFAULT_SUPPORTS`, ordered format by format, most preferred first) calls them, with their options:
+  `of(fmt, capability)` lists the supports for the format with the capability whose packages are installed (empty:
+  none of the registered ones can); `view` of the first of `of(fmt, "view")` that views the item (ValueError if each
+  refuses it; RuntimeError, the caller's error, if `of` is empty: the explorer checks `of` first, in `_viewer`, and
+  reports "no library viewing it is installed"); `recipes` with the first support with `"recipe"` of each library
+  (so one given replaces the default's), installed or not (the code may run elsewhere; `_registered`).
 - `view(fmt, ctx, options, limits)`: one `View` dataclass of `view.py`. A `QueryView` (`data`: any
   dataframe narwhals supports, best lazy) opens the data browser (`_new_query`: the first view's data, then the view
   again on reload, with the context it was opened with); whether an item opens in the data browser is known only
   once viewed, so the menu offers "Preview" and "View in a new tab" for whatever has a format. The others
   (`TableView`, `TextView`, `TreeView`, `MarkdownView`, `MediaView`...) are sent as the one item of the preview's
-  `"sections"` (`section()`), which the frontend renders by `kind`. With no support installed, the chain returns an
-  `InstallView` naming the missing packages per support, so supports never check. `ViewLimits`: `max_bytes`,
+  `"sections"` (`section()`), which the frontend renders by `kind`. Supports never check their packages: the
+  chain calls only installed ones. `ViewLimits`: `max_bytes`,
   `max_display_rows` (table views' rows and the data browser's page size, sent as `"page_rows"`),
   `max_whole_file_bytes`, `max_live_rows` and `max_memory_rows` (the data browser's; `StorageExplorer(view_limits=)`).
   The functions given to a view's `on_close(callback, *, remove=False)` (the widgets' `on_change` idiom; kept in a

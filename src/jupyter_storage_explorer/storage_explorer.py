@@ -24,6 +24,7 @@ from jupyter_storage_explorer._explorer.listing import Listing
 from jupyter_storage_explorer._explorer.previews import PreviewsMixin
 from jupyter_storage_explorer._explorer.requests import FileRequestsMixin
 from jupyter_storage_explorer._explorer.states import ExplorerStates, explorer_states
+from jupyter_storage_explorer._explorer.supports import SupportChain
 from jupyter_storage_explorer._jobs.incoming import IncomingFiles
 from jupyter_storage_explorer._jobs.runner import JobRunner
 from jupyter_storage_explorer._jobs.transfer_policy import TransferPolicy
@@ -43,7 +44,6 @@ from jupyter_storage_explorer.formats import (
     ViewLimits,
     default_formats,
 )
-from jupyter_storage_explorer.formats.support import SupportChain
 from jupyter_storage_explorer.formats.utils import DEFAULT_SUPPORTS, format_icons
 
 if TYPE_CHECKING:

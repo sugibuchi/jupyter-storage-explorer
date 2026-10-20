@@ -100,9 +100,15 @@ class PreviewsMixin:
         return _Detected(ctx, matching_formats(ctx, formats=self._formats))
 
     def _viewer(self, fmt: DataFormat, item: _Detected) -> Callable[[], View]:
-        """Views ``item`` as ``fmt`` (by the first support installed; with
-        none, what to install), each time it is called: on the storage it is
-        on (its context's), also after switching storages."""
+        """Views ``item`` as ``fmt`` (by the first support installed), each
+        time it is called: on the storage it is on (its context's), also
+        after switching storages. ValueError if no support installed views
+        the format."""
+        if not self._supports.of(fmt, "view"):
+            raise ValueError(
+                f"{item.ctx.name} cannot be viewed as {fmt.label}: "
+                f"no library viewing it is installed"
+            )
         limits = self._view_limits
 
         def view() -> View:

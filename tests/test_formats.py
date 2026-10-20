@@ -10,6 +10,7 @@ import polars as pl
 import pytest
 from items import local_item
 
+from jupyter_storage_explorer._explorer.supports import SupportChain
 from jupyter_storage_explorer.filesystems import S3Location
 from jupyter_storage_explorer.formats import (
     Csv,
@@ -32,7 +33,6 @@ from jupyter_storage_explorer.formats import (
     default_supports,
 )
 from jupyter_storage_explorer.formats.packages import Pillow
-from jupyter_storage_explorer.formats.support import SupportChain
 from jupyter_storage_explorer.formats.supports import (
     CsvByPandas,
     DeltaLakeByPolars,
@@ -43,7 +43,6 @@ from jupyter_storage_explorer.formats.supports import (
     ParquetByPandas,
 )
 from jupyter_storage_explorer.formats.supports.pyspark import spark_url
-from jupyter_storage_explorer.formats.view import InstallView
 
 CHAIN = SupportChain(default_supports())
 
@@ -303,11 +302,9 @@ class TestViews:
         assert isinstance(media, MediaView)
         assert (media.mime, media.data) == ("image/png", b"\x89PNG")
 
-    def test_install_hint_when_nothing_installed(self, make_item, monkeypatch):
+    def test_nothing_installed(self, monkeypatch):
         monkeypatch.setattr(PythonPackage, "is_installed", lambda self: False)
-        hint = view(Csv(), make_item("/a.csv", b"a\n"))
-        assert isinstance(hint, InstallView)
-        assert hint.options == [["polars"], ["pandas"]]
+        assert CHAIN.of(Csv(), "view") == []
 
     def test_image_needs_no_package(self, make_item, monkeypatch):
         # The browser shows images itself: Pillow is for the load code only.

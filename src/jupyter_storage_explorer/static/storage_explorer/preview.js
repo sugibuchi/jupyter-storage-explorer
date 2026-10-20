@@ -68,12 +68,6 @@ function createPreview(x) {
       children = [queryPanel.el];
     } else {
       children = preview.sections.map(renderSection);
-      if (preview.sections.some((s) => s.kind === "install")) {
-        // After installing, this re-runs the preview with the same format.
-        const again = h("button", { className: "jse-btn jse-primary", textContent: "Preview again" });
-        again.addEventListener("click", () => open(preview.path, preview.format));
-        children.push(again);
-      }
     }
     body.replaceChildren(...children);
     el.hidden = false;

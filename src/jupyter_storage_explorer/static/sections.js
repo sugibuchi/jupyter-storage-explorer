@@ -31,21 +31,6 @@ function renderMedia(section) {
   return h("div", { textContent: `Cannot show ${section.mime}` });
 }
 
-// Missing packages: the packages of each option, the user installing them
-// as their environment does (pip, conda, an image, ...).
-function renderInstall(section) {
-  const several = section.options.length > 1;
-  const intro = several
-    ? `To view this ${section.format}, install one of these sets of packages, then preview it again:`
-    : `To view this ${section.format}, install these packages, then preview it again:`;
-  return h(
-    "div",
-    { className: "jse-install" },
-    h("div", { textContent: intro }),
-    h("ul", {}, ...section.options.map((packages) => h("li", { textContent: packages.join(", ") }))),
-  );
-}
-
 // --- Markdown: rendered with marked, sanitized with DOMPurify ---
 // Both are vendored in static/vendor. An anywidget module cannot import files
 // next to it, so the kernel sends their source, imported once per page.
@@ -112,7 +97,6 @@ const sectionRenderers = {
   text: (s) => (s.html ? h("pre", { className: "jse-text jse-highlight", innerHTML: s.html }) : h("pre", { className: "jse-text", textContent: s.text })),
   tree: (s) => h("div", { className: "jse-json" }, renderJson(s.value, null, 0)),
   media: renderMedia,
-  install: renderInstall,
 };
 
 function renderSection(section) {

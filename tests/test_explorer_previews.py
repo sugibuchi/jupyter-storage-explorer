@@ -9,6 +9,7 @@ import pytest
 from explorers import make, path_of
 
 from jupyter_storage_explorer._explorer import previews
+from jupyter_storage_explorer._explorer.supports import SupportChain
 from jupyter_storage_explorer._query.settings import QuerySettings
 from jupyter_storage_explorer._view_tab import ViewTab
 from jupyter_storage_explorer.data_explorer import DataExplorer
@@ -18,7 +19,6 @@ from jupyter_storage_explorer.formats import (
     TextView,
     ViewLimits,
 )
-from jupyter_storage_explorer.formats.support import SupportChain
 from jupyter_storage_explorer.formats.supports import CsvByPandas, CsvByPolars
 
 
@@ -76,16 +76,20 @@ class TestPreview:
         mem_explorer._open_preview("/data/a.csv", "image")
         assert "cannot be previewed as image" in mem_explorer._preview["error"]
 
-    def test_install_hint(self, mem_explorer, monkeypatch):
-        # Packages missing: the explorer tells what to install, without
-        # calling the supports' view.
+    def test_no_library_installed(self, mem_explorer, monkeypatch):
+        # No support installed for the format: an error, without calling the
+        # supports' view, in the panel and for a tab.
         monkeypatch.setattr(PythonPackage, "is_installed", lambda self: False)
         monkeypatch.setattr(CsvByPolars, "view", None)
         monkeypatch.setattr(CsvByPandas, "view", None)
         mem_explorer._open_preview("/data/a.csv")
-        [hint] = mem_explorer._preview["sections"]
-        assert hint["kind"] == "install"
-        assert hint["options"] == [["polars"], ["pandas"]]
+        assert mem_explorer._preview["error"] == (
+            "a.csv cannot be viewed as CSV: no library viewing it is installed"
+        )
+        reply = mem_explorer.request(
+            {"type": "view_tab", "rid": 1, "path": "/data/a.csv"}
+        )
+        assert "no library viewing it is installed" in reply["error"]
 
     def test_query_after_close(self, local):
         reply = local.request({"type": "query_rows", "rid": 1, "path": "gone"})
