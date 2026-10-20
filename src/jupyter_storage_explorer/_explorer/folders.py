@@ -7,7 +7,7 @@ from typing import Any
 from jupyter_storage_explorer import _infos, _paths
 from jupyter_storage_explorer._explorer.listing import Listing
 from jupyter_storage_explorer.formats import DataFormat, ItemContext
-from jupyter_storage_explorer.formats import detect as detect_format
+from jupyter_storage_explorer.formats.base import detect as detect_format
 
 
 def _entry(info: dict[str, Any]) -> dict[str, Any]:

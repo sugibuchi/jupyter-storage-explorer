@@ -7,11 +7,10 @@ from __future__ import annotations
 from inspect import cleandoc
 from typing import TYPE_CHECKING
 
-from jupyter_storage_explorer.formats.base import format_kwargs
 from jupyter_storage_explorer.formats.delta import DeltaLake
 from jupyter_storage_explorer.formats.packages import DeltaSpark, PySpark
 from jupyter_storage_explorer.formats.parquet import Parquet
-from jupyter_storage_explorer.formats.support import FormatSupport
+from jupyter_storage_explorer.formats.support import FormatSupport, format_kwargs
 from jupyter_storage_explorer.formats.text import Csv, JsonLines
 
 if TYPE_CHECKING:
@@ -59,7 +58,7 @@ class CsvByPySpark(FormatSupport):
         return {
             AS_DATA_FRAME: self.data_frame_template.format(
                 url=repr(spark_url(ctx.location.url)),
-                kwargs=format_kwargs(sep=fmt.code_separator(ctx.fs, ctx.path)),
+                kwargs=format_kwargs(sep=fmt.code_separator(ctx)),
             )
         }
 

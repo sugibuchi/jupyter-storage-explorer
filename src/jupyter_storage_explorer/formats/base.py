@@ -1,23 +1,20 @@
-"""The base of formats: the ``DataFormat`` interface, ``ItemContext`` (the
-item formats and supports are given) and ``detect``; helpers
-reading a file through its fsspec filesystem (``head_text``,
-``read_whole``, ...); and helpers for the code
-supports generate ("Python code"): storage options fit to show, keyword
-arguments for recipe templates, and URLs as libraries read them.
-The predefined formats each have a module (delta.py, parquet.py, text.py,
-...); handling the data is ``FormatSupport``'s (support.py)."""
+"""The base of formats: the ``DataFormat`` interface, and ``ItemContext``,
+the item formats and supports are given, with what they read of it (its
+beginning, all of it, its children's names, its URL as libraries read it).
+``detect`` and ``matching_formats`` are the explorer's. The predefined
+formats each have a module (delta.py, parquet.py, text.py, ...); handling
+the data is ``FormatSupport``'s (support.py)."""
 
 from __future__ import annotations
 
-import re
-from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from jupyter_storage_explorer import _paths
 from jupyter_storage_explorer.filesystems.locations import LocalLocation
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Sequence
+    from collections.abc import Iterable, Mapping, Sequence
 
     from fsspec import AbstractFileSystem
 
@@ -28,7 +25,7 @@ if TYPE_CHECKING:
 @dataclass(frozen=True, kw_only=True)
 class ItemContext:
     """A file or folder, as formats (``DataFormat.matches``) and supports
-    (``FormatSupport.view``, ``recipe``) are given it.
+    (``FormatSupport.view``, ``recipe``) are given it, and how they read it.
 
     One object rather than parameters, so that what they are given can grow
     without changing their signatures.
@@ -36,12 +33,12 @@ class ItemContext:
     Parameters
     ----------
     location : Location
-        Where it is, independently of fsspec: what libraries doing their own
-        I/O read (``library_url(ctx.location)``), and what formats keep what
-        they find by (e.g. a Parquet dataset's layout).
+        Where it is, independently of fsspec: what formats keep what they
+        find by (e.g. a Parquet dataset's layout); libraries doing their own
+        I/O read ``library_url``.
     fs : AbstractFileSystem
-        The explorer's filesystem it is on, with its credentials, to read it
-        through (e.g. ``head_text(ctx.fs, ctx.path, n)``).
+        The explorer's filesystem it is on, with its credentials, which
+        ``head``, ``head_text`` and ``read_whole`` read it through.
     path : str
         Its path in ``fs``.
     info : mapping
@@ -56,6 +53,15 @@ class ItemContext:
         Whether it is a folder (``children`` is not None).
     name : str
         The last part of its path, e.g. "a.csv".
+    child_names : set of str
+        The names of a folder's items; empty for a file.
+    size : int or None
+        A file's size in bytes, if its filesystem tells it (from ``info``).
+    library_url : str
+        Where most libraries read it (polars, pandas, DuckDB, ...): its
+        location's URL, but a local file's plain path, which they all take
+        (not all of them read ``file://`` URLs). Spark reads its own
+        spelling of ``location.url`` (``supports.pyspark.spark_url``).
     """
 
     location: Location
@@ -70,56 +76,47 @@ class ItemContext:
 
     @property
     def name(self) -> str:
-        return name_of(self.path)
+        return _paths.basename(self.path)
 
+    @property
+    def child_names(self) -> set[str]:
+        return {_paths.basename(c["name"]) for c in self.children or ()}
 
-# --- Reading a file through its fsspec filesystem, for detection and views ---
+    @property
+    def size(self) -> int | None:
+        return self.info.get("size")
 
+    @property
+    def library_url(self) -> str:
+        location = self.location
+        return location.path if isinstance(location, LocalLocation) else location.url
 
-def name_of(path: str) -> str:
-    """The last part of a path, e.g. "a.csv" of "data/a.csv"."""
-    return path.rstrip("/").rsplit("/", 1)[-1]
+    def head(self, size: int) -> bytes:
+        """The first ``size`` bytes of the file, without reading the rest."""
+        with self.fs.open(self.path, "rb") as f:
+            return f.read(size)
 
+    def head_text(self, size: int) -> tuple[str, bool]:
+        """The first ``size`` bytes decoded as UTF-8, and whether the file is
+        longer.
 
-def child_names(children: Iterable[Mapping[str, Any]] | None) -> set[str]:
-    """The names of the items of a folder's listing (fsspec's ``ls``
-    entries); empty for a file's None."""
-    return {name_of(c["name"]) for c in children or ()}
+        When the file is longer, the text is cut after its last complete line.
+        """
+        data = self.head(size + 1)
+        truncated = len(data) > size
+        if truncated:
+            data = data[:size]
+            if (end := data.rfind(b"\n")) >= 0:
+                data = data[: end + 1]
+        return data.decode("utf-8-sig", errors="replace"), truncated
 
-
-def file_size(fs: AbstractFileSystem, path: str) -> int | None:
-    """The file's size in bytes, if its filesystem tells it."""
-    return fs.info(path).get("size")
-
-
-def head(fs: AbstractFileSystem, path: str, size: int) -> bytes:
-    """The first ``size`` bytes of the file, without reading the rest."""
-    with fs.open(path, "rb") as f:
-        return f.read(size)
-
-
-def head_text(fs: AbstractFileSystem, path: str, size: int) -> tuple[str, bool]:
-    """The first ``size`` bytes decoded as UTF-8, and whether the file is longer.
-
-    When the file is longer, the text is cut after its last complete line.
-    """
-    data = head(fs, path, size + 1)
-    truncated = len(data) > size
-    if truncated:
-        data = data[:size]
-        if (end := data.rfind(b"\n")) >= 0:
-            data = data[: end + 1]
-    return data.decode("utf-8-sig", errors="replace"), truncated
-
-
-def read_whole(fs: AbstractFileSystem, path: str, limits: ViewLimits) -> bytes:
-    """The whole file, for formats that cannot be read in part. ValueError if
-    it is larger than ``limits.max_whole_file_bytes``."""
-    size = file_size(fs, path)
-    if size is not None and size > limits.max_whole_file_bytes:
-        limit = limits.max_whole_file_bytes // (1024 * 1024)
-        raise ValueError(f"too large to view (over {limit} MB)")
-    return fs.cat_file(path)
+    def read_whole(self, limits: ViewLimits) -> bytes:
+        """The whole file, for formats that cannot be read in part.
+        ValueError if it is larger than ``limits.max_whole_file_bytes``."""
+        if self.size is not None and self.size > limits.max_whole_file_bytes:
+            limit = limits.max_whole_file_bytes // (1024 * 1024)
+            raise ValueError(f"too large to view (over {limit} MB)")
+        return self.fs.cat_file(self.path)
 
 
 # The icons a format's files can have in the explorer's list (``file_icon``):
@@ -151,9 +148,9 @@ class DataFormat:
     code), given as ``supports``. File formats usually only set
     ``extensions``; directory formats (Delta Lake tables, Spark output,
     Hive-partitioned datasets, ...) override ``matches`` and inspect the
-    folder's listing (``ctx.children``). What detection finds and supports need
-    (e.g. a Parquet dataset's partition layout) is kept by the format, by
-    location: supports are given the format.
+    folder's listing (``ctx.children``, ``ctx.child_names``). What detection
+    finds and supports need (e.g. a Parquet dataset's partition layout) is
+    kept by the format, by location: supports are given the format.
 
     Attributes
     ----------
@@ -226,62 +223,3 @@ def detect(ctx: ItemContext, *, formats: Iterable[DataFormat]) -> DataFormat | N
         if best is None or fmt.priority > best.priority:
             best = fmt
     return best
-
-
-# Storage options whose names look like credentials are left out of generated
-# snippets, since snippets get copied, shared and saved in notebooks.
-_SECRET_OPTION = re.compile(
-    r"key|secret|token|password|passwd|credential|sas|connection_string", re.IGNORECASE
-)
-
-
-def _is_plain(value: Any) -> bool:
-    """Whether ``repr(value)`` is valid Python, so it can appear in generated code."""
-    if value is None or isinstance(value, (bool, int, float, str)):
-        return True
-    if isinstance(value, (list, tuple)):
-        return all(_is_plain(v) for v in value)
-    if isinstance(value, Mapping):
-        return all(isinstance(k, str) and _is_plain(v) for k, v in value.items())
-    return False
-
-
-def snippet_options(
-    options: Mapping[str, Any] | None, secret_keys: Iterable[str] = ()
-) -> dict[str, Any]:
-    """Storage options fit to put in generated code; empty for None.
-
-    Leaves out ``secret_keys`` (at any depth), options that look like
-    credentials anyway, and ones whose values are objects rather than plain
-    data (e.g. the filesystem a DirFileSystem wraps).
-    """
-    secret_keys = frozenset(secret_keys)
-    out: dict[str, Any] = {}
-    for key, value in (options or {}).items():
-        if key in secret_keys or _SECRET_OPTION.search(key):
-            continue
-        if isinstance(value, Mapping):
-            # Filtered key by key, keeping e.g. client_kwargs' endpoint_url.
-            out[key] = snippet_options(value, secret_keys)
-        elif _is_plain(value):
-            out[key] = value
-    return out
-
-
-def format_kwargs(**kwargs: Any) -> str:
-    """Python source for keyword arguments following others in a call, each
-    after ", "; those that are None are left out, so it may be empty. For the
-    ``{kwargs}`` of load code templates, e.g. ``"df = pl.read_csv({url}{kwargs})"``.
-
-    >>> format_kwargs(sep=";", storage_options=None)
-    ", sep=';'"
-    """
-    return "".join(f", {k}={v!r}" for k, v in kwargs.items() if v is not None)
-
-
-def library_url(location: Location) -> str:
-    """Where most libraries read ``location`` (polars, pandas, DuckDB, ...):
-    its URL, but a local file's plain path, which they all take (not all of
-    them read ``file://`` URLs). Spark reads its own spelling of
-    ``location.url`` (``supports.pyspark.spark_url``)."""
-    return location.path if isinstance(location, LocalLocation) else location.url

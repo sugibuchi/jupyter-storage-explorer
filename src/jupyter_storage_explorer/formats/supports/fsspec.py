@@ -6,14 +6,11 @@ from dataclasses import dataclass
 from inspect import cleandoc
 from typing import TYPE_CHECKING, Any
 
-from jupyter_storage_explorer.formats.base import (
-    format_kwargs,
-    library_url,
-)
 from jupyter_storage_explorer.formats.packages import Fsspec
 from jupyter_storage_explorer.formats.support import (
     FormatSupport,
     SupportOptions,
+    format_kwargs,
     secret_dict_field,
 )
 from jupyter_storage_explorer.formats.text import Json, Text
@@ -83,7 +80,7 @@ class TextByFsspec(OpenedByFsspec):
     ) -> dict[str, str]:
         return {
             READ_TEXT: self.text_template.format(
-                url=repr(library_url(ctx.location)), kwargs=options.code_kwargs()
+                url=repr(ctx.library_url), kwargs=options.code_kwargs()
             )
         }
 
@@ -109,6 +106,6 @@ class JsonByFsspec(OpenedByFsspec):
     ) -> dict[str, str]:
         return {
             LOAD_VALUE: self.value_template.format(
-                url=repr(library_url(ctx.location)), kwargs=options.code_kwargs()
+                url=repr(ctx.library_url), kwargs=options.code_kwargs()
             )
         }

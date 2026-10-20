@@ -8,14 +8,15 @@ library: polars.py, pandas.py, ...)."""
 from __future__ import annotations
 
 import dataclasses
+import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, TypeAlias
 
-from jupyter_storage_explorer.formats.base import snippet_options
 from jupyter_storage_explorer.formats.view import InstallView
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterable, Mapping, Sequence
+    from collections.abc import Callable, Iterable, Sequence
 
     from jupyter_storage_explorer.formats.base import DataFormat, ItemContext
     from jupyter_storage_explorer.formats.package import PythonPackage
@@ -54,6 +55,56 @@ class Recipe:
     code: str
 
 
+def format_kwargs(**kwargs: Any) -> str:
+    """Python source for keyword arguments following others in a call, each
+    after ", "; those that are None are left out, so it may be empty. For the
+    ``{kwargs}`` of recipe templates, e.g. ``"df = pl.read_csv({url}{kwargs})"``,
+    with options as ``SupportOptions.code_value`` gives them.
+
+    >>> format_kwargs(sep=";", storage_options=None)
+    ", sep=';'"
+    """
+    return "".join(f", {k}={v!r}" for k, v in kwargs.items() if v is not None)
+
+
+# Option names that look like credentials are left out of generated code,
+# since code gets copied, shared and saved in notebooks: a safety net under
+# the secrets options declare (secret_field, secret_dict_field).
+_SECRET_OPTION = re.compile(
+    r"key|secret|token|password|passwd|credential|sas|connection_string", re.IGNORECASE
+)
+
+
+def _is_plain(value: Any) -> bool:
+    """Whether ``repr(value)`` is valid Python, so it can appear in generated code."""
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return True
+    if isinstance(value, (list, tuple)):
+        return all(_is_plain(v) for v in value)
+    if isinstance(value, Mapping):
+        return all(isinstance(k, str) and _is_plain(v) for k, v in value.items())
+    return False
+
+
+def _shown_options(
+    options: Mapping[str, Any] | None, secret_keys: frozenset[str]
+) -> dict[str, Any]:
+    """``options`` fit to put in generated code; empty for None: without
+    ``secret_keys`` (at any depth), names that look like credentials anyway,
+    and values that are objects rather than plain data (e.g. the filesystem
+    a DirFileSystem wraps)."""
+    out: dict[str, Any] = {}
+    for key, value in (options or {}).items():
+        if key in secret_keys or _SECRET_OPTION.search(key):
+            continue
+        if isinstance(value, Mapping):
+            # Filtered key by key, keeping e.g. client_kwargs' endpoint_url.
+            out[key] = _shown_options(value, secret_keys)
+        elif _is_plain(value):
+            out[key] = value
+    return out
+
+
 # Field metadata of options: the whole value is a secret (``secret_field``),
 # or these keys of a mapping are (``secret_dict_field``).
 IS_SECRET = "is_secret"
@@ -90,7 +141,7 @@ def secret_dict_field(*, secret_keys: Iterable[str], **kwargs: Any) -> Any:
 
     Generated code shows the mapping without them, at any depth
     (``SupportOptions.code_value``), nor keys that look like credentials
-    anyway (``snippet_options``).
+    anyway.
 
     Parameters
     ----------
@@ -150,7 +201,7 @@ class SupportOptions:
         """Option ``name`` as generated code may show it: None for a secret
         (``secret_field``) or an object that is not plain data; a mapping
         without its secret keys (``secret_dict_field``) and keys that look
-        like credentials (see ``snippet_options``), None if nothing is left.
+        like credentials, None if nothing is left.
 
         Parameters
         ----------
@@ -166,7 +217,8 @@ class SupportOptions:
         if field.metadata.get(IS_SECRET):
             return None
         secret_keys = field.metadata.get(SECRET_KEYS, ())
-        value = snippet_options({name: getattr(self, name)}, secret_keys).get(name)
+        shown = _shown_options({name: getattr(self, name)}, frozenset(secret_keys))
+        value = shown.get(name)
         return None if isinstance(value, dict) and not value else value
 
 
@@ -201,12 +253,12 @@ class FormatSupport:
       tried, and for "recipe", the support's code is left out.
     - Each method gets the detected format, then the item as an
       ``ItemContext`` (``ctx``): its location (where it is, for libraries
-      doing their own I/O and for the code: ``library_url(ctx.location)``,
-      for Spark ``supports.pyspark.spark_url(ctx.location.url)``), the
-      explorer's fsspec filesystem and the item's path in it (to read it
-      through the explorer's filesystem, e.g. with ``head_text(ctx.fs,
-      ctx.path, n)``), its info and listing, and whether it is a folder
-      (``ctx.is_dir``); then its options, an ``options_model``.
+      doing their own I/O and for the code: ``ctx.library_url``, for Spark
+      ``supports.pyspark.spark_url(ctx.location.url)``), the explorer's
+      fsspec filesystem and the item's path in it (to read it through the
+      explorer's filesystem: ``ctx.head_text(n)``, ``ctx.read_whole(limits)``),
+      its info and listing, and whether it is a folder (``ctx.is_dir``); then
+      its options, an ``options_model``.
     - Options are the fields of ``options_model`` (see ``SupportOptions``),
       never ``__init__`` arguments: explorers create supports without
       arguments, and give each the options of its ``engine``'s package
@@ -280,10 +332,10 @@ class FormatSupport:
         A ``QueryView`` of the data opens it in the data browser: read it
         lazily where the format allows, as the browser only fetches the rows
         it shows. Libraries doing their own I/O (polars, DuckDB, Spark) read
-        the location (``library_url(ctx.location)``), with credentials from
-        the environment or the options. Other views show what they read,
-        mostly the beginning of the file through ``ctx.fs`` (``head_text``,
-        ``read_whole`` in ``formats.base``), so any storage the explorer
+        the location (``ctx.library_url``), with credentials from the
+        environment or the options. Other views show what they read, mostly
+        the beginning of the file through the explorer's filesystem
+        (``ctx.head_text``, ``ctx.read_whole``), so any storage the explorer
         reaches can be viewed.
 
         Parameters
@@ -324,17 +376,17 @@ class FormatSupport:
         The code runs as it is in a new notebook: its imports first, and what
         else it needs, e.g. a Spark session. Installing the packages and
         configuring access to the storage are left to the user. It reads the
-        location (``library_url(ctx.location)``; for Spark,
-        ``supports.pyspark.spark_url(ctx.location.url)``); ``ctx.fs`` and
-        ``ctx.path`` are for what the code needs to know of the file, e.g. a
-        CSV file's separator.
+        location (``ctx.library_url``; for Spark,
+        ``supports.pyspark.spark_url(ctx.location.url)``); reading the file
+        is for what the code needs to know of it, e.g. a CSV file's
+        separator.
 
         The predefined supports fill templates, class attributes
         ``*_template`` written with ``inspect.cleandoc`` just before the
         method, with ``str.format``: the URL (``{url}``, as a Python literal)
         and the keyword arguments set by the options (``{kwargs}``, with
-        ``format_kwargs``; storage options through ``snippet_options``). A
-        subclass can change a template alone.
+        ``format_kwargs``, the options as ``options.code_value`` gives them).
+        A subclass can change a template alone.
 
         Parameters
         ----------

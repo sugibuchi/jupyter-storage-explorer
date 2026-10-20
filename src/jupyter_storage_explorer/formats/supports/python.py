@@ -11,7 +11,6 @@ from pygments.formatters import HtmlFormatter
 from pygments.lexers import get_lexer_by_name
 from pygments.util import ClassNotFound
 
-from jupyter_storage_explorer.formats.base import file_size, head, head_text
 from jupyter_storage_explorer.formats.images import Image
 from jupyter_storage_explorer.formats.support import FormatSupport
 from jupyter_storage_explorer.formats.text import Json, Markdown, Text
@@ -23,17 +22,14 @@ from jupyter_storage_explorer.formats.view import (
 )
 
 if TYPE_CHECKING:
-    from fsspec import AbstractFileSystem
-
     from jupyter_storage_explorer.formats.base import ItemContext
     from jupyter_storage_explorer.formats.support import SupportOptions
     from jupyter_storage_explorer.formats.view import View, ViewLimits
 
 
-def _size_note(fs: AbstractFileSystem, path: str, limits: ViewLimits) -> str:
+def _size_note(ctx: ItemContext, limits: ViewLimits) -> str:
     """The note under a view of the file's beginning."""
-    size = file_size(fs, path)
-    total = f" of {size:,} bytes" if size is not None else ""
+    total = f" of {ctx.size:,} bytes" if ctx.size is not None else ""
     return f"First {limits.max_bytes // 1024} KB{total}"
 
 
@@ -73,8 +69,8 @@ class TextByPython(FormatSupport):
     def view(
         self, fmt: Text, ctx: ItemContext, options: SupportOptions, limits: ViewLimits
     ) -> View:
-        text, truncated = head_text(ctx.fs, ctx.path, limits.max_bytes)
-        note = _size_note(ctx.fs, ctx.path, limits) if truncated else ""
+        text, truncated = ctx.head_text(limits.max_bytes)
+        note = _size_note(ctx, limits) if truncated else ""
         return _text_view(text, fmt.language(ctx.path), note)
 
 
@@ -92,8 +88,8 @@ class MarkdownByPython(FormatSupport):
         options: SupportOptions,
         limits: ViewLimits,
     ) -> View:
-        text, truncated = head_text(ctx.fs, ctx.path, limits.max_bytes)
-        note = _size_note(ctx.fs, ctx.path, limits) if truncated else ""
+        text, truncated = ctx.head_text(limits.max_bytes)
+        note = _size_note(ctx, limits) if truncated else ""
         return MarkdownView(text=text, note=note)
 
 
@@ -106,11 +102,9 @@ class JsonByPython(FormatSupport):
     def view(
         self, fmt: Json, ctx: ItemContext, options: SupportOptions, limits: ViewLimits
     ) -> View:
-        text, truncated = head_text(ctx.fs, ctx.path, limits.max_bytes)
+        text, truncated = ctx.head_text(limits.max_bytes)
         if truncated:
-            note = (
-                f"{_size_note(ctx.fs, ctx.path, limits)}; too large to show as a tree"
-            )
+            note = f"{_size_note(ctx, limits)}; too large to show as a tree"
             return _text_view(text, "json", note)
         try:
             return TreeView(value=json.loads(text))
@@ -129,9 +123,9 @@ class ImageByPython(FormatSupport):
         self, fmt: Image, ctx: ItemContext, options: SupportOptions, limits: ViewLimits
     ) -> View:
         mime = fmt.mime_type(ctx.path)
-        size = file_size(ctx.fs, ctx.path)
+        size = ctx.size
         if size is not None and size <= limits.max_whole_file_bytes:
-            return MediaView(mime=mime, data=head(ctx.fs, ctx.path, size))
+            return MediaView(mime=mime, data=ctx.head(size))
         # Too large to send through the kernel: let the browser fetch it, if the
         # storage can issue a temporary link.
         try:

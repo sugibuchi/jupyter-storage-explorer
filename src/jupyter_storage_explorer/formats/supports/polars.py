@@ -6,10 +6,6 @@ from dataclasses import dataclass
 from inspect import cleandoc
 from typing import TYPE_CHECKING, Any
 
-from jupyter_storage_explorer.formats.base import (
-    format_kwargs,
-    library_url,
-)
 from jupyter_storage_explorer.formats.delta import DeltaLake
 from jupyter_storage_explorer.formats.excel import Excel
 from jupyter_storage_explorer.formats.packages import DeltaLake as DeltaLakePackage
@@ -18,6 +14,7 @@ from jupyter_storage_explorer.formats.parquet import Parquet
 from jupyter_storage_explorer.formats.support import (
     FormatSupport,
     SupportOptions,
+    format_kwargs,
     secret_dict_field,
     secret_field,
 )
@@ -130,7 +127,7 @@ class CsvByPolars(_PolarsByUrl):
         self, fmt: Csv, ctx: ItemContext, options: PolarsOptions, limits: ViewLimits
     ) -> View:
         pl = Polars().load()
-        url = library_url(ctx.location)
+        url = ctx.library_url
         # The first lines, read by polars too, so any URL it reads works.
         lines = pl.scan_lines(url, **options.storage()).head(20).collect()["line"]
         # try_parse_dates: date columns get date filters (<, >, ...) instead of text ones.
@@ -153,10 +150,10 @@ class CsvByPolars(_PolarsByUrl):
         self, fmt: Csv, ctx: ItemContext, options: PolarsOptions
     ) -> dict[str, str]:
         kwargs = format_kwargs(
-            separator=fmt.code_separator(ctx.fs, ctx.path),
+            separator=fmt.code_separator(ctx),
             storage_options=options.code_value("storage_options"),
         )
-        url = repr(library_url(ctx.location))
+        url = repr(ctx.library_url)
         return {AS_DATA_FRAME: self.data_frame_template.format(url=url, kwargs=kwargs)}
 
 
@@ -171,9 +168,7 @@ class JsonLinesByPolars(_PolarsByUrl):
         options: PolarsOptions,
         limits: ViewLimits,
     ) -> View:
-        data = (
-            Polars().load().scan_ndjson(library_url(ctx.location), **options.storage())
-        )
+        data = Polars().load().scan_ndjson(ctx.library_url, **options.storage())
         return QueryView(data=data)
 
     lazy_frame_template = cleandoc("""
@@ -191,7 +186,7 @@ class JsonLinesByPolars(_PolarsByUrl):
     def recipe(
         self, fmt: JsonLines, ctx: ItemContext, options: PolarsOptions
     ) -> dict[str, str]:
-        url = repr(library_url(ctx.location))
+        url = repr(ctx.library_url)
         kwargs = format_kwargs(storage_options=options.code_value("storage_options"))
         return {
             AS_LAZY_FRAME: self.lazy_frame_template.format(url=url, kwargs=kwargs),
@@ -216,7 +211,7 @@ class JsonByPolars(FormatSupport):
         self, fmt: Json, ctx: ItemContext, options: SupportOptions
     ) -> dict[str, str]:
         # polars' read_json takes no storage options.
-        url = repr(library_url(ctx.location))
+        url = repr(ctx.library_url)
         return {AS_DATA_FRAME: self.data_frame_template.format(url=url)}
 
 
@@ -257,7 +252,7 @@ class ExcelByPolars(FormatSupport):
         self, fmt: Excel, ctx: ItemContext, options: ExcelByPolarsOptions
     ) -> dict[str, str]:
         kwargs = format_kwargs(**(options.code_value("fsspec_storage_options") or {}))
-        url = repr(library_url(ctx.location))
+        url = repr(ctx.library_url)
         return {AS_DATA_FRAME: self.data_frame_template.format(url=url, kwargs=kwargs)}
 
 
@@ -348,7 +343,7 @@ class DeltaLakeByPolars(_PolarsByUrl):
             Polars()
             .load()
             .scan_delta(
-                library_url(ctx.location),
+                ctx.library_url,
                 **options.storage(),
                 delta_table_options=options.delta_table_options,
                 use_pyarrow=options.use_pyarrow,
@@ -372,7 +367,7 @@ class DeltaLakeByPolars(_PolarsByUrl):
     def recipe(
         self, fmt: DeltaLake, ctx: ItemContext, options: DeltaLakeByPolarsOptions
     ) -> dict[str, str]:
-        url = repr(library_url(ctx.location))
+        url = repr(ctx.library_url)
         # Only the arguments that differ from scan_delta's (read_delta's) defaults.
         kwargs = format_kwargs(
             storage_options=options.code_value("storage_options"),

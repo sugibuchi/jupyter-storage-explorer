@@ -8,12 +8,6 @@ from inspect import cleandoc
 from typing import TYPE_CHECKING, Any
 
 from jupyter_storage_explorer._json import jsonable
-from jupyter_storage_explorer.formats.base import (
-    format_kwargs,
-    head_text,
-    library_url,
-    read_whole,
-)
 from jupyter_storage_explorer.formats.excel import Excel
 from jupyter_storage_explorer.formats.frames import rows_note, with_sheets
 from jupyter_storage_explorer.formats.packages import Openpyxl, Pandas, PyArrow
@@ -21,6 +15,7 @@ from jupyter_storage_explorer.formats.parquet import Parquet
 from jupyter_storage_explorer.formats.support import (
     FormatSupport,
     SupportOptions,
+    format_kwargs,
     secret_dict_field,
 )
 from jupyter_storage_explorer.formats.text import Csv, Json, JsonLines
@@ -91,7 +86,7 @@ class CsvByPandas(_PandasByUrl):
         self, fmt: Csv, ctx: ItemContext, options: PandasOptions, limits: ViewLimits
     ) -> View:
         pd = Pandas().load()
-        text, truncated = head_text(ctx.fs, ctx.path, limits.max_bytes)
+        text, truncated = ctx.head_text(limits.max_bytes)
         df = pd.read_csv(
             io.StringIO(text),
             sep=fmt.separator(ctx.name, text),
@@ -111,9 +106,9 @@ class CsvByPandas(_PandasByUrl):
     ) -> dict[str, str]:
         return {
             AS_DATA_FRAME: self.data_frame_template.format(
-                url=repr(library_url(ctx.location)),
+                url=repr(ctx.library_url),
                 kwargs=format_kwargs(
-                    sep=fmt.code_separator(ctx.fs, ctx.path),
+                    sep=fmt.code_separator(ctx),
                     storage_options=options.code_value("storage_options"),
                 ),
             )
@@ -132,7 +127,7 @@ class JsonLinesByPandas(_PandasByUrl):
         limits: ViewLimits,
     ) -> View:
         pd = Pandas().load()
-        text, truncated = head_text(ctx.fs, ctx.path, limits.max_bytes)
+        text, truncated = ctx.head_text(limits.max_bytes)
         df = pd.read_json(io.StringIO(text), lines=True, nrows=limits.max_display_rows)
         more = truncated or len(df) == limits.max_display_rows
         return _table(df, note=rows_note(len(df), more, "records"))
@@ -148,7 +143,7 @@ class JsonLinesByPandas(_PandasByUrl):
     ) -> dict[str, str]:
         return {
             AS_DATA_FRAME: self.data_frame_template.format(
-                url=repr(library_url(ctx.location)),
+                url=repr(ctx.library_url),
                 kwargs=format_kwargs(
                     storage_options=options.code_value("storage_options")
                 ),
@@ -173,7 +168,7 @@ class JsonByPandas(_PandasByUrl):
     ) -> dict[str, str]:
         return {
             AS_DATA_FRAME: self.data_frame_template.format(
-                url=repr(library_url(ctx.location)),
+                url=repr(ctx.library_url),
                 kwargs=format_kwargs(
                     storage_options=options.code_value("storage_options")
                 ),
@@ -190,9 +185,7 @@ class ExcelByPandas(_PandasByUrl):
         self, fmt: Excel, ctx: ItemContext, options: PandasOptions, limits: ViewLimits
     ) -> View:
         pd = Pandas().load()
-        workbook = pd.ExcelFile(
-            io.BytesIO(read_whole(ctx.fs, ctx.path, limits)), engine="openpyxl"
-        )
+        workbook = pd.ExcelFile(io.BytesIO(ctx.read_whole(limits)), engine="openpyxl")
         name = workbook.sheet_names[0]
         # One extra row tells whether there are more.
         df = workbook.parse(name, nrows=limits.max_display_rows + 1)
@@ -216,7 +209,7 @@ class ExcelByPandas(_PandasByUrl):
     ) -> dict[str, str]:
         return {
             AS_DATA_FRAME: self.data_frame_template.format(
-                url=repr(library_url(ctx.location)),
+                url=repr(ctx.library_url),
                 kwargs=format_kwargs(
                     storage_options=options.code_value("storage_options")
                 ),
@@ -268,7 +261,7 @@ class ParquetByPandas(_PandasByUrl):
     ) -> dict[str, str]:
         return {
             AS_DATA_FRAME: self.data_frame_template.format(
-                url=repr(library_url(ctx.location)),
+                url=repr(ctx.library_url),
                 kwargs=format_kwargs(
                     storage_options=options.code_value("storage_options")
                 ),

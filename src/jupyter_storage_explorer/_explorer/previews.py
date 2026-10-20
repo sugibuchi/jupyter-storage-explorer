@@ -19,8 +19,8 @@ from jupyter_storage_explorer.formats import (
     MediaView,
     QueryView,
     View,
-    matching_formats,
 )
+from jupyter_storage_explorer.formats.base import matching_formats
 
 if TYPE_CHECKING:
     from collections.abc import Callable

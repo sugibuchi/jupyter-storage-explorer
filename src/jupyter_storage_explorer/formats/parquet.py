@@ -7,7 +7,7 @@ import itertools
 import re
 from typing import TYPE_CHECKING, Any
 
-from jupyter_storage_explorer.formats.base import DataFormat, child_names, library_url
+from jupyter_storage_explorer.formats.base import DataFormat
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
@@ -254,7 +254,7 @@ class Parquet(DataFormat):
         ``_dataset_files`` and ``_partitioned_layout``), and not a Hudi table."""
         if not ctx.is_dir:
             return super().matches(ctx)
-        if _HUDI_FOLDER in child_names(ctx.children):
+        if _HUDI_FOLDER in ctx.child_names:
             return False
         children = list(ctx.children)
         if (files := _dataset_files(children, ctx.fs)) is not None:
@@ -278,10 +278,10 @@ class Parquet(DataFormat):
 
     def data_url(self, ctx: ItemContext, url: str | None = None) -> str:
         """The URL of the data files, from ``url`` (the location as the
-        library reads it; by default ``library_url``): a file's as it is, a
+        library reads it; by default ``ctx.library_url``): a file's as it is, a
         directory's data files as a glob (see ``ParquetLayout.glob``), rather
         than the directory itself, which libraries would search recursively."""
-        url = url if url is not None else library_url(ctx.location)
+        url = url if url is not None else ctx.library_url
         return self.layout(ctx).glob(url) if ctx.is_dir else url
 
     def first_files(self, ctx: ItemContext, limit: int) -> list[str]:

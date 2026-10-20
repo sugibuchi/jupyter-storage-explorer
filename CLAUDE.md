@@ -286,15 +286,17 @@ The list's is cleared when another folder's listing arrives, not on the click, s
 unfiltered.
 
 **Formats** (`formats/`). Laid out as `filesystems/`: the interfaces `DataFormat` (`base.py`, with
-`ItemContext`, `detect`, `FILE_ICONS`, the helpers reading a file through its filesystem, `head_text`, `read_whole`,
-`file_size`, `name_of`, `child_names`, and the generated code's helpers), `FormatSupport` (`support.py`, with `SupportOptions`, `SupportChain`, `Capability` and `Recipe`) and `PythonPackage`
+`ItemContext`, which reads the item for formats and supports (`head`, `head_text`, `read_whole`; `name`, `size`,
+`child_names`, `library_url`: the location as most libraries read it, a local file's plain path), `FILE_ICONS`,
+and the explorer's `detect` and `matching_formats`, not exported), `FormatSupport` (`support.py`, with
+`SupportOptions`, `SupportChain`, `Capability`, `Recipe`, and the generated code's helpers: `format_kwargs`, the
+secret fields, `_shown_options`) and `PythonPackage`
 (`package.py`); a module per predefined format (`delta.py`, `parquet.py`, `excel.py`, `text.py`, `images.py`) and
 per library of the predefined supports in `supports/` (`polars.py`, `pandas.py`, `pyspark.py`, `fsspec.py`,
 `pillow.py`; `python.py` for those needing no package; named after the libraries, which they import only inside
 methods; exported by `formats.supports`, not `formats`); the predefined packages in `packages.py`, the
-views in `view.py` (`View`s, `ViewLimits`; tables made from dataframes in each library's support module, their notes in `frames.py`), the generated code's helpers in `base.py`
-(`snippet_options`, `format_kwargs`, `library_url`: a location as most libraries read it, a local
-file's plain path), and the defaults in `utils.py` (`DEFAULT_FORMATS`,
+views in `view.py` (`View`s, `ViewLimits`; tables made from dataframes in each library's support module, their
+notes in `frames.py`), and the defaults in `utils.py` (`DEFAULT_FORMATS`,
 `DEFAULT_SUPPORTS`). A format only detects; a support handles one format's data with one library,
 so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
 - `DataFormat` subclasses declare `name`, `label`, `priority`, `extensions`, `file_icon` (its files' icon in the list:
@@ -319,7 +321,7 @@ so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
   `capabilities`, so a method not listed is never called (no runtime check of that, by design: users are expected to
   generate supports with AI from the written rules in `FormatSupport`'s docstring, kept by
   `test_capabilities_are_the_methods_implemented` for the defaults). Each method gets the detected format object first, then the item's `ItemContext`
-  (`ctx`): its location (for libraries doing their own I/O and for the code: `library_url(ctx.location)`; Spark's
+  (`ctx`): its location (for libraries doing their own I/O and for the code: `ctx.library_url`; Spark's
   `spark_url(ctx.location.url)`, in `supports/pyspark.py`), the explorer's fsspec filesystem and the item's path in it
   (to read it through the explorer, with its credentials); then its options, and for `view` the `limits`
   (`ViewLimits`), all positional, never in the context. Any may raise `FormatSupport.NotSupported` for an item, and
@@ -376,7 +378,7 @@ format) are ValueErrors. Supports given as objects get options as classes do (th
 declared on the fields (`support.py`): `secret_field(...)` (metadata `is_secret`; also `repr=False`) for a whole value,
 `secret_dict_field(..., secret_keys=[...])` for keys of a mapping (storage options); generated code gets options
 only through `SupportOptions.code_value(name)`, which drops secret fields, secret keys at any depth, and, through
-`snippet_options(value, secret_keys)`, credential-looking keys anyway (a safety net: storage options' keys come from
+`_shown_options(value, secret_keys)`, credential-looking keys anyway (a safety net: storage options' keys come from
 many backends) and non-literal values. ruff's `extend-immutable-calls` (pyproject.toml) knows the two helpers. Spark
 snippets never get storage options (`spark_url()` rewrites `abfs`/`s3` to `abfss`/`s3a`).
 

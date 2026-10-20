@@ -5,7 +5,6 @@ from __future__ import annotations
 from inspect import cleandoc
 from typing import TYPE_CHECKING
 
-from jupyter_storage_explorer.formats.base import library_url
 from jupyter_storage_explorer.formats.images import Image
 from jupyter_storage_explorer.formats.packages import Fsspec, Pillow
 from jupyter_storage_explorer.formats.supports.fsspec import OpenedByFsspec
@@ -43,6 +42,6 @@ class ImageByPillow(OpenedByFsspec):
             raise self.NotSupported
         return {
             OPEN_IMAGE: self.image_template.format(
-                url=repr(library_url(ctx.location)), kwargs=options.code_kwargs()
+                url=repr(ctx.library_url), kwargs=options.code_kwargs()
             )
         }

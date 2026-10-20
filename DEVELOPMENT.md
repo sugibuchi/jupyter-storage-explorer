@@ -402,10 +402,11 @@ class ParquetByDuckDB(FormatSupport):
 StorageExplorer("data", supports=[ParquetByDuckDB])
 ```
 
-Each method gets the format detected and the item, an `ItemContext` (`ctx`): where it is (`ctx.location`, which
-libraries doing their own I/O read: `library_url(ctx.location)`), the explorer's fsspec filesystem and the item's path in
-it (`ctx.fs`, `ctx.path`: to read it through the explorer, e.g. for a text view), its info, its listing if it is a folder
-(`ctx.children`, `ctx.is_dir`); then its options, and `view` also `limits` (`ViewLimits`: bytes and rows to read).
+Each method gets the format detected and the item, an `ItemContext` (`ctx`): where it is (`ctx.location`; libraries
+doing their own I/O read `ctx.library_url`, a local file's plain path), the explorer's fsspec filesystem and the item's
+path in it (`ctx.fs`, `ctx.path`; `ctx.head_text(n)`, `ctx.head(n)` and `ctx.read_whole(limits)` read it through the
+explorer, e.g. for a text view), its info (`ctx.size`), its listing if it is a folder (`ctx.children`,
+`ctx.child_names`, `ctx.is_dir`); then its options, and `view` also `limits` (`ViewLimits`: bytes and rows to read).
 Formats' `matches(ctx)` gets the same context. A support's options are the fields of a frozen dataclass, its
 `options_model` (a `SupportOptions` subclass, each field with a default), made from [`format_options`](docs/storage-explorer.md#format-options)
 under its library's name (`engine.package`, e.g. `"duckdb"`). Mark credentials so that "Python code" never shows them:
