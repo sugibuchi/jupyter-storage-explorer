@@ -41,7 +41,7 @@ def section(view: View) -> dict[str, Any]:
     data = {
         f.name: getattr(view, f.name)
         for f in dataclasses.fields(view)
-        if f.name != "on_close" and not f.name.startswith("_")
+        if not f.name.startswith("_")
     }
     if isinstance(view, MediaView) and view.data is not None:
         data["data"] = base64.b64encode(view.data).decode("ascii")
