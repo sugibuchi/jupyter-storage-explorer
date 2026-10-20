@@ -207,6 +207,14 @@ function createMenu(widgetEl) {
       show({ clientX: box.left, clientY: box.bottom, preventDefault() {}, stopPropagation() {} }, items);
       owner = button;
     },
+    // Opens the menu of `items` above `button` (in the status bar), likewise.
+    showAbove(button, items) {
+      const box = button.getBoundingClientRect();
+      show({ clientX: box.left, clientY: box.top, preventDefault() {}, stopPropagation() {} }, items);
+      at = { x: box.left, y: box.top - el.offsetHeight };
+      place();
+      owner = button;
+    },
     isOpenFrom: (button) => !el.hidden && owner === button,
   };
 }

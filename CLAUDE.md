@@ -135,7 +135,7 @@ view tabs) + the widget's parts (`static/<widget>/*.js`, if any) + `<widget>.js`
 functions and constants; the widget's file has `render` and the `export`), and likewise for CSS (`sections.css`;
 without parts). The storage explorer's parts are a feature each (`tree.js`,
 `list.js`, `preview.js`, `item_menu.js`, `operations.js` with the clipboard, `transfers.js` (drag and drop, uploads,
-downloads), `jupyterlab.js`, `properties.js`, `toolbar.js` with unsafe mode and bookmarks, `jobs.js`, `overlays.js`
+downloads), `jupyterlab.js`, `properties.js`, `toolbar.js` with unsafe mode and bookmarks, `engine.js` (the engine chosen, in the status bar), `jobs.js`, `overlays.js`
 (busy screen, modal, menus), `util.js`): a `createX(x)` returning its elements and
 functions. `x` is the explorer, made in `render()`: what the features share (`model`, `el`, `request`, `ask`,
 `flash`, `navigate`, ...) and the features themselves (`x.list`, `x.preview`, ...), used when needed, not when made,
@@ -390,8 +390,8 @@ so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
 
 **Engines in the explorer.** `StorageExplorer(engine_preference=)` orders the chain's `engines`, synced as
 `_engines` (`[{"key", "label"}]`); `_engine` is the one chosen: the user's last (`ExplorerStates.engine`, its JSON
-"engine") if still offered, else the first; the frontend sets it from the settings menu (toolbar.js: the ⚙ button,
-with the engine's label, opens "Engine ▸" and, in launcher tabs, "Edit settings"), `_on_engine` remembers it
+"engine") if still offered, else the first; the frontend sets it from the status bar (engine.js: a button left of Preview, with
+the engine's label, opening a menu of the engines), `_on_engine` remembers it
 (`remember_engine`; not the value `__init__` sets, `_engine_ready`) and shows again what can be previewed
 (`_selected_format`, `_current_format` via `_viewable`, and the preview open). Requests "preview" and "view_tab"
 take an optional "engine" (a key, or null for the built-in views; absent: the one chosen, `...` in Python), the

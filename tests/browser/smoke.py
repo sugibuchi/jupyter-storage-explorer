@@ -197,14 +197,10 @@ def browse(x: Explorer) -> None:
     expect(x.el.locator(".jse-crumb").last).to_have_text("curated")
     x.el.locator(".jse-crumb", has_text="/sales-lake").click()
     expect(x.names.first).to_have_text("curated")
-    # The settings menu: the engine, in every explorer; "Edit settings" only
-    # in the launcher's tabs (see launcher_settings).
-    settings = x.el.locator(".jse-settings-btn")
-    expect(settings).to_contain_text("Polars")
-    settings.click()
-    expect(x.menu_item("Engine")).to_be_visible()
-    expect(x.menu_item("Edit settings")).to_have_count(0)
-    settings.click()
+    # The settings button is in the launcher's tabs only (launcher_settings);
+    # the engine, in the status bar, in every explorer.
+    expect(x.el.locator(".jse-settings-btn")).to_be_hidden()
+    expect(x.el.locator(".jse-engine-btn")).to_have_text("Polars")
 
 
 @check
@@ -350,8 +346,8 @@ def python_code(x: Explorer) -> None:
 
 @check
 def engines(x: Explorer) -> None:
-    # Previews use the engine chosen in the settings menu: Polars first.
-    settings = x.el.locator(".jse-settings-btn")
+    # Previews use the engine chosen in the status bar: Polars first.
+    engine_btn = x.el.locator(".jse-engine-btn")
     panel = x.el.locator(".jse-preview-panel")
     badge = panel.locator(".jse-badge")
     x.go("curated")
@@ -360,10 +356,9 @@ def engines(x: Explorer) -> None:
     expect(panel.locator(".jse-query")).to_be_visible()  # the data browser
 
     def choose(engine: str) -> None:
-        settings.click()
-        x.menu_item("Engine").hover()
-        x.el.locator(".jse-submenu .jse-menu-item:visible", has_text=engine).click()
-        expect(settings).to_contain_text(engine)
+        engine_btn.click()
+        x.menu_item(engine).click()
+        expect(engine_btn).to_have_text(engine)
 
     # Another engine: the preview open is viewed again with it.
     choose("pandas")
@@ -1076,18 +1071,12 @@ def launcher_settings(lab: Lab, page: Page) -> None:
         tab = open_launcher_tab(lab, page)
         path.unlink()  # read when the tab started
         dialog = tab.locator(".jse-dialog:visible")
-        edit = tab.locator(
-            ".jse-menu:not(.jse-submenu) > .jse-menu-item:visible",
-            has_text="Edit settings",
-        )
         tab.locator(".jse-settings-btn").click()
-        edit.click()
         expect(dialog).to_contain_text("Create your launcher settings")
         dialog.get_by_role("button", name="Cancel").click()
         expect(dialog).to_be_hidden()
         assert not path.exists()
         tab.locator(".jse-settings-btn").click()
-        edit.click()
         dialog.get_by_role("button", name="Create").click()
         editor = page.locator(".jp-FileEditor .cm-content").first
         expect(editor).to_contain_text("def filesystems():")

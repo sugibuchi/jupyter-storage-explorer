@@ -67,6 +67,7 @@ function render({ model, el }) {
   x.tree = createTree(x);
   x.list = createList(x);
   x.preview = createPreview(x);
+  x.engine = createEngine(x);
   x.itemMenu = createItemMenu(x);
   x.operations = createOperations(x);
   x.clipboard = createClipboard(x);
@@ -95,14 +96,14 @@ function render({ model, el }) {
   // Keep JupyterLab's notebook shortcuts (e.g. "dd" deletes a cell) from
   // firing while keys are pressed in the widget.
   el.dataset.lmSuppressShortcuts = "true";
-  // The status bar (messages on the left, Preview on the right) belongs to
+  // The status bar (messages on the left, the engine and Preview on the right) belongs to
   // the list, so it stays under it, above the preview panel: Preview and the
   // item count stay in view when the panel opens. The jobs running are above it.
   el.replaceChildren(
     x.toolbar.el,
     panesEl,
     x.jobs.el,
-    h("div", { className: "jse-status-bar" }, x.list.statusEl, x.preview.button),
+    h("div", { className: "jse-status-bar" }, x.list.statusEl, x.engine.button, x.preview.button),
     x.preview.el,
     grip,
     x.modal.el,
@@ -189,8 +190,9 @@ function render({ model, el }) {
     "change:_current_format": x.preview.updateButton,
     "change:_selected_format": x.preview.updateButton,
     "change:_unsafe_mode": x.unsafe.render,
-    "change:_engines": x.toolbar.renderSettings,
-    "change:_engine": x.toolbar.renderSettings,
+    "change:_settings_path": x.toolbar.renderSettings,
+    "change:_engines": x.engine.render,
+    "change:_engine": x.engine.render,
     "msg:custom": onCustomMsg,
   };
   for (const [event, handler] of Object.entries(handlers)) model.on(event, handler);
@@ -199,6 +201,7 @@ function render({ model, el }) {
   x.tree.renderStorages();
   x.unsafe.render();
   x.toolbar.renderSettings();
+  x.engine.render();
   onDirChange();
   x.list.render();
   x.preview.render();

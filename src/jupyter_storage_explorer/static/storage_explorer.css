@@ -393,7 +393,8 @@
 }
 
 /* The status bar: messages on the left (.jse-status, without its own border
-   here), Preview on the right. */
+   here), then the engine and Preview, each of a fixed width, so they do not
+   move as their labels change, and set apart by lines. */
 .jse-status-bar {
   display: flex;
   align-items: center;
@@ -407,16 +408,46 @@
   border-top: none;
 }
 
-/* Preview: a borderless button, an icon and its label, in the link colour. */
+/* Borderless buttons, an icon and a label, the height of the bar. */
+.jse-status-bar > .jse-engine-btn,
 .jse-status-bar > .jse-preview-btn {
   display: inline-flex;
+  flex: none;
   align-items: center;
+  align-self: stretch;
   gap: 4px;
-  margin: 1px 4px 1px auto; /* stays right when the message is hidden */
-  padding: 1px 6px 1px 4px;
+  margin: 0;
+  padding: 1px 6px;
+  border-left: 1px solid var(--jse-border);
+  border-radius: 0;
+  white-space: nowrap;
+}
+
+.jse-status-bar > .jse-engine-btn {
+  width: 8.5em;
+  margin-left: auto; /* stays right when the message is hidden */
+  color: var(--jse-fg-muted);
+}
+
+.jse-status-bar > .jse-engine-btn[hidden] {
+  display: none;
+}
+
+/* Preview, in the link colour. */
+.jse-status-bar > .jse-preview-btn {
+  width: 13em;
   color: var(--jse-link);
   font-weight: 600;
-  white-space: nowrap;
+}
+
+.jse-status-bar > .jse-engine-btn[hidden] + .jse-preview-btn {
+  margin-left: auto;
+}
+
+.jse-engine-label,
+.jse-preview-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .jse-status-bar > .jse-preview-btn:disabled {
@@ -439,20 +470,11 @@
 }
 
 /* After Unsafe mode, in the launcher's tabs only. */
-/* The settings menu's button: the engine chosen's label, then the icon. */
 .jse-settings-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
   margin-right: 2px;
-  white-space: nowrap;
 }
 
-.jse-engine-label {
-  color: var(--jse-fg-muted);
-}
-
-.jse-engine-label[hidden] {
+.jse-settings-btn[hidden] {
   display: none;
 }
 

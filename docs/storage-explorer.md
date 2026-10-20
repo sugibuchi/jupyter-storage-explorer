@@ -117,7 +117,7 @@ Edit (in JupyterLab's editor), Rename, Create a folder, Delete; Download to loca
 bookmark. The views and Python code are offered for what has a format, e.g. not a plain folder. Local files' URLs are
 `file:///` URLs, e.g. `file:///home/jovyan/x.csv`; Copy path gives the plain path, as Copy puts it on the clipboard.
 
-<img src="figs/using-right-click.png" width="403" alt="The right-click menu of a JSON Lines file">
+<img src="figs/using-right-click.png" width="402" alt="The right-click menu of a JSON Lines file">
 
 ### Properties
 
@@ -233,8 +233,8 @@ polars reads the data with the credentials in the environment, not the explorer'
 ### Engines
 
 Previews and view tabs read the data with an *engine*, a library: **Polars** (the data browser), **pandas** (the
-first rows), each when installed. The label at the right of the toolbar shows the engine chosen; its ⚙ menu →
-**Engine** chooses another, and the preview open is shown again with it. Text, Markdown, JSON and images, which the
+first rows), each when installed. The status bar shows the engine chosen, left of **Preview**; click it to choose
+another, and the preview open is shown again with it. Text, Markdown, JSON and images, which the
 engines do not handle, are shown by the explorer itself whatever the engine. When the engine chosen cannot view an
 item (e.g. a Delta table, with polars but not `deltalake`), Preview is disabled: **Preview as** and **View in new tab
 as** offer each format and engine that can. The choice is [remembered](#remembered-states).
