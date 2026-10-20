@@ -33,8 +33,8 @@ def filesystems():
     return {**demo_data.shared_drive(), **demo_data.filesystems()}
 
 
-def formats():
-    return demo_data.formats()
+def supports():
+    return demo_data.supports()
 """
 
 

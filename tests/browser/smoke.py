@@ -55,7 +55,7 @@ for i in range(150):
     memory.pipe_file(f"/scratch/some/file_{i:03}.txt", b"x")
 for i in range(250):
     memory.pipe_file(f"/scratch/many/file_{i:03}.txt", b"x")
-StorageExplorer(filesystems=storages, formats=demo_data.formats(), max_browser_items=200)"""
+StorageExplorer(filesystems=storages, supports=demo_data.supports(), max_browser_items=200)"""
 
 # A switch or button that is on.
 ON = re.compile(r"\bjse-on\b")
@@ -333,6 +333,7 @@ def python_code(x: Explorer) -> None:
     x.el.locator(".jse-submenu .jse-menu-item", has_text="Load with polars").click()
     dialog = x.el.locator(".jse-dialog:visible")
     expect(dialog).to_contain_text("scan_parquet")
+    expect(dialog).to_contain_text("Needs polars")
     dialog.press("Escape")
     expect(dialog).to_be_hidden()
 
@@ -912,7 +913,7 @@ import ipywidgets
 from jupyter_storage_explorer import StorageExplorer
 
 explorer = StorageExplorer(
-    filesystems=demo_data.filesystems(), formats=demo_data.formats(), open_preview=True
+    filesystems=demo_data.filesystems(), supports=demo_data.supports(), open_preview=True
 )
 selected = ipywidgets.Label("-").add_class("smoke-selected")
 rows = ipywidgets.Label("-").add_class("smoke-rows")

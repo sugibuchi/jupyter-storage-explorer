@@ -5,7 +5,8 @@ from __future__ import annotations
 from explorers import path_of
 
 from jupyter_storage_explorer._query.settings import QuerySettings
-from jupyter_storage_explorer.formats import Csv, Requirement
+from jupyter_storage_explorer.formats import Requirement
+from jupyter_storage_explorer.formats.supports import CsvByPandas, CsvByPolars
 
 
 class TestPreview:
@@ -35,9 +36,10 @@ class TestPreview:
 
     def test_install_hint(self, mem_explorer, monkeypatch):
         # Packages missing: the explorer tells what to install, without
-        # calling the format's preview.
+        # calling the supports' preview.
         monkeypatch.setattr(Requirement, "is_installed", lambda self: False)
-        monkeypatch.setattr(Csv, "preview", None)
+        monkeypatch.setattr(CsvByPolars, "preview", None)
+        monkeypatch.setattr(CsvByPandas, "preview", None)
         mem_explorer._open_preview("/data/a.csv")
         [hint] = mem_explorer._preview["sections"]
         assert hint["kind"] == "install"
@@ -51,7 +53,8 @@ class TestPreview:
 def test_menu_info(mem_explorer):
     reply = mem_explorer.request({"type": "menu_info", "rid": 1, "path": "/data/a.csv"})
     assert reply["formats"] == ["csv", "text"]
-    assert [r["library"] for r in reply["recipes"]] == ["polars", "pandas", "pyspark"]
+    packages = [r["packages"] for r in reply["recipes"]]
+    assert packages == [["polars"], ["pandas"], ["pyspark"]]
     folder = mem_explorer.request(
         {"type": "menu_info", "rid": 1, "path": "/data/table"}
     )

@@ -68,7 +68,8 @@ The file has some of these functions, all optional:
 |------------------------|-------------------------------------------------------------------------------------------|
 | `filesystems()`        | `{name: URL or fsspec filesystem}`                                                        |
 | `formats()`            | Formats of your own (`DataFormat`), tried before the defaults                             |
-| `format_options()`     | Options for the default formats ([Format options](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#format-options)) |
+| `supports()`           | [Libraries of your own for formats](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#another-library-for-a-format) (`FormatSupport`), tried before the defaults |
+| `format_options()`     | The libraries' options, by library and format ([Format options](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#format-options)) |
 | `operations()`         | File operations of your own (`FileSystemOperations`), tried before the defaults           |
 | `filesystem_mappers()` | [How storages are told apart](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#file-transfer-between-file-systems) and their URLs (`FileSystemMapper`) |
 | `transfer_policy()`    | Rules of a [transfer policy](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#transfer-policy) |
@@ -102,8 +103,9 @@ A later layer changes an earlier one's settings this way:
 | Function                                        | Merged with earlier layers                     |
 |-------------------------------------------------|------------------------------------------------|
 | `filesystems()`                                 | By name: added or replaced; `None` removes one |
-| `format_options()`, `parameters()`              | By name                                        |
-| `formats()`, `operations()`, `filesystem_mappers()` | Later layers' first, all before the defaults |
+| `parameters()`                                  | By name                                        |
+| `format_options()`                              | By library, format, then option                |
+| `formats()`, `supports()`, `operations()`, `filesystem_mappers()` | Later layers' first, all before the defaults |
 | `transfer_policy()`                             | Later layers' rules first, so they decide first |
 
 `final()` returns the settings later layers cannot change: function names (except `parameters`) and parameter names.

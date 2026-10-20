@@ -23,6 +23,11 @@ def rows_note(
     )
 
 
+def with_sheets(note: str, sheets: list[str]) -> str:
+    """The note under a workbook's first sheet's table, mentioning the other sheets."""
+    return f"{note}; other sheets: {', '.join(sheets[1:])}" if len(sheets) > 1 else note
+
+
 def polars_table(df: Any, **kwargs: Any) -> TablePreview:
     return TablePreview(
         columns=list(df.columns),

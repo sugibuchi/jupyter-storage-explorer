@@ -144,7 +144,18 @@ function codeBlock(title, code) {
   );
 }
 
-// Body of the "Python code" dialog for one recipe ({library, code}).
+// A recipe ({packages, code}) is named after the library it loads with, its
+// first package; one needing no package is plain Python.
+function recipeLibrary(recipe) {
+  return recipe.packages[0] ?? "Python";
+}
+
+// Body of the "Python code" dialog for one recipe: the code, and the packages
+// it needs (installing them is left to the user).
 function recipeBlocks(recipe) {
-  return [codeBlock("Load", recipe.code)];
+  const blocks = [codeBlock("Load", recipe.code)];
+  if (recipe.packages.length) {
+    blocks.push(h("div", { className: "jse-note", textContent: `Needs ${recipe.packages.join(", ")}` }));
+  }
+  return blocks;
 }

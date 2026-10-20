@@ -21,13 +21,16 @@ def filesystems():
     }
 
 
-# Options for the default formats' previews, data browser and code (see
-# "Format options" in docs/storage-explorer.md).
+# Options of the libraries reading the data for previews, the data browser
+# and code, by library, then format ("*": all formats). See "Format options"
+# in docs/storage-explorer.md.
 #
 # def format_options():
 #     return {
-#         "polars_storage_options": {"aws_region": "eu-west-1"},
-#         "polars_delta_use_pyarrow": True,
+#         "polars": {
+#             "*": {"storage_options": {"aws_region": "eu-west-1"}},
+#             "delta": {"use_pyarrow": True},
+#         },
 #     }
 
 
@@ -37,6 +40,15 @@ def filesystems():
 #     from my_formats import AvroFormat
 #
 #     return [AvroFormat()]
+
+
+# Libraries of your own handling formats' data (FormatSupport subclasses),
+# tried before the defaults.
+#
+# def supports():
+#     from my_supports import ParquetByDuckDB
+#
+#     return [ParquetByDuckDB]
 
 
 # File operations of your own, tried before the defaults: e.g. renames and

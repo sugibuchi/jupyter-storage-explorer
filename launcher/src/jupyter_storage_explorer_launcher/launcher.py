@@ -23,9 +23,14 @@ final. Each file may have these functions, all optional:
 ``formats()``
     ``[DataFormat, ...]``: formats of your own, tried before the defaults;
     a later layer's come first.
+``supports()``
+    ``[FormatSupport, ...]``: how formats' data is handled with libraries
+    of your own (classes or objects), tried before the defaults; a later
+    layer's come first.
 ``format_options()``
-    ``{option: value}`` for the default formats, merged by option name (a
-    value is replaced whole, e.g. a ``polars_storage_options`` dict).
+    ``{library: {format or "*": {option: value}}}`` for the supports (see
+    ``StorageExplorer``'s ``format_options``), merged option by option (a
+    value is replaced whole, e.g. a ``storage_options`` dict).
 ``operations()``
     ``[FileSystemOperations, ...]``: file operations of your own, tried
     before ``StorageExplorer.default_operations()``; a later layer's come
@@ -100,6 +105,7 @@ LAUNCHER_FILE = pathlib.Path("storage-explorer", "launcher.py")
 HOOKS = (
     "filesystems",
     "formats",
+    "supports",
     "format_options",
     "operations",
     "filesystem_mappers",
@@ -124,6 +130,7 @@ _NOT_PARAMETERS = frozenset(
         "fs",
         "filesystems",
         "formats",
+        "supports",
         "format_options",
         "operations",
         "filesystem_mappers",
@@ -147,7 +154,10 @@ class Settings:
 
     filesystems: dict[str, Any] = dataclasses.field(default_factory=dict)
     formats: list[Any] = dataclasses.field(default_factory=list)
-    format_options: dict[str, Any] = dataclasses.field(default_factory=dict)
+    supports: list[Any] = dataclasses.field(default_factory=list)
+    format_options: dict[str, dict[str, dict[str, Any]]] = dataclasses.field(
+        default_factory=dict
+    )
     operations: list[Any] = dataclasses.field(default_factory=list)
     filesystem_mappers: list[Any] = dataclasses.field(default_factory=list)
     transfer_policy: list[Any] = dataclasses.field(default_factory=list)
@@ -164,10 +174,11 @@ class Settings:
             **self.parameters,
         }
         if self.formats:
-            # StorageExplorer takes formats or format_options, not both.
-            kwargs["formats"] = [*self.formats, *default_formats(self.format_options)]
-        elif self.format_options:
-            kwargs["format_options"] = dict(self.format_options)
+            kwargs["formats"] = [*self.formats, *default_formats()]
+        if self.supports:
+            kwargs["supports"] = list(self.supports)
+        if self.format_options:
+            kwargs["format_options"] = self.format_options
         if self.operations:
             kwargs["operations"] = list(self.operations)
         if self.filesystem_mappers:
@@ -280,6 +291,8 @@ def _apply(
             continue
         if merge == "by name":
             getattr(settings, name).update(_mapping(value, path, name))
+        elif merge == "by option":
+            _merge_format_options(settings.format_options, value, path)
         else:  # "first"
             getattr(settings, name)[:0] = _sequence(value, path, name)
     if values["parameters"] is not None:
@@ -307,7 +320,8 @@ def _allowed(
 _MERGES = {
     "filesystems": "by name",
     "formats": "first",
-    "format_options": "by name",
+    "supports": "first",
+    "format_options": "by option",
     "operations": "first",
     "filesystem_mappers": "first",
     "transfer_policy": "first",
@@ -346,6 +360,24 @@ def _mapping(value: Any, path: pathlib.Path, name: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise LauncherError(f"{path}: {name}() must return a dict")
     return value
+
+
+def _merge_format_options(
+    merged: dict[str, dict[str, dict[str, Any]]], value: Any, path: pathlib.Path
+) -> None:
+    """Merge one layer's ``format_options()`` into ``merged``: by library,
+    format, then option, so a layer changes one option of a format without
+    restating the others. Whether the names exist is checked by the explorer."""
+    for library, by_format in _mapping(value, path, "format_options").items():
+        if not isinstance(by_format, dict) or not all(
+            isinstance(options, dict) for options in by_format.values()
+        ):
+            raise LauncherError(
+                f"{path}: format_options(): {library!r} must map format names "
+                f'(or "*") to dicts of options'
+            )
+        for name, options in by_format.items():
+            merged.setdefault(library, {}).setdefault(name, {}).update(options)
 
 
 def _sequence(value: Any, path: pathlib.Path, name: str) -> list[Any]:
