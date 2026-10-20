@@ -3,8 +3,13 @@
 from __future__ import annotations
 
 import pathlib
+from typing import Any
 
 STATIC = pathlib.Path(__file__).parent / "static"
+
+# Libraries the frontend may ask the kernel for ("vendor"), in static/vendor:
+# what Markdown views need (sections.js).
+_VENDOR_FILES = frozenset({"marked.esm.js", "purify.es.mjs"})
 
 
 def _join(*names: str) -> str:
@@ -24,6 +29,7 @@ def esm(widget: str) -> str:
         "icons.js",
         "common.js",
         "query.js",
+        "sections.js",
         *(f"{widget}/{part}" for part in parts),
         f"{widget}.js",
     )
@@ -31,4 +37,12 @@ def esm(widget: str) -> str:
 
 def css(widget: str) -> str:
     """The stylesheet of a widget: the shared styles, then its own."""
-    return _join("common.css", "query.css", f"{widget}.css")
+    return _join("common.css", "query.css", "sections.css", f"{widget}.css")
+
+
+def vendor_source(name: str) -> dict[str, Any]:
+    """The answer to a "vendor" request: the source of a bundled library,
+    e.g. marked for Markdown views, or {"error"}."""
+    if name not in _VENDOR_FILES:
+        return {"error": f"unknown library {name!r}"}
+    return {"source": (STATIC / "vendor" / name).read_text(encoding="utf-8")}

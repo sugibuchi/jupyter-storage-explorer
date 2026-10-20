@@ -274,7 +274,7 @@ def preview(x: Explorer) -> None:
 def query(x: Explorer) -> None:
     x.go("curated")
     x.row("orders.parquet").click()
-    x.el.locator(".jse-status-bar .jse-preview-btn", has_text="Query data").click()
+    x.el.locator(".jse-status-bar .jse-preview-btn", has_text="Preview").click()
     status = x.preview.locator(".jse-query-status")
     expect(status).to_have_text("Rows 1–100 / 2,400")
     x.preview.locator(".jse-query-bar button[title='Next page']").click()
@@ -302,7 +302,7 @@ def delta_folder(x: Explorer) -> None:
     # The folder shown, with nothing selected: a Delta table, queried.
     x.go("curated", "customers")
     link = x.el.locator(".jse-status-bar .jse-preview-btn")
-    expect(link).to_have_text("Query data (Delta Lake table)")
+    expect(link).to_have_text("Preview (Delta Lake table)")
     link.click()
     expect(x.preview.locator(".jse-query-status")).to_contain_text("/ 200")
     x.preview.press("Escape")
@@ -315,7 +315,7 @@ def partitioned_parquet(x: Explorer) -> None:
     x.go("curated")
     x.row("orders_by_month").click()
     link = x.el.locator(".jse-status-bar .jse-preview-btn")
-    expect(link).to_have_text("Query data (Parquet)")
+    expect(link).to_have_text("Preview (Parquet)")
     link.click()
     expect(x.preview.locator(".jse-query-status")).to_have_text("Rows 1–100 / 2,400")
     for column in ("year", "month"):
@@ -330,9 +330,14 @@ def python_code(x: Explorer) -> None:
     x.go("curated")
     x.row("orders.parquet").click(button="right")
     x.menu_item("Python code").hover()
-    x.el.locator(".jse-submenu .jse-menu-item", has_text="Load with polars").click()
+    # A submenu per library, its recipes by title.
+    x.el.locator(".jse-submenu .jse-menu-item", has_text="polars").first.hover()
+    x.el.locator(".jse-submenu .jse-submenu .jse-menu-item:visible").filter(
+        has_text="Load as DataFrame"
+    ).click()
     dialog = x.el.locator(".jse-dialog:visible")
-    expect(dialog).to_contain_text("scan_parquet")
+    expect(dialog).to_contain_text("Load as DataFrame (polars)")
+    expect(dialog).to_contain_text("read_parquet")
     expect(dialog).to_contain_text("Needs polars")
     dialog.press("Escape")
     expect(dialog).to_be_hidden()
@@ -879,9 +884,10 @@ def markdown_preview_sanitized(x: Explorer) -> None:
 
 
 @check
-def query_in_new_tab(x: Explorer) -> None:
+def view_in_new_tab(x: Explorer) -> None:
+    # Data: the data browser, a DataExplorer, in the tab.
     x.go("curated")
-    x.menu(x.row("orders.parquet"), "Query data in new tab")
+    x.menu(x.row("orders.parquet"), "View in a new tab")
     tab = x.page.locator(".jse-query-tab")
     expect(tab.locator(".jse-query-status")).to_have_text("Rows 1–100 / 2,400")
     expect(x.page.locator(".lm-TabBar-tab.jp-mod-current")).to_contain_text(
@@ -889,6 +895,14 @@ def query_in_new_tab(x: Explorer) -> None:
     )
     x.page.locator(".lm-TabBar-tab.jp-mod-current .lm-TabBar-tabCloseIcon").click()
     expect(tab).to_have_count(0)
+    x.back_to_notebook()
+    # Other views: a ViewTab, rendered as in the preview panel.
+    x.go("pipelines")
+    x.menu(x.row("README.md"), "View in a new tab")
+    view = x.page.locator(".jse-query-tab .jse-view-tab")
+    expect(view.locator(".jse-markdown")).to_contain_text("Sales lake")
+    x.page.locator(".lm-TabBar-tab.jp-mod-current .lm-TabBar-tabCloseIcon").click()
+    expect(view).to_have_count(0)
     x.back_to_notebook()
 
 

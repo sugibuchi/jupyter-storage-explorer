@@ -63,8 +63,8 @@ DEFAULT_FORMATS: tuple[type[DataFormat], ...] = (
 )
 
 # The supports explorers use after those they are given; ``default_supports``
-# creates them. In order of preference, format by format: for previews and
-# the data browser, the first installed is used, and "Python code" shows them in this order.
+# creates them. In order of preference, format by format: for views, the
+# first installed is used, and "Python code" shows them in this order.
 # MarkdownByPython comes before TextByPython: Markdown is a Text format.
 DEFAULT_SUPPORTS: tuple[type[FormatSupport], ...] = (
     DeltaLakeByPolars,
@@ -122,7 +122,7 @@ def create_supports(
     """``supports``, those given as classes created with ``options``, the
     others as they are.
 
-    ``options`` are by library (a support's ``use``'s package), then format
+    ``options`` are by library (a support's ``engine``'s package), then format
     name, or ``"*"`` for all formats, e.g. ``{"polars": {"*":
     {"storage_options": {...}}, "delta": {"use_pyarrow": True}}}``: a support
     class gets those of its library for all formats, then for its format
@@ -147,7 +147,7 @@ def create_supports(
         if not isinstance(support, type):
             created.append(support)
             continue
-        library = options.get(support.library(), {}) if support.use else {}
+        library = options.get(support.library(), {}) if support.engine else {}
         merged = {
             **library.get(ALL_FORMATS, {}),
             **library.get(support.format.name, {}),
@@ -165,7 +165,7 @@ def _check_options(
     """ValueError for ``options`` that no class takes (see ``create_supports``)."""
     libraries: dict[str, list[type[FormatSupport]]] = {}
     for cls in classes:
-        if cls.use is not None:
+        if cls.engine is not None:
             libraries.setdefault(cls.library(), []).append(cls)
     format_names = list(
         dict.fromkeys([*(format_names or ()), *(cls.format.name for cls in classes)])

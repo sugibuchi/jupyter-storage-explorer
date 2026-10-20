@@ -407,10 +407,9 @@ def filesystems() -> dict[str, str]:
 
 
 def supports() -> list[Any]:
-    """The default supports, reading the local copy where they read by URL
-    (``query``: the data browser, and previews of Delta tables and Parquet
-    by polars), for an explorer's ``supports``: tried before its own
-    defaults, they are those used."""
+    """The default supports, polars' viewing the local copy (it reads by URL,
+    for the data browser), for an explorer's ``supports``: tried before its
+    own defaults, they are those used."""
 
     from jupyter_storage_explorer.filesystems import (  # noqa: PLC0415
         LocalLocation,
@@ -423,20 +422,26 @@ def supports() -> list[Any]:
     mappers = MapperChain(default_mappers())
 
     def local(location, fs, path):
-        """The local copy's location, filesystem and path of a demo item."""
+        """The local copy's location, filesystem and path of a demo item, if
+        it has one (Scratch's files are in memory only)."""
         if not isinstance(location, MemoryLocation):
             return location, fs, path
         copy = (local_copy() / location.path.lstrip("/")).as_posix()
+        if not local_fs.exists(copy):
+            return location, fs, path
         copy_location = mappers.location_of(local_fs, copy)
         assert isinstance(copy_location, LocalLocation)
         return copy_location, local_fs, copy
 
     result = default_supports()
     for support in result:
-        if "query" in support.capabilities:
-            query = support.query
-            support.query = lambda fmt, location, fs, path, is_dir, query=query: query(
-                fmt, *local(location, fs, path), is_dir
+        # Only polars reads by URL; the others read the demo's own files,
+        # so that files saved from JupyterLab show as saved.
+        uses_polars = support.engine is not None and support.engine.package == "polars"
+        if uses_polars and "view" in support.capabilities:
+            view = support.view
+            support.view = lambda fmt, location, fs, path, is_dir, view=view, **kw: (
+                view(fmt, *local(location, fs, path), is_dir, **kw)
             )
     return result
 

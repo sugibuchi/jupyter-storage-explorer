@@ -1,4 +1,4 @@
-"""The data browser ("Query data"), as ``DataExplorer`` and the previews of
+"""The data browser, as ``DataExplorer`` and the previews of
 ``StorageExplorer`` show it: filters, sort order and hidden columns over a
 dataframe.
 

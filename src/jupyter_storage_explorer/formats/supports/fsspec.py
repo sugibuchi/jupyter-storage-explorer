@@ -10,7 +10,7 @@ from jupyter_storage_explorer.formats.base import (
     library_url,
     snippet_options,
 )
-from jupyter_storage_explorer.formats.requirements import Fsspec
+from jupyter_storage_explorer.formats.packages import Fsspec
 from jupyter_storage_explorer.formats.support import FormatSupport
 from jupyter_storage_explorer.formats.text import Json, Text
 
@@ -20,6 +20,10 @@ if TYPE_CHECKING:
     from fsspec import AbstractFileSystem
 
     from jupyter_storage_explorer.location import Location
+
+
+READ_TEXT = "Read the text"
+LOAD_VALUE = "Load the JSON value"
 
 
 class OpenedByFsspec(FormatSupport):
@@ -40,10 +44,10 @@ class TextByFsspec(OpenedByFsspec):
     """The text, for Text formats (code, logs, Markdown, ...)."""
 
     format = Text
-    use = Fsspec
+    engine = Fsspec
     capabilities = ("recipe",)
 
-    recipe_template = cleandoc("""
+    text_template = cleandoc("""
         import fsspec
 
         with fsspec.open({url}, 'rt'{kwargs}) as f:
@@ -57,20 +61,22 @@ class TextByFsspec(OpenedByFsspec):
         fs: AbstractFileSystem,
         path: str,
         is_dir: bool,
-    ) -> str:
-        return self.recipe_template.format(
-            url=repr(library_url(location)), kwargs=self.code_kwargs()
-        )
+    ) -> dict[str, str]:
+        return {
+            READ_TEXT: self.text_template.format(
+                url=repr(library_url(location)), kwargs=self.code_kwargs()
+            )
+        }
 
 
 class JsonByFsspec(OpenedByFsspec):
     """The JSON value, with Python's json."""
 
     format = Json
-    use = Fsspec
+    engine = Fsspec
     capabilities = ("recipe",)
 
-    recipe_template = cleandoc("""
+    value_template = cleandoc("""
         import json
 
         import fsspec
@@ -86,7 +92,9 @@ class JsonByFsspec(OpenedByFsspec):
         fs: AbstractFileSystem,
         path: str,
         is_dir: bool,
-    ) -> str:
-        return self.recipe_template.format(
-            url=repr(library_url(location)), kwargs=self.code_kwargs()
-        )
+    ) -> dict[str, str]:
+        return {
+            LOAD_VALUE: self.value_template.format(
+                url=repr(library_url(location)), kwargs=self.code_kwargs()
+            )
+        }

@@ -188,7 +188,6 @@ function render({ model, el }) {
     },
     "change:_current_format": x.preview.updateButton,
     "change:_selected_format": x.preview.updateButton,
-    "change:_current_query": x.preview.updateButton,
     "change:_unsafe_mode": x.unsafe.render,
     "change:_settings_path": x.toolbar.renderSettings,
     "msg:custom": onCustomMsg,

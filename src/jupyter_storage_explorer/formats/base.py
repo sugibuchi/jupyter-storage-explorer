@@ -19,11 +19,11 @@ if TYPE_CHECKING:
 
     from fsspec import AbstractFileSystem
 
-    from jupyter_storage_explorer.formats.preview import PreviewLimits
+    from jupyter_storage_explorer.formats.view import ViewLimits
     from jupyter_storage_explorer.location import Location
 
 
-# --- Reading a file through its fsspec filesystem, for detection and previews ---
+# --- Reading a file through its fsspec filesystem, for detection and views ---
 
 
 def name_of(path: str) -> str:
@@ -62,13 +62,13 @@ def head_text(fs: AbstractFileSystem, path: str, size: int) -> tuple[str, bool]:
     return data.decode("utf-8-sig", errors="replace"), truncated
 
 
-def read_whole(fs: AbstractFileSystem, path: str, limits: PreviewLimits) -> bytes:
+def read_whole(fs: AbstractFileSystem, path: str, limits: ViewLimits) -> bytes:
     """The whole file, for formats that cannot be read in part. ValueError if
     it is larger than ``limits.max_whole_file_bytes``."""
     size = file_size(fs, path)
     if size is not None and size > limits.max_whole_file_bytes:
         limit = limits.max_whole_file_bytes // (1024 * 1024)
-        raise ValueError(f"too large to preview (over {limit} MB)")
+        raise ValueError(f"too large to view (over {limit} MB)")
     return fs.cat_file(path)
 
 

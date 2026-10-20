@@ -1,4 +1,4 @@
-"""What formats share (formats/base.py, requirement.py): reading files,
+"""What formats share (formats/base.py, package.py): reading files,
 generated-code helpers, requirements, detection and file icons (the
 supports: test_supports.py)."""
 
@@ -14,9 +14,9 @@ from jupyter_storage_explorer.formats import (
     Csv,
     DeltaLake,
     Parquet,
-    PreviewLimits,
-    Requirement,
+    PythonPackage,
     Text,
+    ViewLimits,
     child_names,
     default_formats,
     detect,
@@ -29,7 +29,7 @@ from jupyter_storage_explorer.formats import (
     read_whole,
     snippet_options,
 )
-from jupyter_storage_explorer.formats.requirements import Polars
+from jupyter_storage_explorer.formats.packages import Polars
 from jupyter_storage_explorer.formats.utils import format_icons
 
 
@@ -63,9 +63,9 @@ class TestReading:
 
     def test_read_whole_within_the_limit(self, memfs):
         memfs.pipe_file("/a.bin", b"x" * 10)
-        assert read_whole(memfs, "/a.bin", PreviewLimits()) == b"x" * 10
-        with pytest.raises(ValueError, match="too large to preview"):
-            read_whole(memfs, "/a.bin", PreviewLimits(max_whole_file_bytes=5))
+        assert read_whole(memfs, "/a.bin", ViewLimits()) == b"x" * 10
+        with pytest.raises(ValueError, match="too large to view"):
+            read_whole(memfs, "/a.bin", ViewLimits(max_whole_file_bytes=5))
 
 
 def test_library_url(tmp_path):
@@ -110,7 +110,7 @@ class TestRequirement:
 
     def test_missing(self):
         missing = type(
-            "Missing", (Requirement,), {"package": "x", "import_name": "not_a_pkg"}
+            "Missing", (PythonPackage,), {"package": "x", "import_name": "not_a_pkg"}
         )
         assert not missing().is_installed()
 

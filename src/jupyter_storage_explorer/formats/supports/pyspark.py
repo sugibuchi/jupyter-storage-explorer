@@ -9,8 +9,8 @@ from typing import TYPE_CHECKING
 
 from jupyter_storage_explorer.formats.base import format_kwargs
 from jupyter_storage_explorer.formats.delta import DeltaLake
+from jupyter_storage_explorer.formats.packages import DeltaSpark, PySpark
 from jupyter_storage_explorer.formats.parquet import Parquet
-from jupyter_storage_explorer.formats.requirements import DeltaSpark, PySpark
 from jupyter_storage_explorer.formats.support import FormatSupport
 from jupyter_storage_explorer.formats.text import Csv, JsonLines
 
@@ -40,12 +40,15 @@ def spark_url(url: str) -> str:
     )
 
 
+AS_DATA_FRAME = "Load as DataFrame"
+
+
 class CsvByPySpark(FormatSupport):
     format = Csv
-    use = PySpark
+    engine = PySpark
     capabilities = ("recipe",)
 
-    recipe_template = cleandoc("""
+    data_frame_template = cleandoc("""
         from pyspark.sql import SparkSession
 
         spark = SparkSession.builder.getOrCreate()
@@ -59,20 +62,22 @@ class CsvByPySpark(FormatSupport):
         fs: AbstractFileSystem,
         path: str,
         is_dir: bool,
-    ) -> str:
-        return self.recipe_template.format(
-            url=repr(spark_url(location.url)),
-            kwargs=format_kwargs(sep=fmt.code_separator(fs, path)),
-        )
+    ) -> dict[str, str]:
+        return {
+            AS_DATA_FRAME: self.data_frame_template.format(
+                url=repr(spark_url(location.url)),
+                kwargs=format_kwargs(sep=fmt.code_separator(fs, path)),
+            )
+        }
 
 
 class JsonLinesByPySpark(FormatSupport):
     format = JsonLines
-    use = PySpark
+    engine = PySpark
     capabilities = ("recipe",)
 
     # Spark reads JSON Lines (one record per line) by default.
-    recipe_template = cleandoc("""
+    data_frame_template = cleandoc("""
         from pyspark.sql import SparkSession
 
         spark = SparkSession.builder.getOrCreate()
@@ -86,17 +91,21 @@ class JsonLinesByPySpark(FormatSupport):
         fs: AbstractFileSystem,
         path: str,
         is_dir: bool,
-    ) -> str:
-        return self.recipe_template.format(url=repr(spark_url(location.url)))
+    ) -> dict[str, str]:
+        return {
+            AS_DATA_FRAME: self.data_frame_template.format(
+                url=repr(spark_url(location.url))
+            )
+        }
 
 
 class ParquetByPySpark(FormatSupport):
     format = Parquet
-    use = PySpark
+    engine = PySpark
     capabilities = ("recipe",)
 
     # A file or a folder of them; Spark finds partitions itself.
-    recipe_template = cleandoc("""
+    data_frame_template = cleandoc("""
         from pyspark.sql import SparkSession
 
         spark = SparkSession.builder.getOrCreate()
@@ -110,18 +119,22 @@ class ParquetByPySpark(FormatSupport):
         fs: AbstractFileSystem,
         path: str,
         is_dir: bool,
-    ) -> str:
-        return self.recipe_template.format(url=repr(spark_url(location.url)))
+    ) -> dict[str, str]:
+        return {
+            AS_DATA_FRAME: self.data_frame_template.format(
+                url=repr(spark_url(location.url))
+            )
+        }
 
 
 class DeltaLakeByPySpark(FormatSupport):
     format = DeltaLake
-    use = PySpark
+    engine = PySpark
     # Delta Lake set up in the Spark session (on Databricks, it is).
     additional_requirements = (DeltaSpark,)
     capabilities = ("recipe",)
 
-    recipe_template = cleandoc("""
+    data_frame_template = cleandoc("""
         from pyspark.sql import SparkSession
 
         # Needs Delta Lake in the Spark session (Databricks has it)
@@ -136,5 +149,9 @@ class DeltaLakeByPySpark(FormatSupport):
         fs: AbstractFileSystem,
         path: str,
         is_dir: bool,
-    ) -> str:
-        return self.recipe_template.format(url=repr(spark_url(location.url)))
+    ) -> dict[str, str]:
+        return {
+            AS_DATA_FRAME: self.data_frame_template.format(
+                url=repr(spark_url(location.url))
+            )
+        }

@@ -1,4 +1,4 @@
-"""Formats handled with pandas: previews and load code."""
+"""Formats handled with pandas: views of their first rows, and load code."""
 
 from __future__ import annotations
 
@@ -17,29 +17,30 @@ from jupyter_storage_explorer.formats.base import (
 )
 from jupyter_storage_explorer.formats.excel import Excel
 from jupyter_storage_explorer.formats.frames import rows_note, with_sheets
+from jupyter_storage_explorer.formats.packages import Openpyxl, Pandas, PyArrow
 from jupyter_storage_explorer.formats.parquet import Parquet
-from jupyter_storage_explorer.formats.preview import TablePreview
-from jupyter_storage_explorer.formats.requirements import Openpyxl, Pandas, PyArrow
 from jupyter_storage_explorer.formats.support import FormatSupport
 from jupyter_storage_explorer.formats.text import Csv, Json, JsonLines
+from jupyter_storage_explorer.formats.view import TableView
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from fsspec import AbstractFileSystem
 
-    from jupyter_storage_explorer.formats.preview import Preview, PreviewLimits
+    from jupyter_storage_explorer.formats.view import View, ViewLimits
     from jupyter_storage_explorer.location import Location
 
-# Data files read for a directory preview: enough for the first rows.
-_PREVIEW_FILES = 10
+AS_DATA_FRAME = "Load as DataFrame"
+# Data files read for a directory's view: enough for the first rows.
+_VIEW_FILES = 10
 
 
-def _table(df: Any, **kwargs: Any) -> TablePreview:
-    """A pandas DataFrame as a table preview."""
+def _table(df: Any, **kwargs: Any) -> TableView:
+    """A pandas DataFrame as a table view."""
     # Object dtype makes NaN/NaT/NA replaceable with None.
     cells = df.astype(object).where(df.notna(), None)
-    return TablePreview(
+    return TableView(
         columns=[str(c) for c in df.columns],
         rows=[[jsonable(v) for v in row] for row in cells.itertuples(index=False)],
         dtypes=[str(t) for t in df.dtypes],
@@ -50,7 +51,7 @@ def _table(df: Any, **kwargs: Any) -> TablePreview:
 class _PandasByUrl(FormatSupport):
     """A format whose code pandas reads by URL, with storage options."""
 
-    use = Pandas
+    engine = Pandas
 
     def __init__(self, *, storage_options: Mapping[str, Any] | None = None) -> None:
         """``storage_options``: pandas' (fsspec's) in the code; ones that
@@ -64,9 +65,9 @@ class _PandasByUrl(FormatSupport):
 
 class CsvByPandas(_PandasByUrl):
     format = Csv
-    capabilities = ("preview", "recipe")
+    capabilities = ("view", "recipe")
 
-    def preview(
+    def view(
         self,
         fmt: Csv,
         location: Location,
@@ -74,19 +75,19 @@ class CsvByPandas(_PandasByUrl):
         path: str,
         is_dir: bool,
         *,
-        limits: PreviewLimits,
-    ) -> Preview:
+        limits: ViewLimits,
+    ) -> View:
         pd = Pandas().load()
         text, truncated = head_text(fs, path, limits.max_bytes)
         df = pd.read_csv(
             io.StringIO(text),
             sep=fmt.separator(name_of(path), text),
-            nrows=limits.max_rows,
+            nrows=limits.max_display_rows,
         )
-        more = truncated or len(df) == limits.max_rows
+        more = truncated or len(df) == limits.max_display_rows
         return _table(df, note=rows_note(len(df), more))
 
-    recipe_template = cleandoc("""
+    data_frame_template = cleandoc("""
         import pandas as pd
 
         df = pd.read_csv({url}{kwargs})
@@ -99,21 +100,23 @@ class CsvByPandas(_PandasByUrl):
         fs: AbstractFileSystem,
         path: str,
         is_dir: bool,
-    ) -> str:
-        return self.recipe_template.format(
-            url=repr(library_url(location)),
-            kwargs=format_kwargs(
-                sep=fmt.code_separator(fs, path),
-                storage_options=self.code_storage_options(),
-            ),
-        )
+    ) -> dict[str, str]:
+        return {
+            AS_DATA_FRAME: self.data_frame_template.format(
+                url=repr(library_url(location)),
+                kwargs=format_kwargs(
+                    sep=fmt.code_separator(fs, path),
+                    storage_options=self.code_storage_options(),
+                ),
+            )
+        }
 
 
 class JsonLinesByPandas(_PandasByUrl):
     format = JsonLines
-    capabilities = ("preview", "recipe")
+    capabilities = ("view", "recipe")
 
-    def preview(
+    def view(
         self,
         fmt: JsonLines,
         location: Location,
@@ -121,15 +124,15 @@ class JsonLinesByPandas(_PandasByUrl):
         path: str,
         is_dir: bool,
         *,
-        limits: PreviewLimits,
-    ) -> Preview:
+        limits: ViewLimits,
+    ) -> View:
         pd = Pandas().load()
         text, truncated = head_text(fs, path, limits.max_bytes)
-        df = pd.read_json(io.StringIO(text), lines=True, nrows=limits.max_rows)
-        more = truncated or len(df) == limits.max_rows
+        df = pd.read_json(io.StringIO(text), lines=True, nrows=limits.max_display_rows)
+        more = truncated or len(df) == limits.max_display_rows
         return _table(df, note=rows_note(len(df), more, "records"))
 
-    recipe_template = cleandoc("""
+    data_frame_template = cleandoc("""
         import pandas as pd
 
         df = pd.read_json({url}, lines=True{kwargs})
@@ -142,20 +145,22 @@ class JsonLinesByPandas(_PandasByUrl):
         fs: AbstractFileSystem,
         path: str,
         is_dir: bool,
-    ) -> str:
-        return self.recipe_template.format(
-            url=repr(library_url(location)),
-            kwargs=format_kwargs(storage_options=self.code_storage_options()),
-        )
+    ) -> dict[str, str]:
+        return {
+            AS_DATA_FRAME: self.data_frame_template.format(
+                url=repr(library_url(location)),
+                kwargs=format_kwargs(storage_options=self.code_storage_options()),
+            )
+        }
 
 
 class JsonByPandas(_PandasByUrl):
-    """Load code only: JSON is previewed as a tree (``JsonByPython``)."""
+    """Load code only: JSON is viewed as a tree (``JsonByPython``)."""
 
     format = Json
     capabilities = ("recipe",)
 
-    recipe_template = cleandoc("""
+    data_frame_template = cleandoc("""
         import pandas as pd
 
         df = pd.read_json({url}{kwargs})
@@ -168,19 +173,21 @@ class JsonByPandas(_PandasByUrl):
         fs: AbstractFileSystem,
         path: str,
         is_dir: bool,
-    ) -> str:
-        return self.recipe_template.format(
-            url=repr(library_url(location)),
-            kwargs=format_kwargs(storage_options=self.code_storage_options()),
-        )
+    ) -> dict[str, str]:
+        return {
+            AS_DATA_FRAME: self.data_frame_template.format(
+                url=repr(library_url(location)),
+                kwargs=format_kwargs(storage_options=self.code_storage_options()),
+            )
+        }
 
 
 class ExcelByPandas(_PandasByUrl):
     format = Excel
     additional_requirements = (Openpyxl,)  # pandas' Excel engine
-    capabilities = ("preview", "recipe")
+    capabilities = ("view", "recipe")
 
-    def preview(
+    def view(
         self,
         fmt: Excel,
         location: Location,
@@ -188,23 +195,25 @@ class ExcelByPandas(_PandasByUrl):
         path: str,
         is_dir: bool,
         *,
-        limits: PreviewLimits,
-    ) -> Preview:
+        limits: ViewLimits,
+    ) -> View:
         pd = Pandas().load()
         workbook = pd.ExcelFile(
             io.BytesIO(read_whole(fs, path, limits)), engine="openpyxl"
         )
         name = workbook.sheet_names[0]
         # One extra row tells whether there are more.
-        df = workbook.parse(name, nrows=limits.max_rows + 1)
-        note = rows_note(min(len(df), limits.max_rows), len(df) > limits.max_rows)
+        df = workbook.parse(name, nrows=limits.max_display_rows + 1)
+        note = rows_note(
+            min(len(df), limits.max_display_rows), len(df) > limits.max_display_rows
+        )
         return _table(
-            df.head(limits.max_rows),
+            df.head(limits.max_display_rows),
             title=name,
             note=with_sheets(note, workbook.sheet_names),
         )
 
-    recipe_template = cleandoc("""
+    data_frame_template = cleandoc("""
         import pandas as pd
 
         df = pd.read_excel({url}{kwargs})
@@ -217,19 +226,21 @@ class ExcelByPandas(_PandasByUrl):
         fs: AbstractFileSystem,
         path: str,
         is_dir: bool,
-    ) -> str:
-        return self.recipe_template.format(
-            url=repr(library_url(location)),
-            kwargs=format_kwargs(storage_options=self.code_storage_options()),
-        )
+    ) -> dict[str, str]:
+        return {
+            AS_DATA_FRAME: self.data_frame_template.format(
+                url=repr(library_url(location)),
+                kwargs=format_kwargs(storage_options=self.code_storage_options()),
+            )
+        }
 
 
 class ParquetByPandas(_PandasByUrl):
     format = Parquet
     additional_requirements = (PyArrow,)  # pandas' Parquet engine
-    capabilities = ("preview", "recipe")
+    capabilities = ("view", "recipe")
 
-    def preview(
+    def view(
         self,
         fmt: Parquet,
         location: Location,
@@ -237,8 +248,8 @@ class ParquetByPandas(_PandasByUrl):
         path: str,
         is_dir: bool,
         *,
-        limits: PreviewLimits,
-    ) -> Preview:
+        limits: ViewLimits,
+    ) -> View:
         pa_dataset = PyArrow().load("dataset")
         # pyarrow reads through the browser's fsspec filesystem, so any storage
         # works. For a directory, given its first few files, of one partition
@@ -248,21 +259,21 @@ class ParquetByPandas(_PandasByUrl):
         if not is_dir:
             source: Any = path
         else:
-            source = fmt.first_files(location, fs, path, _PREVIEW_FILES)
+            source = fmt.first_files(location, fs, path, _VIEW_FILES)
             if fmt.layout(location, fs, path).keys:
                 options = {"partitioning": "hive", "partition_base_dir": path}
         if not source:
             raise ValueError("no Parquet files found")
         dataset = pa_dataset.dataset(source, filesystem=fs, format="parquet", **options)
-        df = dataset.head(limits.max_rows).to_pandas()
+        df = dataset.head(limits.max_display_rows).to_pandas()
         if is_dir:
-            note = rows_note(len(df), len(df) == limits.max_rows)
+            note = rows_note(len(df), len(df) == limits.max_display_rows)
         else:
             total = dataset.count_rows()
             note = rows_note(len(df), len(df) < total, total=total)
         return _table(df, note=note)
 
-    recipe_template = cleandoc("""
+    data_frame_template = cleandoc("""
         import pandas as pd
 
         df = pd.read_parquet({url}{kwargs})
@@ -275,8 +286,10 @@ class ParquetByPandas(_PandasByUrl):
         fs: AbstractFileSystem,
         path: str,
         is_dir: bool,
-    ) -> str:
-        return self.recipe_template.format(
-            url=repr(library_url(location)),
-            kwargs=format_kwargs(storage_options=self.code_storage_options()),
-        )
+    ) -> dict[str, str]:
+        return {
+            AS_DATA_FRAME: self.data_frame_template.format(
+                url=repr(library_url(location)),
+                kwargs=format_kwargs(storage_options=self.code_storage_options()),
+            )
+        }

@@ -1,4 +1,4 @@
-// Data Explorer: the data browser ("Query data") for one dataframe, on its own.
+// Data Explorer: the data browser for one dataframe, on its own.
 // Joined after common.js and query.js (see _static.py).
 
 function render({ model, el }) {

@@ -1,7 +1,7 @@
 """Checks the widgets' JavaScript as the kernel joins it (see _static.py):
 its syntax (``node --check``), and with ESLint, names used but defined in no
 file, and names defined but never used (only for the storage explorer: the
-data explorer uses some of the shared functions only).
+data explorer and view tabs use some of the shared functions only).
 
 The files are joined into one module per widget, so a typo in a name used
 across files shows only here, or in a browser. Run by CI; locally, with the
@@ -29,6 +29,7 @@ GLOBALS = (
 RULES = {
     "storage_explorer": ["no-undef: error", "no-unused-vars: [error, {args: none}]"],
     "data_explorer": ["no-undef: error"],
+    "view_tab": ["no-undef: error"],
 }
 
 

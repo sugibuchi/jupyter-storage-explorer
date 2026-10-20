@@ -1,0 +1,11 @@
+/* View Tab: a view under a title bar, filling the tab (its sections stretch
+   as in the preview panel: sections.css). */
+.jse-view-tab {
+  display: flex;
+  flex-direction: column;
+}
+
+.jse-view-tab .jse-view-tab-body {
+  flex: 1 1 0;
+  min-height: 80px;
+}

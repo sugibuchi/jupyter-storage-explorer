@@ -9,7 +9,7 @@ edit files. For installation, see the [README](../README.md).
 - [Using the explorer](#using-the-explorer)
 - [Unsafe operations](#unsafe-operations)
 - [Transfer policy](#transfer-policy)
-- [Query data](#query-data)
+- [Data browser and view tabs](#data-browser-and-view-tabs)
 - [Remembered states](#remembered-states)
 - [Supported formats](#supported-formats)
 - [Format options](#format-options)
@@ -101,7 +101,7 @@ it again.
 
 The **Preview** link at the bottom right of the list (with nothing selected: the current folder, e.g. a Delta Lake
 table), or right-click → **Preview**; **Preview as** chooses another format. Double-clicking a file previews it when
-JupyterLab cannot [open it](#open-files), e.g. Parquet or Excel. Tables open in the [data browser](#query-data). While
+JupyterLab cannot [open it](#open-files), e.g. Parquet or Excel. Tables open in the [data browser](#data-browser-and-view-tabs). While
 the panel is open, clicking a file previews it; `open_preview=True` opens it from the start. The same link, then
 **Close preview**, or Esc, closes it.
 
@@ -109,9 +109,9 @@ the panel is open, clicking a file previews it; `open_preview=True` opens it fro
 
 ### Right-click
 
-Open in JupyterLab (to edit), Preview as, Query data in new tab, Python code to load the data, Copy URL (and on a local
-disk Copy path); Copy, Cut, Paste; Create a folder, Rename, Delete; Download to local or to JupyterLab; Properties, Add
-bookmark. Preview and Python code are offered for what has a format, e.g. not a plain folder. Local files' URLs are
+Open in JupyterLab (to edit), Preview, View in a new tab, Preview as, Python code to load the data (by library, e.g.
+polars ▸ Load as LazyFrame), Copy URL (and on a local disk Copy path); Copy, Cut, Paste; Create a folder, Rename, Delete; Download to local or to JupyterLab; Properties, Add
+bookmark. Preview, View in a new tab and Python code are offered for what has a format, e.g. not a plain folder. Local files' URLs are
 `file:///` URLs, e.g. `file:///home/jovyan/x.csv`; Copy path gives the plain path, as Copy puts it on the clipboard.
 
 <img src="figs/using-right-click.png" width="385" alt="The right-click menu of a JSON Lines file">
@@ -212,15 +212,16 @@ captures the same text in both. Both patterns must have the same group names. Wi
 
 The `deny` after it has no groups, e.g. `{"rule": "deny", "src": r"abfs://[^@/]+@L/.*"}` for "not between containers".
 
-## Query data
+## Data browser and view tabs
 
 With [polars](https://pola.rs) installed (plus `deltalake` for Delta Lake, `fastexcel` for Excel), tables open in the
 data browser: page, sort, filter and choose columns, on the data itself (**Live**) or on its first 100,000 rows
 (**In memory**). It is `DataExplorer`'s browser; see [Using the data browser](data-explorer.md#using-the-data-browser).
 
 With the [launcher](../launcher/README.md) package, the button at the right of the preview's title, or right-click →
-**Query data in new tab**, opens the data browser in a JupyterLab tab of its own, with the same filters, sort and columns.
-Each tab is a query of its own: open several to compare tables side by side. The tabs close with the explorer's tab or
+**View in a new tab**, opens what the preview shows in a JupyterLab tab of its own: a table in the data browser, with
+the same filters, sort and columns, and text, JSON, Markdown or an image as the preview panel shows them. Each tab is
+a view of its own: open several to compare tables side by side. The tabs close with the explorer's tab or
 notebook, or when its kernel restarts, and are not reopened after a page reload.
 
 polars reads the data with the credentials in the environment, not the explorer's options; see
@@ -260,59 +261,61 @@ StorageExplorer("s3://my-bucket/data", states=ExplorerStates("states.json", max_
 
 ## Supported formats
 
-| Format                                                       | Name         | Preview                       | Query data | Load with                                           |
-|--------------------------------------------------------------|--------------|-------------------------------|------------|-----------------------------------------------------|
-| Delta Lake tables                                            | `delta`      | First rows                    | ✓          | polars (with deltalake), PySpark (with delta-spark) |
-| Parquet files, and folders of them (e.g. Spark, Hive output) | `parquet`    | First rows                    | ✓          | polars, pandas, PySpark                             |
-| CSV, TSV                                                     | `csv`        | First rows                    | ✓          | polars, pandas, PySpark                             |
-| JSON Lines                                                   | `json-lines` | First records                 | ✓          | polars, pandas, PySpark                             |
-| JSON                                                         | `json`       | Collapsible tree              |            | Python, polars, pandas                              |
-| Excel (`.xlsx`)                                              | `excel`      | First rows of the first sheet | ✓          | polars, pandas                                      |
-| Markdown                                                     | `markdown`   | Rendered                      |            | Python                                              |
-| Text, code, configuration (YAML, SQL, Python, …)             | `text`       | With syntax highlighting      |            | Python                                              |
-| Images (PNG, JPEG, GIF, SVG, …)                              | `image`      | Shown                         |            | Pillow                                              |
+| Format                                                       | Name         | Preview                       | Data browser | Load with                                           |
+|--------------------------------------------------------------|--------------|-------------------------------|--------------|-----------------------------------------------------|
+| Delta Lake tables                                            | `delta`      | First rows                    | ✓            | polars (with deltalake), PySpark (with delta-spark) |
+| Parquet files, and folders of them (e.g. Spark, Hive output) | `parquet`    | First rows                    | ✓            | polars, pandas, PySpark                             |
+| CSV, TSV                                                     | `csv`        | First rows                    | ✓            | polars, pandas, PySpark                             |
+| JSON Lines                                                   | `json-lines` | First records                 | ✓            | polars, pandas, PySpark                             |
+| JSON                                                         | `json`       | Collapsible tree              |              | Python, polars, pandas                              |
+| Excel (`.xlsx`)                                              | `excel`      | First rows of the first sheet | ✓            | polars, pandas                                      |
+| Markdown                                                     | `markdown`   | Rendered                      |              | Python                                              |
+| Text, code, configuration (YAML, SQL, Python, …)             | `text`       | With syntax highlighting      |              | Python                                              |
+| Images (PNG, JPEG, GIF, SVG, …)                              | `image`      | Shown                         |              | Pillow                                              |
 
 Folders of Parquet files written by Spark or Hive, partitioned or not, are supported; folders written by other tools
 may work, but are not guaranteed to.
 
-Each format's previews, data browser and code are done by the first library installed in the kernel, in the order
-above (the code is shown for every library; a support given for a library replaces the default one's). The name identifies the format in CSS (see
+Each format's view (the preview, the data browser) is the first installed library's, in the order above, and its code is
+shown for every library, grouped by library in **Python code** (a support given for a library replaces the default one's). The name identifies the format in CSS (see
 [Icons](../DEVELOPMENT.md#icons)) and in [Format options](#format-options).
 
 ### Another library for a format
 
 A *support* handles a format's data with a library: a `FormatSupport` subclass, listing in `capabilities` the methods it
-implements: `"preview"`, `"query"` for the data browser, `"recipe"` for "Python code". Supports given as `supports` are tried before
-the defaults, e.g. DuckDB for the data browser on Parquet:
+implements: `"view"`, returning what to show (a `QueryView` of data for the data browser, or e.g. a `TableView` or
+`TextView`), and `"recipe"`, the code of "Python code" by title. Supports given as `supports` are tried before the
+defaults, e.g. DuckDB for the data browser on Parquet:
 
 ```python
 from jupyter_storage_explorer import StorageExplorer
-from jupyter_storage_explorer.formats import FormatSupport, Parquet, Requirement
+from jupyter_storage_explorer.formats import FormatSupport, Parquet, PythonPackage, QueryView
 
 
-class DuckDB(Requirement):
+class DuckDB(PythonPackage):
     package = "duckdb"
     import_name = "duckdb"
 
 
 class ParquetByDuckDB(FormatSupport):
     format = Parquet
-    use = DuckDB
-    capabilities = ("query",)
+    engine = DuckDB
+    capabilities = ("view",)
 
-    def query(self, fmt, location, fs, path, is_dir):
+    def view(self, fmt, location, fs, path, is_dir, *, limits):
         # A folder's data files, as detection found them.
         partitioned = is_dir and bool(fmt.layout(location, fs, path).keys)
         url = fmt.data_url(location, fs, path, is_dir)
-        return DuckDB().load().read_parquet(url, hive_partitioning=partitioned)
+        return QueryView(data=DuckDB().load().read_parquet(url, hive_partitioning=partitioned))
 
 
 StorageExplorer("data", supports=[ParquetByDuckDB])
 ```
 
 Each method gets where the item is (`location`, which libraries doing their own I/O read: `library_url(location)`),
-the explorer's fsspec filesystem and the item's path in it (to read it through the explorer, e.g. for a preview), and
-whether it is a folder. `FormatSupport`'s docstring has the rules for writing one.
+the explorer's fsspec filesystem and the item's path in it (to read it through the explorer, e.g. for a text view), and
+whether it is a folder; `view` also gets `limits` (`ViewLimits`: bytes and rows to read). `recipe` returns code by
+title, e.g. `{"Load as DataFrame": "import duckdb\n..."}`, the title saying what the code does, not the library. `FormatSupport`'s docstring has the rules for writing one.
 
 ## Format options
 
@@ -443,6 +446,7 @@ Filter by channel in the data browser, and the chart shows that channel's sales.
 | `filesystems={...}`                 | Several named storages; see [Several storages in one explorer](#several-storages-in-one-explorer).                                    |
 | `max_browser_items=20_000`          | Folders with more items are filtered, sorted and paged by the kernel, one page at a time, instead of the browser (`None`: never).     |
 | `fetch_rows=...`                    | How the data browser reads pages; see [Reading pages](#reading-pages).                                                                |
+| `view_limits=ViewLimits(...)`       | How much views read and show (`formats.ViewLimits`): `max_bytes`, `max_display_rows` (also the data browser's page size), `max_whole_file_bytes`, `max_live_rows`, `max_memory_rows`. |
 | `operations=[...]`                  | File operation extensions, tried before the defaults; see [File operation extensions](#file-operation-extensions).                   |
 | `filesystem_mappers=[...]`          | The locations of storages' paths, by which they are told apart, tried before the defaults; see [File transfer](#file-transfer-between-file-systems). |
 | `transfer_policy=[...]`             | Rules for transfers of files between storages; see [Transfer policy](#transfer-policy).                                               |

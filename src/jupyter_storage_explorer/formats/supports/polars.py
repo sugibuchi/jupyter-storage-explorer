@@ -1,53 +1,40 @@
-"""Formats handled with polars: previews, the data browser and load code."""
+"""Formats handled with polars: the data browser and load code."""
 
 from __future__ import annotations
 
-import io
 from inspect import cleandoc
 from typing import TYPE_CHECKING, Any
 
-from jupyter_storage_explorer._json import jsonable
 from jupyter_storage_explorer.formats.base import (
     format_kwargs,
-    head_text,
     library_url,
-    name_of,
-    read_whole,
     snippet_options,
 )
 from jupyter_storage_explorer.formats.delta import DeltaLake
 from jupyter_storage_explorer.formats.excel import Excel
-from jupyter_storage_explorer.formats.frames import rows_note, with_sheets
+from jupyter_storage_explorer.formats.packages import DeltaLake as DeltaLakePackage
+from jupyter_storage_explorer.formats.packages import Fastexcel, Fsspec, Polars
 from jupyter_storage_explorer.formats.parquet import Parquet
-from jupyter_storage_explorer.formats.preview import TablePreview
-from jupyter_storage_explorer.formats.requirements import DeltaLake as DeltaLakePackage
-from jupyter_storage_explorer.formats.requirements import Fastexcel, Fsspec, Polars
 from jupyter_storage_explorer.formats.support import FormatSupport
 from jupyter_storage_explorer.formats.text import Csv, Json, JsonLines
+from jupyter_storage_explorer.formats.view import QueryView
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from fsspec import AbstractFileSystem
 
-    from jupyter_storage_explorer.formats.preview import Preview, PreviewLimits
+    from jupyter_storage_explorer.formats.view import View, ViewLimits
     from jupyter_storage_explorer.location import Location
 
-
-def _table(df: Any, **kwargs: Any) -> TablePreview:
-    """A polars DataFrame as a table preview."""
-    return TablePreview(
-        columns=list(df.columns),
-        rows=[[jsonable(v) for v in row] for row in df.rows()],
-        dtypes=[str(t) for t in df.dtypes],
-        **kwargs,
-    )
+AS_LAZY_FRAME = "Load as LazyFrame"
+AS_DATA_FRAME = "Load as DataFrame"
 
 
 class _PolarsByUrl(FormatSupport):
     """A format polars reads by URL, with the storage options of its readers."""
 
-    use = Polars
+    engine = Polars
 
     def __init__(
         self,
@@ -56,9 +43,9 @@ class _PolarsByUrl(FormatSupport):
         credential_provider: Any = "auto",
     ) -> None:
         """``storage_options`` and ``credential_provider``: polars' arguments
-        of these names, for the data browser, previews read by URL and the
-        code. In the code, storage options that look like credentials are
-        left out, as is the credential provider."""
+        of these names, for the data browser and the code. In the code,
+        storage options that look like credentials are left out, as is the
+        credential provider."""
         self.storage_options = storage_options
         self.credential_provider = credential_provider
 
@@ -76,9 +63,9 @@ class _PolarsByUrl(FormatSupport):
 
 class CsvByPolars(_PolarsByUrl):
     format = Csv
-    capabilities = ("preview", "query", "recipe")
+    capabilities = ("view", "recipe")
 
-    def preview(
+    def view(
         self,
         fmt: Csv,
         location: Location,
@@ -86,41 +73,23 @@ class CsvByPolars(_PolarsByUrl):
         path: str,
         is_dir: bool,
         *,
-        limits: PreviewLimits,
-    ) -> Preview:
-        pl = Polars().load()
-        text, truncated = head_text(fs, path, limits.max_bytes)
-        df = pl.read_csv(
-            io.BytesIO(text.encode()),
-            separator=fmt.separator(name_of(path), text),
-            n_rows=limits.max_rows,
-            truncate_ragged_lines=True,
-        )
-        more = truncated or df.height == limits.max_rows
-        return _table(df, note=rows_note(df.height, more))
-
-    def query(
-        self,
-        fmt: Csv,
-        location: Location,
-        fs: AbstractFileSystem,
-        path: str,
-        is_dir: bool,
-    ) -> Any:
+        limits: ViewLimits,
+    ) -> View:
         pl = Polars().load()
         url = library_url(location)
         # The first lines, read by polars too, so any URL it reads works.
         lines = pl.scan_lines(url, **self.storage()).head(20).collect()["line"]
         # try_parse_dates: date columns get date filters (<, >, ...) instead of text ones.
-        return pl.scan_csv(
+        data = pl.scan_csv(
             url,
             separator=fmt.separator(url, "\n".join(lines)),
             truncate_ragged_lines=True,
             try_parse_dates=True,
             **self.storage(),
         )
+        return QueryView(data=data)
 
-    recipe_template = cleandoc("""
+    data_frame_template = cleandoc("""
         import polars as pl
 
         df = pl.read_csv({url}{kwargs})
@@ -133,21 +102,20 @@ class CsvByPolars(_PolarsByUrl):
         fs: AbstractFileSystem,
         path: str,
         is_dir: bool,
-    ) -> str:
-        return self.recipe_template.format(
-            url=repr(library_url(location)),
-            kwargs=format_kwargs(
-                separator=fmt.code_separator(fs, path),
-                storage_options=self.code_storage_options(),
-            ),
+    ) -> dict[str, str]:
+        kwargs = format_kwargs(
+            separator=fmt.code_separator(fs, path),
+            storage_options=self.code_storage_options(),
         )
+        url = repr(library_url(location))
+        return {AS_DATA_FRAME: self.data_frame_template.format(url=url, kwargs=kwargs)}
 
 
 class JsonLinesByPolars(_PolarsByUrl):
     format = JsonLines
-    capabilities = ("preview", "query", "recipe")
+    capabilities = ("view", "recipe")
 
-    def preview(
+    def view(
         self,
         fmt: JsonLines,
         location: Location,
@@ -155,28 +123,21 @@ class JsonLinesByPolars(_PolarsByUrl):
         path: str,
         is_dir: bool,
         *,
-        limits: PreviewLimits,
-    ) -> Preview:
-        pl = Polars().load()
-        text, truncated = head_text(fs, path, limits.max_bytes)
-        df = pl.read_ndjson(io.BytesIO(text.encode()), n_rows=limits.max_rows)
-        more = truncated or df.height == limits.max_rows
-        return _table(df, note=rows_note(df.height, more, "records"))
+        limits: ViewLimits,
+    ) -> View:
+        data = Polars().load().scan_ndjson(library_url(location), **self.storage())
+        return QueryView(data=data)
 
-    def query(
-        self,
-        fmt: JsonLines,
-        location: Location,
-        fs: AbstractFileSystem,
-        path: str,
-        is_dir: bool,
-    ) -> Any:
-        return Polars().load().scan_ndjson(library_url(location), **self.storage())
-
-    recipe_template = cleandoc("""
+    lazy_frame_template = cleandoc("""
         import polars as pl
 
         df = pl.scan_ndjson({url}{kwargs})
+        """)
+
+    data_frame_template = cleandoc("""
+        import polars as pl
+
+        df = pl.read_ndjson({url}{kwargs})
         """)
 
     def recipe(
@@ -186,21 +147,23 @@ class JsonLinesByPolars(_PolarsByUrl):
         fs: AbstractFileSystem,
         path: str,
         is_dir: bool,
-    ) -> str:
-        return self.recipe_template.format(
-            url=repr(library_url(location)),
-            kwargs=format_kwargs(storage_options=self.code_storage_options()),
-        )
+    ) -> dict[str, str]:
+        url = repr(library_url(location))
+        kwargs = format_kwargs(storage_options=self.code_storage_options())
+        return {
+            AS_LAZY_FRAME: self.lazy_frame_template.format(url=url, kwargs=kwargs),
+            AS_DATA_FRAME: self.data_frame_template.format(url=url, kwargs=kwargs),
+        }
 
 
 class JsonByPolars(FormatSupport):
-    """Load code only: JSON is previewed as a tree (``JsonByPython``)."""
+    """Load code only: JSON is viewed as a tree (``JsonByPython``)."""
 
     format = Json
-    use = Polars
+    engine = Polars
     capabilities = ("recipe",)
 
-    recipe_template = cleandoc("""
+    data_frame_template = cleandoc("""
         import polars as pl
 
         df = pl.read_json({url})
@@ -213,17 +176,18 @@ class JsonByPolars(FormatSupport):
         fs: AbstractFileSystem,
         path: str,
         is_dir: bool,
-    ) -> str:
+    ) -> dict[str, str]:
         # polars' read_json takes no storage options.
-        return self.recipe_template.format(url=repr(library_url(location)))
+        url = repr(library_url(location))
+        return {AS_DATA_FRAME: self.data_frame_template.format(url=url)}
 
 
 class ExcelByPolars(FormatSupport):
     format = Excel
-    use = Polars
+    engine = Polars
     # fastexcel reads workbooks for polars; the code reads the bytes with fsspec.
     additional_requirements = (Fastexcel, Fsspec)
-    capabilities = ("preview", "query", "recipe")
+    capabilities = ("view", "recipe")
 
     def __init__(
         self, *, fsspec_storage_options: Mapping[str, Any] | None = None
@@ -233,7 +197,7 @@ class ExcelByPolars(FormatSupport):
         credentials are left out."""
         self.fsspec_storage_options = fsspec_storage_options
 
-    def preview(
+    def view(
         self,
         fmt: Excel,
         location: Location,
@@ -241,33 +205,19 @@ class ExcelByPolars(FormatSupport):
         path: str,
         is_dir: bool,
         *,
-        limits: PreviewLimits,
-    ) -> Preview:
-        Polars().load()  # fastexcel's to_polars() needs polars
-        fastexcel = Fastexcel().load()
-        reader = fastexcel.read_excel(read_whole(fs, path, limits))
-        sheet = reader.load_sheet(0, n_rows=limits.max_rows)
-        df = sheet.to_polars()
-        note = rows_note(
-            df.height, sheet.total_height > df.height, total=sheet.total_height
-        )
-        note = with_sheets(note, reader.sheet_names)
-        return _table(df, title=sheet.name, note=note)
-
-    def query(
-        self,
-        fmt: Excel,
-        location: Location,
-        fs: AbstractFileSystem,
-        path: str,
-        is_dir: bool,
-    ) -> Any:
+        limits: ViewLimits,
+    ) -> View:
         # Excel cannot be read lazily: the first sheet is read whole, through
         # the explorer's filesystem, and queried in memory.
-        return Polars().load().read_excel(fs.cat_file(path)).lazy()
+        size = fs.info(path).get("size")
+        if size is not None and size > limits.max_whole_file_bytes:
+            limit = limits.max_whole_file_bytes // (1024 * 1024)
+            raise ValueError(f"too large to view (over {limit} MB)")
+        Fastexcel().load()  # polars reads workbooks with fastexcel
+        return QueryView(data=Polars().load().read_excel(fs.cat_file(path)))
 
     # polars reads the bytes, fetched with fsspec so any storage works.
-    recipe_template = cleandoc("""
+    data_frame_template = cleandoc("""
         import fsspec
         import polars as pl
 
@@ -282,18 +232,17 @@ class ExcelByPolars(FormatSupport):
         fs: AbstractFileSystem,
         path: str,
         is_dir: bool,
-    ) -> str:
-        return self.recipe_template.format(
-            url=repr(library_url(location)),
-            kwargs=format_kwargs(**snippet_options(self.fsspec_storage_options)),
-        )
+    ) -> dict[str, str]:
+        kwargs = format_kwargs(**snippet_options(self.fsspec_storage_options))
+        url = repr(library_url(location))
+        return {AS_DATA_FRAME: self.data_frame_template.format(url=url, kwargs=kwargs)}
 
 
 class ParquetByPolars(_PolarsByUrl):
     format = Parquet
-    capabilities = ("preview", "query", "recipe")
+    capabilities = ("view", "recipe")
 
-    def preview(
+    def view(
         self,
         fmt: Parquet,
         location: Location,
@@ -301,27 +250,8 @@ class ParquetByPolars(_PolarsByUrl):
         path: str,
         is_dir: bool,
         *,
-        limits: PreviewLimits,
-    ) -> Preview:
-        pl = Polars().load()
-        lf = self.query(fmt, location, fs, path, is_dir)
-        df = lf.head(limits.max_rows).collect()
-        if is_dir:
-            note = rows_note(df.height, df.height == limits.max_rows)
-        else:
-            # Counting rows only reads the file's metadata.
-            total = lf.select(pl.len()).collect().item()
-            note = rows_note(df.height, df.height < total, total=total)
-        return _table(df, note=note)
-
-    def query(
-        self,
-        fmt: Parquet,
-        location: Location,
-        fs: AbstractFileSystem,
-        path: str,
-        is_dir: bool,
-    ) -> Any:
+        limits: ViewLimits,
+    ) -> View:
         """A LazyFrame over a Parquet file, or over a directory's data files.
 
         For a directory, its data files as ``matches`` found them (see
@@ -330,7 +260,7 @@ class ParquetByPolars(_PolarsByUrl):
         writes "_SUCCESS" and ".crc" checksums next to the data.
         """
         layout = fmt.layout(location, fs, path) if is_dir else None
-        return (
+        data = (
             Polars()
             .load()
             .scan_parquet(
@@ -340,12 +270,26 @@ class ParquetByPolars(_PolarsByUrl):
                 **self.storage(),
             )
         )
+        return QueryView(data=data)
 
     # A LazyFrame, so only the needed rows and columns are read.
-    recipe_template = cleandoc("""
+    lazy_frame_template = cleandoc("""
         import polars as pl
 
         df = pl.scan_parquet({url}{kwargs})
+        """)
+
+    data_frame_template = cleandoc("""
+        import polars as pl
+
+        df = pl.read_parquet({url}{kwargs})
+        """)
+
+    # read_parquet takes no hidden_file_prefix: scanned, then read.
+    data_frame_scanned_template = cleandoc("""
+        import polars as pl
+
+        df = pl.scan_parquet({url}{kwargs}).collect()
         """)
 
     def recipe(
@@ -355,19 +299,23 @@ class ParquetByPolars(_PolarsByUrl):
         fs: AbstractFileSystem,
         path: str,
         is_dir: bool,
-    ) -> str:
+    ) -> dict[str, str]:
         layout = fmt.layout(location, fs, path) if is_dir else None
-        return self.recipe_template.format(
-            url=repr(fmt.data_url(location, fs, path, is_dir)),
-            kwargs=format_kwargs(
-                hive_partitioning=True if layout and layout.keys else None,
-                # "*" also matches Spark's "_SUCCESS" and checksums.
-                hidden_file_prefix=[".", "_"]
-                if layout and layout.files == "*"
-                else None,
-                storage_options=self.code_storage_options(),
-            ),
+        # "*" also matches Spark's "_SUCCESS" and checksums.
+        hidden = layout is not None and layout.files == "*"
+        url = repr(fmt.data_url(location, fs, path, is_dir))
+        kwargs = format_kwargs(
+            hive_partitioning=True if layout and layout.keys else None,
+            hidden_file_prefix=[".", "_"] if hidden else None,
+            storage_options=self.code_storage_options(),
         )
+        data_frame = (
+            self.data_frame_scanned_template if hidden else self.data_frame_template
+        )
+        return {
+            AS_LAZY_FRAME: self.lazy_frame_template.format(url=url, kwargs=kwargs),
+            AS_DATA_FRAME: data_frame.format(url=url, kwargs=kwargs),
+        }
 
 
 class DeltaLakeByPolars(_PolarsByUrl):
@@ -375,7 +323,7 @@ class DeltaLakeByPolars(_PolarsByUrl):
     # polars reads the table with deltalake (delta-rs), which reads cloud
     # storage itself, by default with credentials from the environment.
     additional_requirements = (DeltaLakePackage,)
-    capabilities = ("preview", "query", "recipe")
+    capabilities = ("view", "recipe")
 
     def __init__(
         self,
@@ -386,9 +334,9 @@ class DeltaLakeByPolars(_PolarsByUrl):
         use_pyarrow: bool = False,
         pyarrow_options: Mapping[str, Any] | None = None,
     ) -> None:
-        """Options of polars' ``scan_delta``, for the preview, the data browser
-        and the code: ``storage_options`` and ``credential_provider``, as for
-        the other formats polars reads, and ``delta_table_options``,
+        """Options of polars' ``scan_delta``, for the data browser and the
+        code: ``storage_options`` and ``credential_provider``, as for the
+        other formats polars reads, and ``delta_table_options``,
         ``use_pyarrow`` and ``pyarrow_options``.
 
         ``storage_options`` are delta-rs' (object_store's), not fsspec's;
@@ -403,7 +351,7 @@ class DeltaLakeByPolars(_PolarsByUrl):
         self.use_pyarrow = use_pyarrow
         self.pyarrow_options = pyarrow_options
 
-    def preview(
+    def view(
         self,
         fmt: DeltaLake,
         location: Location,
@@ -411,21 +359,9 @@ class DeltaLakeByPolars(_PolarsByUrl):
         path: str,
         is_dir: bool,
         *,
-        limits: PreviewLimits,
-    ) -> Preview:
-        lf = self.query(fmt, location, fs, path, is_dir)
-        df = lf.head(limits.max_rows).collect()
-        return _table(df, note=rows_note(df.height, df.height == limits.max_rows))
-
-    def query(
-        self,
-        fmt: DeltaLake,
-        location: Location,
-        fs: AbstractFileSystem,
-        path: str,
-        is_dir: bool,
-    ) -> Any:
-        return (
+        limits: ViewLimits,
+    ) -> View:
+        data = (
             Polars()
             .load()
             .scan_delta(
@@ -436,11 +372,18 @@ class DeltaLakeByPolars(_PolarsByUrl):
                 pyarrow_options=self.pyarrow_options,
             )
         )
+        return QueryView(data=data)
 
-    recipe_template = cleandoc("""
+    lazy_frame_template = cleandoc("""
         import polars as pl
 
         df = pl.scan_delta({url}{kwargs})
+        """)
+
+    data_frame_template = cleandoc("""
+        import polars as pl
+
+        df = pl.read_delta({url}{kwargs})
         """)
 
     def recipe(
@@ -450,14 +393,16 @@ class DeltaLakeByPolars(_PolarsByUrl):
         fs: AbstractFileSystem,
         path: str,
         is_dir: bool,
-    ) -> str:
-        # Only the arguments that differ from scan_delta's defaults.
-        return self.recipe_template.format(
-            url=repr(library_url(location)),
-            kwargs=format_kwargs(
-                storage_options=self.code_storage_options(),
-                delta_table_options=self.delta_table_options,
-                use_pyarrow=True if self.use_pyarrow else None,
-                pyarrow_options=self.pyarrow_options,
-            ),
+    ) -> dict[str, str]:
+        url = repr(library_url(location))
+        # Only the arguments that differ from scan_delta's (read_delta's) defaults.
+        kwargs = format_kwargs(
+            storage_options=self.code_storage_options(),
+            delta_table_options=self.delta_table_options,
+            use_pyarrow=True if self.use_pyarrow else None,
+            pyarrow_options=self.pyarrow_options,
         )
+        return {
+            AS_LAZY_FRAME: self.lazy_frame_template.format(url=url, kwargs=kwargs),
+            AS_DATA_FRAME: self.data_frame_template.format(url=url, kwargs=kwargs),
+        }

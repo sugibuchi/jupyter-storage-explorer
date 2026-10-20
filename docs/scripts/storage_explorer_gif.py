@@ -50,9 +50,7 @@ def make(lab: Lab) -> None:
         page.wait_for_timeout(800)
         film.snap(500)
         film.click(
-            page.locator(
-                ".jse-status-bar .jse-preview-btn", has_text="Query data"
-            ).first
+            page.locator(".jse-status-bar .jse-preview-btn", has_text="Preview").first
         )
         page.wait_for_selector(".jse-data tbody tr", timeout=30000)
         page.wait_for_timeout(1000)
@@ -94,7 +92,9 @@ def make(lab: Lab) -> None:
         film.click(page.locator(".lm-TabBar-tab", has_text="Storage Explorer").first)
         page.wait_for_timeout(1000)
         film.snap(1000)
-        changes = page.get_by_text("refreshed on the 1st").first
+        changes = (
+            page.locator(".jse-preview-panel").get_by_text("refreshed on the 1st").first
+        )
         film.move(page.get_by_text("Owner: data platform team").first)
         for _ in range(8):
             page.mouse.wheel(0, 40)

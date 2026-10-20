@@ -83,7 +83,7 @@ class ExplorerStates:
     """What explorers remember: bookmarks, and how data was last queried.
 
     ``StorageExplorer`` reads its bookmarks here, and the data browser
-    ("Query data") restores the filters, sort order, hidden columns, widths
+    restores the filters, sort order, hidden columns, widths
     and mode a dataset was last shown with. Only the ``max_queries`` datasets
     queried last are remembered.
 

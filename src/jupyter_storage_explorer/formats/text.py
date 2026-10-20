@@ -15,7 +15,7 @@ class Text(DataFormat):
     name = "text"
     label = "Text"
     # Extension -> syntax highlighting hint. Includes text-based data formats
-    # (JSON, CSV, SVG, ...), so those can also be previewed as plain text.
+    # (JSON, CSV, SVG, ...), so those can also be viewed as plain text.
     languages = {  # noqa: RUF012
         ".txt": None, ".log": None, ".md": "markdown", ".rst": None,
         ".py": "python", ".sql": "sql", ".r": "r", ".sh": "shell",

@@ -1,4 +1,4 @@
-"""Data explorer widget: the data browser ("Query data") for one dataframe."""
+"""Data explorer widget: the data browser for one dataframe."""
 
 from __future__ import annotations
 
@@ -51,7 +51,7 @@ def _query_settings(settings: Any) -> QuerySettings:
 
 class DataExplorer(anywidget.AnyWidget):
     """The data browser for one dataframe: page through it, sort, filter and
-    choose columns, as "Query data" does in ``StorageExplorer``.
+    choose columns, as ``StorageExplorer`` does for data it views.
 
     Queries run on the data itself ("Live") or on its first rows read into
     memory ("In memory", queried with polars when installed), switched at the
@@ -107,7 +107,7 @@ class DataExplorer(anywidget.AnyWidget):
 
     See Also
     --------
-    StorageExplorer : The file explorer, whose "Query data" is the same browser.
+    StorageExplorer : The file explorer, whose data browser is the same.
     QuerySettings : Settings written in code.
     fetch_rows : How pages are read by default.
 
@@ -188,7 +188,7 @@ class DataExplorer(anywidget.AnyWidget):
         height: str,
     ) -> DataExplorer:
         """A data explorer of a query opened elsewhere: StorageExplorer's
-        "Query data" in a tab of its own, whose settings stay remembered under
+        data browser in a tab of its own ("View in a new tab"), whose settings stay remembered under
         ``key`` (the data's URL) in ``states``, as its previews' are. ``label``
         (the file's format, as the explorer's preview shows it) is shown
         beside the title instead of the data's library."""
