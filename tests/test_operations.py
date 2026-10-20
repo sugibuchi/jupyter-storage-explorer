@@ -14,6 +14,7 @@ from fsspec.implementations.dirfs import DirFileSystem
 
 from jupyter_storage_explorer import StorageExplorer
 from jupyter_storage_explorer._jobs import runner as jobs
+from jupyter_storage_explorer._jobs.operation_chain import OperationChain
 from jupyter_storage_explorer._jobs.runner import JobRunner
 from jupyter_storage_explorer.filesystems import (
     AsyncFsspecOperations,
@@ -24,7 +25,6 @@ from jupyter_storage_explorer.filesystems.operation import (
     FileSystemOperations,
     Measurement,
     OperationCancelled,
-    OperationChain,
     Progress,
     measure_file_info,
 )

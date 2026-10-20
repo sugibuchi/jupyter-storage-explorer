@@ -3,7 +3,8 @@
 ``StorageExplorer`` moves, copies, deletes and downloads files through a list
 of ``FileSystemOperations`` objects (its ``operations`` argument): for each
 operation it calls the first object's method, and the next object's if that
-raises ``FileSystemOperations.NotSupported`` (see ``OperationChain``). Its
+raises ``FileSystemOperations.NotSupported`` (the explorer's chain,
+_jobs/operation_chain.py). Its
 default list (``default_operations()`` in operations.py, with the predefined
 operations) is ``AtomicMoveOperation``, for moves in one step
 on local disks, then ``AsyncFsspecOperations``, for asynchronous filesystems
@@ -32,7 +33,7 @@ from fsspec.callbacks import Callback
 from jupyter_storage_explorer import _infos
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Sequence
+    from collections.abc import Callable
 
     from fsspec import AbstractFileSystem
 
@@ -655,31 +656,3 @@ class FileSystemOperations:
         """The error of a file moved by a copy whose source was left."""
         name = path.rstrip("/").rsplit("/", 1)[-1]
         return OSError(f"{name} was copied, but not deleted from its source: {exc}")
-
-
-class OperationChain:
-    """Calls an operation on the first of ``operations`` that supports it
-    (see the module docstring), in the order given: which objects there are,
-    defaults included, is up to the caller (e.g.
-    ``StorageExplorer.default_operations``)."""
-
-    def __init__(self, operations: Sequence[FileSystemOperations]) -> None:
-        if not operations:
-            raise ValueError("no operations objects given")
-        self.operations = list(operations)
-
-    def __getattr__(self, name: str) -> Callable[..., Any]:
-        if name.startswith("_") or not hasattr(FileSystemOperations, name):
-            raise AttributeError(name)
-
-        def call(*args: Any, **kwargs: Any) -> Any:
-            for operations in self.operations:
-                try:
-                    return getattr(operations, name)(*args, **kwargs)
-                except FileSystemOperations.NotSupported:
-                    continue
-            raise FileSystemOperations.NotSupported(
-                f"no operations object does {name} on this filesystem"
-            )
-
-        return call

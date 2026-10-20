@@ -26,6 +26,7 @@ from jupyter_storage_explorer._explorer.requests import FileRequestsMixin
 from jupyter_storage_explorer._explorer.states import ExplorerStates, explorer_states
 from jupyter_storage_explorer._explorer.supports import SupportChain
 from jupyter_storage_explorer._jobs.incoming import IncomingFiles
+from jupyter_storage_explorer._jobs.operation_chain import OperationChain
 from jupyter_storage_explorer._jobs.runner import JobRunner
 from jupyter_storage_explorer._jobs.transfer_policy import TransferPolicy
 from jupyter_storage_explorer.filesystems import (
@@ -36,7 +37,6 @@ from jupyter_storage_explorer.filesystems import (
 from jupyter_storage_explorer.filesystems import (
     default_operations as _default_operations,
 )
-from jupyter_storage_explorer.filesystems.operation import OperationChain
 from jupyter_storage_explorer.formats import (
     DataFormat,
     FormatSupport,

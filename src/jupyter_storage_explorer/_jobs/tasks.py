@@ -38,7 +38,7 @@ if TYPE_CHECKING:
 
     from fsspec import AbstractFileSystem
 
-    from jupyter_storage_explorer.filesystems.operation import OperationChain
+    from jupyter_storage_explorer._jobs.operation_chain import OperationChain
 
 
 @dataclasses.dataclass

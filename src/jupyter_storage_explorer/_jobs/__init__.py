@@ -8,6 +8,8 @@ it plans and runs in the background, so testable on their own.
 - incoming.py: files from the user's computer, received in pieces.
 - properties.py: "Properties": a file's info, or the totals of a selection.
 - transfer_policy.py: the rules of the directions files may be transferred in.
+- operation_chain.py: ``OperationChain``, each operation by the first of the
+  explorer's ``FileSystemOperations`` objects that does it.
 
 The operations themselves are done by ``filesystems``.
 """

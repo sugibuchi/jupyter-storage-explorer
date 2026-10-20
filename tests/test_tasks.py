@@ -10,6 +10,7 @@ import pytest
 
 from jupyter_storage_explorer._jobs import tasks as tasks_module
 from jupyter_storage_explorer._jobs.incoming import IncomingFiles
+from jupyter_storage_explorer._jobs.operation_chain import OperationChain
 from jupyter_storage_explorer._jobs.tasks import FileTasks, Task
 from jupyter_storage_explorer.filesystems import (
     FsspecOperations,
@@ -19,7 +20,6 @@ from jupyter_storage_explorer.filesystems import (
 )
 from jupyter_storage_explorer.filesystems.operation import (
     FileSystemOperations,
-    OperationChain,
     Progress,
 )
 

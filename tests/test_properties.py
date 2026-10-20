@@ -11,9 +11,10 @@ import pytest
 
 from jupyter_storage_explorer import StorageExplorer, _paths
 from jupyter_storage_explorer._infos import mtime
+from jupyter_storage_explorer._jobs.operation_chain import OperationChain
 from jupyter_storage_explorer._jobs.properties import file_properties, scan
 from jupyter_storage_explorer._jobs.runner import JobRunner
-from jupyter_storage_explorer.filesystems.operation import OperationChain, Progress
+from jupyter_storage_explorer.filesystems.operation import Progress
 
 if TYPE_CHECKING:
     from pathlib import Path

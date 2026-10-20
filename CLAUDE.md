@@ -70,11 +70,12 @@ explorer of exactly its own version (`launcher/hatch_build.py` sets its dependen
   `operation.py`: the `FileSystemOperations` interface; `operations.py`: the predefined operations; `abfs.py`: the
   opt-in Data Lake operation) and `formats/`; private, `_explorer/`
   (`StorageExplorer`'s mixins, with `states.py`, `listing.py` and `jupyterlab_files.py`), `_jobs/` (`tasks.py`:
-  `FileTasks`; `runner.py`: `JobRunner`; `incoming.py`, `properties.py`, `transfer_policy.py`) and `_query/`
+  `FileTasks`; `runner.py`: `JobRunner`; `operation_chain.py`: `OperationChain`; `incoming.py`, `properties.py`,
+  `transfer_policy.py`) and `_query/`
   (`filters.py`, `settings.py`: `QuerySettings`, `QueryState`; `data_query.py`: `DataQuery`, `fetch_rows`). Users import
   from the top level, `filesystems`, `formats` and `formats.supports` only, whose `__all__` are the public API:
   what users construct, subclass, call or annotate with. The explorer's machinery (`SupportChain` and `Recipe`,
-  in `_explorer/supports.py`; `OperationChain`, `detect`, `matching_formats`, the `DEFAULT_*` tuples) stays out of
+  in `_explorer/supports.py`; `OperationChain`, in `_jobs/operation_chain.py`; `detect`, `matching_formats`, the `DEFAULT_*` tuples) stays out of
   them, imported from its modules by the package and the tests.
 - `jupyter-storage-explorer-launcher` (`launcher/`): a JupyterLab launcher item opening a tab whose kernel runs
   `launch()`. It merges every `storage-explorer/launcher.py` in Jupyter's config paths as layers, system to user
