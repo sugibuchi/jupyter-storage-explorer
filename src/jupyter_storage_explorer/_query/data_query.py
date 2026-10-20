@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from jupyter_storage_explorer._explorer.states import ExplorerStates
+    from jupyter_storage_explorer.location import Location
 
 MODES = ("auto", "live", "memory")
 
@@ -124,7 +125,7 @@ class DataQuery:
     def __init__(
         self,
         source: Any,
-        key: str,
+        key: Location | str,
         states: ExplorerStates,
         *,
         mode: str = "auto",

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import os
 
 import fsspec
@@ -132,8 +133,9 @@ def test_operations_told_by_the_explorers_mappers(tmp_path):
     class ByOption(LocalMapper):
         """Local filesystems apart by an option, unlike the default mapper."""
 
-        def identifier(self, fs):
-            return {**super().identifier(fs), "auto_mkdir": fs.auto_mkdir}
+        def to_location(self, fs, path):
+            location = super().to_location(fs, path)
+            return dataclasses.replace(location, hostname=f"auto-{fs.auto_mkdir}")
 
     _operations_told(tmp_path, MapperChain([ByOption(), *default_mappers()]), [False])
 

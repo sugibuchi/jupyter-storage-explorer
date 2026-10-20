@@ -6,6 +6,7 @@ import fsspec
 import pytest
 from explorers import Explorer, entries, make, path_of
 
+from jupyter_storage_explorer import Location
 from jupyter_storage_explorer._explorer.states import ExplorerStates
 
 
@@ -46,20 +47,37 @@ class TestListing:
         local = Explorer(str(tmp_path))
         assert local._listing["ctimes"] == [int((tmp_path / "x.txt").stat().st_ctime)]
 
-    def test_urls_on_request(self, mem_explorer):
+    def test_locations_on_request(self, mem_explorer):
         reply = mem_explorer.request(
-            {"type": "urls", "rid": 1, "paths": ["/data/a.csv", "/data"]}
+            {"type": "locations", "rid": 1, "paths": ["/data/a.csv", "/data"]}
         )
-        assert reply == {
-            "type": "reply",
-            "rid": 1,
-            "urls": ["memory:///data/a.csv", "memory:///data"],
-        }
+        [file, folder] = reply["locations"]
+        assert (file["url"], folder["url"]) == (
+            "memory:///data/a.csv",
+            "memory:///data",
+        )
+        assert file["path"] is None  # plain paths are for local files only
+        assert Location.from_json(file["location"]) == mem_explorer._location_of(
+            "/data/a.csv"
+        )
+
+    def test_local_paths_on_request(self, tmp_path):
+        (tmp_path / "a.csv").write_bytes(b"x")
+        local = Explorer(str(tmp_path), states=ExplorerStates())
+        assert local._local_paths
+        path = path_of(local, "a.csv")
+        [reply] = local.request({"type": "locations", "rid": 1, "paths": [path]})[
+            "locations"
+        ]
+        assert reply["path"] == str(tmp_path / "a.csv")  # the system's form
+        assert reply["url"].startswith("file:///")
 
     def test_items_without_url(self, memfs):
         class NoCsvUrls(Explorer):
-            def _url(self, path):
-                return None if path.endswith((".csv", "/sub")) else super()._url(path)
+            def _location_of(self, path):
+                if path.endswith((".csv", "/sub")):
+                    return None
+                return super()._location_of(path)
 
         memfs.pipe_file("/d/a.csv", b"x")
         memfs.pipe_file("/d/b.txt", b"x")

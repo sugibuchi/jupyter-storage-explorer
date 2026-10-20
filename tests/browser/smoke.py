@@ -530,18 +530,18 @@ def drag_from_another_page_refused(x: Explorer) -> None:
     crafted = json.dumps(
         {
             "explorer": "elsewhere",
-            "filesystem": {
-                "name": "Sales lake",
-                "protocol": "memory",
-                "identifier": {},
-            },
+            "filesystem": {"name": "Sales lake"},
             "folders": True,
             "unsafe": True,
             "files": [
                 {
                     "path": "/sales-lake/catalog.json",
-                    "url": "memory:///sales-lake/catalog.json",
                     "name": "catalog.json",
+                    "location": {
+                        "kind": "fsspec",
+                        "fsspec_protocol": "memory",
+                        "fsspec_url": "memory:///sales-lake/catalog.json",
+                    },
                 }
             ],
         }
@@ -934,6 +934,31 @@ display(explorer, selected, rows)"""
 
 
 @lab_check
+def local_paths_copied(lab: Lab, page: Page) -> None:
+    # On a local disk, items have a plain path besides their file:/// URL:
+    # "Copy path" copies it, and "Copy" puts it on the system clipboard.
+    folder = lab.root / "local-disk"
+    folder.mkdir(exist_ok=True)
+    (folder / "notes.txt").write_text("notes", encoding="utf-8")
+    page.context.grant_permissions(["clipboard-read", "clipboard-write"])
+    source = f"from jupyter_storage_explorer import StorageExplorer\nStorageExplorer({str(folder)!r})"
+    x = Explorer(lab, page, source)
+    clipboard = "() => navigator.clipboard.readText()"
+    x.menu(x.row("notes.txt"), "Copy path")
+    expect(x.status).to_contain_text("Copied path")
+    assert page.evaluate(clipboard) == str(folder / "notes.txt")
+    x.menu(x.row("notes.txt"), "Copy URL")
+    expect(x.status).to_contain_text("Copied URL")
+    assert page.evaluate(clipboard) == (folder / "notes.txt").as_uri()
+    x.row("notes.txt").click(button="right")
+    x.el.locator(".jse-menu:not(.jse-submenu) > .jse-menu-item:visible").filter(
+        has=page.get_by_text("Copy", exact=True)
+    ).click()
+    expect(x.status).to_contain_text("Copied notes.txt")
+    assert page.evaluate(clipboard) == str(folder / "notes.txt")
+
+
+@lab_check
 def python_callbacks(lab: Lab, page: Page) -> None:
     x = Explorer(lab, page, CALLBACKS)
     selected, rows = page.locator(".smoke-selected"), page.locator(".smoke-rows")
@@ -1044,8 +1069,8 @@ def launcher_tab_reload(lab: Lab, page: Page) -> None:
 @lab_check
 def drag_between_tabs(lab: Lab, page: Page) -> None:
     # Two launcher tabs side by side, each with its own kernel: a file dragged
-    # from one onto the other is pasted there by its URL and its storage's
-    # identifier. The demo storages are in each kernel's own memory, so the
+    # from one onto the other is pasted there by its location, which names
+    # its storage. The demo storages are in each kernel's own memory, so the
     # other kernel refuses it rather than read its own memory.
     first = open_launcher_tab(lab, page)
     page.keyboard.press("Control+Shift+L")

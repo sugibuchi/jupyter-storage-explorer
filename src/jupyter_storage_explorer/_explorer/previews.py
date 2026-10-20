@@ -38,7 +38,7 @@ class PreviewsMixin:
 
         (None, []) if ``path`` has no URL: it is then not treated as data.
         """
-        url = self._url(path)
+        url = self._data_url(path)
         if url is None:
             return None, []
         info = self._info(path)
@@ -120,21 +120,22 @@ class PreviewsMixin:
     def _new_query(self, fmt: DataFormat, target: Target) -> DataQuery:
         """The data browser's query of ``target`` read as ``fmt``.
 
-        Settings are remembered by URL, so they follow the data across
+        Settings are remembered by location, so they follow the data across
         explorers and tabs, with the mode last chosen for it.
         """
         # By the first support installed (can_query()).
         source = functools.partial(self._supports.query, fmt, target.url, target.is_dir)
-        state = self._states.query(target.url)
+        key = self._location_of(target.path)
+        state = self._states.query(key)
         mode = state.mode if state is not None else "auto"
         fetch = self._fetch_rows
         try:
-            return DataQuery(source, target.url, self._states, mode=mode, fetch=fetch)
+            return DataQuery(source, key, self._states, mode=mode, fetch=fetch)
         except ValueError:
             if mode != "live":
                 raise
             # "live" chosen when the format scanned lazily, and no longer does.
-            return DataQuery(source, target.url, self._states, fetch=fetch)
+            return DataQuery(source, key, self._states, fetch=fetch)
 
     # --- Query data in a new tab: a DataExplorer of the same query, which the
     # launcher's JupyterLab extension shows in a tab of its own ---
@@ -152,10 +153,11 @@ class PreviewsMixin:
                 formats = [f for f in formats if f.name == content["format"]]
             if not formats or not self._supports.can_query(formats[0]):
                 raise ValueError(f"{_paths.basename(path)} cannot be queried")
+            data = self._new_query(formats[0], target)
             explorer = DataExplorer._of_query(
-                self._new_query(formats[0], target),
+                data,
                 self._states,
-                target.url,
+                data.key,
                 title=_paths.basename(path),
                 label=formats[0].label,
                 height="fill",
@@ -166,7 +168,7 @@ class PreviewsMixin:
         return {
             "model_id": explorer.model_id,
             "title": _paths.basename(path),
-            "url": target.url,
+            "url": data.key.url,
         }
 
     def _query_tab_closed(self, model_id: str) -> None:

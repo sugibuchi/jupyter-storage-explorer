@@ -20,6 +20,8 @@ if TYPE_CHECKING:
 
     import narwhals as nw
 
+    from jupyter_storage_explorer.location import Location
+
 # The key DataExplorer's settings are kept under, in its own states.
 _KEY = "data"
 
@@ -179,7 +181,7 @@ class DataExplorer(anywidget.AnyWidget):
         cls,
         data: DataQuery,
         states: ExplorerStates,
-        key: str,
+        key: Location | str,
         *,
         title: str,
         label: str,

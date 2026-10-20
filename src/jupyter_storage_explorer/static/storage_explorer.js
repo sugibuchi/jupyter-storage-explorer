@@ -37,13 +37,15 @@ function render({ model, el }) {
       }
       return out;
     },
-    // The storage shown, as files copied or dragged name it: {name, protocol,
-    // identifier}, by which an explorer of another kernel finds them.
-    storage: () => ({ name: model.get("_filesystem"), ...model.get("_storage_identity") }),
-    // The URLs of items ({path}), from the kernel: the listing does not carry them.
-    async urlsOf(items) {
-      const { urls } = await request({ type: "urls", paths: items.map((t) => t.path) });
-      return urls;
+    // The storage shown, as files copied or dragged name it: {name}. An
+    // explorer of another kernel finds them by their locations instead.
+    storage: () => ({ name: model.get("_filesystem") }),
+    // The locations of items ({path}), from the kernel: the listing does not
+    // carry them. Each {url, path: a local item's plain path (else null),
+    // location: its JSON, which files copied or dragged carry}, or null.
+    async locationsOf(items) {
+      const { locations } = await request({ type: "locations", paths: items.map((t) => t.path) });
+      return locations;
     },
     // Puts `lines` on the system clipboard; `what` they are, for the message.
     async copyText(lines, what) {

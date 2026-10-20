@@ -2,7 +2,7 @@
 Data Lake Storage Gen2 (adlfs), Amazon S3 and S3-compatible stores (s3fs),
 Google Cloud Storage (gcsfs), the local disk, fsspec's memory filesystem, and
 SFTP servers (fsspec's own, and sshfs). They match fsspec classes by name, so none of these packages is
-imported.
+imported. Their locations are in locations.py.
 """
 
 from __future__ import annotations
@@ -15,10 +15,18 @@ import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from jupyter_storage_explorer.filesystems.locations import (
+    AbfsLocation,
+    GcsLocation,
+    LocalLocation,
+    MemoryLocation,
+    S3Location,
+    SftpLocation,
+    origin,
+)
 from jupyter_storage_explorer.filesystems.mapper import (
     FileSystemMapper,
     MapperChain,
-    split_url,
 )
 
 if sys.platform == "win32":
@@ -27,42 +35,41 @@ if sys.platform == "win32":
 if TYPE_CHECKING:
     from fsspec import AbstractFileSystem
 
+    from jupyter_storage_explorer.location import Location
+
 
 class AzureBlobMapper(FileSystemMapper):
     """adlfs's ``AzureBlobFileSystem``, which reaches the containers (the
     file systems, as Azure names them) of one storage account.
 
-    Its identifier is the account's name, ``{"account_name": "acct"}``;
-    names are unique within an Azure cloud. URLs are those of Hadoop and
-    Spark, ``abfs://container@acct.dfs.core.windows.net/key``, which name
-    the account (adlfs's own, ``abfs://container/key``, do not; they are
-    read too, as files come with their account's identifier). The host
-    comes from the filesystem's blob endpoint, so other Azure clouds keep
-    their domain; with an emulator or a custom endpoint, URLs are adlfs's.
+    Its locations are ``AbfsLocation``s of the account, whose URLs are those
+    of Hadoop and Spark, ``abfs://container@acct.dfs.core.windows.net/key``,
+    which name the account (adlfs's own, ``abfs://container/key``, do not).
+    The domain comes from the filesystem's blob endpoint, so other Azure
+    clouds keep theirs; with an emulator or a custom endpoint, URLs are
+    adlfs's.
     """
 
-    protocol = "abfs"
     classes = ("adlfs.spec.AzureBlobFileSystem",)
 
-    def identifier(self, fs: AbstractFileSystem) -> dict[str, Any]:
-        name = getattr(fs, "account_name", None) or (_blob_host(fs) or "").split(".")[0]
-        return {"account_name": name.lower()}
-
-    def to_url(self, fs: AbstractFileSystem, path: str) -> str:
-        host = _blob_host(fs)
+    def to_location(self, fs: AbstractFileSystem, path: str) -> AbfsLocation:
+        host = _blob_host(fs) or ""
+        account = getattr(fs, "account_name", None) or host.split(".")[0]
+        suffix = None
+        if ".blob." in host:
+            suffix = host.split(".", 1)[1].replace("blob.", "dfs.", 1)
         container, _, key = path.strip("/").partition("/")
-        if not host or ".blob." not in host or not container:
-            return fs.unstrip_protocol(path)
-        return f"abfs://{container}@{host.replace('.blob.', '.dfs.', 1)}/{key}"
+        return AbfsLocation(
+            account_name=account,
+            container_name=container,
+            path=key,
+            endpoint_suffix=suffix,
+        )
 
-    def path_of(self, fs: AbstractFileSystem, url: str) -> str | None:
-        scheme, netloc, path = split_url(url)
-        if scheme not in ("abfs", "abfss", "az"):
+    def path_of(self, fs: AbstractFileSystem, location: Location) -> str | None:
+        if not self.reaches(fs, location):
             return None
-        container, at, host = netloc.partition("@")
-        if at and host.split(".")[0].lower() != self.identifier(fs)["account_name"]:
-            return None  # another account's
-        return f"{container}/{path.strip('/')}".strip("/")
+        return f"{location.container_name}/{location.path}".strip("/")
 
 
 def _blob_host(fs: AbstractFileSystem) -> str | None:
@@ -71,104 +78,83 @@ def _blob_host(fs: AbstractFileSystem) -> str | None:
     return urllib.parse.urlsplit(getattr(fs, "account_url", None) or "").hostname
 
 
-class _BucketMapper(FileSystemMapper):
-    """Paths are "bucket/key", URLs ``<scheme>://bucket/key`` for each of
-    ``schemes``, the first one made."""
-
-    schemes: tuple[str, ...] = ()
-
-    def to_url(self, fs: AbstractFileSystem, path: str) -> str:
-        return f"{self.schemes[0]}://{path.lstrip('/')}"
-
-    def path_of(self, fs: AbstractFileSystem, url: str) -> str | None:
-        scheme, bucket, key = split_url(url)
-        if scheme not in self.schemes:
-            return None
-        return f"{bucket}/{key.strip('/')}".strip("/")
-
-
-class S3Mapper(_BucketMapper):
+class S3Mapper(FileSystemMapper):
     """s3fs's ``S3FileSystem``, which reaches the buckets of one endpoint.
 
-    Its identifier is the endpoint, ``{"endpoint": "http://minio:9000"}``,
-    when one is set (S3-compatible stores), else the AWS partition, e.g.
-    ``{"partition": "aws"}``, within which bucket names are unique (from
-    the region set, if any). URLs are ``s3://bucket/key``; ``s3a://`` (Spark's)
-    are read too. They do not name an endpoint, so an S3-compatible store
+    Its locations are ``S3Location``s of its endpoint, when one is set
+    (S3-compatible stores), else of its AWS partition (from the region set,
+    if any), within which bucket names are unique. Their URLs,
+    ``s3://bucket/key``, do not name an endpoint, so an S3-compatible store
     is reached from another kernel only if its explorer has it.
     """
 
-    protocol = "s3"
     classes = ("s3fs.core.S3FileSystem",)
-    schemes = ("s3", "s3a")
 
-    def identifier(self, fs: AbstractFileSystem) -> dict[str, Any]:
+    def to_location(self, fs: AbstractFileSystem, path: str) -> S3Location:
+        bucket, _, key = path.strip("/").partition("/")
         client_kwargs = getattr(fs, "client_kwargs", None) or {}
         endpoint = getattr(fs, "endpoint_url", None) or client_kwargs.get(
             "endpoint_url"
         )
         if endpoint:
-            return {"endpoint": _origin(endpoint)}
+            return S3Location(bucket=bucket, key=key, endpoint=endpoint)
         region = client_kwargs.get("region_name") or ""
+        partition = "aws"
         if region.startswith("cn-"):
-            return {"partition": "aws-cn"}
-        if region.startswith("us-gov-"):
-            return {"partition": "aws-us-gov"}
-        return {"partition": "aws"}
+            partition = "aws-cn"
+        elif region.startswith("us-gov-"):
+            partition = "aws-us-gov"
+        return S3Location(bucket=bucket, key=key, partition=partition)
+
+    def path_of(self, fs: AbstractFileSystem, location: Location) -> str | None:
+        if not self.reaches(fs, location):
+            return None
+        return f"{location.bucket}/{location.key}".strip("/")
 
 
-class GCSMapper(_BucketMapper):
+class GCSMapper(FileSystemMapper):
     """gcsfs's ``GCSFileSystem``. Bucket names are unique in Google Cloud
-    Storage, so its identifier is empty, ``{}``, except with another
-    endpoint (an emulator): ``{"endpoint": ...}``. URLs are ``gs://bucket/key``;
-    ``gcs://`` are read too."""
+    Storage, so its locations, ``GcsLocation``s, have no endpoint, except
+    with another one (an emulator)."""
 
-    protocol = "gs"
     classes = ("gcsfs.core.GCSFileSystem",)
-    schemes = ("gs", "gcs")
 
-    def identifier(self, fs: AbstractFileSystem) -> dict[str, Any]:
+    def to_location(self, fs: AbstractFileSystem, path: str) -> GcsLocation:
+        bucket, _, key = path.strip("/").partition("/")
         endpoint = getattr(fs, "_endpoint", None) or ""
-        if not endpoint or _origin(endpoint) == "https://storage.googleapis.com":
-            return {}
-        return {"endpoint": _origin(endpoint)}
+        if not endpoint or origin(endpoint) == "https://storage.googleapis.com":
+            endpoint = None
+        return GcsLocation(bucket=bucket, key=key, endpoint=endpoint)
 
-
-def _origin(url: str) -> str:
-    """``scheme://host[:port]`` of ``url``, in lower case: the same endpoint
-    written two ways compares equal."""
-    parts = urllib.parse.urlsplit(url.strip())
-    return f"{parts.scheme}://{parts.netloc}".lower()
+    def path_of(self, fs: AbstractFileSystem, location: Location) -> str | None:
+        if not self.reaches(fs, location):
+            return None
+        return f"{location.bucket}/{location.key}".strip("/")
 
 
 class LocalMapper(FileSystemMapper):
     """fsspec's ``LocalFileSystem``: the disk of the kernel's machine.
 
-    Its identifier is the machine, ``{"hostname", "machine_id"}`` (the id
-    the system keeps, where there is one). Best effort: containers made from
-    one image may share a machine id, so the hostname, a container's own,
-    is part of it; and two machines sharing a volume are still two, their
-    files copied rather than moved. URLs are plain paths, which every
-    library reads.
+    Its locations, ``LocalLocation``s, name the machine, by its hostname and
+    the id the system keeps, where there is one. Best effort: containers made
+    from one image may share a machine id, so the hostname, a container's
+    own, is part of it; and two machines sharing a volume are still two,
+    their files copied rather than moved.
     """
 
-    protocol = "file"
     classes = ("fsspec.implementations.local.LocalFileSystem",)
 
-    def identifier(self, fs: AbstractFileSystem) -> dict[str, Any]:
-        return _machine()
+    def to_location(self, fs: AbstractFileSystem, path: str) -> LocalLocation:
+        return LocalLocation(path=path, **_machine())
 
-    def to_url(self, fs: AbstractFileSystem, path: str) -> str:
-        return path
+    def path_of(self, fs: AbstractFileSystem, location: Location) -> str | None:
+        return location.path if self.reaches(fs, location) else None
 
 
 @functools.cache
 def _machine() -> dict[str, Any]:
-    """``LocalMapper``'s identifier, read once: the machine stays the same."""
-    machine = {"hostname": socket.gethostname().lower()}
-    if (machine_id := _machine_id()) is not None:
-        machine["machine_id"] = machine_id
-    return machine
+    """The machine, read once: it stays the same. {"hostname", "machine_id"}."""
+    return {"hostname": socket.gethostname().lower(), "machine_id": _machine_id()}
 
 
 def _machine_id() -> str | None:
@@ -197,59 +183,56 @@ _PROCESS = uuid.uuid4().hex
 
 class MemoryMapper(FileSystemMapper):
     """fsspec's ``MemoryFileSystem``, whose files are shared by its instances
-    in one process: its identifier is the process, ``{"process": ...}``, so
+    in one process: its locations, ``MemoryLocation``s, name the process, so
     files copied in another kernel are never looked for in this one's memory."""
 
-    protocol = "memory"
     classes = ("fsspec.implementations.memory.MemoryFileSystem",)
 
-    def identifier(self, fs: AbstractFileSystem) -> dict[str, Any]:
-        return {"process": _PROCESS}
+    def to_location(self, fs: AbstractFileSystem, path: str) -> MemoryLocation:
+        return MemoryLocation(path=path, process=_PROCESS)
+
+    def path_of(self, fs: AbstractFileSystem, location: Location) -> str | None:
+        return location.path if self.reaches(fs, location) else None
 
 
 class SFTPMapper(FileSystemMapper):
-    """fsspec's ``SFTPFileSystem``. A server may show each user a tree of
-    their own (a chroot), so its identifier is ``{"host", "port", "user"}``,
-    and URLs name all three: ``sftp://user@host:22/path``."""
+    """fsspec's ``SFTPFileSystem``. Its locations, ``SftpLocation``s, name the
+    server's host and port and the user, as a server may show each user a
+    tree of their own (a chroot)."""
 
-    protocol = "sftp"
     classes = ("fsspec.implementations.sftp.SFTPFileSystem",)
 
-    def identifier(self, fs: AbstractFileSystem) -> dict[str, Any]:
+    def server(self, fs: AbstractFileSystem) -> dict[str, Any]:
+        """{"host", "port", "user"} of ``fs``."""
         options = getattr(fs, "ssh_kwargs", None) or {}
         return {
-            "host": str(fs.host).lower(),
+            "host": str(fs.host),
             "port": int(options.get("port") or 22),
             "user": options.get("username"),
         }
 
-    def to_url(self, fs: AbstractFileSystem, path: str) -> str:
-        server = self.identifier(fs)
-        user = f"{server['user']}@" if server["user"] else ""
-        return f"sftp://{user}{server['host']}:{server['port']}/{path.lstrip('/')}"
+    def to_location(self, fs: AbstractFileSystem, path: str) -> SftpLocation:
+        return SftpLocation(path=path or "/", **self.server(fs))
 
-    def path_of(self, fs: AbstractFileSystem, url: str) -> str | None:
-        scheme, _, path = split_url(url)
-        if scheme not in ("sftp", "ssh"):
-            return None
-        return path or "/"
+    def path_of(self, fs: AbstractFileSystem, location: Location) -> str | None:
+        return location.path if self.reaches(fs, location) else None
 
 
 class SSHFSMapper(SFTPMapper):
-    """sshfs's ``SSHFileSystem`` (SFTP with asyncssh): the same identifiers
-    and URLs as ``SFTPMapper``, so files copied from one are found on the
-    other. It keeps no host or user of its own, so they are read from the
-    arguments it was made with: the host (first, or ``host=``), ``port=``
-    and ``username=``."""
+    """sshfs's ``SSHFileSystem`` (SFTP with asyncssh): the same locations as
+    ``SFTPMapper``, so files copied from one are found on the other. It
+    keeps no host or user of its own, so they are read from the arguments it
+    was made with: the host (first, or ``host=``), ``port=`` and
+    ``username=``."""
 
     classes = ("sshfs.spec.SSHFileSystem",)
 
-    def identifier(self, fs: AbstractFileSystem) -> dict[str, Any]:
+    def server(self, fs: AbstractFileSystem) -> dict[str, Any]:
         args = getattr(fs, "storage_args", None) or ()
         options = getattr(fs, "storage_options", None) or {}
         host = args[0] if args else options.get("host", "")
         return {
-            "host": str(host).lower(),
+            "host": str(host),
             "port": int(options.get("port") or 22),
             "user": options.get("username"),
         }
@@ -283,13 +266,13 @@ _DEFAULT = MapperChain(default_mappers())
 def same_filesystem(a: AbstractFileSystem, b: AbstractFileSystem) -> bool:
     """Whether two filesystem objects take the same paths to the same files.
 
-    They do if their mappers (``default_mappers()``) give them the same
-    protocol and identifier (see ``FileSystemMapper``), and for filesystems
-    wrapped in ``DirFileSystem``s the same folders. Credentials are not part
-    of it: the same storage opened with two of them is one filesystem, and an
-    operation within it (e.g. a server-side move) uses the source's.
-    Filesystems no mapper knows compare as fsspec compares them, by their
-    class and arguments.
+    They do if their mappers (``default_mappers()``) give them locations of
+    the same storage (``Location.storage``), and for filesystems wrapped in
+    ``DirFileSystem``s the same folders. Credentials are not part of it: the
+    same storage opened with two of them is one filesystem, and an operation
+    within it (e.g. a server-side move) uses the source's. Filesystems no
+    mapper knows compare as fsspec compares them, by their class and
+    arguments.
 
     Parameters
     ----------

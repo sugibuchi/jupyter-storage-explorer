@@ -144,7 +144,7 @@ function createBookmarks(x) {
 
   // The bookmarks menu, below the button: bookmarking the folder shown, then
   // the bookmarks ("[storage] path", in the kernel's order); right-click one
-  // for "Copy URL" and "Delete bookmark".
+  // for "Copy URL", "Copy path" (local folders) and "Delete bookmark".
   async function showMenu() {
     await load();
     const current = model.get("_current_dir");
@@ -159,6 +159,7 @@ function createBookmarks(x) {
         action: () => open(b),
         menu: () => [
           { label: "Copy URL", icon: "link", disabled: !b.url, action: () => x.copyText([b.url], "URL") },
+          ...(b.local_path ? [{ label: "Copy path", icon: "file", action: () => x.copyText([b.local_path], "path") }] : []),
           { label: "Delete bookmark", icon: "close", action: () => remove(b) },
         ],
       });

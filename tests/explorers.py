@@ -70,12 +70,16 @@ def entries(explorer: Explorer) -> list[dict[str, Any]]:
 
 def storage(explorer: Explorer, name: str | None = None) -> dict[str, Any]:
     """Storage ``name`` of ``explorer`` (default: the one shown) as files
-    copied or dragged there name it: {"name", "protocol", "identifier"}."""
-    name = name or explorer._filesystem
-    return {
-        "name": name,
-        **explorer._mappers.storage_of(explorer._filesystems[name].fs),
-    }
+    copied or dragged there name it: {"name"}."""
+    return {"name": name or explorer._filesystem}
+
+
+def copied(explorer: Explorer, path: str, name: str | None = None) -> dict[str, Any]:
+    """File ``path`` of storage ``name`` of ``explorer`` (default: the one
+    shown) as Copy puts it on the clipboard: {"path", "location"}."""
+    fs = explorer._filesystems[name or explorer._filesystem].fs
+    location = explorer._mappers.location_of(fs, path)
+    return {"path": path, "location": location.to_json() if location else None}
 
 
 def path_of(explorer: Explorer, name: str) -> str:

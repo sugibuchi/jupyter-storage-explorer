@@ -8,20 +8,26 @@ from jupyter_storage_explorer._explorer.common import (
     error_text,
     within_top,
 )
+from jupyter_storage_explorer.filesystems.locations import LocalLocation
 
 
 class BookmarksMixin:
     """Bookmarked folders, kept in the explorer states (states.py)."""
 
     def _bookmark_list(self) -> dict[str, Any]:
-        """{"bookmarks": [{"filesystem", "path", "url", "label"}]}: those of this
-        explorer's storages, within their top folders, labelled "[storage]
-        path" and in alphabetical order of storage, then path (ignoring case)."""
+        """{"bookmarks": [{"filesystem", "path", "url", "local_path", "label"}]}:
+        those of this explorer's storages, within their top folders, labelled
+        "[storage] path" and in alphabetical order of storage, then path
+        (ignoring case). "local_path" is a local folder's for "Copy path"
+        (``LocalLocation.os_path``), else None."""
         bookmarks = [
             {
                 "filesystem": b.filesystem,
                 "path": b.path,
                 "url": b.url,
+                "local_path": b.location.os_path
+                if isinstance(b.location, LocalLocation)
+                else None,
                 "label": f"[{b.filesystem}] {b.path}",
             }
             for b in self._states.bookmarks
@@ -35,7 +41,7 @@ class BookmarksMixin:
         """Bookmark folder ``path`` of the storage shown; the bookmarks, or {"error"}."""
         if not within_top(path, self._root) or not self._exists_folder(path):
             return {"error": f"{path} is not a folder of this storage"}
-        self._states.add_bookmark(self._filesystem, path, self._url(path))
+        self._states.add_bookmark(self._filesystem, path, self._location_of(path))
         return self._bookmark_list()
 
     def _remove_bookmark(self, filesystem: str, path: str) -> dict[str, Any]:

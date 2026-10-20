@@ -62,9 +62,10 @@ explorer of exactly its own version (`launcher/hatch_build.py` sets its dependen
   and `DataExplorer` (a dataframe given by the user, any library narwhals supports, with `QuerySettings`). Runtime
   dependencies are only anywidget, fsspec, narwhals, pygments, traitlets; polars, pandas, pyarrow, deltalake, fastexcel,
   openpyxl, Pillow, PySpark are all optional and probed at run time. The "abfs" extra adds adlfs and the Data Lake SDK,
-  for `filesystems/abfs.py`. Its top level has the widgets (`storage_explorer.py`, `data_explorer.py`) and small
+  for `filesystems/abfs.py`. Its top level has the widgets (`storage_explorer.py`, `data_explorer.py`), the
+  `Location` interface (`location.py`) and small
   private helpers (`_paths`, `_infos`, `_json`, `_static`, `_callbacks`); the rest is in packages: public, `filesystems/`
-  (`mapper.py`: the `FileSystemMapper` interface and `MapperChain`; `mappers.py`: the predefined mappers;
+  (`locations.py`: the predefined locations; `mapper.py`: the `FileSystemMapper` interface and `MapperChain`; `mappers.py`: the predefined mappers;
   `operation.py`: the `FileSystemOperations` interface; `operations.py`: the predefined operations; `abfs.py`: the
   opt-in Data Lake operation) and `formats/`; private, `_explorer/`
   (`StorageExplorer`'s mixins, with `states.py`, `listing.py` and `jupyterlab_files.py`), `_jobs/` (`tasks.py`:
@@ -112,7 +113,9 @@ the traits' observers; `_query_changed`: the query shown in the preview panel an
 data browser's replies and on `_preview` changes, not while one loads).
 
 `StorageExplorer` keeps its state (set up in `__init__`), the messages' routing, the traitlets observers (they must be
-on the class itself), the URLs (`_url`, from its `MapperChain`) and the fsspec calls. Its features are mixins in `_explorer/`,
+on the class itself), the locations of paths (`_location_of`, from its `MapperChain`; `_url`, its URL; `_data_url`,
+what formats read: the URL, but a local file's plain path, until formats take locations; `_location_reply`, what the
+frontend gets) and the fsspec calls. Its features are mixins in `_explorer/`,
 listed before `AnyWidget` in its bases, which only hold methods: `FoldersMixin` (`folders.py`: the list and the tree),
 `PreviewsMixin` (`previews.py`: previews, the data browser, query tabs, the right-click menu's formats),
 `BookmarksMixin`, `JupyterLabFilesMixin` (`jupyterlab.py`), `JobsMixin` (`jobs.py`: running file operations as jobs,
@@ -134,21 +137,32 @@ so their order rarely matters. Third-party code is vendored in `static/vendor/`.
 sync.
 
 **Storage.** Everything is an fsspec filesystem; `StorageExplorer` can hold several named ones (`filesystems=`).
-What a filesystem reaches and its URLs come from mappers (`filesystems/mapper.py`, the `filesystem_mappers=` argument,
+Where files are is a `Location` (`location.py`): independent of fsspec's implementations, so it travels to other
+kernels, files and libraries doing their own I/O. A frozen, keyword-only dataclass, normalized when made (hosts and
+accounts in lower case, endpoints as origins, no trailing "/"; whether it is a folder is not part of it), so equal
+locations name the same item and are dict keys; `protocol`, `url` (the common form, which the fsspec implementation
+also reads), `storage` (hashable: the location without its path), `name`, `parent`, `join(*parts)` (on its
+`path_field`), `to_json()`/`Location.from_json()` (`{"kind", "protocol", "url", ...fields}`; subclasses register by
+`kind`; an unknown kind becomes an `FsspecLocation`, the URL in the JSON being ignored for known kinds). The
+predefined ones are in `filesystems/locations.py`: `AbfsLocation` (account, container, path, endpoint suffix:
+`abfs://container@account.dfs.core.windows.net/path`; adlfs's `abfs://container/path` with an emulator),
+`S3Location` (bucket, key, endpoint or AWS partition: `s3://bucket/key`), `GcsLocation`, `SftpLocation` (host, port,
+user, path), `LocalLocation` (`path` as fsspec names it, "C:/x" on Windows, `os_path` the system's form, hostname
+and machine id: `file:///...`), `MemoryLocation` (path, process), `FsspecLocation` (fsspec's protocol and URL, for
+filesystems no mapper knows). Locations come from mappers (`filesystems/mapper.py`, the `filesystem_mappers=` argument,
 then `default_mappers()` of `mappers.py`): a `FileSystemMapper` per fsspec implementation, matched by qualified class names through the MRO
 (so optional packages are not imported; tests fake s3fs, gcsfs, fsspec's SFTP and sshfs classes by `__module__`). It gives
-`identifier(fs)` (JSON, no credentials; defined per protocol, so implementations of one protocol agree: adlfs
-`{"account_name"}`, s3fs the endpoint or AWS partition, gcsfs `{}`, SFTP (fsspec's, and sshfs's from `fs.storage_args`/`storage_options`) host, port and user, local disk the machine,
-memory the process), `to_url` (plain paths for local files, `abfs://container@account.dfs.core.windows.net/...` for
-Azure, `s3://`, `gs://`, `sftp://user@host:port/...`; None for items without a URL) and `path_of`, the reverse.
-`MapperChain` (`mapper.py`, the explorer's `_mappers`: its mappers then the defaults) asks them: `url_of`, `storage_of` (`{"protocol", "identifier"}`,
-synced as `_storage_identity` and sent with files copied or dragged), `same_filesystem` (equal protocol and identifier,
-so the same storage opened with other credentials is one; unknown filesystems, `FsspecMapper`, compare as fsspec does)
-and `locate`, for files pasted from another kernel: the first of the explorer's storages whose mapper accepts the
-identifier and parses the URL, else, for protocols a mapper knows (never others: the kernel would connect wherever a dropped URL points),
-`url_to_fs(url)` if it has the same identifier, else refused (so another
-kernel's memory or another machine's disk is never read). `DirFileSystem`s are not mapped: the chain unwraps them, so
-their URLs are those of the filesystem they wrap, and `same_filesystem` also compares their folders. File operations
+`to_location(fs, path)` (no credentials; locations are defined per storage, so implementations of one agree: SFTP's
+from fsspec's and from sshfs's `fs.storage_args`/`storage_options`; "" gives the top, whose `storage` tells what `fs`
+reaches; None for items without one) and `path_of(fs, location)`, the reverse, None unless `reaches(fs, location)`
+(same kind and storage as `fs`'s top). `MapperChain` (`mapper.py`, the explorer's `_mappers`: its mappers then the
+defaults) asks them: `location_of`, `path_in`, `same_filesystem` (tops of the same kind and storage, so the same
+storage opened with other credentials is one; unknown filesystems, `FsspecMapper`, compare as fsspec does) and
+`locate(location, filesystems)`, for files pasted from another kernel: the first of the explorer's storages that
+reaches it, else, for kinds other than `FsspecLocation` (never those: the kernel would connect wherever a dropped
+URL points), `url_to_fs(location.url)` if it reaches it, else refused (so another kernel's memory or another
+machine's disk is never read). `DirFileSystem`s are not mapped: the chain unwraps them, so
+their locations are those of the filesystem they wrap, and `same_filesystem` also compares their folders. File operations
 are told by `FileTasks` with `move`'s and `copy`'s required keyword `same` (the explorer's chain); outside an
 explorer, callers pass it themselves (e.g. the module-level `same_filesystem`, of the default mappers).
 
@@ -213,11 +227,11 @@ and `dest` both `fullmatch`, with their named groups capturing the same text in 
 patterns must have the same group names) apply to every copy and move, within a filesystem as well as between
 filesystems. They are checked in the kernel only, per item as it is planned: `FileTasks._refused` calls its `check`
 (the explorer's `_transfer_error`) from `_plan_moves`, `rename`, `_plan_copies` and `download`, and refused items
-become errors while the others go on. URLs come from `_location` (the mappers' `url_of`, else fsspec's; files pasted keep
-the URL they were copied with, from `_paste_sources`). Transfers with the user's computer use `computer_url(name)`
+become errors while the others go on. URLs come from `_policy_url` (the location's, else fsspec's; files pasted keep
+the URL of the location they were copied with, from `_paste_sources`). Transfers with the user's computer use `computer_url(name)`
 (`browser:///<name>`): checked in `_download` and `_upload_chunk`. Transfers with JupyterLab's file browser (uploads
-from it, both downloads to the server) pass filesystem None to `check` for that side, which `_location` makes
-`jupyterlab_url(path)` (`jupyterlab://<absolute path>`), unlike the explorer's own local storage (plain paths). Not a
+from it, both downloads to the server) pass filesystem None to `check` for that side, which `_policy_url` makes
+`jupyterlab_url(path)` (`jupyterlab://<absolute path>`), unlike the explorer's own local storage (`file:///`). Not a
 security boundary.
 
 **Between explorers and with JupyterLab.** Drags of items from the list carry one type,
@@ -233,15 +247,20 @@ drags from others' before the drop by `explorer`) and
 functions (`canOpen`, `open`,
 `openWidget`) under `"jupyter-storage-explorer.jupyterlab"`, which the explorer offers ("Open in JupyterLab", "Query
 data in new tab") only when they are there. Explorers on a page may be in different kernels (notebooks). The
-clipboard names the explorer and storage copied from: an explorer of the same kernel is found in `explorers` (by
-`_explorer_id`) and its filesystem object used as it is (`_paste_sources`); otherwise the files' URLs are read back
-with `MapperChain.locate`, from the identifier sent with them. After pasting files cut in another explorer, the frontend dispatches a
+clipboard names the explorer and storage copied from (`{name}`), and each file's path and location (its JSON, from
+the `"locations"` request: `_location_reply`): an explorer of the same kernel is found in `explorers` (by
+`_explorer_id`) and its filesystem object used as it is (`_paste_sources`); otherwise the files' locations are found
+with `MapperChain.locate`. Copy also puts local items' plain paths (`os_path`), others' URLs, on the system clipboard;
+"Copy path" (and the bookmarks menu's) is offered on local storages (trait `_local_paths`). After pasting files cut in another explorer, the frontend dispatches a
 `"jupyter-storage-explorer:changed"` event on `globalThis`, so that explorer asks its kernel to show what is left
 (`"changed"`, `_sources_changed`).
 
 **States** (`_explorer/states.py`). `ExplorerStates` keeps what explorers remember: bookmarks (storage name, folder, and
-its URL when bookmarked, as `_url` only resolves the storage shown) and the data browser's queries (URL, settings, mode
-chosen), the most recent first, at most `max_queries`. One in memory (`default_states`) is shared by the kernel's
+its location when bookmarked, as `_location_of` only resolves the storage shown) and the data browser's queries
+(keyed by location, or a string such as `DataExplorer`'s; URL, location JSON, settings, mode chosen), the most recent
+first, at most `max_queries`. Entries with a URL only (from strings, or written before locations, when local files'
+URLs were plain paths) still match a location of that URL or plain path (`_is_query_of`), and are rewritten with
+the location at their next change. One in memory (`default_states`) is shared by the kernel's
 explorers unless `states=` gives another, or a file's path (`explorer_states`: one object per file in the kernel). With
 a path it is a JSON file shared with other kernels (each launcher tab is one; the launcher defaults to
 `<jupyter_config_dir>/storage-explorer/states.json`): read again when an explorer is created and before each change,
@@ -252,7 +271,7 @@ bookmarks (star) menu opens (`"bookmarks"`, ...), as other explorers may have ch
 **Lists.** The file list is filtered (by name), sorted and paged (100 per page) in the browser, from the full listing
 the kernel sends; the selection survives filtering and paging. Folders can hold tens of thousands of items, so the
 listing (`_listing`, see `_make_listing`) is sent as columns, without paths or URLs: the frontend joins paths and asks
-for URLs (`"urls"`) when copying, and sorts once per listing, not per keystroke. Folders of more than
+for locations (`"locations"`) when copying and for tooltips, and sorts once per listing, not per keystroke. Folders of more than
 `max_browser_items` are handled by the kernel instead (`_explorer/listing.py`): `_listing` then only gives their size
 and a version, and the frontend asks for pages (`"list"`), filtering the rows shown while it waits; sorting and filters
 there follow the browser's as closely as Python allows (natural order ignoring case and accents; Python's `re`). Filters
@@ -323,7 +342,7 @@ snippets never get storage options (`spark_url()` rewrites `abfs`/`s3` to `abfss
 - Docstrings of the public API, what users construct, call, subclass or override (`StorageExplorer`, `DataExplorer`,
   `fetch_rows` (the `fetch_rows=` default of both), `QuerySettings`, `ExplorerStates` (with `Bookmark`,
   `QueryState`), `FileSystemOperations` and its subclasses (with `_copy_file`, `_move_file`), `Measurement`,
-  `Progress`, `DataFormat`, `FormatSupport`, `FileSystemMapper` and its subclasses, `MapperChain`, `same_filesystem`), are in numpy style:
+  `Progress`, `DataFormat`, `FormatSupport`, `Location` and its subclasses, `FileSystemMapper` and its subclasses, `MapperChain`, `same_filesystem`), are in numpy style:
   `Parameters`, `Returns`, `Raises`, `Attributes`, `See Also`, `Examples`. Internal ones (underscore names,
   `DataQuery`, `FileTasks`, `JobRunner`, the mixins, ...) stay prose.
 - `from __future__ import annotations` everywhere, with type-only imports under `TYPE_CHECKING` (ruff `TC` rules).

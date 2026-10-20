@@ -67,7 +67,9 @@ class TestQueryTab:
     def test_opened_with_the_remembered_settings_and_closed(self, local):
         path = path_of(local, "data.parquet")
         url = local._url(path)
-        local._states.remember_query(url, QuerySettings(sort="a", descending=True))
+        local._states.remember_query(
+            local._location_of(path), QuerySettings(sort="a", descending=True)
+        )
         reply = local.request({"type": "query_tab", "rid": 1, "path": path})
         assert reply["title"] == "data.parquet" and reply["url"] == url
         tab = local._query_tabs[reply["model_id"]]

@@ -8,6 +8,7 @@ from explorers import make, storage
 
 from jupyter_storage_explorer import _paths
 from jupyter_storage_explorer._jobs.incoming import format_size
+from jupyter_storage_explorer.filesystems import S3Location
 
 
 def test_download(mem_explorer):
@@ -302,7 +303,8 @@ class TestTransferPolicy:
         local = fsspec.filesystem("file")._strip_protocol(str(tmp_path))
         policy = [
             {"rule": "allow", "src": r"memory:///d/ok\.txt", "dest": ".*"},
-            {"rule": "deny", "src": "memory://.*", "dest": f"{local}/.*"},
+            # Local files' URLs are file:///... URLs.
+            {"rule": "deny", "src": "memory://.*", "dest": "file:///.*"},
         ]
         explorer = make(
             filesystems={"mem": files, "local": str(tmp_path)}, transfer_policy=policy
@@ -326,18 +328,16 @@ class TestTransferPolicy:
     def test_paste_from_another_kernel_uses_the_url_copied(self, files, tmp_path):
         policy = [{"rule": "deny", "src": r"s3://elsewhere/.*", "dest": ".*"}]
         explorer = make(str(tmp_path), transfer_policy=policy)
-        # The URL copied in the other kernel's explorer, which its _url made.
-        explorer._mappers.locate = lambda url, protocol, identifier, filesystems: (
-            files,
-            "/d/ok.txt",
-        )
+        # The location copied in the other kernel's explorer.
+        explorer._mappers.locate = lambda location, filesystems: (files, "/d/ok.txt")
+        location = S3Location(bucket="elsewhere", key="ok.txt")
         reply = explorer.request(
             {
                 "type": "paste",
                 "rid": 1,
                 "explorer": "in another kernel",
-                "filesystem": {"name": "default", "protocol": "s3", "identifier": {}},
-                "files": [{"path": "ok.txt", "url": "s3://elsewhere/ok.txt"}],
+                "filesystem": {"name": "default"},
+                "files": [{"path": "ok.txt", "location": location.to_json()}],
                 "dest": explorer._root,
             }
         )

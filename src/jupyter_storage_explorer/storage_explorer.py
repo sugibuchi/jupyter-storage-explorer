@@ -28,6 +28,7 @@ from jupyter_storage_explorer._jobs.incoming import IncomingFiles
 from jupyter_storage_explorer._jobs.runner import JobRunner
 from jupyter_storage_explorer._jobs.transfer_policy import TransferPolicy
 from jupyter_storage_explorer.filesystems import (
+    LocalLocation,
     MapperChain,
     OperationChain,
     default_mappers,
@@ -57,6 +58,7 @@ if TYPE_CHECKING:
     from jupyter_storage_explorer.data_explorer import DataExplorer
     from jupyter_storage_explorer.filesystems.mapper import FileSystemMapper
     from jupyter_storage_explorer.filesystems.operation import FileSystemOperations
+    from jupyter_storage_explorer.location import Location
 
     # A request's handler: the reply to its content (see _requests).
     _Handler = Callable[[dict[str, Any]], dict[str, Any]]
@@ -176,11 +178,12 @@ class StorageExplorer(
     filesystem_mappers : sequence of FileSystemMapper, optional
         Mappers of your own, tried before
         ``jupyter_storage_explorer.filesystems.default_mappers()``: for each
-        filesystem, the first that maps it gives the URLs of its paths ("Copy
-        URL", ``folder_url``, "Python code", previews, the transfer policy)
-        and what it reaches (its identifier), by which files copied or
-        dragged from another kernel are found and two filesystems are told
-        apart, also for the file operations (their ``same`` argument).
+        filesystem, the first that maps it gives the locations of its paths
+        (``jupyter_storage_explorer.Location``: "Copy URL",
+        ``folder_location``, "Python code", previews, the transfer policy),
+        by which files copied or dragged from another kernel are found and
+        two filesystems are told apart (the storage of their locations), also
+        for the file operations (their ``same`` argument).
     transfer_policy : list of dict, optional
         Rules for the directions files may be transferred in, each
         ``{"rule": "allow" or "deny", "src": regex, "dest": regex}``.
@@ -215,13 +218,14 @@ class StorageExplorer(
 
     Notes
     -----
-    ``folder_url`` and ``selected_urls`` give the locations of the folder
-    shown and of the selected items, and ``on_change()`` calls a function
-    when they change. ``query_result()`` gives the data the data browser
-    shows in the preview panel, with its filters applied, and
-    ``on_query_change()`` calls a function when that changes. To change how
-    paths become locations ("Copy URL", these properties, "Python code", data
-    read by polars), give a mapper in ``filesystem_mappers``.
+    ``folder_location`` and ``selected_locations`` give the locations of the
+    folder shown and of the selected items (``folder_url`` and
+    ``selected_urls`` their URLs), and ``on_change()`` calls a function when
+    they change. ``query_result()`` gives the data the data browser shows in
+    the preview panel, with its filters applied, and ``on_query_change()``
+    calls a function when that changes. To change how paths become locations
+    ("Copy URL", these properties, "Python code", data read by polars), give
+    a mapper in ``filesystem_mappers``.
 
     Examples
     --------
@@ -289,10 +293,10 @@ class StorageExplorer(
     # widget's drop-down sets `_filesystem` to switch.
     _filesystem_names = traitlets.List(traitlets.Unicode()).tag(sync=True)
     _filesystem = traitlets.Unicode().tag(sync=True)
-    # The filesystem shown, as its mapper describes it: {"protocol",
-    # "identifier"} (see filesystems/), sent with files copied or dragged, by
-    # which an explorer in another kernel finds them (MapperChain.locate).
-    _storage_identity = traitlets.Dict().tag(sync=True)
+    # Whether the filesystem shown is a local disk, whose items have a plain
+    # path besides their URL ("Copy path", and what "Copy" puts on the
+    # system clipboard: LocalLocation.os_path).
+    _local_paths = traitlets.Bool(False).tag(sync=True)
     # The "Unsafe mode" switch in the toolbar: while on, risky operations
     # are offered (today: moving, copying, pasting, renaming and deleting folders). The
     # frontend turns it off when any operation starts, and sends with each
@@ -485,7 +489,9 @@ class StorageExplorer(
             # An open panel stays open, for the files of this storage.
             self._preview = {"empty": True} if self._preview else {}
             self._tree = {}
-            self._storage_identity = self._mappers.storage_of(self._fs)
+            self._local_paths = isinstance(
+                self._mappers.location_of(self._fs, root), LocalLocation
+            )
             self._root = root
             if self._current_dir == path:
                 # Same path string as before (e.g. "/" on both), so no change event lists it.
@@ -534,34 +540,62 @@ class StorageExplorer(
     # --- Public interface ---
 
     @property
+    def folder_location(self) -> Location | None:
+        """The location of the folder shown in the list.
+
+        Returns
+        -------
+        Location or None
+            Its location, from the filesystem's mapper, e.g. an
+            ``S3Location``: ``.url`` for fsspec, polars, pandas, etc., and
+            ``.path`` for a local folder's plain path. None if it has none.
+        """
+        return self._location_of(self._current_dir)
+
+    @property
+    def selected_locations(self) -> list[Location]:
+        """The locations of the selected items.
+
+        Returns
+        -------
+        list of Location
+            In the order selected. Items without one are left out, so the
+            list is empty when nothing with a location is selected.
+        """
+        locations = (self._location_of(p) for p in self._selected)
+        return [location for location in locations if location is not None]
+
+    @property
     def folder_url(self) -> str | None:
-        """The location of the folder shown in the list (see ``_url``).
+        """The URL of the folder shown in the list: ``folder_location.url``.
 
         Returns
         -------
         str or None
-            A URL (or a plain path for local files) usable with
-            ``fsspec.open``, polars, pandas, etc.; None if it has none.
+            A URL usable with ``fsspec.open``, polars, pandas, etc., e.g.
+            "s3://bucket/data" ("file:///home/u/data" for a local folder);
+            None if it has none.
         """
-        return self._url(self._current_dir)
+        location = self.folder_location
+        return location.url if location is not None else None
 
     @property
     def selected_urls(self) -> list[str]:
-        """The locations of the selected items (see ``_url``).
+        """The URLs of the selected items: those of ``selected_locations``.
 
         Returns
         -------
         list of str
-            Their URLs, in the order selected. Items without one are left out,
-            so the list is empty when nothing with a URL is selected.
+            In the order selected. Items without one are left out, so the
+            list is empty when nothing with a URL is selected.
         """
-        return [url for p in self._selected if (url := self._url(p)) is not None]
+        return [location.url for location in self.selected_locations]
 
     def on_change(
         self, callback: Callable[[StorageExplorer], Any], *, remove: bool = False
     ) -> None:
-        """Call a function whenever ``folder_url`` or ``selected_urls`` changes
-        in the widget.
+        """Call a function whenever ``folder_location`` or
+        ``selected_locations`` changes in the widget.
 
         That is when the user opens another folder or storage, or selects
         other items, also when items selected are moved or deleted; not for
@@ -724,8 +758,11 @@ class StorageExplorer(
         return {
             "menu_info": lambda c: self._menu_info(c["path"]),
             "vendor": lambda c: self._vendor_source(c["name"]),
-            # The listing has no URLs (see _make_listing): asked for when copying.
-            "urls": lambda c: {"urls": [self._url(p) for p in c["paths"]]},
+            # The listing has no locations (see _make_listing): asked for
+            # when copying, and for the list's tooltips.
+            "locations": lambda c: {
+                "locations": [self._location_reply(p) for p in c["paths"]]
+            },
             "list": self._list_page,
             # The data browser (see DataQuery.handle).
             "query_rows": self._query_request,
@@ -817,12 +854,39 @@ class StorageExplorer(
         if not change["new"].get("loading"):
             self._query_changed()
 
-    # --- Locations: the URLs of paths, from the filesystem mappers ---
+    # --- Locations of paths, from the filesystem mappers ---
+
+    def _location_of(self, path: str) -> Location | None:
+        """The location of a path of the filesystem shown (its mapper's
+        ``to_location``), or None if it has none."""
+        return self._mappers.location_of(self._fs, path)
 
     def _url(self, path: str) -> str | None:
-        """The URL of a path of the filesystem shown (its mapper's ``to_url``),
-        or None if it has none."""
-        return self._mappers.url_of(self._fs, path)
+        """The URL of a path of the filesystem shown, or None if it has none."""
+        location = self._location_of(path)
+        return location.url if location is not None else None
+
+    def _data_url(self, path: str) -> str | None:
+        """Where formats read a path of the filesystem shown: its URL, but a
+        local file's plain path, as polars and pandas take it. None if it has
+        no location."""
+        location = self._location_of(path)
+        if location is None:
+            return None
+        return location.path if isinstance(location, LocalLocation) else location.url
+
+    def _location_reply(self, path: str) -> dict[str, Any] | None:
+        """What the frontend gets of a path's location: {"url", "path" (a
+        local item's ``os_path``, else None), "location": its JSON, which
+        files copied or dragged carry}; None if it has none."""
+        location = self._location_of(path)
+        if location is None:
+            return None
+        return {
+            "url": location.url,
+            "path": location.os_path if isinstance(location, LocalLocation) else None,
+            "location": location.to_json(),
+        }
 
     # --- File operations: wrappers of fsspec calls on the filesystem shown
     # (``self._fs``) for listing, reading and writing; the methods above go
