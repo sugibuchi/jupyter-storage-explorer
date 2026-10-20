@@ -159,12 +159,23 @@ class MarkdownView(View):
 
 @dataclass(frozen=True, kw_only=True)
 class TableView(View):
-    """A table of rows already read, e.g. the first rows of a file."""
+    """A table of rows already read, e.g. the first rows of a file.
+
+    The explorer notes under it how many rows it shows, from ``more``,
+    ``total`` and ``unit`` (e.g. "First 100 of 1,234 rows"), before
+    ``note`` (e.g. "other sheets: ...").
+    """
 
     kind: ClassVar[str] = "table"
     columns: list[str]
     rows: list[list[Any]]
     dtypes: list[str] | None = None
+    # Whether the data has more rows than ``rows``, and how many in all if
+    # known (None if not).
+    more: bool = False
+    total: int | None = None
+    # What a row is, plural, e.g. "records" for JSON Lines.
+    unit: str = "rows"
 
 
 @dataclass(frozen=True, kw_only=True)

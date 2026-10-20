@@ -20,6 +20,7 @@ from jupyter_storage_explorer.formats import (
     ItemContext,
     MediaView,
     QueryView,
+    TableView,
     View,
 )
 from jupyter_storage_explorer.formats.base import matching_formats
@@ -64,7 +65,19 @@ def section(view: View) -> dict[str, Any]:
     }
     if isinstance(view, MediaView) and view.data is not None:
         data["data"] = base64.b64encode(view.data).decode("ascii")
+    if isinstance(view, TableView):
+        data["note"] = "; ".join(filter(None, [_rows_note(view), view.note]))
     return {"kind": view.kind, **jsonable(data)}
+
+
+def _rows_note(table: TableView) -> str:
+    """How many rows a table view shows, e.g. "First 100 of 1,234 rows"."""
+    count, unit = len(table.rows), table.unit
+    if not table.more:
+        return f"{count:,} {unit}"
+    if table.total is not None:
+        return f"First {count:,} of {table.total:,} {unit}"
+    return f"First {count:,} {unit}"
 
 
 class PreviewsMixin:

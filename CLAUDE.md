@@ -295,8 +295,9 @@ secret fields, `_shown_options`) and `PythonPackage`
 per library of the predefined supports in `supports/` (`polars.py`, `pandas.py`, `pyspark.py`, `fsspec.py`,
 `pillow.py`; `python.py` for those needing no package; named after the libraries, which they import only inside
 methods; exported by `formats.supports`, not `formats`); the predefined packages in `packages.py`, the
-views in `view.py` (`View`s, `ViewLimits`; tables made from dataframes in each library's support module, their
-notes in `frames.py`), and the defaults in `utils.py` (`DEFAULT_FORMATS`,
+views in `view.py` (`View`s, `ViewLimits`; tables made from dataframes in each library's support module, which
+give their counts, `TableView.more`, `total` and `unit`, and the explorer words them in the note, `section()`'s
+`_rows_note`: presentation stays out of `formats`, which never imports `_explorer`), and the defaults in `utils.py` (`DEFAULT_FORMATS`,
 `DEFAULT_SUPPORTS`). A format only detects; a support handles one format's data with one library,
 so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
 - `DataFormat` subclasses declare `name`, `label`, `priority`, `extensions`, `file_icon` (its files' icon in the list:

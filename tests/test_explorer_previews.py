@@ -15,6 +15,7 @@ from jupyter_storage_explorer.data_explorer import DataExplorer
 from jupyter_storage_explorer.formats import (
     PythonPackage,
     SupportChain,
+    TableView,
     TextView,
     ViewLimits,
 )
@@ -259,6 +260,20 @@ class TestClose:
         local.message({"type": "preview", "path": path_of(local, "data.parquet")})
         assert local._preview["error"] == "cannot query"
         assert closed == ["1"]
+
+
+@pytest.mark.parametrize(
+    ("counts", "note"),
+    [
+        ({}, "2 rows"),
+        ({"more": True}, "First 2 rows"),
+        ({"more": True, "total": 1234}, "First 2 of 1,234 rows"),
+        ({"unit": "records", "note": "other sheets: b"}, "2 records; other sheets: b"),
+    ],
+)
+def test_table_notes_worded_by_the_explorer(counts, note):
+    table = TableView(columns=["a"], rows=[[1], [2]], **counts)
+    assert previews.section(table)["note"] == note
 
 
 def test_view_closed_once_and_errors_logged(caplog):

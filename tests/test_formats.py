@@ -251,7 +251,7 @@ class TestViews:
         item = make_item("/a.parquet", parquet_bytes(pl.DataFrame({"a": [1, 2, 3]})))
         table = ParquetByPandas().view(Parquet(), item, PandasOptions(), LIMITS)
         assert table.rows == [[1], [2]]
-        assert "of 3" in table.note
+        assert (table.more, table.total) == (True, 3)  # the explorer notes them
 
     def test_parquet_file_in_the_data_browser(self, tmp_path):
         path = tmp_path / "a.parquet"

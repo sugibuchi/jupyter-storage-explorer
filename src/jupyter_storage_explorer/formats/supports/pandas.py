@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING, Any
 
 from jupyter_storage_explorer._json import jsonable
 from jupyter_storage_explorer.formats.excel import Excel
-from jupyter_storage_explorer.formats.frames import rows_note, with_sheets
 from jupyter_storage_explorer.formats.packages import Openpyxl, Pandas, PyArrow
 from jupyter_storage_explorer.formats.parquet import Parquet
 from jupyter_storage_explorer.formats.support import (
@@ -93,7 +92,7 @@ class CsvByPandas(_PandasByUrl):
             nrows=limits.max_display_rows,
         )
         more = truncated or len(df) == limits.max_display_rows
-        return _table(df, note=rows_note(len(df), more))
+        return _table(df, more=more)
 
     data_frame_template = cleandoc("""
         import pandas as pd
@@ -130,7 +129,7 @@ class JsonLinesByPandas(_PandasByUrl):
         text, truncated = ctx.head_text(limits.max_bytes)
         df = pd.read_json(io.StringIO(text), lines=True, nrows=limits.max_display_rows)
         more = truncated or len(df) == limits.max_display_rows
-        return _table(df, note=rows_note(len(df), more, "records"))
+        return _table(df, more=more, unit="records")
 
     data_frame_template = cleandoc("""
         import pandas as pd
@@ -189,13 +188,12 @@ class ExcelByPandas(_PandasByUrl):
         name = workbook.sheet_names[0]
         # One extra row tells whether there are more.
         df = workbook.parse(name, nrows=limits.max_display_rows + 1)
-        note = rows_note(
-            min(len(df), limits.max_display_rows), len(df) > limits.max_display_rows
-        )
+        others = workbook.sheet_names[1:]
         return _table(
             df.head(limits.max_display_rows),
             title=name,
-            note=with_sheets(note, workbook.sheet_names),
+            more=len(df) > limits.max_display_rows,
+            note=f"other sheets: {', '.join(others)}" if others else "",
         )
 
     data_frame_template = cleandoc("""
@@ -244,11 +242,9 @@ class ParquetByPandas(_PandasByUrl):
         )
         df = dataset.head(limits.max_display_rows).to_pandas()
         if ctx.is_dir:
-            note = rows_note(len(df), len(df) == limits.max_display_rows)
-        else:
-            total = dataset.count_rows()
-            note = rows_note(len(df), len(df) < total, total=total)
-        return _table(df, note=note)
+            return _table(df, more=len(df) == limits.max_display_rows)
+        total = dataset.count_rows()
+        return _table(df, more=len(df) < total, total=total)
 
     data_frame_template = cleandoc("""
         import pandas as pd
