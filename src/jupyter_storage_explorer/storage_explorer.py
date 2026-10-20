@@ -43,7 +43,6 @@ from jupyter_storage_explorer.formats import (
     SupportChain,
     Text,
     ViewLimits,
-    create_supports,
     default_formats,
 )
 from jupyter_storage_explorer.formats.utils import format_icons
@@ -132,14 +131,14 @@ class StorageExplorer(
         ``default_supports()``: for each job, the first support for the
         format that is installed does it (see
         ``jupyter_storage_explorer.formats.FormatSupport``). Classes are
-        created with ``format_options``. To change the defaults themselves,
+        created without arguments. To change the defaults themselves,
         override ``default_supports`` in a subclass.
     format_options : mapping, optional
         The supports' options, by library, then format name or ``"*"`` for
         all formats, e.g. ``{"polars": {"*": {"storage_options": {...}},
-        "delta": {"use_pyarrow": True}}}``: each support class gets those of
-        its library (its ``engine``'s package) that it takes (see "Format
-        options" in docs/storage-explorer.md).
+        "delta": {"use_pyarrow": True}}}``: each support gets those of its
+        library (its ``engine``'s package) that its ``options_model`` has
+        (see "Format options" in docs/storage-explorer.md).
     view_limits : ViewLimits, optional
         How much views read and show, in the preview panel and in tabs:
         bytes and rows of a file's beginning, the data browser's page size and
@@ -373,13 +372,11 @@ class StorageExplorer(
         self._settings_file: tuple[str, Callable[[], Any]] | None = None
         self._formats = list(formats) if formats is not None else default_formats()
         # How the formats' data is handled: each job by the first support
-        # installed (see formats/support.py).
+        # installed, with its options (see formats/support.py).
         self._supports = SupportChain(
-            create_supports(
-                [*(supports or ()), *self.default_supports()],
-                format_options,
-                [f.name for f in self._formats],
-            )
+            [*(supports or ()), *self.default_supports()],
+            format_options,
+            format_names=[f.name for f in self._formats],
         )
         self._view_limits = view_limits or ViewLimits()
         # Files being received from the user's computer (see _jobs/incoming.py).
@@ -452,8 +449,8 @@ class StorageExplorer(
         list of FormatSupport classes or objects
             By default ``jupyter_storage_explorer.formats.DEFAULT_SUPPORTS``:
             polars, pandas, Spark, fsspec and Pillow for the default formats,
-            and the previews needing no package (text, JSON, images). Classes
-            are created with ``format_options``.
+            and the previews needing no package (text, JSON, images). Each
+            gets its options from ``format_options``.
         """
         return list(DEFAULT_SUPPORTS)
 

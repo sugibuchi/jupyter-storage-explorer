@@ -74,7 +74,7 @@ class PreviewsMixin:
         limits = self._view_limits
 
         def view() -> View:
-            return self._supports.view(fmt, item.ctx, limits=limits)
+            return self._supports.view(fmt, item.ctx, limits)
 
         return view
 

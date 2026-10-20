@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from inspect import cleandoc
 from typing import TYPE_CHECKING, Any
 
@@ -15,7 +16,7 @@ from jupyter_storage_explorer.formats.excel import Excel
 from jupyter_storage_explorer.formats.packages import DeltaLake as DeltaLakePackage
 from jupyter_storage_explorer.formats.packages import Fastexcel, Fsspec, Polars
 from jupyter_storage_explorer.formats.parquet import Parquet
-from jupyter_storage_explorer.formats.support import FormatSupport
+from jupyter_storage_explorer.formats.support import FormatSupport, SupportOptions
 from jupyter_storage_explorer.formats.text import Csv, Json, JsonLines
 from jupyter_storage_explorer.formats.view import QueryView
 
@@ -29,23 +30,21 @@ AS_LAZY_FRAME = "Load as LazyFrame"
 AS_DATA_FRAME = "Load as DataFrame"
 
 
-class _PolarsByUrl(FormatSupport):
-    """A format polars reads by URL, with the storage options of its readers."""
+@dataclass(frozen=True, kw_only=True)
+class PolarsOptions(SupportOptions):
+    """The options of the formats polars reads by URL.
 
-    engine = Polars
+    Attributes
+    ----------
+    storage_options : mapping or None, default None
+        polars' ``storage_options``, for the data browser and the code; in
+        the code, those that look like credentials are left out.
+    credential_provider : default "auto"
+        polars' ``credential_provider``, for the data browser only.
+    """
 
-    def __init__(
-        self,
-        *,
-        storage_options: Mapping[str, Any] | None = None,
-        credential_provider: Any = "auto",
-    ) -> None:
-        """``storage_options`` and ``credential_provider``: polars' arguments
-        of these names, for the data browser and the code. In the code,
-        storage options that look like credentials are left out, as is the
-        credential provider."""
-        self.storage_options = storage_options
-        self.credential_provider = credential_provider
+    storage_options: Mapping[str, Any] | None = None
+    credential_provider: Any = "auto"
 
     def storage(self) -> dict[str, Any]:
         """polars' keyword arguments reaching the storage."""
@@ -59,22 +58,66 @@ class _PolarsByUrl(FormatSupport):
         return snippet_options(self.storage_options) or None
 
 
+@dataclass(frozen=True, kw_only=True)
+class ExcelByPolarsOptions(SupportOptions):
+    """The options of Excel workbooks read with polars.
+
+    Attributes
+    ----------
+    fsspec_storage_options : mapping or None, default None
+        ``fsspec.open``'s keyword arguments in the code, which reads the
+        bytes with it; those that look like credentials are left out.
+    """
+
+    fsspec_storage_options: Mapping[str, Any] | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class DeltaLakeByPolarsOptions(PolarsOptions):
+    """The options of polars' ``scan_delta``, for the data browser and the
+    code.
+
+    ``storage_options`` are delta-rs' (object_store's), not fsspec's;
+    without them, credentials come from the environment.
+
+    Attributes
+    ----------
+    delta_table_options : mapping or None, default None
+    use_pyarrow : bool, default False
+    pyarrow_options : mapping or None, default None
+        polars' arguments of these names.
+    """
+
+    delta_table_options: Mapping[str, Any] | None = None
+    use_pyarrow: bool = False
+    pyarrow_options: Mapping[str, Any] | None = None
+
+
+class _PolarsByUrl(FormatSupport):
+    """A format polars reads by URL, with the storage options of its readers."""
+
+    engine = Polars
+    options_model = PolarsOptions
+
+
 class CsvByPolars(_PolarsByUrl):
     format = Csv
     capabilities = ("view", "recipe")
 
-    def view(self, fmt: Csv, ctx: ItemContext, *, limits: ViewLimits) -> View:
+    def view(
+        self, fmt: Csv, ctx: ItemContext, options: PolarsOptions, limits: ViewLimits
+    ) -> View:
         pl = Polars().load()
         url = library_url(ctx.location)
         # The first lines, read by polars too, so any URL it reads works.
-        lines = pl.scan_lines(url, **self.storage()).head(20).collect()["line"]
+        lines = pl.scan_lines(url, **options.storage()).head(20).collect()["line"]
         # try_parse_dates: date columns get date filters (<, >, ...) instead of text ones.
         data = pl.scan_csv(
             url,
             separator=fmt.separator(url, "\n".join(lines)),
             truncate_ragged_lines=True,
             try_parse_dates=True,
-            **self.storage(),
+            **options.storage(),
         )
         return QueryView(data=data)
 
@@ -84,10 +127,12 @@ class CsvByPolars(_PolarsByUrl):
         df = pl.read_csv({url}{kwargs})
         """)
 
-    def recipe(self, fmt: Csv, ctx: ItemContext) -> dict[str, str]:
+    def recipe(
+        self, fmt: Csv, ctx: ItemContext, options: PolarsOptions
+    ) -> dict[str, str]:
         kwargs = format_kwargs(
             separator=fmt.code_separator(ctx.fs, ctx.path),
-            storage_options=self.code_storage_options(),
+            storage_options=options.code_storage_options(),
         )
         url = repr(library_url(ctx.location))
         return {AS_DATA_FRAME: self.data_frame_template.format(url=url, kwargs=kwargs)}
@@ -97,8 +142,16 @@ class JsonLinesByPolars(_PolarsByUrl):
     format = JsonLines
     capabilities = ("view", "recipe")
 
-    def view(self, fmt: JsonLines, ctx: ItemContext, *, limits: ViewLimits) -> View:
-        data = Polars().load().scan_ndjson(library_url(ctx.location), **self.storage())
+    def view(
+        self,
+        fmt: JsonLines,
+        ctx: ItemContext,
+        options: PolarsOptions,
+        limits: ViewLimits,
+    ) -> View:
+        data = (
+            Polars().load().scan_ndjson(library_url(ctx.location), **options.storage())
+        )
         return QueryView(data=data)
 
     lazy_frame_template = cleandoc("""
@@ -113,9 +166,11 @@ class JsonLinesByPolars(_PolarsByUrl):
         df = pl.read_ndjson({url}{kwargs})
         """)
 
-    def recipe(self, fmt: JsonLines, ctx: ItemContext) -> dict[str, str]:
+    def recipe(
+        self, fmt: JsonLines, ctx: ItemContext, options: PolarsOptions
+    ) -> dict[str, str]:
         url = repr(library_url(ctx.location))
-        kwargs = format_kwargs(storage_options=self.code_storage_options())
+        kwargs = format_kwargs(storage_options=options.code_storage_options())
         return {
             AS_LAZY_FRAME: self.lazy_frame_template.format(url=url, kwargs=kwargs),
             AS_DATA_FRAME: self.data_frame_template.format(url=url, kwargs=kwargs),
@@ -135,7 +190,9 @@ class JsonByPolars(FormatSupport):
         df = pl.read_json({url})
         """)
 
-    def recipe(self, fmt: Json, ctx: ItemContext) -> dict[str, str]:
+    def recipe(
+        self, fmt: Json, ctx: ItemContext, options: SupportOptions
+    ) -> dict[str, str]:
         # polars' read_json takes no storage options.
         url = repr(library_url(ctx.location))
         return {AS_DATA_FRAME: self.data_frame_template.format(url=url)}
@@ -147,16 +204,15 @@ class ExcelByPolars(FormatSupport):
     # fastexcel reads workbooks for polars; the code reads the bytes with fsspec.
     additional_requirements = (Fastexcel, Fsspec)
     capabilities = ("view", "recipe")
+    options_model = ExcelByPolarsOptions
 
-    def __init__(
-        self, *, fsspec_storage_options: Mapping[str, Any] | None = None
-    ) -> None:
-        """``fsspec_storage_options``: ``fsspec.open``'s keyword arguments in
-        the code, which reads the bytes with it; ones that look like
-        credentials are left out."""
-        self.fsspec_storage_options = fsspec_storage_options
-
-    def view(self, fmt: Excel, ctx: ItemContext, *, limits: ViewLimits) -> View:
+    def view(
+        self,
+        fmt: Excel,
+        ctx: ItemContext,
+        options: ExcelByPolarsOptions,
+        limits: ViewLimits,
+    ) -> View:
         # Excel cannot be read lazily: the first sheet is read whole, through
         # the explorer's filesystem, and queried in memory.
         size = ctx.info.get("size")
@@ -175,8 +231,10 @@ class ExcelByPolars(FormatSupport):
             df = pl.read_excel(f.read())
         """)
 
-    def recipe(self, fmt: Excel, ctx: ItemContext) -> dict[str, str]:
-        kwargs = format_kwargs(**snippet_options(self.fsspec_storage_options))
+    def recipe(
+        self, fmt: Excel, ctx: ItemContext, options: ExcelByPolarsOptions
+    ) -> dict[str, str]:
+        kwargs = format_kwargs(**snippet_options(options.fsspec_storage_options))
         url = repr(library_url(ctx.location))
         return {AS_DATA_FRAME: self.data_frame_template.format(url=url, kwargs=kwargs)}
 
@@ -185,7 +243,9 @@ class ParquetByPolars(_PolarsByUrl):
     format = Parquet
     capabilities = ("view", "recipe")
 
-    def view(self, fmt: Parquet, ctx: ItemContext, *, limits: ViewLimits) -> View:
+    def view(
+        self, fmt: Parquet, ctx: ItemContext, options: PolarsOptions, limits: ViewLimits
+    ) -> View:
         """A LazyFrame over a Parquet file, or over a directory's data files.
 
         For a directory, its data files as ``matches`` found them (see
@@ -201,7 +261,7 @@ class ParquetByPolars(_PolarsByUrl):
                 fmt.data_url(ctx),
                 hive_partitioning=layout is not None and bool(layout.keys),
                 hidden_file_prefix=[".", "_"],
-                **self.storage(),
+                **options.storage(),
             )
         )
         return QueryView(data=data)
@@ -226,7 +286,9 @@ class ParquetByPolars(_PolarsByUrl):
         df = pl.scan_parquet({url}{kwargs}).collect()
         """)
 
-    def recipe(self, fmt: Parquet, ctx: ItemContext) -> dict[str, str]:
+    def recipe(
+        self, fmt: Parquet, ctx: ItemContext, options: PolarsOptions
+    ) -> dict[str, str]:
         layout = fmt.layout(ctx) if ctx.is_dir else None
         # "*" also matches Spark's "_SUCCESS" and checksums.
         hidden = layout is not None and layout.files == "*"
@@ -234,7 +296,7 @@ class ParquetByPolars(_PolarsByUrl):
         kwargs = format_kwargs(
             hive_partitioning=True if layout and layout.keys else None,
             hidden_file_prefix=[".", "_"] if hidden else None,
-            storage_options=self.code_storage_options(),
+            storage_options=options.code_storage_options(),
         )
         data_frame = (
             self.data_frame_scanned_template if hidden else self.data_frame_template
@@ -251,43 +313,24 @@ class DeltaLakeByPolars(_PolarsByUrl):
     # storage itself, by default with credentials from the environment.
     additional_requirements = (DeltaLakePackage,)
     capabilities = ("view", "recipe")
+    options_model = DeltaLakeByPolarsOptions
 
-    def __init__(
+    def view(
         self,
-        *,
-        storage_options: Mapping[str, Any] | None = None,
-        credential_provider: Any = "auto",
-        delta_table_options: Mapping[str, Any] | None = None,
-        use_pyarrow: bool = False,
-        pyarrow_options: Mapping[str, Any] | None = None,
-    ) -> None:
-        """Options of polars' ``scan_delta``, for the data browser and the
-        code: ``storage_options`` and ``credential_provider``, as for the
-        other formats polars reads, and ``delta_table_options``,
-        ``use_pyarrow`` and ``pyarrow_options``.
-
-        ``storage_options`` are delta-rs' (object_store's), not fsspec's;
-        without them, credentials come from the environment. In the code,
-        ones that look like credentials are left out, as is the credential
-        provider.
-        """
-        super().__init__(
-            storage_options=storage_options, credential_provider=credential_provider
-        )
-        self.delta_table_options = delta_table_options
-        self.use_pyarrow = use_pyarrow
-        self.pyarrow_options = pyarrow_options
-
-    def view(self, fmt: DeltaLake, ctx: ItemContext, *, limits: ViewLimits) -> View:
+        fmt: DeltaLake,
+        ctx: ItemContext,
+        options: DeltaLakeByPolarsOptions,
+        limits: ViewLimits,
+    ) -> View:
         data = (
             Polars()
             .load()
             .scan_delta(
                 library_url(ctx.location),
-                **self.storage(),
-                delta_table_options=self.delta_table_options,
-                use_pyarrow=self.use_pyarrow,
-                pyarrow_options=self.pyarrow_options,
+                **options.storage(),
+                delta_table_options=options.delta_table_options,
+                use_pyarrow=options.use_pyarrow,
+                pyarrow_options=options.pyarrow_options,
             )
         )
         return QueryView(data=data)
@@ -304,14 +347,16 @@ class DeltaLakeByPolars(_PolarsByUrl):
         df = pl.read_delta({url}{kwargs})
         """)
 
-    def recipe(self, fmt: DeltaLake, ctx: ItemContext) -> dict[str, str]:
+    def recipe(
+        self, fmt: DeltaLake, ctx: ItemContext, options: DeltaLakeByPolarsOptions
+    ) -> dict[str, str]:
         url = repr(library_url(ctx.location))
         # Only the arguments that differ from scan_delta's (read_delta's) defaults.
         kwargs = format_kwargs(
-            storage_options=self.code_storage_options(),
-            delta_table_options=self.delta_table_options,
-            use_pyarrow=True if self.use_pyarrow else None,
-            pyarrow_options=self.pyarrow_options,
+            storage_options=options.code_storage_options(),
+            delta_table_options=options.delta_table_options,
+            use_pyarrow=True if options.use_pyarrow else None,
+            pyarrow_options=options.pyarrow_options,
         )
         return {
             AS_LAZY_FRAME: self.lazy_frame_template.format(url=url, kwargs=kwargs),

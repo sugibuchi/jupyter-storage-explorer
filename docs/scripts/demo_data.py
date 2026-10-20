@@ -448,7 +448,9 @@ def supports() -> list[Any]:
         uses_polars = support.engine is not None and support.engine.package == "polars"
         if uses_polars and "view" in support.capabilities:
             view = support.view
-            support.view = lambda fmt, ctx, view=view, **kw: view(fmt, local(ctx), **kw)
+            support.view = lambda fmt, ctx, options, limits, view=view: view(
+                fmt, local(ctx), options, limits
+            )
     return result
 
 

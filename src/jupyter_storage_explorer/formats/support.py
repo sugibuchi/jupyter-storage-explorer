@@ -1,17 +1,20 @@
 """How to handle data in a format with a library: the ``FormatSupport``
-interface, ``SupportChain``, by which explorers choose a support for each
-capability, and the ``Recipe`` of a support's code (the predefined supports
-are in supports/, a module per library: polars.py, pandas.py, ...)."""
+interface, with ``SupportOptions``, the base of its options;
+``SupportChain``, by which explorers choose a support for each capability
+and give each its options (``format_options``); and the ``Recipe`` of a
+support's code (the predefined supports are in supports/, a module per
+library: polars.py, pandas.py, ...)."""
 
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, ClassVar, Literal, TypeAlias
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, TypeAlias
 
 from jupyter_storage_explorer.formats.view import InstallView
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Iterable, Mapping, Sequence
 
     from jupyter_storage_explorer.formats.base import DataFormat, ItemContext
     from jupyter_storage_explorer.formats.package import PythonPackage
@@ -21,6 +24,9 @@ if TYPE_CHECKING:
 # doing it: view it (the preview panel, a tab), give recipes, the code
 # loading it ("Python code").
 Capability: TypeAlias = Literal["view", "recipe"]
+
+# In format_options, the options of a library for all formats.
+ALL_FORMATS = "*"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -39,6 +45,35 @@ class Recipe:
     # configuring access to the storage are left to the user: reaching a data
     # lake often needs configuration that depends on it.
     code: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class SupportOptions:
+    """The options of a support: none. The base of supports' options.
+
+    A support taking options names a subclass as its ``options_model``: a
+    frozen, keyword-only dataclass whose fields are the options, each with a
+    default, as users may set none of them. Explorers make one from
+    ``format_options`` and pass it to each of the support's methods.
+    Subclasses of a library's options share them, e.g. its storage options,
+    which ``format_options``' ``"*"`` then sets for all its formats.
+
+    Examples
+    --------
+    >>> @dataclass(frozen=True, kw_only=True)
+    ... class DuckDBOptions(SupportOptions):
+    ...     config: Mapping[str, Any] | None = None
+    >>> class ParquetByDuckDB(FormatSupport):
+    ...     options_model = DuckDBOptions
+    ...     def view(self, fmt, ctx, options, limits):
+    ...         con = DuckDB().load().connect(config=dict(options.config or {}))
+    ...         ...
+    >>> StorageExplorer(
+    ...     "data",
+    ...     supports=[ParquetByDuckDB],
+    ...     format_options={"duckdb": {"*": {"config": {"threads": 4}}}},
+    ... )
+    """
 
 
 class FormatSupport:
@@ -77,12 +112,12 @@ class FormatSupport:
       explorer's fsspec filesystem and the item's path in it (to read it
       through the explorer's filesystem, e.g. with ``head_text(ctx.fs,
       ctx.path, n)``), its info and listing, and whether it is a folder
-      (``ctx.is_dir``).
-    - Options are keyword-only arguments of ``__init__``. Explorers create
-      the supports given as classes with the options of their ``engine``'s
-      package (``format_options={"polars": {"*": {...}, "parquet":
-      {...}}}``), passing each only those its ``__init__`` takes; supports
-      given as objects are used as they are.
+      (``ctx.is_dir``); then its options, an ``options_model``.
+    - Options are the fields of ``options_model`` (see ``SupportOptions``),
+      never ``__init__`` arguments: explorers create supports without
+      arguments, and give each the options of its ``engine``'s package
+      (``format_options={"polars": {"*": {...}, "parquet": {...}}}``),
+      those of its model's fields.
     - Import the packages through their ``PythonPackage``'s ``load()``, in the
       methods, never at the top of the module: they are optional.
 
@@ -101,6 +136,8 @@ class FormatSupport:
         Delta Lake tables.
     capabilities : tuple of str
         The methods it implements: "view", "recipe" (see above).
+    options_model : type of SupportOptions, default SupportOptions
+        Its options (see ``SupportOptions``); by default none.
     """
 
     class NotSupported(Exception):
@@ -112,6 +149,7 @@ class FormatSupport:
     engine: ClassVar[type[PythonPackage] | None] = None
     additional_requirements: ClassVar[tuple[type[PythonPackage], ...]] = ()
     capabilities: ClassVar[tuple[Capability, ...]] = ()
+    options_model: ClassVar[type[SupportOptions]] = SupportOptions
 
     @classmethod
     def requirements(cls) -> tuple[type[PythonPackage], ...]:
@@ -131,7 +169,18 @@ class FormatSupport:
         """The library "Python code" groups its recipes under: ``engine``'s package."""
         return cls.engine.package if cls.engine is not None else "python"
 
-    def view(self, fmt: DataFormat, ctx: ItemContext, *, limits: ViewLimits) -> View:
+    @classmethod
+    def option_names(cls) -> frozenset[str]:
+        """The options it takes: the fields of ``options_model``."""
+        return frozenset(f.name for f in dataclasses.fields(cls.options_model))
+
+    def view(
+        self,
+        fmt: DataFormat,
+        ctx: ItemContext,
+        options: SupportOptions,
+        limits: ViewLimits,
+    ) -> View:
         """A view of the item, shown in the preview panel or a tab.
 
         A ``QueryView`` of the data opens it in the data browser: read it
@@ -152,6 +201,8 @@ class FormatSupport:
             The file or folder: where it is, the explorer's filesystem it is
             on (with its credentials) and its path there, its info and
             listing.
+        options : SupportOptions
+            Its options, an ``options_model``.
         limits : ViewLimits
             How much to read and show (bytes, rows).
 
@@ -168,7 +219,9 @@ class FormatSupport:
         """
         raise self.NotSupported
 
-    def recipe(self, fmt: DataFormat, ctx: ItemContext) -> dict[str, str]:
+    def recipe(
+        self, fmt: DataFormat, ctx: ItemContext, options: SupportOptions
+    ) -> dict[str, str]:
         """The recipes' code: Python loading the data with the library, by
         title, shown in "Python code" under ``library()``.
 
@@ -195,6 +248,8 @@ class FormatSupport:
             The format detected, an instance of ``format``.
         ctx : ItemContext
             The file or folder (see ``view``).
+        options : SupportOptions
+            Its options, an ``options_model``.
 
         Returns
         -------
@@ -211,47 +266,79 @@ class FormatSupport:
 
 
 class SupportChain:
-    """The supports of an explorer, in order, and what is done with them:
-    for each capability, the first support for the format that is installed
-    and has it (see ``FormatSupport``)."""
+    """The supports of an explorer, in order, with their options, and what is
+    done with them: for each capability, the first support for the format
+    that is installed and has it (see ``FormatSupport``).
 
-    def __init__(self, supports: Iterable[FormatSupport]) -> None:
-        self.supports = list(supports)
+    Supports given as classes are created (without arguments). Each gets an
+    ``options_model`` made from ``format_options``, by library (its
+    ``engine``'s package), then format name, or ``"*"`` for all formats, e.g.
+    ``{"polars": {"*": {"storage_options": {...}}, "delta": {"use_pyarrow":
+    True}}}``: those of its library for all formats, then for its format
+    (``format.name``), each only if its model has the field.
+
+    ValueError for a library no support has, a format neither in
+    ``format_names`` nor of a support, or an option no support of the
+    library (for that format) takes: a typo would otherwise be ignored.
+    TypeError for an item that is no FormatSupport.
+    """
+
+    def __init__(
+        self,
+        supports: Iterable[type[FormatSupport] | FormatSupport],
+        format_options: Mapping[str, Mapping[str, Mapping[str, Any]]] | None = None,
+        *,
+        format_names: Sequence[str] = (),
+    ) -> None:
+        self.supports = [_created(s) for s in supports]
+        format_options = format_options or {}
+        _check_options(format_options, self.supports, format_names)
+        # The options of each support, by its position in ``supports``.
+        self.options = [_options_of(s, format_options) for s in self.supports]
+
+    def _entries(
+        self, fmt: DataFormat, capability: Capability
+    ) -> list[tuple[FormatSupport, SupportOptions]]:
+        """The supports with ``capability`` for ``fmt``, with their options."""
+        return [
+            (s, o)
+            for s, o in zip(self.supports, self.options, strict=True)
+            if isinstance(fmt, s.format) and capability in s.capabilities
+        ]
 
     def of(self, fmt: DataFormat, capability: Capability) -> list[FormatSupport]:
         """The supports with ``capability`` for ``fmt``, installed or not, in
         order."""
-        return [
-            s
-            for s in self.supports
-            if isinstance(fmt, s.format) and capability in s.capabilities
-        ]
+        return [s for s, _ in self._entries(fmt, capability)]
 
     def installed(self, fmt: DataFormat, capability: Capability) -> list[FormatSupport]:
         """The supports with ``capability`` for ``fmt`` whose packages are
         installed."""
         return [s for s in self.of(fmt, capability) if s.is_installed()]
 
-    def view(self, fmt: DataFormat, ctx: ItemContext, *, limits: ViewLimits) -> View:
+    def view(self, fmt: DataFormat, ctx: ItemContext, limits: ViewLimits) -> View:
         """The view of the first support installed that views the item (see
         ``FormatSupport.view``); with none installed, what to install
         (``InstallView``). ValueError if none can view it."""
-        for support in self.installed(fmt, "view"):
+        entries = self._entries(fmt, "view")
+        for support, options in entries:
+            if not support.is_installed():
+                continue
             try:
-                return support.view(fmt, ctx, limits=limits)
+                return support.view(fmt, ctx, options, limits)
             except FormatSupport.NotSupported:
                 continue
-        missing = [s for s in self.of(fmt, "view") if not s.is_installed()]
+        missing = [s for s, _ in entries if not s.is_installed()]
         if not missing:
             raise ValueError(f"{ctx.name} cannot be viewed as {fmt.label}")
-        options: list[list[str]] = []
+        packages_missing: list[list[str]] = []
         for support in missing:
             packages = [
                 r.package for r in support.requirements() if not r().is_installed()
             ]
-            if packages not in options:
-                options.append(packages)
-        return InstallView(format=fmt.label, options=options)
+            if packages not in packages_missing:
+                packages_missing.append(packages)
+        return InstallView(format=fmt.label, options=packages_missing)
 
     def recipes(self, fmt: DataFormat, ctx: ItemContext) -> list[Recipe]:
         """The recipes of the supports with "recipe" for ``fmt``, installed or
@@ -260,11 +347,11 @@ class SupportChain:
         defaults replaces the default one of its library."""
         recipes: list[Recipe] = []
         libraries: set[str] = set()
-        for support in self.of(fmt, "recipe"):
+        for support, options in self._entries(fmt, "recipe"):
             if support.library() in libraries:
                 continue
             try:
-                codes = support.recipe(fmt, ctx)
+                codes = support.recipe(fmt, ctx, options)
             except FormatSupport.NotSupported:
                 continue
             libraries.add(support.library())
@@ -273,3 +360,80 @@ class SupportChain:
                 for title, code in codes.items()
             ]
         return recipes
+
+
+def _created(support: type[FormatSupport] | FormatSupport) -> FormatSupport:
+    """``support``, created if it is a class. TypeError if it is no FormatSupport."""
+    cls = support if isinstance(support, type) else type(support)
+    if not issubclass(cls, FormatSupport):
+        raise TypeError(f"not a FormatSupport: {support!r}")
+    return support() if isinstance(support, type) else support
+
+
+def _options_of(
+    support: FormatSupport, format_options: Mapping[str, Mapping[str, Any]]
+) -> SupportOptions:
+    """The support's options: its library's for all formats, then for its
+    format, those its model has."""
+    library = format_options.get(support.library(), {}) if support.engine else {}
+    merged = {**library.get(ALL_FORMATS, {}), **library.get(support.format.name, {})}
+    taken = support.option_names()
+    return support.options_model(**{k: v for k, v in merged.items() if k in taken})
+
+
+def _check_options(
+    format_options: Mapping[str, Any],
+    supports: Sequence[FormatSupport],
+    format_names: Sequence[str],
+) -> None:
+    """ValueError for ``format_options`` that no support takes (see ``SupportChain``)."""
+    libraries: dict[str, list[FormatSupport]] = {}
+    for support in supports:
+        if support.engine is not None:
+            libraries.setdefault(support.library(), []).append(support)
+    names = list(dict.fromkeys([*format_names, *(s.format.name for s in supports)]))
+    for library, by_format in format_options.items():
+        if library not in libraries:
+            raise ValueError(
+                f"format_options: unknown library {library!r}; "
+                f"choose from {sorted(libraries)}"
+            )
+        if not isinstance(by_format, dict):
+            raise ValueError(
+                f"format_options[{library!r}] must be a dict of format names "
+                f"(or {ALL_FORMATS!r}) to options"
+            )
+        for name, values in by_format.items():
+            _check_format_options(
+                f"format_options[{library!r}][{name!r}]",
+                name,
+                values,
+                libraries[library],
+                names,
+            )
+
+
+def _check_format_options(
+    where: str,
+    name: str,
+    values: Any,
+    supports: Sequence[FormatSupport],
+    format_names: Sequence[str],
+) -> None:
+    """ValueError for options of a library for format ``name`` (or all) that
+    none of its ``supports`` for it takes."""
+    if name != ALL_FORMATS and name not in format_names:
+        raise ValueError(
+            f"{where}: unknown format; choose from {[ALL_FORMATS, *format_names]}"
+        )
+    if not isinstance(values, dict):
+        raise ValueError(f"{where} must be a dict of options")
+    taken: set[str] = set()
+    for support in supports:
+        if name in (ALL_FORMATS, support.format.name):
+            taken |= support.option_names()
+    unknown = values.keys() - taken
+    if unknown:
+        raise ValueError(
+            f"{where}: unknown options {sorted(unknown)}; choose from {sorted(taken)}"
+        )

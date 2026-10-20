@@ -38,12 +38,12 @@ from jupyter_storage_explorer.formats.support import (
     FormatSupport,
     Recipe,
     SupportChain,
+    SupportOptions,
 )
 from jupyter_storage_explorer.formats.text import Csv, Json, JsonLines, Markdown, Text
 from jupyter_storage_explorer.formats.utils import (
     DEFAULT_FORMATS,
     DEFAULT_SUPPORTS,
-    create_supports,
     default_formats,
     default_supports,
 )
@@ -83,6 +83,7 @@ __all__ = [
     "QueryView",
     "Recipe",
     "SupportChain",
+    "SupportOptions",
     "TableView",
     "Text",
     "TextView",
@@ -90,7 +91,6 @@ __all__ = [
     "View",
     "ViewLimits",
     "child_names",
-    "create_supports",
     "default_formats",
     "default_supports",
     "detect",

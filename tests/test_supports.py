@@ -1,8 +1,9 @@
-"""formats/support.py and utils.py: which support does what, and the
-supports' options (format_options)."""
+"""formats/support.py: which support does what, and the supports' options
+(format_options)."""
 
 from __future__ import annotations
 
+import dataclasses
 from typing import get_args
 
 import polars as pl
@@ -22,8 +23,8 @@ from jupyter_storage_explorer.formats import (
     PythonPackage,
     QueryView,
     SupportChain,
+    SupportOptions,
     ViewLimits,
-    create_supports,
     default_formats,
     default_supports,
 )
@@ -31,9 +32,14 @@ from jupyter_storage_explorer.formats.supports import (
     CsvByPandas,
     CsvByPolars,
     DeltaLakeByPolars,
+    DeltaLakeByPolarsOptions,
     ExcelByPolars,
+    ExcelByPolarsOptions,
+    PandasOptions,
     ParquetByPolars,
+    PolarsOptions,
     TextByFsspec,
+    TextByPython,
 )
 
 LIMITS = ViewLimits(max_display_rows=2)
@@ -50,8 +56,10 @@ def support(fmt=Csv, engine=None, capabilities=("view",), **methods):
     return type("Fake", (FormatSupport,), {**attributes, **methods})
 
 
-def by_class(supports):
-    return {type(s): s for s in supports}
+def options_by_class(format_options=None):
+    """The default supports' options, by class, made from ``format_options``."""
+    chain = SupportChain(DEFAULT_SUPPORTS, format_options)
+    return {type(s): o for s, o in zip(chain.supports, chain.options, strict=True)}
 
 
 def test_default_formats_are_new_objects():
@@ -73,29 +81,29 @@ def test_capabilities_are_the_methods_implemented(cls):
 
 class TestOptions:
     def test_all_formats_then_one(self):
-        supports = by_class(
-            default_supports(
-                {
-                    "polars": {
-                        "*": {"storage_options": {"a": 1}},
-                        "delta": {"storage_options": {"b": 2}, "use_pyarrow": True},
-                    }
+        options = options_by_class(
+            {
+                "polars": {
+                    "*": {"storage_options": {"a": 1}},
+                    "delta": {"storage_options": {"b": 2}, "use_pyarrow": True},
                 }
-            )
+            }
         )
-        assert supports[CsvByPolars].storage_options == {"a": 1}
-        assert supports[ParquetByPolars].storage_options == {"a": 1}
-        delta = supports[DeltaLakeByPolars]
+        assert options[CsvByPolars] == PolarsOptions(storage_options={"a": 1})
+        assert options[ParquetByPolars].storage_options == {"a": 1}
+        delta = options[DeltaLakeByPolars]
+        assert isinstance(delta, DeltaLakeByPolarsOptions)
         assert (delta.storage_options, delta.use_pyarrow) == ({"b": 2}, True)
-        # Only the options a support takes: Excel's code reads with fsspec.
-        assert not hasattr(supports[ExcelByPolars], "storage_options")
-        assert supports[CsvByPandas].storage_options is None  # pandas' own
+        # Only the options a support's model has: Excel's code reads with fsspec.
+        assert options[ExcelByPolars] == ExcelByPolarsOptions()
+        assert options[CsvByPandas] == PandasOptions()  # pandas' own
+        assert options[TextByPython] == SupportOptions()  # none
 
     def test_by_library(self):
-        supports = by_class(
-            default_supports({"fsspec": {"text": {"storage_options": {"anon": True}}}})
+        options = options_by_class(
+            {"fsspec": {"text": {"storage_options": {"anon": True}}}}
         )
-        assert supports[TextByFsspec].storage_options == {"anon": True}
+        assert options[TextByFsspec].storage_options == {"anon": True}
 
     @pytest.mark.parametrize(
         ("options", "error"),
@@ -118,20 +126,38 @@ class TestOptions:
     )
     def test_unknown(self, options, error):
         with pytest.raises(ValueError, match=error):
-            default_supports(options)
+            SupportChain(DEFAULT_SUPPORTS, options)
 
-    def test_objects_used_as_they_are(self):
-        given = CsvByPolars(storage_options={"x": 1})
-        [created, csv] = create_supports(
+    def test_objects_get_options_as_classes(self):
+        # Supports carry no options: objects given are used as they are, and
+        # get theirs as classes do.
+        given = CsvByPolars()
+        chain = SupportChain(
             [given, CsvByPolars], {"polars": {"*": {"storage_options": {"y": 2}}}}
         )
-        assert created is given
-        assert given.storage_options == {"x": 1}
-        assert csv.storage_options == {"y": 2}
+        assert chain.supports[0] is given
+        assert chain.options == [PolarsOptions(storage_options={"y": 2})] * 2
+
+    def test_options_reach_the_methods(self, make_item):
+        seen = []
+
+        @dataclasses.dataclass(frozen=True, kw_only=True)
+        class DuckOptions(SupportOptions):
+            threads: int = 1
+
+        duck = support(
+            engine=Missing,
+            capabilities=("recipe",),
+            recipe=lambda self, fmt, ctx, options: seen.append(options) or {},
+        )
+        duck.options_model = DuckOptions
+        chain = SupportChain([duck], {"not-a-package": {"*": {"threads": 4}}})
+        chain.recipes(Csv(), make_item("/a.csv", b""))
+        assert seen == [DuckOptions(threads=4)]
 
     def test_not_a_support(self):
         with pytest.raises(TypeError, match="not a FormatSupport"):
-            create_supports([Csv])
+            SupportChain([Csv])
 
     def test_formats_of_the_explorer(self):
         # A format the explorer has, which no support's format names.
@@ -146,7 +172,7 @@ class TestOptions:
 
 class TestChain:
     def view(self, chain, item):
-        return chain.view(Csv(), item, limits=LIMITS)
+        return chain.view(Csv(), item, LIMITS)
 
     def test_first_installed_views(self, make_item):
         missing = support(engine=Missing, view=lambda *a, **k: "missing")
@@ -189,9 +215,7 @@ class TestChain:
         tsv = type("Tsv", (Csv,), {"name": "tsv"})
         path = tmp_path / "a.tsv"
         path.write_text("a\tb\n1\t2\n")
-        view = SupportChain(default_supports()).view(
-            tsv(), local_item(path), limits=LIMITS
-        )
+        view = SupportChain(default_supports()).view(tsv(), local_item(path), LIMITS)
         assert isinstance(view, QueryView)
         assert view.data.collect().columns == ["a", "b"]
 
@@ -231,7 +255,7 @@ class TestChain:
         path = tmp_path / "a.parquet"
         pl.DataFrame({"a": [1, 2]}).write_parquet(path)
         view = SupportChain(default_supports()).view(
-            Parquet(), local_item(path), limits=LIMITS
+            Parquet(), local_item(path), LIMITS
         )
         assert view.data.collect()["a"].to_list() == [1, 2]
 

@@ -37,8 +37,10 @@ from jupyter_storage_explorer.formats.packages import Pillow
 from jupyter_storage_explorer.formats.supports import (
     CsvByPandas,
     DeltaLakeByPolars,
+    DeltaLakeByPolarsOptions,
     ExcelByPandas,
     JsonLinesByPandas,
+    PandasOptions,
     ParquetByPandas,
 )
 from jupyter_storage_explorer.formats.supports.pyspark import spark_url
@@ -202,7 +204,7 @@ LIMITS = ViewLimits(max_display_rows=2)
 
 def view(fmt, item, limits=LIMITS):
     """``fmt``'s view of ``item``, by the support the explorer would pick."""
-    return CHAIN.view(fmt, item, limits=limits)
+    return CHAIN.view(fmt, item, limits)
 
 
 def data(fmt, item):
@@ -223,7 +225,7 @@ class TestViews:
 
     def test_csv_with_pandas(self, make_item):
         item = make_item("/a.csv", b"x;y\n1;2\n3;4\n5;6\n")
-        table = CsvByPandas().view(Csv(), item, limits=LIMITS)
+        table = CsvByPandas().view(Csv(), item, PandasOptions(), LIMITS)
         assert isinstance(table, TableView)
         assert table.columns == ["x", "y"]
         assert table.rows == [[1, 2], [3, 4]]  # max_display_rows
@@ -241,13 +243,13 @@ class TestViews:
     def test_json_lines_with_pandas(self, make_item):
         lines = b"".join(json.dumps({"i": i}).encode() + b"\n" for i in range(5))
         item = make_item("/a.jsonl", lines)
-        table = JsonLinesByPandas().view(JsonLines(), item, limits=LIMITS)
+        table = JsonLinesByPandas().view(JsonLines(), item, PandasOptions(), LIMITS)
         assert table.rows == [[0], [1]]
 
     def test_parquet_file_with_pandas(self, make_item):
         # pyarrow reads through the item's fsspec filesystem, so memory:// works.
         item = make_item("/a.parquet", parquet_bytes(pl.DataFrame({"a": [1, 2, 3]})))
-        table = ParquetByPandas().view(Parquet(), item, limits=LIMITS)
+        table = ParquetByPandas().view(Parquet(), item, PandasOptions(), LIMITS)
         assert table.rows == [[1], [2]]
         assert "of 3" in table.note
 
@@ -264,7 +266,7 @@ class TestViews:
 
     def test_excel_with_pandas(self, make_item):
         item = make_item("/a.xlsx", self.workbook())
-        table = ExcelByPandas().view(Excel(), item, limits=LIMITS)
+        table = ExcelByPandas().view(Excel(), item, PandasOptions(), LIMITS)
         assert table.title == "one"
         assert table.rows == [[1], [2]]
         assert "other sheets: two" in table.note
@@ -428,7 +430,7 @@ def test_spark_url(tmp_path):
 
 
 def options_chain(options):
-    return SupportChain(default_supports(options))
+    return SupportChain(default_supports(), options)
 
 
 class TestFormatOptionsInCode:
@@ -463,13 +465,13 @@ class TestFormatOptionsInCode:
 
     def test_delta_options(self, make_item, memfs):
         memfs.pipe_file("/t/_delta_log/0.json", b"{}")
-        support = DeltaLakeByPolars(
+        options = DeltaLakeByPolarsOptions(
             storage_options={"region": "eu"},
             use_pyarrow=True,
             delta_table_options={"version": 1},
         )
         item = make_item("/t", location=S3Location(bucket="b", key="t"))
-        code = support.recipe(DeltaLake(), item)
+        code = DeltaLakeByPolars().recipe(DeltaLake(), item, options)
         options = (
             "'s3://b/t', storage_options={'region': 'eu'}, "
             "delta_table_options={'version': 1}, use_pyarrow=True)"
@@ -548,7 +550,9 @@ class TestPartitionedParquetReading:
         fmt = Parquet()
         item = make_item("/t")
         assert fmt.matches(item)
-        table = ParquetByPandas().view(fmt, item, limits=ViewLimits(max_display_rows=5))
+        table = ParquetByPandas().view(
+            fmt, item, PandasOptions(), ViewLimits(max_display_rows=5)
+        )
         assert table.columns == ["a", "year"]
         assert table.rows == [[2025, 2025], [2025, 2025]]
 

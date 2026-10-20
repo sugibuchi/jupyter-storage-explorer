@@ -287,7 +287,7 @@ unfiltered.
 
 **Formats** (`formats/`). Laid out as `filesystems/`: the interfaces `DataFormat` (`base.py`, with
 `ItemContext`, `detect`, `FILE_ICONS`, the helpers reading a file through its filesystem, `head_text`, `read_whole`,
-`file_size`, `name_of`, `child_names`, and the generated code's helpers), `FormatSupport` (`support.py`, with `SupportChain`, `Capability` and `Recipe`) and `PythonPackage`
+`file_size`, `name_of`, `child_names`, and the generated code's helpers), `FormatSupport` (`support.py`, with `SupportOptions`, `SupportChain`, `Capability` and `Recipe`) and `PythonPackage`
 (`package.py`); a module per predefined format (`delta.py`, `parquet.py`, `excel.py`, `text.py`, `images.py`) and
 per library of the predefined supports in `supports/` (`polars.py`, `pandas.py`, `pyspark.py`, `fsspec.py`,
 `pillow.py`; `python.py` for those needing no package; named after the libraries, which they import only inside
@@ -295,7 +295,7 @@ methods; exported by `formats.supports`, not `formats`); the predefined packages
 views in `view.py` (`View`s, `ViewLimits`; tables made from dataframes in each library's support module, their notes in `frames.py`), the generated code's helpers in `base.py`
 (`snippet_options`, `format_kwargs`, `library_url`: a location as most libraries read it, a local
 file's plain path), and the defaults in `utils.py` (`DEFAULT_FORMATS`,
-`DEFAULT_SUPPORTS`, `create_supports`). A format only detects; a support handles one format's data with one library,
+`DEFAULT_SUPPORTS`). A format only detects; a support handles one format's data with one library,
 so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
 - `DataFormat` subclasses declare `name`, `label`, `priority`, `extensions`, `file_icon` (its files' icon in the list:
   one of `FILE_ICONS`, or `(name, svg)` for one of its own, shown as an `<img>` so its scripts never run; sent as
@@ -321,15 +321,19 @@ so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
   `test_capabilities_are_the_methods_implemented` for the defaults). Each method gets the detected format object first, then the item's `ItemContext`
   (`ctx`): its location (for libraries doing their own I/O and for the code: `library_url(ctx.location)`; Spark's
   `spark_url(ctx.location.url)`, in `supports/pyspark.py`), the explorer's fsspec filesystem and the item's path in it
-  (to read it through the explorer, with its credentials); `view`'s `limits` (`ViewLimits`) is a keyword-only
-  argument of its own, not in the context. Any may raise `FormatSupport.NotSupported`
-  for an item, and the next support is tried. Options are keyword-only `__init__` arguments, no `**kwargs`. Class
-  names are `<Format>By<Library>`.
-- `SupportChain` (the explorer's `_supports`: `supports=` then `StorageExplorer.default_supports()`, i.e.
-  `DEFAULT_SUPPORTS`, ordered format by format, most preferred first) calls them: `view` of the first support
+  (to read it through the explorer, with its credentials); then its options, and for `view` the `limits`
+  (`ViewLimits`), all positional, never in the context. Any may raise `FormatSupport.NotSupported` for an item, and
+  the next support is tried. Options are the fields of the class's `options_model` (`SupportOptions`, the default,
+  has none): a frozen, keyword-only dataclass, each field with a default, its helpers as methods (e.g.
+  `PolarsOptions.storage()`); a library's supports share a base model (`PolarsOptions`, `PandasOptions`,
+  `FsspecOptions`; exported by `formats.supports`). Supports take no `__init__` arguments: the chain creates those
+  given as classes. Class names are `<Format>By<Library>`, options `<Library>Options` or `<Format>By<Library>Options`.
+- `SupportChain(supports, format_options, format_names=)` (the explorer's `_supports`: `supports=` then
+  `StorageExplorer.default_supports()`, i.e. `DEFAULT_SUPPORTS`, ordered format by format, most preferred first;
+  `supports` and `options`, one each, by position) calls them, with their options: `view` of the first support
   installed for the format (`installed`), `recipes` with the first support with `"recipe"` of each library (so one
   given replaces the default's), installed or not (the code may run elsewhere).
-- `view(fmt, ctx, *, limits)`: one `View` dataclass of `view.py`. A `QueryView` (`data`: any
+- `view(fmt, ctx, options, limits)`: one `View` dataclass of `view.py`. A `QueryView` (`data`: any
   dataframe narwhals supports, best lazy) opens the data browser (`_new_query`: the first view's data, then the view
   again on reload, with the context it was opened with); whether an item opens in the data browser is known only
   once viewed, so the menu offers "Preview" and "View in a new tab" for whatever has a format. The others
@@ -347,7 +351,7 @@ so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
   `_query/data_query.py`'s `DataQuery` does filters, sort and paging as narwhals expressions, either on the data itself
   ("live") or on rows read into memory (queried with polars); behaviour such as regex syntax then follows the data's
   library.
-- `recipe(fmt, ctx)`: the code of "Python code", by title, e.g. `{"Load as LazyFrame": ...,
+- `recipe(fmt, ctx, options)`: the code of "Python code", by title, e.g. `{"Load as LazyFrame": ...,
   "Load as DataFrame": ...}` (`ctx.fs` and `ctx.path` only for what the code must know of the file, e.g. a CSV file's
   separator; titles never name the library: the chain makes a `Recipe` of each, adding the support's
   `requirements()`, and the frontend groups them in a submenu per library, the first package, and lists the packages
@@ -359,10 +363,11 @@ so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
   left to the user. `PythonPackage`s (`packages.py`) only say what a support needs (`package`, `import_name`,
   `is_installed()`, `load()`).
 
-**Format options.** `format_options` is `{library: {format name or "*": {option: value}}}` (`create_supports`): a
-support class gets its library's (`engine.package`) options for `"*"`, then for its `format.name`, only those its
-`__init__` takes. Unknown libraries, formats (of the explorer's formats or the supports') and options (taken by no
-support of that library and format) are ValueErrors. Supports given as objects are used as they are. Storage options
+**Format options.** `format_options` is `{library: {format name or "*": {option: value}}}` (`SupportChain`): a
+support gets its library's (`engine.package`) options for `"*"`, then for its `format.name`, only those its
+`options_model` has (`option_names()`), as an `options_model` object passed to each of its methods. Unknown
+libraries, formats (of the explorer's formats or the supports') and options (taken by no support of that library and
+format) are ValueErrors. Supports given as objects get options as classes do (they carry none). Storage options
 go into generated code through `snippet_options()`, which drops credential-looking keys and non-literal values. Spark
 snippets never get storage options (`spark_url()` rewrites `abfs`/`s3` to `abfss`/`s3a`).
 

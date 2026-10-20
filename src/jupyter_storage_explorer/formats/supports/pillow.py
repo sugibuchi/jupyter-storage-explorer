@@ -12,6 +12,7 @@ from jupyter_storage_explorer.formats.supports.fsspec import OpenedByFsspec
 
 if TYPE_CHECKING:
     from jupyter_storage_explorer.formats.base import ItemContext
+    from jupyter_storage_explorer.formats.supports.fsspec import FsspecOptions
 
 OPEN_IMAGE = "Open the image"
 
@@ -35,11 +36,13 @@ class ImageByPillow(OpenedByFsspec):
         img
         """)
 
-    def recipe(self, fmt: Image, ctx: ItemContext) -> dict[str, str]:
+    def recipe(
+        self, fmt: Image, ctx: ItemContext, options: FsspecOptions
+    ) -> dict[str, str]:
         if fmt.mime_type(ctx.path) == "image/svg+xml":
             raise self.NotSupported
         return {
             OPEN_IMAGE: self.image_template.format(
-                url=repr(library_url(ctx.location)), kwargs=self.code_kwargs()
+                url=repr(library_url(ctx.location)), kwargs=options.code_kwargs()
             )
         }

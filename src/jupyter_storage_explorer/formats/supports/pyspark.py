@@ -16,6 +16,7 @@ from jupyter_storage_explorer.formats.text import Csv, JsonLines
 
 if TYPE_CHECKING:
     from jupyter_storage_explorer.formats.base import ItemContext
+    from jupyter_storage_explorer.formats.support import SupportOptions
 
 # Spark (Hadoop) names for storage URLs: TLS "abfss" for Azure, as Spark
 # expects it (storage accounts usually require secure transfer); "s3a", the
@@ -52,7 +53,9 @@ class CsvByPySpark(FormatSupport):
         df = spark.read.csv({url}, header=True, inferSchema=True{kwargs})
         """)
 
-    def recipe(self, fmt: Csv, ctx: ItemContext) -> dict[str, str]:
+    def recipe(
+        self, fmt: Csv, ctx: ItemContext, options: SupportOptions
+    ) -> dict[str, str]:
         return {
             AS_DATA_FRAME: self.data_frame_template.format(
                 url=repr(spark_url(ctx.location.url)),
@@ -74,7 +77,9 @@ class JsonLinesByPySpark(FormatSupport):
         df = spark.read.json({url})
         """)
 
-    def recipe(self, fmt: JsonLines, ctx: ItemContext) -> dict[str, str]:
+    def recipe(
+        self, fmt: JsonLines, ctx: ItemContext, options: SupportOptions
+    ) -> dict[str, str]:
         return {
             AS_DATA_FRAME: self.data_frame_template.format(
                 url=repr(spark_url(ctx.location.url))
@@ -95,7 +100,9 @@ class ParquetByPySpark(FormatSupport):
         df = spark.read.parquet({url})
         """)
 
-    def recipe(self, fmt: Parquet, ctx: ItemContext) -> dict[str, str]:
+    def recipe(
+        self, fmt: Parquet, ctx: ItemContext, options: SupportOptions
+    ) -> dict[str, str]:
         return {
             AS_DATA_FRAME: self.data_frame_template.format(
                 url=repr(spark_url(ctx.location.url))
@@ -118,7 +125,9 @@ class DeltaLakeByPySpark(FormatSupport):
         df = spark.read.format("delta").load({url})
         """)
 
-    def recipe(self, fmt: DeltaLake, ctx: ItemContext) -> dict[str, str]:
+    def recipe(
+        self, fmt: DeltaLake, ctx: ItemContext, options: SupportOptions
+    ) -> dict[str, str]:
         return {
             AS_DATA_FRAME: self.data_frame_template.format(
                 url=repr(spark_url(ctx.location.url))

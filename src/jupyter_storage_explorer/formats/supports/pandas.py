@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+from dataclasses import dataclass
 from inspect import cleandoc
 from typing import TYPE_CHECKING, Any
 
@@ -18,7 +19,7 @@ from jupyter_storage_explorer.formats.excel import Excel
 from jupyter_storage_explorer.formats.frames import rows_note, with_sheets
 from jupyter_storage_explorer.formats.packages import Openpyxl, Pandas, PyArrow
 from jupyter_storage_explorer.formats.parquet import Parquet
-from jupyter_storage_explorer.formats.support import FormatSupport
+from jupyter_storage_explorer.formats.support import FormatSupport, SupportOptions
 from jupyter_storage_explorer.formats.text import Csv, Json, JsonLines
 from jupyter_storage_explorer.formats.view import TableView
 
@@ -45,26 +46,39 @@ def _table(df: Any, **kwargs: Any) -> TableView:
     )
 
 
-class _PandasByUrl(FormatSupport):
-    """A format whose code pandas reads by URL, with storage options."""
+@dataclass(frozen=True, kw_only=True)
+class PandasOptions(SupportOptions):
+    """The options of the formats pandas reads.
 
-    engine = Pandas
+    Attributes
+    ----------
+    storage_options : mapping or None, default None
+        pandas' (fsspec's) ``storage_options`` in the code; those that look
+        like credentials are left out. Views read through the explorer's
+        filesystem.
+    """
 
-    def __init__(self, *, storage_options: Mapping[str, Any] | None = None) -> None:
-        """``storage_options``: pandas' (fsspec's) in the code; ones that
-        look like credentials are left out."""
-        self.storage_options = storage_options
+    storage_options: Mapping[str, Any] | None = None
 
     def code_storage_options(self) -> Mapping[str, Any] | None:
         """The storage options fit to show in code (see ``snippet_options``), or None."""
         return snippet_options(self.storage_options) or None
 
 
+class _PandasByUrl(FormatSupport):
+    """A format whose code pandas reads by URL, with storage options."""
+
+    engine = Pandas
+    options_model = PandasOptions
+
+
 class CsvByPandas(_PandasByUrl):
     format = Csv
     capabilities = ("view", "recipe")
 
-    def view(self, fmt: Csv, ctx: ItemContext, *, limits: ViewLimits) -> View:
+    def view(
+        self, fmt: Csv, ctx: ItemContext, options: PandasOptions, limits: ViewLimits
+    ) -> View:
         pd = Pandas().load()
         text, truncated = head_text(ctx.fs, ctx.path, limits.max_bytes)
         df = pd.read_csv(
@@ -81,13 +95,15 @@ class CsvByPandas(_PandasByUrl):
         df = pd.read_csv({url}{kwargs})
         """)
 
-    def recipe(self, fmt: Csv, ctx: ItemContext) -> dict[str, str]:
+    def recipe(
+        self, fmt: Csv, ctx: ItemContext, options: PandasOptions
+    ) -> dict[str, str]:
         return {
             AS_DATA_FRAME: self.data_frame_template.format(
                 url=repr(library_url(ctx.location)),
                 kwargs=format_kwargs(
                     sep=fmt.code_separator(ctx.fs, ctx.path),
-                    storage_options=self.code_storage_options(),
+                    storage_options=options.code_storage_options(),
                 ),
             )
         }
@@ -97,7 +113,13 @@ class JsonLinesByPandas(_PandasByUrl):
     format = JsonLines
     capabilities = ("view", "recipe")
 
-    def view(self, fmt: JsonLines, ctx: ItemContext, *, limits: ViewLimits) -> View:
+    def view(
+        self,
+        fmt: JsonLines,
+        ctx: ItemContext,
+        options: PandasOptions,
+        limits: ViewLimits,
+    ) -> View:
         pd = Pandas().load()
         text, truncated = head_text(ctx.fs, ctx.path, limits.max_bytes)
         df = pd.read_json(io.StringIO(text), lines=True, nrows=limits.max_display_rows)
@@ -110,11 +132,13 @@ class JsonLinesByPandas(_PandasByUrl):
         df = pd.read_json({url}, lines=True{kwargs})
         """)
 
-    def recipe(self, fmt: JsonLines, ctx: ItemContext) -> dict[str, str]:
+    def recipe(
+        self, fmt: JsonLines, ctx: ItemContext, options: PandasOptions
+    ) -> dict[str, str]:
         return {
             AS_DATA_FRAME: self.data_frame_template.format(
                 url=repr(library_url(ctx.location)),
-                kwargs=format_kwargs(storage_options=self.code_storage_options()),
+                kwargs=format_kwargs(storage_options=options.code_storage_options()),
             )
         }
 
@@ -131,11 +155,13 @@ class JsonByPandas(_PandasByUrl):
         df = pd.read_json({url}{kwargs})
         """)
 
-    def recipe(self, fmt: Json, ctx: ItemContext) -> dict[str, str]:
+    def recipe(
+        self, fmt: Json, ctx: ItemContext, options: PandasOptions
+    ) -> dict[str, str]:
         return {
             AS_DATA_FRAME: self.data_frame_template.format(
                 url=repr(library_url(ctx.location)),
-                kwargs=format_kwargs(storage_options=self.code_storage_options()),
+                kwargs=format_kwargs(storage_options=options.code_storage_options()),
             )
         }
 
@@ -145,7 +171,9 @@ class ExcelByPandas(_PandasByUrl):
     additional_requirements = (Openpyxl,)  # pandas' Excel engine
     capabilities = ("view", "recipe")
 
-    def view(self, fmt: Excel, ctx: ItemContext, *, limits: ViewLimits) -> View:
+    def view(
+        self, fmt: Excel, ctx: ItemContext, options: PandasOptions, limits: ViewLimits
+    ) -> View:
         pd = Pandas().load()
         workbook = pd.ExcelFile(
             io.BytesIO(read_whole(ctx.fs, ctx.path, limits)), engine="openpyxl"
@@ -168,11 +196,13 @@ class ExcelByPandas(_PandasByUrl):
         df = pd.read_excel({url}{kwargs})
         """)
 
-    def recipe(self, fmt: Excel, ctx: ItemContext) -> dict[str, str]:
+    def recipe(
+        self, fmt: Excel, ctx: ItemContext, options: PandasOptions
+    ) -> dict[str, str]:
         return {
             AS_DATA_FRAME: self.data_frame_template.format(
                 url=repr(library_url(ctx.location)),
-                kwargs=format_kwargs(storage_options=self.code_storage_options()),
+                kwargs=format_kwargs(storage_options=options.code_storage_options()),
             )
         }
 
@@ -182,7 +212,9 @@ class ParquetByPandas(_PandasByUrl):
     additional_requirements = (PyArrow,)  # pandas' Parquet engine
     capabilities = ("view", "recipe")
 
-    def view(self, fmt: Parquet, ctx: ItemContext, *, limits: ViewLimits) -> View:
+    def view(
+        self, fmt: Parquet, ctx: ItemContext, options: PandasOptions, limits: ViewLimits
+    ) -> View:
         pa_dataset = PyArrow().load("dataset")
         # pyarrow reads through the browser's fsspec filesystem, so any storage
         # works. For a directory, given its first few files, of one partition
@@ -214,10 +246,12 @@ class ParquetByPandas(_PandasByUrl):
         df = pd.read_parquet({url}{kwargs})
         """)
 
-    def recipe(self, fmt: Parquet, ctx: ItemContext) -> dict[str, str]:
+    def recipe(
+        self, fmt: Parquet, ctx: ItemContext, options: PandasOptions
+    ) -> dict[str, str]:
         return {
             AS_DATA_FRAME: self.data_frame_template.format(
                 url=repr(library_url(ctx.location)),
-                kwargs=format_kwargs(storage_options=self.code_storage_options()),
+                kwargs=format_kwargs(storage_options=options.code_storage_options()),
             )
         }

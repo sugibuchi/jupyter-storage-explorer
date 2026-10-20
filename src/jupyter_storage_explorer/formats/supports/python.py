@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from fsspec import AbstractFileSystem
 
     from jupyter_storage_explorer.formats.base import ItemContext
+    from jupyter_storage_explorer.formats.support import SupportOptions
     from jupyter_storage_explorer.formats.view import View, ViewLimits
 
 
@@ -69,7 +70,9 @@ class TextByPython(FormatSupport):
     format = Text
     capabilities = ("view",)
 
-    def view(self, fmt: Text, ctx: ItemContext, *, limits: ViewLimits) -> View:
+    def view(
+        self, fmt: Text, ctx: ItemContext, options: SupportOptions, limits: ViewLimits
+    ) -> View:
         text, truncated = head_text(ctx.fs, ctx.path, limits.max_bytes)
         note = _size_note(ctx.fs, ctx.path, limits) if truncated else ""
         return _text_view(text, fmt.language(ctx.path), note)
@@ -82,7 +85,13 @@ class MarkdownByPython(FormatSupport):
     format = Markdown
     capabilities = ("view",)
 
-    def view(self, fmt: Markdown, ctx: ItemContext, *, limits: ViewLimits) -> View:
+    def view(
+        self,
+        fmt: Markdown,
+        ctx: ItemContext,
+        options: SupportOptions,
+        limits: ViewLimits,
+    ) -> View:
         text, truncated = head_text(ctx.fs, ctx.path, limits.max_bytes)
         note = _size_note(ctx.fs, ctx.path, limits) if truncated else ""
         return MarkdownView(text=text, note=note)
@@ -94,7 +103,9 @@ class JsonByPython(FormatSupport):
     format = Json
     capabilities = ("view",)
 
-    def view(self, fmt: Json, ctx: ItemContext, *, limits: ViewLimits) -> View:
+    def view(
+        self, fmt: Json, ctx: ItemContext, options: SupportOptions, limits: ViewLimits
+    ) -> View:
         text, truncated = head_text(ctx.fs, ctx.path, limits.max_bytes)
         if truncated:
             note = (
@@ -114,7 +125,9 @@ class ImageByPython(FormatSupport):
     format = Image
     capabilities = ("view",)
 
-    def view(self, fmt: Image, ctx: ItemContext, *, limits: ViewLimits) -> View:
+    def view(
+        self, fmt: Image, ctx: ItemContext, options: SupportOptions, limits: ViewLimits
+    ) -> View:
         mime = fmt.mime_type(ctx.path)
         size = file_size(ctx.fs, ctx.path)
         if size is not None and size <= limits.max_whole_file_bytes:

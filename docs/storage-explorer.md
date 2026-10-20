@@ -302,7 +302,7 @@ class ParquetByDuckDB(FormatSupport):
     engine = DuckDB
     capabilities = ("view",)
 
-    def view(self, fmt, ctx, *, limits):
+    def view(self, fmt, ctx, options, limits):
         # A folder's data files, as detection found them.
         partitioned = ctx.is_dir and bool(fmt.layout(ctx).keys)
         url = fmt.data_url(ctx)
@@ -315,8 +315,10 @@ StorageExplorer("data", supports=[ParquetByDuckDB])
 Each method gets the format detected and the item, an `ItemContext` (`ctx`): where it is (`ctx.location`, which
 libraries doing their own I/O read: `library_url(ctx.location)`), the explorer's fsspec filesystem and the item's path in
 it (`ctx.fs`, `ctx.path`: to read it through the explorer, e.g. for a text view), its info, its listing if it is a folder
-(`ctx.children`, `ctx.is_dir`); `view` also gets `limits` (`ViewLimits`: bytes and rows to read). Formats' `matches(ctx)`
-gets the same. A view holding something to release, e.g. a database connection, releases it in a function given to its
+(`ctx.children`, `ctx.is_dir`); then its options, and `view` also `limits` (`ViewLimits`: bytes and rows to read).
+Formats' `matches(ctx)` gets the same context. A support's options are the fields of a frozen dataclass, its
+`options_model` (a `SupportOptions` subclass, each field with a default), made from [`format_options`](#format-options)
+under its library's name (`engine.package`, e.g. `"duckdb"`). A view holding something to release, e.g. a database connection, releases it in a function given to its
 `on_close` (`view.on_close(lambda view: con.close())`), as `StorageExplorer.on_change` takes one: the explorer calls it
 once it no longer shows the view. `recipe` returns code by
 title, e.g. `{"Load as DataFrame": "import duckdb\n..."}`, the title saying what the code does, not the library. `FormatSupport`'s docstring has the rules for writing one.
