@@ -58,7 +58,7 @@ if TYPE_CHECKING:
     from jupyter_storage_explorer.data_explorer import DataExplorer
     from jupyter_storage_explorer.filesystems.mapper import FileSystemMapper
     from jupyter_storage_explorer.filesystems.operation import FileSystemOperations
-    from jupyter_storage_explorer.formats import View
+    from jupyter_storage_explorer.formats import FormatOptions, View
     from jupyter_storage_explorer.location import Location
 
     # A request's handler: the reply to its content (see _requests).
@@ -138,7 +138,11 @@ class StorageExplorer(
         all formats, e.g. ``{"polars": {"*": {"storage_options": {...}},
         "delta": {"use_pyarrow": True}}}``: each support gets those of its
         library (its ``engine``'s package) that its ``options_model`` has
-        (see "Format options" in docs/storage-explorer.md).
+        (see "Format options" in docs/storage-explorer.md). Instead of a
+        dict of options, a function of the item's ``Location`` returning
+        one, for options depending on where the data is, e.g.
+        ``{"polars": {"*": lambda location: {"storage_options":
+        keys[location.account_name]}}}``.
     view_limits : ViewLimits, optional
         How much views read and show, in the preview panel and in tabs:
         bytes and rows of a file's beginning, the data browser's page size and
@@ -315,7 +319,7 @@ class StorageExplorer(
         open_preview: bool = False,
         formats: Sequence[DataFormat] | None = None,
         supports: Sequence[type[FormatSupport] | FormatSupport] | None = None,
-        format_options: Mapping[str, Mapping[str, Mapping[str, Any]]] | None = None,
+        format_options: FormatOptions | None = None,
         view_limits: ViewLimits | None = None,
         max_upload_bytes: int | None = 10 * 1024 * 1024,
         download_to_jupyterlab_path: str = ".",

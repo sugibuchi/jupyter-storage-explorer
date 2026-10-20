@@ -314,6 +314,24 @@ StorageExplorer(
 Options that look like credentials are left out of the code. A library, format or option name that no support takes is
 an error.
 
+Options that depend on where the data is, e.g. one key per Azure storage account, are given by a function of the item's
+location instead of a dict. It is called each time a file is viewed or its code shown:
+
+```python
+keys = {"sales": "...", "finance": "..."}
+
+StorageExplorer(
+    filesystems={"Sales": "abfs://lake@sales.dfs.core.windows.net", "Finance": "abfs://lake@finance.dfs.core.windows.net"},
+    format_options={
+        "polars": {"*": lambda location: {"storage_options": {"account_key": keys[location.account_name]}}},
+    },
+)
+```
+
+The location is a `jupyter_storage_explorer.Location`: `AbfsLocation` (`account_name`, `container_name`, `path`),
+`S3Location` (`bucket`, `key`), `LocalLocation`, ... (`jupyter_storage_explorer.filesystems`). In the launcher's
+`format_options()`, a later layer's options still override an earlier layer's option by option, functions or not.
+
 ## Working with the explorer from Python
 
 ```python

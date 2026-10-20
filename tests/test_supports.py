@@ -11,6 +11,7 @@ import pytest
 from items import local_item
 
 from jupyter_storage_explorer import StorageExplorer
+from jupyter_storage_explorer.filesystems import AbfsLocation
 from jupyter_storage_explorer.formats import (
     DEFAULT_FORMATS,
     DEFAULT_SUPPORTS,
@@ -37,6 +38,7 @@ from jupyter_storage_explorer.formats.supports import (
     DeltaLakeByPolarsOptions,
     ExcelByPolars,
     ExcelByPolarsOptions,
+    FsspecOptions,
     PandasOptions,
     ParquetByPolars,
     PolarsOptions,
@@ -58,10 +60,17 @@ def support(fmt=Csv, engine=None, capabilities=("view",), **methods):
     return type("Fake", (FormatSupport,), {**attributes, **methods})
 
 
-def options_by_class(format_options=None):
-    """The default supports' options, by class, made from ``format_options``."""
+# Where an item is, for options that depend on it.
+ACCOUNT_A = AbfsLocation(account_name="a", container_name="c", path="x")
+ACCOUNT_B = AbfsLocation(account_name="b", container_name="c", path="x")
+ACCOUNT_KEYS = {"a": "key-a", "b": "key-b"}
+
+
+def options_by_class(format_options=None, location=ACCOUNT_A):
+    """The default supports' options for ``location``, by class, made from
+    ``format_options``."""
     chain = SupportChain(DEFAULT_SUPPORTS, format_options)
-    return {type(s): o for s, o in zip(chain.supports, chain.options, strict=True)}
+    return {type(s): chain.options_of(s, location) for s in chain.supports}
 
 
 def test_default_formats_are_new_objects():
@@ -138,7 +147,11 @@ class TestOptions:
             [given, CsvByPolars], {"polars": {"*": {"storage_options": {"y": 2}}}}
         )
         assert chain.supports[0] is given
-        assert chain.options == [PolarsOptions(storage_options={"y": 2})] * 2
+        expected = PolarsOptions(storage_options={"y": 2})
+        assert [chain.options_of(s, ACCOUNT_A) for s in chain.supports] == [
+            expected,
+            expected,
+        ]
 
     def test_options_reach_the_methods(self, make_item):
         seen = []
@@ -160,6 +173,76 @@ class TestOptions:
     def test_not_a_support(self):
         with pytest.raises(TypeError, match="not a FormatSupport"):
             SupportChain([Csv])
+
+
+class TestOptionsByLocation:
+    """Options may be a function of the item's location."""
+
+    def format_options(self):
+        return {
+            "polars": {
+                "*": lambda location: {
+                    "storage_options": {
+                        "account_key": ACCOUNT_KEYS[location.account_name]
+                    }
+                },
+                "delta": {"use_pyarrow": True},
+            }
+        }
+
+    def test_by_account(self):
+        for location, key in ((ACCOUNT_A, "key-a"), (ACCOUNT_B, "key-b")):
+            options = options_by_class(self.format_options(), location)
+            assert options[CsvByPolars].storage_options == {"account_key": key}
+            # A format's dict over the function for all formats.
+            delta = options[DeltaLakeByPolars]
+            assert (delta.storage_options, delta.use_pyarrow) == (
+                {"account_key": key},
+                True,
+            )
+
+    def test_a_format_function_over_the_dict_for_all(self):
+        options = options_by_class(
+            {
+                "polars": {
+                    "*": {"storage_options": {"region": "eu"}, "use_pyarrow": False},
+                    "delta": lambda location: {"use_pyarrow": True},
+                }
+            }
+        )
+        delta = options[DeltaLakeByPolars]
+        assert (delta.storage_options, delta.use_pyarrow) == ({"region": "eu"}, True)
+
+    def test_unknown_options_returned(self):
+        chain = SupportChain(
+            DEFAULT_SUPPORTS, {"polars": {"csv": lambda location: {"use_pyarrow": 1}}}
+        )
+        [csv] = [s for s in chain.supports if isinstance(s, CsvByPolars)]
+        with pytest.raises(ValueError, match=r"\(.*abfs://c@a.*\): unknown options"):
+            chain.options_of(csv, ACCOUNT_A)
+
+    def test_format_names_checked_at_once(self):
+        with pytest.raises(ValueError, match="unknown format"):
+            SupportChain(DEFAULT_SUPPORTS, {"polars": {"parq": lambda location: {}}})
+
+    def test_the_items_location(self, make_item):
+        seen = []
+        recording = support(
+            engine=Missing,
+            capabilities=("recipe",),
+            recipe=lambda self, fmt, ctx, options: seen.append(options) or {},
+        )
+        recording.options_model = FsspecOptions
+        chain = SupportChain(
+            [recording],
+            {
+                "not-a-package": {
+                    "*": lambda location: {"storage_options": {"at": location.url}}
+                }
+            },
+        )
+        chain.recipes(Csv(), make_item("/a.csv", b"", location=ACCOUNT_B))
+        assert seen == [FsspecOptions(storage_options={"at": ACCOUNT_B.url})]
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)

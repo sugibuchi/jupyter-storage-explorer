@@ -35,6 +35,7 @@ from jupyter_storage_explorer.formats.package import PythonPackage
 from jupyter_storage_explorer.formats.parquet import Parquet, ParquetLayout
 from jupyter_storage_explorer.formats.support import (
     Capability,
+    FormatOptions,
     FormatSupport,
     Recipe,
     SupportChain,
@@ -70,6 +71,7 @@ __all__ = [
     "DataFormat",
     "DeltaLake",
     "Excel",
+    "FormatOptions",
     "FormatSupport",
     "Image",
     "InstallView",

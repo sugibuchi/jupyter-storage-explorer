@@ -363,9 +363,14 @@ so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
   left to the user. `PythonPackage`s (`packages.py`) only say what a support needs (`package`, `import_name`,
   `is_installed()`, `load()`).
 
-**Format options.** `format_options` is `{library: {format name or "*": {option: value}}}` (`SupportChain`): a
-support gets its library's (`engine.package`) options for `"*"`, then for its `format.name`, only those its
-`options_model` has (`option_names()`), as an `options_model` object passed to each of its methods. Unknown
+**Format options.** `format_options` is `{library: {format name or "*": {option: value}}}` (`SupportChain`,
+`FormatOptions`): a support gets its library's (`engine.package`) options for `"*"`, then for its `format.name`, only
+those its `options_model` has (`option_names()`), as an `options_model` object passed to each of its methods. An entry
+may instead be a function of the item's `Location` returning the dict (options per storage, e.g. by
+`account_name`): `SupportChain.options_of(support, location)` calls it at each view and recipe, for the support
+called only, and checks what it returns then (format names are checked at once). The launcher merges layers option
+by option even so: an entry that is a function in either layer becomes a function giving the earlier layer's options
+updated with the later's (`_merged_options`). Unknown
 libraries, formats (of the explorer's formats or the supports') and options (taken by no support of that library and
 format) are ValueErrors. Supports given as objects get options as classes do (they carry none). Secrets are
 declared on the fields (`support.py`): `secret_field(...)` (metadata `is_secret`; also `repr=False`) for a whole value,

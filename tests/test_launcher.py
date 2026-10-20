@@ -107,6 +107,38 @@ class TestMerging:
         assert kwargs["max_upload_bytes"] == 1000 and kwargs["height"] == "fill"
         assert settings.warnings == []
 
+    def test_options_by_location_merged_option_by_option(self, tmp_path, system):
+        # A later layer's function over the system's dicts, then the user's
+        # dict over that function: the later layer's options still win,
+        # option by option, for each location.
+        team = layer(
+            tmp_path,
+            "team",
+            """
+            def format_options():
+                return {
+                    "polars": {
+                        "*": lambda location: {"storage_options": {"at": location}},
+                    },
+                }
+            """,
+        )
+        user = layer(
+            tmp_path,
+            "user",
+            """
+            def format_options():
+                return {"polars": {"*": {"credential_provider": None}}}
+            """,
+        )
+        settings = load_settings([user, team, system])
+        merged = settings.format_options["polars"]["*"]
+        assert merged("here") == {
+            "storage_options": {"at": "here"},
+            "credential_provider": None,
+        }
+        assert settings.format_options["polars"]["delta"] == {"use_pyarrow": True}
+
     def test_lists_come_first_then_the_defaults(self, tmp_path):
         system = layer(
             tmp_path,
