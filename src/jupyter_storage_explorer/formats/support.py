@@ -8,18 +8,21 @@ from __future__ import annotations
 import inspect
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, TypeAlias
 
-from jupyter_storage_explorer.formats.base import Recipe
+from jupyter_storage_explorer.formats.base import Recipe, name_of
 from jupyter_storage_explorer.formats.preview import InstallPreview
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
-    from jupyter_storage_explorer.formats.base import DataFormat, Target
+    from fsspec import AbstractFileSystem
+
+    from jupyter_storage_explorer.formats.base import DataFormat
     from jupyter_storage_explorer.formats.preview import Preview, PreviewLimits
     from jupyter_storage_explorer.formats.requirement import (
         Requirement,
         Requirements,
     )
+    from jupyter_storage_explorer.location import Location
 
 # What a support can do with a format's data, each the name of the method
 # doing it: preview it, query it in the data browser, give a recipe, the code
@@ -46,9 +49,14 @@ class FormatSupport:
       ``capabilities`` to decide what to offer: a method not listed there is
       never called, and a capability listed there must have its method
       implemented. A subclass adding a method extends ``capabilities``.
-    - A method may raise ``NotSupported`` for a particular target (e.g. an
+    - A method may raise ``NotSupported`` for a particular item (e.g. an
       image format the library cannot read): the next support is then
       tried, and for "recipe", the support's code is left out.
+    - Each method gets the item as its location (where it is, for libraries
+      doing their own I/O and for the code: ``library_url(location)``,
+      ``spark_url(location.url)``), the explorer's fsspec filesystem and the
+      item's path in it (to read it through the explorer's filesystem, e.g.
+      with ``head_text(fs, path, n)``), and whether it is a folder.
     - Options are keyword-only arguments of ``__init__``. Explorers create
       the supports given as classes with the options of their ``use``'s
       package (``format_options={"polars": {"*": {...}, "parquet":
@@ -103,17 +111,36 @@ class FormatSupport:
         return cls.use.package if cls.use is not None else "python"
 
     def preview(
-        self, fmt: DataFormat, target: Target, limits: PreviewLimits
+        self,
+        fmt: DataFormat,
+        location: Location,
+        fs: AbstractFileSystem,
+        path: str,
+        is_dir: bool,
+        *,
+        limits: PreviewLimits,
     ) -> Preview:
         """What to show in the preview panel.
+
+        Most previews read the beginning of the file through ``fs``
+        (``head_text``, ``read_whole`` in ``formats.base``), so any storage
+        the explorer reaches can be previewed; a library reading by URL
+        (e.g. polars for Delta Lake) reads ``library_url(location)``.
 
         Parameters
         ----------
         fmt : DataFormat
             The format detected, an instance of ``format``: what its
-            ``matches`` found (e.g. a Parquet dataset's layout).
-        target : Target
-            The file or folder.
+            ``matches`` found (e.g. a Parquet dataset's layout, by location).
+        location : Location
+            Where the file or folder is, as libraries reading it themselves
+            take it.
+        fs : AbstractFileSystem
+            The explorer's filesystem it is on, with its credentials.
+        path : str
+            Its path in ``fs``.
+        is_dir : bool
+            Whether it is a folder (e.g. a table) or a file.
         limits : PreviewLimits
             How much to read and show (bytes, rows).
 
@@ -125,24 +152,35 @@ class FormatSupport:
         Raises
         ------
         FormatSupport.NotSupported
-            By default, or for a target it cannot preview.
+            By default, or for an item it cannot preview.
         """
         raise self.NotSupported
 
-    def query(self, fmt: DataFormat, url: str, is_dir: bool) -> Any:
+    def query(
+        self,
+        fmt: DataFormat,
+        location: Location,
+        fs: AbstractFileSystem,
+        path: str,
+        is_dir: bool,
+    ) -> Any:
         """The data, lazily, for the data browser ("Query data").
 
         Read lazily where the format allows: the browser only fetches the
-        rows it shows.
+        rows it shows. Libraries doing their own I/O (polars, DuckDB, Spark)
+        read the location (``library_url(location)``), with credentials from
+        the environment or the options; others can read through ``fs``.
 
         Parameters
         ----------
         fmt : DataFormat
             The format detected, an instance of ``format``.
-        url : str
-            A location the library reads itself: a local path or a cloud URL
-            (e.g. "s3://bucket/key"), with credentials from the environment
-            or the options.
+        location : Location
+            Where the file or folder is.
+        fs : AbstractFileSystem
+            The explorer's filesystem it is on.
+        path : str
+            Its path in ``fs``.
         is_dir : bool
             Whether it is a folder (e.g. a table) or a file.
 
@@ -158,13 +196,23 @@ class FormatSupport:
         """
         raise self.NotSupported
 
-    def recipe(self, fmt: DataFormat, target: Target) -> str:
+    def recipe(
+        self,
+        fmt: DataFormat,
+        location: Location,
+        fs: AbstractFileSystem,
+        path: str,
+        is_dir: bool,
+    ) -> str:
         """The recipe's code: Python loading the data with the library, shown
         in "Python code" under ``library()``.
 
         The code runs as it is in a new notebook: its imports first, and what
         else it needs, e.g. a Spark session. Installing the packages and
-        configuring access to the storage are left to the user.
+        configuring access to the storage are left to the user. It reads the
+        location (``library_url(location)``, ``spark_url(location.url)``);
+        ``fs`` and ``path`` are for what the code needs to know of the file,
+        e.g. a CSV file's separator.
 
         The predefined supports fill a template, a class attribute
         ``recipe_template`` written with ``inspect.cleandoc`` just before
@@ -177,8 +225,14 @@ class FormatSupport:
         ----------
         fmt : DataFormat
             The format detected, an instance of ``format``.
-        target : Target
-            The file or folder; ``target.url`` is its location.
+        location : Location
+            Where the file or folder is.
+        fs : AbstractFileSystem
+            The explorer's filesystem it is on.
+        path : str
+            Its path in ``fs``.
+        is_dir : bool
+            Whether it is a folder (e.g. a table) or a file.
 
         Returns
         -------
@@ -189,7 +243,7 @@ class FormatSupport:
         Raises
         ------
         FormatSupport.NotSupported
-            By default, or for a target it has no code for.
+            By default, or for an item it has no code for.
         """
         raise self.NotSupported
 
@@ -228,19 +282,26 @@ class SupportChain:
         return bool(self.installed(fmt, "query"))
 
     def preview(
-        self, fmt: DataFormat, target: Target, limits: PreviewLimits
+        self,
+        fmt: DataFormat,
+        location: Location,
+        fs: AbstractFileSystem,
+        path: str,
+        is_dir: bool,
+        *,
+        limits: PreviewLimits,
     ) -> Preview:
-        """The preview of the first support installed that previews
-        ``target``; with none installed, what to install
-        (``InstallPreview``). ValueError if none can preview it."""
+        """The preview of the first support installed that previews the
+        item (see ``FormatSupport.preview``); with none installed, what to
+        install (``InstallPreview``). ValueError if none can preview it."""
         for support in self.installed(fmt, "preview"):
             try:
-                return support.preview(fmt, target, limits)
+                return support.preview(fmt, location, fs, path, is_dir, limits=limits)
             except FormatSupport.NotSupported:
                 continue
         missing = [s for s in self.of(fmt, "preview") if not s.is_installed()]
         if not missing:
-            raise ValueError(f"{target.name} cannot be previewed as {fmt.label}")
+            raise ValueError(f"{name_of(path)} cannot be previewed as {fmt.label}")
         options: list[list[str]] = []
         for support in missing:
             packages = [
@@ -250,27 +311,41 @@ class SupportChain:
                 options.append(packages)
         return InstallPreview(format=fmt.label, options=options)
 
-    def query(self, fmt: DataFormat, url: str, is_dir: bool) -> Any:
-        """The data of the first support installed that queries ``url``.
-        ValueError if none can."""
+    def query(
+        self,
+        fmt: DataFormat,
+        location: Location,
+        fs: AbstractFileSystem,
+        path: str,
+        is_dir: bool,
+    ) -> Any:
+        """The data of the first support installed that queries the item
+        (see ``FormatSupport.query``). ValueError if none can."""
         for support in self.installed(fmt, "query"):
             try:
-                return support.query(fmt, url, is_dir)
+                return support.query(fmt, location, fs, path, is_dir)
             except FormatSupport.NotSupported:
                 continue
         raise ValueError(f"{fmt.label} cannot be queried")
 
-    def recipes(self, fmt: DataFormat, target: Target) -> list[Recipe]:
+    def recipes(
+        self,
+        fmt: DataFormat,
+        location: Location,
+        fs: AbstractFileSystem,
+        path: str,
+        is_dir: bool,
+    ) -> list[Recipe]:
         """The recipes of the supports with "recipe" for ``fmt``, installed or
         not (the code may run elsewhere): of each library, the first that
-        supports ``target``, so a support given before the defaults replaces
+        supports the item, so a support given before the defaults replaces
         the default one of its library."""
         recipes: dict[str, Recipe] = {}
         for support in self.of(fmt, "recipe"):
             if support.library() in recipes:
                 continue
             try:
-                code = support.recipe(fmt, target)
+                code = support.recipe(fmt, location, fs, path, is_dir)
             except FormatSupport.NotSupported:
                 continue
             recipes[support.library()] = Recipe(

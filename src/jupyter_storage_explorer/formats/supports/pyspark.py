@@ -15,7 +15,9 @@ from jupyter_storage_explorer.formats.support import FormatSupport
 from jupyter_storage_explorer.formats.text import Csv, JsonLines
 
 if TYPE_CHECKING:
-    from jupyter_storage_explorer.formats.base import Target
+    from fsspec import AbstractFileSystem
+
+    from jupyter_storage_explorer.location import Location
 
 
 class CsvByPySpark(FormatSupport):
@@ -30,10 +32,17 @@ class CsvByPySpark(FormatSupport):
         df = spark.read.csv({url}, header=True, inferSchema=True{kwargs})
         """)
 
-    def recipe(self, fmt: Csv, target: Target) -> str:
+    def recipe(
+        self,
+        fmt: Csv,
+        location: Location,
+        fs: AbstractFileSystem,
+        path: str,
+        is_dir: bool,
+    ) -> str:
         return self.recipe_template.format(
-            url=repr(spark_url(target.url)),
-            kwargs=format_kwargs(sep=fmt.code_separator(target)),
+            url=repr(spark_url(location.url)),
+            kwargs=format_kwargs(sep=fmt.code_separator(fs, path)),
         )
 
 
@@ -50,8 +59,15 @@ class JsonLinesByPySpark(FormatSupport):
         df = spark.read.json({url})
         """)
 
-    def recipe(self, fmt: JsonLines, target: Target) -> str:
-        return self.recipe_template.format(url=repr(spark_url(target.url)))
+    def recipe(
+        self,
+        fmt: JsonLines,
+        location: Location,
+        fs: AbstractFileSystem,
+        path: str,
+        is_dir: bool,
+    ) -> str:
+        return self.recipe_template.format(url=repr(spark_url(location.url)))
 
 
 class ParquetByPySpark(FormatSupport):
@@ -67,8 +83,15 @@ class ParquetByPySpark(FormatSupport):
         df = spark.read.parquet({url})
         """)
 
-    def recipe(self, fmt: Parquet, target: Target) -> str:
-        return self.recipe_template.format(url=repr(spark_url(target.url)))
+    def recipe(
+        self,
+        fmt: Parquet,
+        location: Location,
+        fs: AbstractFileSystem,
+        path: str,
+        is_dir: bool,
+    ) -> str:
+        return self.recipe_template.format(url=repr(spark_url(location.url)))
 
 
 class DeltaLakeByPySpark(FormatSupport):
@@ -86,5 +109,12 @@ class DeltaLakeByPySpark(FormatSupport):
         df = spark.read.format("delta").load({url})
         """)
 
-    def recipe(self, fmt: DeltaLake, target: Target) -> str:
-        return self.recipe_template.format(url=repr(spark_url(target.url)))
+    def recipe(
+        self,
+        fmt: DeltaLake,
+        location: Location,
+        fs: AbstractFileSystem,
+        path: str,
+        is_dir: bool,
+    ) -> str:
+        return self.recipe_template.format(url=repr(spark_url(location.url)))

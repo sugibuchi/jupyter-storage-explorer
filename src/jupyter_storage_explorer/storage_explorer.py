@@ -837,7 +837,8 @@ class StorageExplorer(
             return {}
         path = selected[0]
         try:
-            _, formats = self._detect(path)
+            item = self._detect(path)
+            formats = item.formats if item is not None else []
         except Exception:
             formats = []  # detection is best-effort; a failure just means no preview
         return {
@@ -865,15 +866,6 @@ class StorageExplorer(
         """The URL of a path of the filesystem shown, or None if it has none."""
         location = self._location_of(path)
         return location.url if location is not None else None
-
-    def _data_url(self, path: str) -> str | None:
-        """Where formats read a path of the filesystem shown: its URL, but a
-        local file's plain path, as polars and pandas take it. None if it has
-        no location."""
-        location = self._location_of(path)
-        if location is None:
-            return None
-        return location.path if isinstance(location, LocalLocation) else location.url
 
     def _location_reply(self, path: str) -> dict[str, Any] | None:
         """What the frontend gets of a path's location: {"url", "path" (a

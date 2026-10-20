@@ -1,9 +1,10 @@
-"""The base of formats: the ``DataFormat`` interface, the ``Target`` it looks
-at, ``detect``, and the ``Recipe`` supports give; and helpers for the code
+"""The base of formats: the ``DataFormat`` interface, ``detect``, and the
+``Recipe`` supports give; helpers reading a file through its fsspec
+filesystem (``head_text``, ``read_whole``, ...); and helpers for the code
 supports generate ("Python code"): storage options fit to show, keyword
-arguments for recipe templates, and URLs as Spark reads them. The predefined
-formats each have a module (delta.py, parquet.py, text.py, ...); handling the
-data is ``FormatSupport``'s (support.py)."""
+arguments for recipe templates, and URLs as libraries and Spark read them.
+The predefined formats each have a module (delta.py, parquet.py, text.py,
+...); handling the data is ``FormatSupport``'s (support.py)."""
 
 from __future__ import annotations
 
@@ -12,6 +13,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from jupyter_storage_explorer.filesystems.locations import LocalLocation
+
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
 
@@ -19,64 +22,56 @@ if TYPE_CHECKING:
 
     from jupyter_storage_explorer.formats.preview import PreviewLimits
     from jupyter_storage_explorer.formats.requirement import Requirements
+    from jupyter_storage_explorer.location import Location
 
 
-@dataclass(frozen=True, kw_only=True)
-class Target:
-    """A file or directory selected in the browser."""
+# --- Reading a file through its fsspec filesystem, for detection and previews ---
 
-    fs: AbstractFileSystem
-    path: str
-    # Location to use in generated code and for libraries to read, e.g.
-    # "s3://bucket/key"; set by StorageExplorer._url.
-    url: str
-    info: Mapping[str, Any]
-    # Listing of the directory (fsspec ``ls(detail=True)`` entries); None for files.
-    children: Sequence[Mapping[str, Any]] | None = None
 
-    @property
-    def is_dir(self) -> bool:
-        return self.children is not None
+def name_of(path: str) -> str:
+    """The last part of a path, e.g. "a.csv" of "data/a.csv"."""
+    return path.rstrip("/").rsplit("/", 1)[-1]
 
-    @property
-    def name(self) -> str:
-        return self.path.rstrip("/").rsplit("/", 1)[-1]
 
-    @property
-    def size(self) -> int | None:
-        return self.info.get("size")
+def child_names(children: Iterable[Mapping[str, Any]] | None) -> set[str]:
+    """The names of the items of a folder's listing (fsspec's ``ls``
+    entries); empty for a file's None."""
+    return {name_of(c["name"]) for c in children or ()}
 
-    @property
-    def child_names(self) -> set[str]:
-        return {c["name"].rstrip("/").rsplit("/", 1)[-1] for c in self.children or ()}
 
-    def child_path(self, name: str) -> str:
-        return f"{self.path.rstrip('/')}/{name}"
+def file_size(fs: AbstractFileSystem, path: str) -> int | None:
+    """The file's size in bytes, if its filesystem tells it."""
+    return fs.info(path).get("size")
 
-    def head(self, size: int) -> bytes:
-        """The first ``size`` bytes of the file, without reading the rest."""
-        with self.fs.open(self.path, "rb") as f:
-            return f.read(size)
 
-    def read_whole(self, limits: PreviewLimits) -> bytes:
-        """The whole file, for formats that cannot be read in part."""
-        if self.size is not None and self.size > limits.max_whole_file_bytes:
-            limit = limits.max_whole_file_bytes // (1024 * 1024)
-            raise ValueError(f"too large to preview (over {limit} MB)")
-        return self.fs.cat_file(self.path)
+def head(fs: AbstractFileSystem, path: str, size: int) -> bytes:
+    """The first ``size`` bytes of the file, without reading the rest."""
+    with fs.open(path, "rb") as f:
+        return f.read(size)
 
-    def head_text(self, size: int) -> tuple[str, bool]:
-        """The first ``size`` bytes decoded as UTF-8, and whether the file is longer.
 
-        When the file is longer, the text is cut after its last complete line.
-        """
-        data = self.head(size + 1)
-        truncated = len(data) > size
-        if truncated:
-            data = data[:size]
-            if (end := data.rfind(b"\n")) >= 0:
-                data = data[: end + 1]
-        return data.decode("utf-8-sig", errors="replace"), truncated
+def head_text(fs: AbstractFileSystem, path: str, size: int) -> tuple[str, bool]:
+    """The first ``size`` bytes decoded as UTF-8, and whether the file is longer.
+
+    When the file is longer, the text is cut after its last complete line.
+    """
+    data = head(fs, path, size + 1)
+    truncated = len(data) > size
+    if truncated:
+        data = data[:size]
+        if (end := data.rfind(b"\n")) >= 0:
+            data = data[: end + 1]
+    return data.decode("utf-8-sig", errors="replace"), truncated
+
+
+def read_whole(fs: AbstractFileSystem, path: str, limits: PreviewLimits) -> bytes:
+    """The whole file, for formats that cannot be read in part. ValueError if
+    it is larger than ``limits.max_whole_file_bytes``."""
+    size = file_size(fs, path)
+    if size is not None and size > limits.max_whole_file_bytes:
+        limit = limits.max_whole_file_bytes // (1024 * 1024)
+        raise ValueError(f"too large to preview (over {limit} MB)")
+    return fs.cat_file(path)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -121,10 +116,10 @@ class DataFormat:
     handling its data (``FormatSupport``: previews, the data browser, load
     code), given as ``supports``. File formats usually only set
     ``extensions``; directory formats (Delta Lake tables, Spark output,
-    Hive-partitioned datasets, ...) override ``matches`` and inspect
-    ``target.children``. What detection finds and supports need (e.g. a
-    Parquet dataset's partition layout) is kept by the format: supports are
-    given it.
+    Hive-partitioned datasets, ...) override ``matches`` and inspect the
+    folder's listing (``children``). What detection finds and supports need
+    (e.g. a Parquet dataset's partition layout) is kept by the format, by
+    location: supports are given the format.
 
     Attributes
     ----------
@@ -157,38 +152,71 @@ class DataFormat:
     extensions: ClassVar[tuple[str, ...]] = ()
     file_icon: ClassVar[str | tuple[str, str] | None] = None
 
-    def matches(self, target: Target) -> bool:
+    def matches(
+        self,
+        location: Location,
+        fs: AbstractFileSystem,
+        path: str,
+        info: Mapping[str, Any],
+        children: Sequence[Mapping[str, Any]] | None,
+    ) -> bool:
         """Whether a file or folder is in this format.
 
         Called on every click, so it must be cheap: look at the name, or the
-        folder's listing (``target.children``), not at the contents.
+        folder's listing (``children``), not at the contents.
 
         Parameters
         ----------
-        target : Target
-            The file or folder.
+        location : Location
+            Where it is: what the format keeps what it finds by (e.g. a
+            dataset's layout), for the supports, which get the location.
+        fs : AbstractFileSystem
+            The filesystem it is on, to read more if needed.
+        path : str
+            Its path in ``fs``.
+        info : mapping
+            fsspec's info of it (``fs.info(path)``).
+        children : sequence of mapping or None
+            A folder's listing (fsspec's ``ls(path, detail=True)`` entries);
+            None for a file.
 
         Returns
         -------
         bool
             By default: a file whose name ends with one of ``extensions``.
         """
-        return not target.is_dir and target.name.lower().endswith(self.extensions)
+        return children is None and name_of(path).lower().endswith(self.extensions)
 
 
-def matching_formats(target: Target, formats: Iterable[DataFormat]) -> list[DataFormat]:
-    """All formats that match ``target``, highest priority first (ties keep their order)."""
-    return sorted((f for f in formats if f.matches(target)), key=lambda f: -f.priority)
+def matching_formats(
+    location: Location,
+    fs: AbstractFileSystem,
+    path: str,
+    info: Mapping[str, Any],
+    children: Sequence[Mapping[str, Any]] | None,
+    *,
+    formats: Iterable[DataFormat],
+) -> list[DataFormat]:
+    """All ``formats`` that match the item (see ``DataFormat.matches``),
+    highest priority first (ties keep their order)."""
+    found = (f for f in formats if f.matches(location, fs, path, info, children))
+    return sorted(found, key=lambda f: -f.priority)
 
 
-def detect(target: Target, formats: Iterable[DataFormat]) -> DataFormat | None:
-    """The highest-priority format that matches ``target``, if any.
-
-    On a tie, the format listed first wins.
-    """
+def detect(
+    location: Location,
+    fs: AbstractFileSystem,
+    path: str,
+    info: Mapping[str, Any],
+    children: Sequence[Mapping[str, Any]] | None,
+    *,
+    formats: Iterable[DataFormat],
+) -> DataFormat | None:
+    """The highest-priority of ``formats`` that matches the item (see
+    ``DataFormat.matches``), if any. On a tie, the format listed first wins."""
     best = None
     for fmt in formats:
-        if not fmt.matches(target):
+        if not fmt.matches(location, fs, path, info, children):
             continue
         if best is None or fmt.priority > best.priority:
             best = fmt
@@ -260,3 +288,10 @@ def spark_url(url: str) -> str:
         if sep and scheme in _SPARK_SCHEMES
         else url
     )
+
+
+def library_url(location: Location) -> str:
+    """Where most libraries read ``location`` (polars, pandas, DuckDB, ...):
+    its URL, but a local file's plain path, which they all take (not all of
+    them read ``file://`` URLs). Spark reads ``spark_url(location.url)``."""
+    return location.path if isinstance(location, LocalLocation) else location.url
