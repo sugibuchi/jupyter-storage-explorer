@@ -1,6 +1,6 @@
 // The preview panel below the tree and list, showing the kernel's _preview:
-// a file's sections (sections.js), or the data browser ("Query data",
-// query.js). The Preview button at the right of the status bar opens it for
+// the item's view (sections.js), or the data browser for data to query
+// (query.js). The Preview button at the right of the status bar opens it for
 // the selected item (or the folder shown); the button or Esc closes it.
 
 function createPreview(x) {
@@ -48,10 +48,10 @@ function createPreview(x) {
     head.dataset.path = preview.path;
     head.replaceChildren(h("span", { className: "jse-preview-name", textContent: visible(preview.path), title: visible(preview.path) }));
     if (preview.format) head.append(h("span", { className: "jse-badge", textContent: x.formatLabel(preview.format) }));
-    // The data browser, in a tab of its own (with the launcher's extension).
-    if (preview.query && x.jupyterlab.canOpenQueryTab()) {
-      const tabBtn = iconButton("open-in-new", "Open in a new tab");
-      tabBtn.addEventListener("click", () => x.jupyterlab.openQueryTab(preview.path, preview.format));
+    // The view in a tab of its own (with the launcher's extension).
+    if (preview.format && !preview.loading && !preview.error && x.jupyterlab.canOpenViewTab()) {
+      const tabBtn = iconButton("open-in-new", "View in a new tab");
+      tabBtn.addEventListener("click", () => x.jupyterlab.openViewTab(preview.path, preview.format));
       head.append(h("span", { className: "jse-spacer" }), tabBtn);
     }
 
@@ -88,7 +88,7 @@ function createPreview(x) {
     const selected = model.get("_selected");
     if (selected.length === 0) {
       const format = model.get("_current_format");
-      return format ? { path: model.get("_current_dir"), format, query: model.get("_current_query") } : null;
+      return format ? { path: model.get("_current_dir"), format } : null;
     }
     const known = model.get("_selected_format");
     if (selected.length === 1 && known.path === selected[0] && known.format) return known;
@@ -119,8 +119,7 @@ function createPreview(x) {
     }
     const wanted = target();
     const selected = model.get("_selected").length;
-    // Tabular data opens in the data browser when polars is installed.
-    const action = wanted?.query ? "Query data" : "Preview";
+    const action = "Preview";
     button.disabled = wanted == null;
     setButton("eye", wanted ? `${action} (${x.formatLabel(wanted.format)})` : "Preview");
     button.title = wanted

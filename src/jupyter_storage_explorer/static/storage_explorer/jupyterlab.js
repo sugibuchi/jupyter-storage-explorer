@@ -1,5 +1,5 @@
-// JupyterLab's own editors and viewers ("Open in JupyterLab"), and the data
-// browser in a tab of its own ("Query data in new tab"), with the launcher's
+// JupyterLab's own editors and viewers ("Open in JupyterLab"), and views in
+// tabs of their own ("View in a new tab"), with the launcher's
 // JupyterLab extension. When on the page, it puts its functions under this
 // key: open(file) (launcher/labextension/src/files.ts), which shows the file
 // through a drive of its own, reading and saving it with `get` and `save`
@@ -81,18 +81,19 @@ function createJupyterLab(x) {
     }).catch((err) => x.flash(`Cannot open the settings: ${err.message ?? err}`));
   }
 
-  // "Query data" in a tab of its own: the kernel opens a DataExplorer of the
-  // same query ("query_tab"), which the extension shows with this widget's
-  // kernel connection (`openWidget`), and closes when the tab closes.
-  const canOpenQueryTab = () => Boolean(globalThis[JUPYTERLAB]?.openWidget);
+  // "View in a new tab": the kernel views the item and opens a widget of the
+  // view ("view_tab"), a DataExplorer for data to query, else a ViewTab; the
+  // extension shows it with this widget's kernel connection (`openWidget`),
+  // and the kernel lets it go when the tab closes.
+  const canOpenViewTab = () => Boolean(globalThis[JUPYTERLAB]?.openWidget);
 
-  async function openQueryTab(path, format = null) {
-    const reply = await request({ type: "query_tab", path, format });
+  async function openViewTab(path, format = null) {
+    const reply = await request({ type: "view_tab", path, format });
     if (reply.error) {
       x.flash(`Cannot open a tab: ${reply.error}`);
       return;
     }
-    const closed = () => model.send({ type: "query_tab_closed", model_id: reply.model_id });
+    const closed = () => model.send({ type: "view_tab_closed", model_id: reply.model_id });
     try {
       await globalThis[JUPYTERLAB].openWidget({ modelId: reply.model_id, title: reply.title, caption: reply.url, owner: x.el, onClose: closed });
     } catch (err) {
@@ -101,5 +102,5 @@ function createJupyterLab(x) {
     }
   }
 
-  return { canOpen, open, canOpenSettings, openSettings, canOpenQueryTab, openQueryTab };
+  return { canOpen, open, canOpenSettings, openSettings, canOpenViewTab, openViewTab };
 }

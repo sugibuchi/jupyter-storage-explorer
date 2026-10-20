@@ -14,9 +14,9 @@ from jupyter_storage_explorer.formats import (
     Csv,
     DeltaLake,
     Parquet,
-    PreviewLimits,
     Requirement,
     Text,
+    ViewLimits,
     child_names,
     default_formats,
     detect,
@@ -63,9 +63,9 @@ class TestReading:
 
     def test_read_whole_within_the_limit(self, memfs):
         memfs.pipe_file("/a.bin", b"x" * 10)
-        assert read_whole(memfs, "/a.bin", PreviewLimits()) == b"x" * 10
-        with pytest.raises(ValueError, match="too large to preview"):
-            read_whole(memfs, "/a.bin", PreviewLimits(max_whole_file_bytes=5))
+        assert read_whole(memfs, "/a.bin", ViewLimits()) == b"x" * 10
+        with pytest.raises(ValueError, match="too large to view"):
+            read_whole(memfs, "/a.bin", ViewLimits(max_whole_file_bytes=5))
 
 
 def test_library_url(tmp_path):

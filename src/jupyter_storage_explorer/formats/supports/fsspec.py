@@ -22,6 +22,10 @@ if TYPE_CHECKING:
     from jupyter_storage_explorer.location import Location
 
 
+READ_TEXT = "Read the text"
+LOAD_VALUE = "Load the JSON value"
+
+
 class OpenedByFsspec(FormatSupport):
     """Code opening the file with ``fsspec.open`` (also for libraries reading
     the file opened, e.g. Pillow)."""
@@ -43,7 +47,7 @@ class TextByFsspec(OpenedByFsspec):
     use = Fsspec
     capabilities = ("recipe",)
 
-    recipe_template = cleandoc("""
+    text_template = cleandoc("""
         import fsspec
 
         with fsspec.open({url}, 'rt'{kwargs}) as f:
@@ -57,10 +61,12 @@ class TextByFsspec(OpenedByFsspec):
         fs: AbstractFileSystem,
         path: str,
         is_dir: bool,
-    ) -> str:
-        return self.recipe_template.format(
-            url=repr(library_url(location)), kwargs=self.code_kwargs()
-        )
+    ) -> dict[str, str]:
+        return {
+            READ_TEXT: self.text_template.format(
+                url=repr(library_url(location)), kwargs=self.code_kwargs()
+            )
+        }
 
 
 class JsonByFsspec(OpenedByFsspec):
@@ -70,7 +76,7 @@ class JsonByFsspec(OpenedByFsspec):
     use = Fsspec
     capabilities = ("recipe",)
 
-    recipe_template = cleandoc("""
+    value_template = cleandoc("""
         import json
 
         import fsspec
@@ -86,7 +92,9 @@ class JsonByFsspec(OpenedByFsspec):
         fs: AbstractFileSystem,
         path: str,
         is_dir: bool,
-    ) -> str:
-        return self.recipe_template.format(
-            url=repr(library_url(location)), kwargs=self.code_kwargs()
-        )
+    ) -> dict[str, str]:
+        return {
+            LOAD_VALUE: self.value_template.format(
+                url=repr(library_url(location)), kwargs=self.code_kwargs()
+            )
+        }

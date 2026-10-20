@@ -1,25 +1,29 @@
-"""StorageExplorer's previews, data browser and right-click menu (a mixin of the class)."""
+"""StorageExplorer's previews, views in tabs of their own and the right-click
+menu's formats and code (a mixin of the class)."""
 
 from __future__ import annotations
 
 import base64
 import dataclasses
-import functools
 from typing import TYPE_CHECKING, Any, NamedTuple
 
 from jupyter_storage_explorer import _paths
 from jupyter_storage_explorer._explorer.common import error_text
 from jupyter_storage_explorer._json import jsonable
 from jupyter_storage_explorer._query.data_query import DataQuery
+from jupyter_storage_explorer._view_tab import ViewTab
 from jupyter_storage_explorer.data_explorer import DataExplorer
 from jupyter_storage_explorer.formats import (
     DataFormat,
-    MediaPreview,
-    Preview,
+    MediaView,
+    QueryView,
+    View,
     matching_formats,
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from jupyter_storage_explorer.location import Location
 
 
@@ -33,17 +37,19 @@ class _Detected(NamedTuple):
     formats: list[DataFormat]
 
 
-def _section(preview: Preview) -> dict[str, Any]:
-    """A preview section as JSON for the frontend; media bytes are base64-encoded."""
-    data = {f.name: getattr(preview, f.name) for f in dataclasses.fields(preview)}
-    if isinstance(preview, MediaPreview) and preview.data is not None:
-        data["data"] = base64.b64encode(preview.data).decode("ascii")
-    return {"kind": preview.kind, **jsonable(data)}
+def section(view: View) -> dict[str, Any]:
+    """A view other than a ``QueryView`` as JSON for the frontend (a section
+    of the preview panel or a view tab); media bytes are base64-encoded."""
+    data = {f.name: getattr(view, f.name) for f in dataclasses.fields(view)}
+    if isinstance(view, MediaView) and view.data is not None:
+        data["data"] = base64.b64encode(view.data).decode("ascii")
+    return {"kind": view.kind, **jsonable(data)}
 
 
 class PreviewsMixin:
-    """Previews (``_preview``), the data browser ("Query data", in the
-    panel or a tab of its own) and the right-click menu's formats and code."""
+    """Previews (``_preview``): the item's view in the preview panel, the data
+    browser for a ``QueryView``; views in tabs of their own ("View in a new
+    tab"); and the right-click menu's formats and code."""
 
     def _detect(self, path: str) -> _Detected | None:
         """The item at ``path`` of the storage shown, and the formats
@@ -59,8 +65,39 @@ class PreviewsMixin:
         )
         return _Detected(path, location, children is not None, formats)
 
+    def _viewer(self, fmt: DataFormat, item: _Detected) -> Callable[[], View]:
+        """Views ``item`` as ``fmt`` (by the first support installed; with
+        none, what to install), each time it is called: on the storage it is
+        on, also after switching storages."""
+        fs, limits = self._fs, self._view_limits
+
+        def view() -> View:
+            return self._supports.view(
+                fmt, item.location, fs, item.path, item.is_dir, limits=limits
+            )
+
+        return view
+
+    def _formats_of(
+        self, path: str, format: str | None
+    ) -> tuple[_Detected, DataFormat]:
+        """The item at ``path`` and the format to view it as: ``format`` if
+        given (e.g. "text" for a JSON file), else its best. ValueError if it
+        has no location or no such format."""
+        item = self._detect(path)
+        if item is None:
+            raise ValueError(f"{path} has no URL, so it cannot be viewed")
+        formats = item.formats
+        if format is not None:
+            formats = [f for f in formats if f.name == format]
+        if not formats:
+            what = f"as {format}" if format is not None else "in any format"
+            raise ValueError(f"{_paths.basename(path)} cannot be viewed {what}")
+        return item, formats[0]
+
     def _open_preview(self, path: str, format: str | None = None) -> None:
-        """Preview the file or directory at ``path`` in the preview panel.
+        """Preview the file or directory at ``path`` in the preview panel: the
+        data browser for a ``QueryView``, else the view's section.
 
         ``format`` names one of the formats matching it (e.g. "text" for a JSON
         file); by default the best match is used.
@@ -86,20 +123,14 @@ class PreviewsMixin:
             if formats:
                 fmt = formats[0]
                 base["format"] = fmt.name
-                if self._supports.can_query(fmt):
-                    base["query"] = self._open_query(fmt, item)
+                viewer = self._viewer(fmt, item)
+                view = viewer()
+                if isinstance(view, QueryView):
+                    data = self._new_query(view, viewer, item)
+                    self._queries[path] = data
+                    base["query"] = data.opening()
                 else:
-                    # By the first support installed; with none, what to
-                    # install instead.
-                    preview = self._supports.preview(
-                        fmt,
-                        item.location,
-                        self._fs,
-                        path,
-                        item.is_dir,
-                        limits=self._preview_limits,
-                    )
-                    base["sections"] = [_section(preview)]
+                    base["sections"] = [section(view)]
         except Exception as exc:
             base["error"] = error_text(exc)
         self._preview = base
@@ -129,78 +160,81 @@ class PreviewsMixin:
             self._query_basis = basis
             self._query_callbacks(self)
 
-    def _open_query(self, fmt: DataFormat, item: _Detected) -> dict[str, Any]:
-        """Open ``item`` in the data browser: its columns and remembered settings.
-
-        The frontend then asks for rows with "query_rows".
-        """
-        data = self._new_query(fmt, item)
-        self._queries[item.path] = data
-        return data.opening()
-
-    def _new_query(self, fmt: DataFormat, item: _Detected) -> DataQuery:
-        """The data browser's query of ``item`` read as ``fmt``.
+    def _new_query(
+        self, view: QueryView, viewer: Callable[[], View], item: _Detected
+    ) -> DataQuery:
+        """The data browser's query of ``view``, the view ``viewer`` gave of
+        ``item``: read again with ``viewer`` (reload).
 
         Settings are remembered by location, so they follow the data across
         explorers and tabs, with the mode last chosen for it.
         """
-        # By the first support installed (can_query()); reading again
-        # (reload) goes to the same storage, also after switching storages.
-        source = functools.partial(
-            self._supports.query, fmt, item.location, self._fs, item.path, item.is_dir
-        )
+        first = [view.data]
+
+        def source() -> Any:
+            if first:  # the data just viewed, not read twice
+                return first.pop()
+            again = viewer()
+            if not isinstance(again, QueryView):
+                raise ValueError(f"{_paths.basename(item.path)} cannot be queried now")
+            return again.data
+
         key = item.location
         state = self._states.query(key)
         mode = state.mode if state is not None else "auto"
-        fetch = self._fetch_rows
+        limits = self._view_limits
+        options = {
+            "fetch": self._fetch_rows,
+            "max_live_rows": limits.max_live_rows,
+            "max_memory_rows": limits.max_memory_rows,
+            "page_rows": limits.max_display_rows,
+        }
         try:
-            return DataQuery(source, key, self._states, mode=mode, fetch=fetch)
+            return DataQuery(source, key, self._states, mode=mode, **options)
         except ValueError:
             if mode != "live":
                 raise
             # "live" chosen when the format scanned lazily, and no longer does.
-            return DataQuery(source, key, self._states, fetch=fetch)
+            first.append(view.data)
+            return DataQuery(source, key, self._states, **options)
 
-    # --- Query data in a new tab: a DataExplorer of the same query, which the
-    # launcher's JupyterLab extension shows in a tab of its own ---
+    # --- Views in tabs of their own ("View in a new tab"), which the
+    # launcher's JupyterLab extension shows: a DataExplorer of the data for
+    # a QueryView, else a ViewTab of the view ---
 
-    def _query_tab_request(self, content: dict[str, Any]) -> dict[str, Any]:
-        """Answer "query_tab": open ``path`` (as ``format``, else its best
-        format) in a new ``DataExplorer``, kept until the tab closes
-        ("query_tab_closed"). {"model_id", "title", "url"} or {"error"}."""
+    def _view_tab_request(self, content: dict[str, Any]) -> dict[str, Any]:
+        """Answer "view_tab": view ``path`` (as ``format``, else its best
+        format) in a new widget, a ``DataExplorer`` or a ``ViewTab``, kept
+        until the tab closes ("view_tab_closed"). {"model_id", "title",
+        "url"} or {"error"}."""
         path = content.get("path")
         try:
-            item = self._detect(path)
-            if item is None:
-                raise ValueError(f"{path} has no URL, so it cannot be queried")
-            formats = item.formats
-            if content.get("format"):
-                formats = [f for f in formats if f.name == content["format"]]
-            if not formats or not self._supports.can_query(formats[0]):
-                raise ValueError(f"{_paths.basename(path)} cannot be queried")
-            data = self._new_query(formats[0], item)
-            explorer = DataExplorer._of_query(
-                data,
-                self._states,
-                data.key,
-                title=_paths.basename(path),
-                label=formats[0].label,
-                height="fill",
-            )
+            item, fmt = self._formats_of(path, content.get("format") or None)
+            viewer = self._viewer(fmt, item)
+            view = viewer()
+            title = _paths.basename(path)
+            if isinstance(view, QueryView):
+                data = self._new_query(view, viewer, item)
+                widget: DataExplorer | ViewTab = DataExplorer._of_query(
+                    data,
+                    self._states,
+                    data.key,
+                    title=title,
+                    label=fmt.label,
+                    height="fill",
+                )
+            else:
+                widget = ViewTab(section(view), title=title, label=fmt.label)
         except Exception as exc:
             return {"error": error_text(exc)}
-        self._query_tabs[explorer.model_id] = explorer
-        return {
-            "model_id": explorer.model_id,
-            "title": _paths.basename(path),
-            "url": data.key.url,
-        }
+        self._view_tabs[widget.model_id] = widget
+        return {"model_id": widget.model_id, "title": title, "url": item.location.url}
 
-    def _query_tab_closed(self, model_id: str) -> None:
-        """The tab of a "query_tab" closed: its DataExplorer is no longer kept."""
-        explorer = self._query_tabs.pop(model_id, None)
-        if explorer is not None:
-            explorer.close()
+    def _view_tab_closed(self, model_id: str) -> None:
+        """The tab of a "view_tab" closed: its widget is no longer kept."""
+        widget = self._view_tabs.pop(model_id, None)
+        if widget is not None:
+            widget.close()
 
     def _query_request(self, content: dict[str, Any]) -> dict[str, Any]:
         """Answer the data browser's requests ("query_rows", "query_check",
@@ -212,8 +246,8 @@ class PreviewsMixin:
 
     def _menu_info(self, path: str) -> dict[str, Any]:
         """Answer "menu_info", the right-click menu's: {"formats": names of
-        those matching ("Preview as"), "recipes": load code ("Python code"),
-        "query": whether it opens in the data browser}, or {"error"}."""
+        those matching ("Preview as"), "recipes": load code ("Python code",
+        by library)}, or {"error"}."""
         try:
             item = self._detect(path)
             formats = item.formats if item is not None else []
@@ -228,10 +262,14 @@ class PreviewsMixin:
             return {"error": error_text(exc)}
         return {
             "formats": [f.name for f in formats],
-            # Requirements are classes: the frontend gets their packages.
+            # Requirements are classes: the frontend gets their packages,
+            # the first the library it groups the recipes by.
             "recipes": [
-                {"packages": [p.package for p in r.requirements], "code": r.code}
+                {
+                    "title": r.title,
+                    "packages": [p.package for p in r.requirements],
+                    "code": r.code,
+                }
                 for r in recipes
             ],
-            "query": bool(formats) and self._supports.can_query(formats[0]),
         }

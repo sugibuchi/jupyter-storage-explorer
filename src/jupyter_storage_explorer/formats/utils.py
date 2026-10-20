@@ -63,8 +63,8 @@ DEFAULT_FORMATS: tuple[type[DataFormat], ...] = (
 )
 
 # The supports explorers use after those they are given; ``default_supports``
-# creates them. In order of preference, format by format: for previews and
-# the data browser, the first installed is used, and "Python code" shows them in this order.
+# creates them. In order of preference, format by format: for views, the
+# first installed is used, and "Python code" shows them in this order.
 # MarkdownByPython comes before TextByPython: Markdown is a Text format.
 DEFAULT_SUPPORTS: tuple[type[FormatSupport], ...] = (
     DeltaLakeByPolars,

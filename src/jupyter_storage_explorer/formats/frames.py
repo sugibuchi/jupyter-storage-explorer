@@ -1,4 +1,4 @@
-"""The notes under table previews, shared by the libraries' supports (their
+"""The notes under table views, shared by the libraries' supports (their
 tables are made in their modules: supports/polars.py, supports/pandas.py)."""
 
 from __future__ import annotations

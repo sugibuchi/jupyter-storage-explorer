@@ -1,4 +1,4 @@
-/* Data browser ("Query data"): toolbar, then the table filling the panel. */
+/* Data browser: toolbar, then the table filling the panel. */
 .jse-query {
   display: flex;
   flex-direction: column;

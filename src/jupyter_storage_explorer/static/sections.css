@@ -1,0 +1,236 @@
+/* Views' sections (sections.js), shared by the storage explorer's preview
+   panel and dialogs, and view tabs: tables, text, Markdown, JSON trees,
+   media, install hints, and the code blocks of "Python code". */
+
+.jse-install {
+  padding: 8px 10px 2px;
+  border-left: 3px solid var(--jse-accent);
+  background: var(--jse-bg-alt);
+}
+
+.jse-install ul {
+  margin: 6px 0 8px;
+  padding-left: 20px;
+  font-family: var(--jp-code-font-family, monospace);
+}
+
+.jse-section {
+  margin-bottom: 10px;
+}
+
+/* Syntax highlighting of text previews: Pygments' token classes, coloured
+   with JupyterLab's code colours (so they follow its theme, dark included),
+   with fallbacks for other frontends. */
+.jse-highlight .k,
+.jse-highlight .kc,
+.jse-highlight .kd,
+.jse-highlight .kn,
+.jse-highlight .kp,
+.jse-highlight .kr,
+.jse-highlight .ow {
+  color: var(--jp-mirror-editor-keyword-color, #008000);
+  font-weight: bold;
+}
+
+.jse-highlight .kt,
+.jse-highlight .nb,
+.jse-highlight .bp {
+  color: var(--jp-mirror-editor-builtin-color, #008000);
+}
+
+.jse-highlight .s,
+.jse-highlight .sa,
+.jse-highlight .sb,
+.jse-highlight .sc,
+.jse-highlight .dl,
+.jse-highlight .sd,
+.jse-highlight .s1,
+.jse-highlight .s2,
+.jse-highlight .se,
+.jse-highlight .sh,
+.jse-highlight .si,
+.jse-highlight .sx,
+.jse-highlight .sr,
+.jse-highlight .ss {
+  color: var(--jp-mirror-editor-string-color, #ba2121);
+}
+
+.jse-highlight .c,
+.jse-highlight .ch,
+.jse-highlight .cm,
+.jse-highlight .c1,
+.jse-highlight .cs,
+.jse-highlight .cpf {
+  color: var(--jp-mirror-editor-comment-color, #408080);
+  font-style: italic;
+}
+
+.jse-highlight .m,
+.jse-highlight .mb,
+.jse-highlight .mf,
+.jse-highlight .mh,
+.jse-highlight .mi,
+.jse-highlight .mo,
+.jse-highlight .il,
+.jse-highlight .kc {
+  color: var(--jp-mirror-editor-number-color, #080);
+}
+
+.jse-highlight .o {
+  color: var(--jp-mirror-editor-operator-color, #aa22ff);
+}
+
+/* YAML keys, XML/HTML tags and attributes, JSON keys */
+.jse-highlight .nt {
+  color: var(--jp-mirror-editor-keyword-color, #008000);
+}
+
+.jse-highlight .na,
+.jse-highlight .nv,
+.jse-highlight .vg,
+.jse-highlight .vi {
+  color: var(--jp-mirror-editor-variable-color, #19177c);
+}
+
+.jse-highlight .nf,
+.jse-highlight .nc,
+.jse-highlight .fm {
+  color: var(--jp-mirror-editor-def-color, #0000ff);
+}
+
+.jse-highlight .cp,
+.jse-highlight .nd,
+.jse-highlight .gh,
+.jse-highlight .gu {
+  color: var(--jp-mirror-editor-meta-color, #aa22ff);
+}
+
+.jse-highlight .err {
+  color: var(--jp-mirror-editor-error-color, #f00);
+}
+
+/* Rendered Markdown. Inside JupyterLab, jp-RenderedHTMLCommon styles it like
+   a Markdown cell; these keep it readable elsewhere. */
+.jse-markdown {
+  padding: 0 4px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.jse-markdown img {
+  max-width: 100%;
+}
+
+.jse-markdown pre {
+  overflow: auto;
+  padding: 6px 8px;
+  background: var(--jse-bg-alt);
+}
+
+.jse-markdown table {
+  border-collapse: collapse;
+}
+
+.jse-markdown th,
+.jse-markdown td {
+  padding: 2px 8px;
+  border: 1px solid var(--jse-border);
+}
+
+.jse-json {
+  font-family: var(--jp-code-font-family, monospace);
+  font-size: 0.9em;
+}
+
+.jse-json details > :not(summary) {
+  margin-left: 14px;
+}
+
+.jse-json summary {
+  cursor: pointer;
+}
+
+.jse-media {
+  max-width: 100%;
+  max-height: 300px;
+  border: 1px solid var(--jse-border);
+}
+
+.jse-recipe {
+  margin-bottom: 10px;
+}
+
+.jse-recipe-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2px;
+  font-weight: 600;
+}
+
+/* In the preview panel and view tabs, the view fills the height and follows
+   resizing:
+   the body is a column, and sections that show content (not the install
+   notice) share the height and scroll inside instead of stopping at a fixed
+   maximum. */
+.jse-preview-panel .jse-dialog-body,
+.jse-view-tab .jse-dialog-body {
+  display: flex;
+  flex-direction: column;
+}
+
+/* The data browser scrolls its table itself. */
+.jse-preview-panel .jse-dialog-body:has(> .jse-query),
+.jse-view-tab .jse-dialog-body:has(> .jse-query) {
+  overflow: hidden;
+}
+
+.jse-preview-panel .jse-section-markdown,
+.jse-view-tab .jse-section-markdown,
+.jse-preview-panel .jse-section-table,
+.jse-view-tab .jse-section-table,
+.jse-preview-panel .jse-section-text,
+.jse-view-tab .jse-section-text,
+.jse-preview-panel .jse-section-tree,
+.jse-view-tab .jse-section-tree,
+.jse-preview-panel .jse-section-media,
+.jse-view-tab .jse-section-media {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 80px;
+  margin-bottom: 0;
+}
+
+.jse-preview-panel .jse-section-title,
+.jse-view-tab .jse-section-title,
+.jse-preview-panel .jse-note,
+.jse-view-tab .jse-note {
+  flex: none;
+}
+
+.jse-preview-panel .jse-markdown,
+.jse-view-tab .jse-markdown,
+.jse-preview-panel .jse-table-wrap,
+.jse-view-tab .jse-table-wrap,
+.jse-preview-panel .jse-text,
+.jse-view-tab .jse-text,
+.jse-preview-panel .jse-json,
+.jse-view-tab .jse-json {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  overflow: auto;
+}
+
+/* Fills the space; large images shrink to fit, small ones keep their size. */
+.jse-preview-panel .jse-media,
+.jse-view-tab .jse-media {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  max-height: none;
+  border: none;
+  object-fit: scale-down;
+  object-position: left top;
+}

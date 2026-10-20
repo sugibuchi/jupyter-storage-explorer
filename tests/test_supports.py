@@ -17,12 +17,12 @@ from jupyter_storage_explorer.formats import (
     Csv,
     DeltaLake,
     FormatSupport,
-    InstallPreview,
+    InstallView,
     Parquet,
-    PreviewLimits,
+    QueryView,
     Requirement,
     SupportChain,
-    Text,
+    ViewLimits,
     create_supports,
     default_formats,
     default_supports,
@@ -36,7 +36,7 @@ from jupyter_storage_explorer.formats.supports import (
     TextByFsspec,
 )
 
-LIMITS = PreviewLimits(max_rows=2)
+LIMITS = ViewLimits(max_display_rows=2)
 
 
 class Missing(Requirement):
@@ -44,7 +44,7 @@ class Missing(Requirement):
     import_name = "not_a_package"
 
 
-def support(fmt=Csv, use=None, capabilities=("preview",), **methods):
+def support(fmt=Csv, use=None, capabilities=("view",), **methods):
     """A support class of ``capabilities``, its methods ``methods``."""
     attributes = {"format": fmt, "use": use, "capabilities": capabilities}
     return type("Fake", (FormatSupport,), {**attributes, **methods})
@@ -145,69 +145,77 @@ class TestOptions:
 
 
 class TestChain:
-    def test_first_installed_previews(self, make_item):
-        missing = support(use=Missing, preview=lambda *a, **k: "missing")
-        first = support(preview=lambda *a, **k: "first")
-        second = support(preview=lambda *a, **k: "second")
+    def view(self, chain, item):
+        return chain.view(Csv(), *item.args, limits=LIMITS)
+
+    def test_first_installed_views(self, make_item):
+        missing = support(use=Missing, view=lambda *a, **k: "missing")
+        first = support(view=lambda *a, **k: "first")
+        second = support(view=lambda *a, **k: "second")
         chain = SupportChain([missing(), first(), second()])
-        assert (
-            chain.preview(Csv(), *make_item("/a.csv", b"").args, limits=LIMITS)
-            == "first"
-        )
+        assert self.view(chain, make_item("/a.csv", b"")) == "first"
 
     def test_not_supported_tries_the_next(self, make_item):
         def refuse(self, *args, **kwargs):
             raise self.NotSupported
 
         chain = SupportChain(
-            [support(preview=refuse)(), support(preview=lambda *a, **k: "next")()]
+            [support(view=refuse)(), support(view=lambda *a, **k: "next")()]
         )
-        assert (
-            chain.preview(Csv(), *make_item("/a.csv", b"").args, limits=LIMITS)
-            == "next"
-        )
+        assert self.view(chain, make_item("/a.csv", b"")) == "next"
 
-    def test_only_its_jobs(self, make_item):
+    def test_only_its_capabilities(self, make_item):
         # A method not in capabilities is never called.
         chain = SupportChain(
             [
-                support(capabilities=(), preview=lambda *a, **k: "not listed")(),
-                support(preview=lambda *a, **k: "listed")(),
+                support(capabilities=(), view=lambda *a, **k: "not listed")(),
+                support(view=lambda *a, **k: "listed")(),
             ]
         )
-        assert (
-            chain.preview(Csv(), *make_item("/a.csv", b"").args, limits=LIMITS)
-            == "listed"
-        )
+        assert self.view(chain, make_item("/a.csv", b"")) == "listed"
 
     def test_install_hint(self, make_item, monkeypatch):
         monkeypatch.setattr(Requirement, "is_installed", lambda self: False)
-        chain = SupportChain(default_supports())
-        hint = chain.preview(Csv(), *make_item("/a.csv", b"a\n").args, limits=LIMITS)
-        assert isinstance(hint, InstallPreview)
+        hint = self.view(SupportChain(default_supports()), make_item("/a.csv", b"a\n"))
+        assert isinstance(hint, InstallView)
         assert hint.options == [["polars"], ["pandas"]]
-        assert not chain.can_query(Csv())
 
-    def test_none_can_preview(self, make_item):
-        with pytest.raises(ValueError, match="cannot be previewed as CSV"):
-            SupportChain([]).preview(
-                Csv(), *make_item("/a.csv", b"").args, limits=LIMITS
-            )
+    def test_none_can_view(self, make_item):
+        with pytest.raises(ValueError, match="cannot be viewed as CSV"):
+            self.view(SupportChain([]), make_item("/a.csv", b""))
 
-    def test_format_subclasses(self, make_item):
+    def test_format_subclasses(self, tmp_path):
+        """A subclass of a format is viewed by its supports."""
         tsv = type("Tsv", (Csv,), {"name": "tsv"})
-        chain = SupportChain(default_supports())
-        assert chain.can_query(tsv())
-        assert not chain.can_query(Text())
+        path = tmp_path / "a.tsv"
+        path.write_text("a\tb\n1\t2\n")
+        view = SupportChain(default_supports()).view(
+            tsv(), *local_item(path).args, limits=LIMITS
+        )
+        assert isinstance(view, QueryView)
+        assert view.data.collect().columns == ["a", "b"]
 
     def test_recipes_of_every_support_installed_or_not(self, make_item, monkeypatch):
         monkeypatch.setattr(Requirement, "is_installed", lambda self: False)
         chain = SupportChain(default_supports())
         recipes = chain.recipes(Csv(), *make_item("/a.csv", b"a\n").args)
-        assert [r.requirements[0].package for r in recipes] == [
-            "polars",
-            "pandas",
-            "pyspark",
+        assert [(r.requirements[0].package, r.title) for r in recipes] == [
+            ("polars", "Load as DataFrame"),
+            ("pandas", "Load as DataFrame"),
+            ("pyspark", "Load as DataFrame"),
+        ]
+
+    def test_recipes_by_title(self, make_item):
+        several = support(
+            capabilities=("recipe",),
+            recipe=lambda *a, **k: {"Load lazily": "lazy", "Load eagerly": "eager"},
+        )
+        recipes = SupportChain([several()]).recipes(
+            Csv(), *make_item("/a.csv", b"").args
+        )
+        assert [(r.title, r.code) for r in recipes] == [
+            ("Load lazily", "lazy"),
+            ("Load eagerly", "eager"),
         ]
 
     def test_recipes_name_their_packages(self, make_item, memfs):
@@ -215,13 +223,19 @@ class TestChain:
         chain = SupportChain(default_supports())
         recipes = chain.recipes(DeltaLake(), *make_item("/t").args)
         packages = [[r.package for r in recipe.requirements] for recipe in recipes]
-        assert packages == [["polars", "deltalake"], ["pyspark", "delta-spark"]]
+        assert packages == [
+            ["polars", "deltalake"],
+            ["polars", "deltalake"],
+            ["pyspark", "delta-spark"],
+        ]
 
-    def test_query(self, tmp_path):
+    def test_query_view(self, tmp_path):
         path = tmp_path / "a.parquet"
         pl.DataFrame({"a": [1, 2]}).write_parquet(path)
-        lf = SupportChain(default_supports()).query(Parquet(), *local_item(path).args)
-        assert lf.collect()["a"].to_list() == [1, 2]
+        view = SupportChain(default_supports()).view(
+            Parquet(), *local_item(path).args, limits=LIMITS
+        )
+        assert view.data.collect()["a"].to_list() == [1, 2]
 
 
 class TestExplorer:
@@ -232,18 +246,20 @@ class TestExplorer:
             fmt=Parquet,
             use=Missing,
             capabilities=("recipe",),
-            recipe=lambda *a, **k: "duck",
+            recipe=lambda *a, **k: {"Load as a duck": "duck"},
         )
         explorer = StorageExplorer(fs=mem_explorer._fs, supports=[duck])
         recipes = explorer._supports.recipes(
             Parquet(), *make_item("/a.parquet", b"").args
         )
-        assert recipes[0].code == "duck"
-        assert len(recipes) == 4  # and the defaults' polars, pandas, pyspark
+        assert (recipes[0].title, recipes[0].code) == ("Load as a duck", "duck")
+        # and the defaults': polars (lazily and eagerly), pandas, pyspark.
+        assert len(recipes) == 5
 
     def test_a_library_given_replaces_the_default_code(self, make_item):
         explorer = StorageExplorer(fs=None, supports=[CsvByPolars()])
         recipes = explorer._supports.recipes(Csv(), *make_item("/a.csv", b"a\n").args)
+        # Its recipes replace the default CsvByPolars': one each.
         assert [r.requirements[0].package for r in recipes] == [
             "polars",
             "pandas",

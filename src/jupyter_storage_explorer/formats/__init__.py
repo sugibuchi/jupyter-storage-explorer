@@ -1,12 +1,12 @@
 """Formats: how explorers detect each kind of data, and handle it with libraries.
 
 ``DataFormat`` (base.py, with the ``Target`` it looks at) detects a format,
-``FormatSupport`` (support.py) handles its data with one library (previews,
-the data browser, recipes), and ``Requirement`` (requirement.py) is a
+``FormatSupport`` (support.py) handles its data with one library (views,
+recipes), and ``Requirement`` (requirement.py) is a
 package one needs. The predefined formats each have a module (delta.py,
 parquet.py, excel.py, text.py, images.py), the predefined supports one per
 library in the ``supports`` package (imported from there), and
-requirements.py has the predefined packages. preview.py has the previews
+requirements.py has the predefined packages. view.py has the views
 supports return, and base.py helpers for the code they generate.
 ``default_formats()`` and ``default_supports()`` (utils.py) create those
 explorers use by default.
@@ -31,16 +31,6 @@ from jupyter_storage_explorer.formats.delta import DeltaLake
 from jupyter_storage_explorer.formats.excel import Excel
 from jupyter_storage_explorer.formats.images import Image
 from jupyter_storage_explorer.formats.parquet import Parquet, ParquetLayout
-from jupyter_storage_explorer.formats.preview import (
-    InstallPreview,
-    MarkdownPreview,
-    MediaPreview,
-    Preview,
-    PreviewLimits,
-    TablePreview,
-    TextPreview,
-    TreePreview,
-)
 from jupyter_storage_explorer.formats.requirement import Requirement, Requirements
 from jupyter_storage_explorer.formats.support import (
     Capability,
@@ -56,6 +46,17 @@ from jupyter_storage_explorer.formats.utils import (
     default_formats,
     default_supports,
 )
+from jupyter_storage_explorer.formats.view import (
+    InstallView,
+    MarkdownView,
+    MediaView,
+    QueryView,
+    TableView,
+    TextView,
+    TreeView,
+    View,
+    ViewLimits,
+)
 
 __all__ = [
     "DEFAULT_FORMATS",
@@ -68,24 +69,25 @@ __all__ = [
     "Excel",
     "FormatSupport",
     "Image",
-    "InstallPreview",
+    "InstallView",
     "Json",
     "JsonLines",
     "Markdown",
-    "MarkdownPreview",
-    "MediaPreview",
+    "MarkdownView",
+    "MediaView",
     "Parquet",
     "ParquetLayout",
-    "Preview",
-    "PreviewLimits",
+    "QueryView",
     "Recipe",
     "Requirement",
     "Requirements",
     "SupportChain",
-    "TablePreview",
+    "TableView",
     "Text",
-    "TextPreview",
-    "TreePreview",
+    "TextView",
+    "TreeView",
+    "View",
+    "ViewLimits",
     "child_names",
     "create_supports",
     "default_formats",

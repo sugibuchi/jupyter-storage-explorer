@@ -1,5 +1,6 @@
-// Preview sections: one renderer per Preview kind of formats/base.py, and the
-// code blocks of "Python code".
+// Views' sections: one renderer per View kind of formats/view.py (all but the
+// data browser's QueryView), for the preview panel and view tabs, and the code
+// blocks of "Python code".
 
 function renderTable(section) {
   const head = h("tr", {}, ...section.columns.map((c) => h("th", { textContent: c })));
@@ -35,8 +36,8 @@ function renderMedia(section) {
 function renderInstall(section) {
   const several = section.options.length > 1;
   const intro = several
-    ? `To preview this ${section.format}, install one of these sets of packages, then preview it again:`
-    : `To preview this ${section.format}, install these packages, then preview it again:`;
+    ? `To view this ${section.format}, install one of these sets of packages, then preview it again:`
+    : `To view this ${section.format}, install these packages, then preview it again:`;
   return h(
     "div",
     { className: "jse-install" },
@@ -119,7 +120,7 @@ function renderSection(section) {
   const box = h("div", { className: `jse-section jse-section-${section.kind}` });
   if (section.title) box.append(h("div", { className: "jse-section-title", textContent: section.title }));
   const renderer = sectionRenderers[section.kind];
-  box.append(renderer ? renderer(section) : h("div", { textContent: `Unknown preview: ${section.kind}` }));
+  box.append(renderer ? renderer(section) : h("div", { textContent: `Unknown view: ${section.kind}` }));
   if (section.note) box.append(h("div", { className: "jse-note", textContent: section.note }));
   return box;
 }
@@ -144,8 +145,8 @@ function codeBlock(title, code) {
   );
 }
 
-// A recipe ({packages, code}) is named after the library it loads with, its
-// first package; one needing no package is plain Python.
+// A recipe ({title, packages, code}) is listed under the library it loads with,
+// its first package; one needing no package is plain Python.
 function recipeLibrary(recipe) {
   return recipe.packages[0] ?? "Python";
 }
@@ -153,7 +154,7 @@ function recipeLibrary(recipe) {
 // Body of the "Python code" dialog for one recipe: the code, and the packages
 // it needs (installing them is left to the user).
 function recipeBlocks(recipe) {
-  const blocks = [codeBlock("Load", recipe.code)];
+  const blocks = [codeBlock(recipe.title, recipe.code)];
   if (recipe.packages.length) {
     blocks.push(h("div", { className: "jse-note", textContent: `Needs ${recipe.packages.join(", ")}` }));
   }

@@ -1,4 +1,4 @@
-"""Previews needing no package: text and code (highlighted), Markdown and
+"""Views needing no package: text and code (highlighted), Markdown and
 JSON from the beginning of the file, and images, which the browser shows."""
 
 from __future__ import annotations
@@ -13,24 +13,24 @@ from pygments.util import ClassNotFound
 
 from jupyter_storage_explorer.formats.base import file_size, head, head_text
 from jupyter_storage_explorer.formats.images import Image
-from jupyter_storage_explorer.formats.preview import (
-    MarkdownPreview,
-    MediaPreview,
-    TextPreview,
-    TreePreview,
-)
 from jupyter_storage_explorer.formats.support import FormatSupport
 from jupyter_storage_explorer.formats.text import Json, Markdown, Text
+from jupyter_storage_explorer.formats.view import (
+    MarkdownView,
+    MediaView,
+    TextView,
+    TreeView,
+)
 
 if TYPE_CHECKING:
     from fsspec import AbstractFileSystem
 
-    from jupyter_storage_explorer.formats.preview import Preview, PreviewLimits
+    from jupyter_storage_explorer.formats.view import View, ViewLimits
     from jupyter_storage_explorer.location import Location
 
 
-def _size_note(fs: AbstractFileSystem, path: str, limits: PreviewLimits) -> str:
-    """The note under a preview of the file's beginning."""
+def _size_note(fs: AbstractFileSystem, path: str, limits: ViewLimits) -> str:
+    """The note under a view of the file's beginning."""
     size = file_size(fs, path)
     total = f" of {size:,} bytes" if size is not None else ""
     return f"First {limits.max_bytes // 1024} KB{total}"
@@ -56,9 +56,9 @@ def _highlight(text: str, language: str | None) -> str | None:
     return result
 
 
-def _text_preview(text: str, language: str | None, note: str = "") -> TextPreview:
+def _text_view(text: str, language: str | None, note: str = "") -> TextView:
     """A text section, highlighted as ``language`` (Pygments' name) if known."""
-    return TextPreview(
+    return TextView(
         text=text, language=language, html=_highlight(text, language), note=note
     )
 
@@ -67,9 +67,9 @@ class TextByPython(FormatSupport):
     """Text and code files, from their beginning, highlighted by their extension."""
 
     format = Text
-    capabilities = ("preview",)
+    capabilities = ("view",)
 
-    def preview(
+    def view(
         self,
         fmt: Text,
         location: Location,
@@ -77,11 +77,11 @@ class TextByPython(FormatSupport):
         path: str,
         is_dir: bool,
         *,
-        limits: PreviewLimits,
-    ) -> Preview:
+        limits: ViewLimits,
+    ) -> View:
         text, truncated = head_text(fs, path, limits.max_bytes)
         note = _size_note(fs, path, limits) if truncated else ""
-        return _text_preview(text, fmt.language(path), note)
+        return _text_view(text, fmt.language(path), note)
 
 
 class MarkdownByPython(FormatSupport):
@@ -89,9 +89,9 @@ class MarkdownByPython(FormatSupport):
     Markdown is a Text format."""
 
     format = Markdown
-    capabilities = ("preview",)
+    capabilities = ("view",)
 
-    def preview(
+    def view(
         self,
         fmt: Markdown,
         location: Location,
@@ -99,20 +99,20 @@ class MarkdownByPython(FormatSupport):
         path: str,
         is_dir: bool,
         *,
-        limits: PreviewLimits,
-    ) -> Preview:
+        limits: ViewLimits,
+    ) -> View:
         text, truncated = head_text(fs, path, limits.max_bytes)
         note = _size_note(fs, path, limits) if truncated else ""
-        return MarkdownPreview(text=text, note=note)
+        return MarkdownView(text=text, note=note)
 
 
 class JsonByPython(FormatSupport):
     """JSON as a tree; as text if it is too large or invalid."""
 
     format = Json
-    capabilities = ("preview",)
+    capabilities = ("view",)
 
-    def preview(
+    def view(
         self,
         fmt: Json,
         location: Location,
@@ -120,16 +120,16 @@ class JsonByPython(FormatSupport):
         path: str,
         is_dir: bool,
         *,
-        limits: PreviewLimits,
-    ) -> Preview:
+        limits: ViewLimits,
+    ) -> View:
         text, truncated = head_text(fs, path, limits.max_bytes)
         if truncated:
             note = f"{_size_note(fs, path, limits)}; too large to show as a tree"
-            return _text_preview(text, "json", note)
+            return _text_view(text, "json", note)
         try:
-            return TreePreview(value=json.loads(text))
+            return TreeView(value=json.loads(text))
         except json.JSONDecodeError as exc:
-            return _text_preview(text, "json", f"Invalid JSON: {exc}")
+            return _text_view(text, "json", f"Invalid JSON: {exc}")
 
 
 class ImageByPython(FormatSupport):
@@ -137,9 +137,9 @@ class ImageByPython(FormatSupport):
     those too large to send through the kernel."""
 
     format = Image
-    capabilities = ("preview",)
+    capabilities = ("view",)
 
-    def preview(
+    def view(
         self,
         fmt: Image,
         location: Location,
@@ -147,16 +147,16 @@ class ImageByPython(FormatSupport):
         path: str,
         is_dir: bool,
         *,
-        limits: PreviewLimits,
-    ) -> Preview:
+        limits: ViewLimits,
+    ) -> View:
         mime = fmt.mime_type(path)
         size = file_size(fs, path)
         if size is not None and size <= limits.max_whole_file_bytes:
-            return MediaPreview(mime=mime, data=head(fs, path, size))
+            return MediaView(mime=mime, data=head(fs, path, size))
         # Too large to send through the kernel: let the browser fetch it, if the
         # storage can issue a temporary link.
         try:
-            return MediaPreview(mime=mime, src=fs.sign(path))
+            return MediaView(mime=mime, src=fs.sign(path))
         except NotImplementedError:
             limit = limits.max_whole_file_bytes // (1024 * 1024)
-            raise ValueError(f"too large to preview (over {limit} MB)") from None
+            raise ValueError(f"too large to view (over {limit} MB)") from None

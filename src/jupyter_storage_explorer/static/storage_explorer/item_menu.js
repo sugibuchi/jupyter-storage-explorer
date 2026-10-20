@@ -1,13 +1,14 @@
 // The right-click menu of items of the list and the tree. Some rows depend
 // on the item's formats, which only the kernel knows ("menu_info"): "Preview
-// as", "Query data" and "Python code", filled in when its reply arrives.
+// as" and "Python code", filled in when its reply arrives, and for folders
+// "Preview" and "View in a new tab", shown then if it has a format.
 
 // Returns itemMenu(targets, withOpen = true): the menu items for one or more
 // items ({path, type, no_url}). The tree passes withOpen = false: clicking a
 // tree folder already opens it.
 function createItemMenu(x) {
   const { model, request } = x;
-  // For the open menu: {path, previewRow, queryTabRow, previewAsRow, previewAsSub, codeRow, codeSub},
+  // For the open menu: {path, previewRow, viewTabRow, previewAsRow, previewAsSub, codeRow, codeSub},
   // the elements to fill when the kernel's "menu_info" reply arrives.
   let menuInfo = null;
 
@@ -26,10 +27,9 @@ function createItemMenu(x) {
     // A folder's rows, hidden until now: shown if it has a format (an error
     // shows in "Python code").
     if (msg.error || msg.formats.length) codeRow.hidden = false;
-    if (!msg.error && msg.formats.length) previewRow.hidden = false;
-    if (!msg.error && msg.query) {
-      previewRow.querySelector(".jse-menu-label").textContent = "Query data";
-      info.queryTabRow.hidden = !x.jupyterlab.canOpenQueryTab();
+    if (!msg.error && msg.formats.length) {
+      previewRow.hidden = false;
+      info.viewTabRow.hidden = !x.jupyterlab.canOpenViewTab();
     }
     // "Preview as" only appears when the item matches more than one format.
     if (!msg.error && msg.formats.length > 1) {
@@ -43,10 +43,25 @@ function createItemMenu(x) {
     } else if (!msg.recipes.length) {
       items = [{ label: "No code for this item", disabled: true }];
     } else {
-      items = msg.recipes.map((recipe) => {
-        const label = `Load with ${recipeLibrary(recipe)}`;
-        return { label, action: () => x.modal.show(label, recipeBlocks(recipe)) };
-      });
+      // A submenu per library (a recipe's first package), its recipes' titles in it.
+      const byLibrary = new Map();
+      for (const recipe of msg.recipes) {
+        const library = recipeLibrary(recipe);
+        if (!byLibrary.has(library)) byLibrary.set(library, []);
+        byLibrary.get(library).push(recipe);
+      }
+      items = [...byLibrary].map(([library, recipes]) => ({
+        label: library,
+        submenu: (sub) =>
+          sub.replaceChildren(
+            ...x.menu.rows(
+              recipes.map((recipe) => ({
+                label: recipe.title,
+                action: () => x.modal.show(`${recipe.title} (${library})`, recipeBlocks(recipe)),
+              })),
+            ),
+          ),
+      }));
     }
     codeSub.replaceChildren(...x.menu.rows(items));
     x.menu.place(); // rows shown above may have pushed it out of the widget
@@ -84,17 +99,16 @@ function createItemMenu(x) {
           label: "Preview",
           icon: "eye",
           hidden: !hasFormat,
-          // Relabelled "Query data" when the kernel says it opens in the data browser.
           ref: (row) => (info.previewRow = row),
           action: () => x.preview.open(single.path),
         },
         {
-          // Shown when the kernel says it opens in the data browser.
-          label: "Query data in new tab",
+          // The same view in a JupyterLab tab of its own (with the launcher's extension).
+          label: "View in a new tab",
           icon: "open-in-new",
-          hidden: true,
-          ref: (row) => (info.queryTabRow = row),
-          action: () => x.jupyterlab.openQueryTab(single.path),
+          hidden: !hasFormat || !x.jupyterlab.canOpenViewTab(),
+          ref: (row) => (info.viewTabRow = row),
+          action: () => x.jupyterlab.openViewTab(single.path),
         },
         {
           label: "Preview as",

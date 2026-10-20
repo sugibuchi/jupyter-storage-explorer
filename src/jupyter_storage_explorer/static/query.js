@@ -1,12 +1,11 @@
-// --- Data browser ("Query data"): pages through a query in the kernel ---
+// --- Data browser: pages through a query in the kernel ---
 // The kernel applies the settings (filters, sort, hidden columns) and returns
-// QUERY_WINDOW rows at a time; pages of QUERY_PAGE rows are shown from that
-// window. The kernel also remembers the settings per dataset, and runs
+// QUERY_PAGES_PER_WINDOW pages of rows at a time; pages of the kernel's
+// "page_rows" rows (ViewLimits.max_display_rows) are shown from that window. The kernel also remembers the settings per dataset, and runs
 // queries on the data itself ("Live") or on rows read into memory ("In
 // memory"; see DataQuery in _query/data_query.py).
 
-const QUERY_WINDOW = 1000;
-const QUERY_PAGE = 100;
+const QUERY_PAGES_PER_WINDOW = 10;
 // Filter types ("op"); the kernel says which apply to each column. "range"
 // has "min" and "max" (both included, either may be empty); "eq" is for
 // booleans; the others with a value have "value".
@@ -100,6 +99,7 @@ function createQueryPanel(host, path, data) {
     // switched (or ""), memory: {rows, cut} in memory mode, live_limit: the
     // most rows a live query gives (or null), max_memory_rows}. See DataQuery.
     mode: data.mode,
+    pageRows: data.page_rows ?? 100, // rows of a page
     start: 0, // first row of the fetched window
     rows: [],
     more: false,
@@ -116,7 +116,7 @@ function createQueryPanel(host, path, data) {
   async function fetchRows(start, page) {
     view.loading = true;
     draw();
-    const reply = await host.request({ type: "query_rows", path, settings: view.settings, offset: start, window: QUERY_WINDOW });
+    const reply = await host.request({ type: "query_rows", path, settings: view.settings, offset: start, window: view.pageRows * QUERY_PAGES_PER_WINDOW });
     if (view.disposed) return;
     view.loading = false;
     if (reply.settings) view.settings = reply.settings;
@@ -197,9 +197,9 @@ function createQueryPanel(host, path, data) {
   function draw() {
     const s = view.settings;
     const columns = view.columns.filter((c) => !s.hidden.includes(c.name));
-    const pageRows = view.rows.slice(view.page * QUERY_PAGE, (view.page + 1) * QUERY_PAGE);
-    const first = view.start + view.page * QUERY_PAGE;
-    const hasNext = (view.page + 1) * QUERY_PAGE < view.rows.length || view.more;
+    const pageRows = view.rows.slice(view.page * view.pageRows, (view.page + 1) * view.pageRows);
+    const first = view.start + view.page * view.pageRows;
+    const hasNext = (view.page + 1) * view.pageRows < view.rows.length || view.more;
     const resettable = Object.keys(s.filters).length > 0 || s.hidden.length > 0;
 
     let status;
@@ -355,11 +355,11 @@ function createQueryPanel(host, path, data) {
   }
 
   function nextPage() {
-    if ((view.page + 1) * QUERY_PAGE < view.rows.length) {
+    if ((view.page + 1) * view.pageRows < view.rows.length) {
       view.page += 1;
       draw();
     } else if (view.more) {
-      fetchRows(view.start + QUERY_WINDOW, 0);
+      fetchRows(view.start + view.pageRows * QUERY_PAGES_PER_WINDOW, 0);
     }
   }
 
@@ -368,7 +368,7 @@ function createQueryPanel(host, path, data) {
       view.page -= 1;
       draw();
     } else if (view.start > 0) {
-      fetchRows(Math.max(0, view.start - QUERY_WINDOW), QUERY_WINDOW / QUERY_PAGE - 1);
+      fetchRows(Math.max(0, view.start - view.pageRows * QUERY_PAGES_PER_WINDOW), QUERY_PAGES_PER_WINDOW - 1);
     }
   }
 

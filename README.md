@@ -28,8 +28,8 @@ result back in code. See [Using the data browser](https://github.com/sugibuchi/j
 - **`DataExplorer`**: page, sort and filter any dataframe; get the result back in code.
 - **Previews** of Delta Lake, Parquet, CSV, JSON, Excel, text and images, with code to load them.
 - **Background file operations** with progress and Cancel; folder operations only in Unsafe mode.
-- **Work in JupyterLab**: open storage files in JupyterLab's own editors and viewers, and save them back; query tables
-  in tabs of their own.
+- **Work in JupyterLab**: open storage files in JupyterLab's own editors and viewers, and save them back; view tables and
+  files in tabs of their own.
 - **Bookmarks**, remembered queries, transfer rules, and a JupyterLab launcher item.
 
 ## Installation

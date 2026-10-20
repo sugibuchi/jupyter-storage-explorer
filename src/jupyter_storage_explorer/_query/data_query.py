@@ -119,6 +119,7 @@ class DataQuery:
         mode: str = "auto",
         max_live_rows: int = 5000,
         max_memory_rows: int = 100_000,
+        page_rows: int = 100,
         fetch: Callable[[nw.LazyFrame, int, int], nw.DataFrame | None] | None = None,
     ) -> None:
         if mode not in MODES:
@@ -128,6 +129,8 @@ class DataQuery:
         self.states = states
         self.max_live_rows = max_live_rows
         self.max_memory_rows = max_memory_rows
+        # Rows of a page of the browser's table.
+        self.page_rows = max(1, page_rows)
         self.fetch = fetch
         # The mode asked for, by the caller or the user: reloading starts in it.
         self.requested = mode
@@ -252,11 +255,13 @@ class DataQuery:
         )
 
     def _view(self, content: dict[str, Any]) -> dict[str, Any]:
-        """The columns, the frontend's settings fitted to them, and the mode."""
+        """The columns, the frontend's settings fitted to them, the mode and
+        the page size."""
         return {
             "columns": columns_info(self.schema),
             "settings": normalize_settings(content.get("settings"), self.schema),
             "mode": self.mode_state(),
+            "page_rows": self.page_rows,
         }
 
     # --- Requests ---

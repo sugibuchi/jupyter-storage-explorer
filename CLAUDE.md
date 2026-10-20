@@ -94,15 +94,17 @@ explorer of exactly its own version (`launcher/hatch_build.py` sets its dependen
     JupyterLab detect changes made elsewhere before saving; notebooks' cells are trusted as jupyter_server trusts them,
     with nbformat's notary in the kernel: untrusted unless signed, signed when saved trusted; tests get their own
     `JUPYTER_DATA_DIR`). Anything else (typed paths, new files, renames) is refused.
-  - `queryTabs.ts`, "Query data in new tab": the kernel opens a `DataExplorer` of the same query
-    (`DataExplorer._of_query`, settings remembered by URL as the preview's) and keeps it in `_query_tabs` until the
-    tab closes (`"query_tab"`, `"query_tab_closed"`); the tab renders it with the output renderers of the notebook or
-    console holding the explorer (ipywidgets ties widgets to that kernel connection), and closes with it or a kernel
-    restart.
+  - `queryTabs.ts`, "View in a new tab": the kernel views the item and opens a widget of the view, a `DataExplorer`
+    of the same query for a `QueryView` (`DataExplorer._of_query`, settings remembered by location as the preview's),
+    else a `ViewTab` (`_view_tab.py`: the view's section, rendered by `static/view_tab.js` with the shared
+    `sections.js`), and keeps it in `_view_tabs` until the tab closes (`"view_tab"`, `"view_tab_closed"`); the tab
+    renders any widget by model id (`openWidget`), with the output renderers of the notebook or console holding the
+    explorer (ipywidgets ties widgets to that kernel connection), and closes with it or a kernel restart.
 
 ## Architecture
 
-**Widgets.** `storage_explorer.py` and `data_explorer.py` are `anywidget.AnyWidget` subclasses. State shared with the
+**Widgets.** `storage_explorer.py` and `data_explorer.py` (and the private `_view_tab.py`) are
+`anywidget.AnyWidget` subclasses. State shared with the
 browser is in `traitlets` tagged `sync=True` (underscore-prefixed). Everything else is custom messages, dispatched by
 `type` in `_on_custom_msg`: requests (`{"type": ..., "rid": ...}`, handled by `_requests()`) are answered with
 `{"type": "reply", "rid": ..., ...}`; notices (`_notices()`) are not, their effects showing in the traits (or, for
@@ -118,18 +120,19 @@ data browser's replies and on `_preview` changes, not while one loads).
 on the class itself), the locations of paths (`_location_of`, from its `MapperChain`; `_url`, its URL; `_location_reply`, what the
 frontend gets) and the fsspec calls. Its features are mixins in `_explorer/`,
 listed before `AnyWidget` in its bases, which only hold methods: `FoldersMixin` (`folders.py`: the list and the tree),
-`PreviewsMixin` (`previews.py`: previews, the data browser, query tabs, the right-click menu's formats),
+`PreviewsMixin` (`previews.py`: previews, the data browser, view tabs, the right-click menu's formats),
 `BookmarksMixin`, `JupyterLabFilesMixin` (`jupyterlab.py`), `JobsMixin` (`jobs.py`: running file operations as jobs,
 following what they change) and `FileRequestsMixin` (`requests.py`: the requests for file operations). What they share
 is in `_explorer/common.py` (`Storage`, `open_storage`, `within_top`, `error_text`, `explorers`).
 
 **Frontend.** Plain ES modules in `static/`, no bundler. anywidget cannot import neighbouring files, so `_static.esm()`
-concatenates `icons.js` + `common.js` + `query.js` + the widget's parts (`static/<widget>/*.js`, if any) +
-`<widget>.js` (all but the last only define functions and constants; the widget's file has `render` and the
-`export`), and likewise for CSS (without parts). The storage explorer's parts are a feature each (`tree.js`,
+concatenates `icons.js` + `common.js` + `query.js` + `sections.js` (views' sections, for the preview panel and
+view tabs) + the widget's parts (`static/<widget>/*.js`, if any) + `<widget>.js` (all but the last only define
+functions and constants; the widget's file has `render` and the `export`), and likewise for CSS (`sections.css`;
+without parts). The storage explorer's parts are a feature each (`tree.js`,
 `list.js`, `preview.js`, `item_menu.js`, `operations.js` with the clipboard, `transfers.js` (drag and drop, uploads,
 downloads), `jupyterlab.js`, `properties.js`, `toolbar.js` with unsafe mode and bookmarks, `jobs.js`, `overlays.js`
-(busy screen, modal, menus), `sections.js` (preview sections), `util.js`): a `createX(x)` returning its elements and
+(busy screen, modal, menus), `util.js`): a `createX(x)` returning its elements and
 functions. `x` is the explorer, made in `render()`: what the features share (`model`, `el`, `request`, `ask`,
 `flash`, `navigate`, ...) and the features themselves (`x.list`, `x.preview`, ...), used when needed, not when made,
 so their order rarely matters. Third-party code is vendored in `static/vendor/`. File names, paths and messages naming files are shown through
@@ -249,8 +252,8 @@ drags from others' before the drop by `explorer`) and
 `"jupyter-storage-explorer.explorers"` (the explorers on the page by id, with the `download` the launcher's
 `download.ts` calls on a drop onto JupyterLab's file browser); the launcher's `files.ts` and `queryTabs.ts` put their
 functions (`canOpen`, `open`,
-`openWidget`) under `"jupyter-storage-explorer.jupyterlab"`, which the explorer offers ("Open in JupyterLab", "Query
-data in new tab") only when they are there. Explorers on a page may be in different kernels (notebooks). The
+`openWidget`) under `"jupyter-storage-explorer.jupyterlab"`, which the explorer offers ("Open in JupyterLab", "View
+in a new tab") only when they are there. Explorers on a page may be in different kernels (notebooks). The
 clipboard names the explorer and storage copied from (`{name}`), and each file's path and location (its JSON, from
 the `"locations"` request: `_location_reply`): an explorer of the same kernel is found in `explorers` (by
 `_explorer_id`) and its filesystem object used as it is (`_paste_sources`); otherwise the files' locations are found
@@ -290,7 +293,7 @@ unfiltered.
 per library of the predefined supports in `supports/` (`polars.py`, `pandas.py`, `pyspark.py`, `fsspec.py`,
 `pillow.py`; `python.py` for those needing no package; named after the libraries, which they import only inside
 methods; exported by `formats.supports`, not `formats`); the predefined packages in `requirements.py`, the
-previews in `preview.py` (tables made from dataframes in each library's support module, their notes in `frames.py`), the generated code's helpers in `base.py`
+views in `view.py` (`View`s, `ViewLimits`; tables made from dataframes in each library's support module, their notes in `frames.py`), the generated code's helpers in `base.py`
 (`snippet_options`, `format_kwargs`, `library_url`: a location as most libraries read it, a local
 file's plain path), and the defaults in `utils.py` (`DEFAULT_FORMATS`,
 `DEFAULT_SUPPORTS`, `create_supports`). A format only detects; a support handles one format's data with one library,
@@ -310,34 +313,39 @@ so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
   (`Csv.separator`, `Text.language`, `Image.mime_type`, `Parquet.data_url`, ...).
 - `FormatSupport` subclasses declare `format` (matched with `isinstance`, so subclasses too: `MarkdownByPython` comes
   before `TextByPython`), `use` (the library's `Requirement`, None for none; names its code, `library()`, and its
-  options), `additional_requirements`, and `capabilities`, the names of the methods it implements (`"preview"`,
-  `"query"`, `"recipe"`; `Capability`; not "jobs" or "tasks", which are file operations here): the explorer reads only
+  options), `additional_requirements`, and `capabilities`, the names of the methods it implements (`"view"`,
+  `"recipe"`; `Capability`; not "jobs" or "tasks", which are file operations here): the explorer reads only
   `capabilities`, so a method not listed is never called (no runtime check of that, by design: users are expected to
   generate supports with AI from the written rules in `FormatSupport`'s docstring, kept by
   `test_capabilities_are_the_methods_implemented` for the defaults). Each method gets the detected format object first, then the item: its location (for
   libraries doing their own I/O and for the code: `library_url(location)`; Spark's `spark_url(location.url)`, in `supports/pyspark.py`), the explorer's
   fsspec filesystem and the item's path in it (to read it through the explorer, with its credentials), and `is_dir`;
-  `preview`'s `limits` is keyword-only. Any may raise `FormatSupport.NotSupported`
+  `view`'s `limits` (`ViewLimits`) is keyword-only. Any may raise `FormatSupport.NotSupported`
   for an item, and the next support is tried. Options are keyword-only `__init__` arguments, no `**kwargs`. Class
   names are `<Format>By<Library>`.
 - `SupportChain` (the explorer's `_supports`: `supports=` then `StorageExplorer.default_supports()`, i.e.
-  `DEFAULT_SUPPORTS`, ordered format by format, most preferred first) calls them: `preview` and `query` of the
-  first support installed for the format (`installed`; `can_query`), `recipes` with the first support with `"recipe"` of each library (so one given replaces the default's),
-  installed or not (the code may run elsewhere).
-- `preview(fmt, location, fs, path, is_dir, *, limits)`: one `Preview` dataclass (`TablePreview`, `TextPreview`, `TreePreview`,
-  `MediaPreview`...) that the frontend renders by `kind` (sent as the one item of the preview's `"sections"`). With no support installed, the chain returns an
-  `InstallPreview` naming the missing packages per support, so supports never check.
-- `query(fmt, location, fs, path, is_dir)`: any dataframe narwhals supports, for the data browser (`_new_query`,
-  which keeps the filesystem it was opened with for reloads).
+  `DEFAULT_SUPPORTS`, ordered format by format, most preferred first) calls them: `view` of the first support
+  installed for the format (`installed`), `recipes` with the first support with `"recipe"` of each library (so one
+  given replaces the default's), installed or not (the code may run elsewhere).
+- `view(fmt, location, fs, path, is_dir, *, limits)`: one `View` dataclass of `view.py`. A `QueryView` (`data`: any
+  dataframe narwhals supports, best lazy) opens the data browser (`_new_query`: the first view's data, then the view
+  again on reload, with the filesystem it was opened with); whether an item opens in the data browser is known only
+  once viewed, so the menu offers "Preview" and "View in a new tab" for whatever has a format. The others
+  (`TableView`, `TextView`, `TreeView`, `MarkdownView`, `MediaView`...) are sent as the one item of the preview's
+  `"sections"` (`section()`), which the frontend renders by `kind`. With no support installed, the chain returns an
+  `InstallView` naming the missing packages per support, so supports never check. `ViewLimits`: `max_bytes`,
+  `max_display_rows` (table views' rows and the data browser's page size, sent as `"page_rows"`),
+  `max_whole_file_bytes`, `max_live_rows` and `max_memory_rows` (the data browser's; `StorageExplorer(view_limits=)`).
   `_query/data_query.py`'s `DataQuery` does filters, sort and paging as narwhals expressions, either on the data itself
   ("live") or on rows read into memory (queried with polars); behaviour such as regex syntax then follows the data's
   library.
-- `recipe(fmt, location, fs, path, is_dir)`: the code (`fs` and `path` only for what the code must know of the
-  file, e.g. a CSV file's separator) of the "Python code" snippet (a `str`; the chain makes the `Recipe`, adding
-  the support's `requirements()`: the frontend gets their packages, names the recipe after the first, "Load with
-  polars", and lists them under the code), run as it is in a new notebook: its imports (`import polars as
-  pl`, whatever the notebook has), and a Spark session (`SparkSession.builder.getOrCreate()`). It fills a class
-  attribute `recipe_template`, written just before the method, an indented `inspect.cleandoc("""...""")`, with
+- `recipe(fmt, location, fs, path, is_dir)`: the code of "Python code", by title, e.g. `{"Load as LazyFrame": ...,
+  "Load as DataFrame": ...}` (`fs` and `path` only for what the code must know of the file, e.g. a CSV file's
+  separator; titles never name the library: the chain makes a `Recipe` of each, adding the support's
+  `requirements()`, and the frontend groups them in a submenu per library, the first package, and lists the packages
+  under the code), run as it is in a new notebook: its imports (`import polars as
+  pl`, whatever the notebook has), and a Spark session (`SparkSession.builder.getOrCreate()`). It fills class
+  attributes `*_template` (e.g. `lazy_frame_template`), written just before the method, an indented `inspect.cleandoc("""...""")`, with
   `str.format`: `{url}` (a repr) and `{kwargs}` (`format_kwargs`, the options; empty when none). Installing packages and
   configuring access to the storage (credentials, Spark's setup for Delta Lake) depend on the environment, so they are
   left to the user. `Requirement`s (`requirements.py`) only say what a support needs (`package`, `import_name`,

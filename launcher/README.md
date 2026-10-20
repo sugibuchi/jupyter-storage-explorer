@@ -13,7 +13,7 @@ It also integrates every Storage Explorer, in its tab or in a notebook, with Jup
 - **Drag and drop**: drag files onto JupyterLab's file browser to download them there.
 - **Open files in a tab**: double-click a file to open it in JupyterLab's own editor or viewer; **Save** writes it back
   to the storage.
-- **Query data in a tab**: open the data browser in a tab of its own.
+- **View in a new tab**: open a table in the data browser, or another view (text, an image, ...), in a tab of its own.
 
 ## Installation
 

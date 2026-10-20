@@ -40,9 +40,9 @@ from jupyter_storage_explorer.formats import (
     DEFAULT_SUPPORTS,
     DataFormat,
     FormatSupport,
-    PreviewLimits,
     SupportChain,
     Text,
+    ViewLimits,
     create_supports,
     default_formats,
 )
@@ -55,6 +55,7 @@ if TYPE_CHECKING:
     from fsspec import AbstractFileSystem
 
     from jupyter_storage_explorer._query.data_query import DataQuery
+    from jupyter_storage_explorer._view_tab import ViewTab
     from jupyter_storage_explorer.data_explorer import DataExplorer
     from jupyter_storage_explorer.filesystems.mapper import FileSystemMapper
     from jupyter_storage_explorer.filesystems.operation import FileSystemOperations
@@ -62,10 +63,6 @@ if TYPE_CHECKING:
 
     # A request's handler: the reply to its content (see _requests).
     _Handler = Callable[[dict[str, Any]], dict[str, Any]]
-
-# JavaScript libraries the frontend may ask for (see static/vendor/README.md);
-# only these names are served.
-_VENDOR_FILES = frozenset({"marked.esm.js", "purify.es.mjs"})
 
 # The data browser's requests, after which query_result() may have changed.
 _QUERY_REQUESTS = frozenset(
@@ -87,8 +84,7 @@ class StorageExplorer(
 ):
     """Browse any fsspec-supported storage with a directory tree and a file list.
 
-    Preview opens a preview below the list; tables open in a data browser
-    ("Query data"). Double-clicking a file opens it in JupyterLab's own
+    Preview opens a preview below the list; tables open in a data browser. Double-clicking a file opens it in JupyterLab's own
     editors and viewers, with the launcher's extension, else previews it. The
     right-click menu offers "Python code" to load the data, downloads, "Copy",
     "Cut" and "Paste" (also between storages and explorers, in this notebook
@@ -143,8 +139,10 @@ class StorageExplorer(
         "delta": {"use_pyarrow": True}}}``: each support class gets those of
         its library (its ``use``'s package) that it takes (see "Format
         options" in docs/storage-explorer.md).
-    preview_limits : PreviewLimits, optional
-        How much of a file previews read and show (bytes, rows).
+    view_limits : ViewLimits, optional
+        How much views read and show, in the preview panel and in tabs:
+        bytes and rows of a file's beginning, the data browser's page size and
+        rows in memory (see `formats.ViewLimits`).
     max_upload_bytes : int or None, default 10 MB
         Largest file uploaded from the user's computer; None for no limit.
         Files dragged from JupyterLab's file browser are not limited.
@@ -276,13 +274,9 @@ class StorageExplorer(
     # Format name of the current directory itself (e.g. "delta"), or ""
     # if it cannot be previewed; enables the Preview button when nothing is selected.
     _current_format = traitlets.Unicode().tag(sync=True)
-    # Whether the current directory can be queried in the data browser
-    # ("Query data" instead of "Preview").
-    _current_query = traitlets.Bool().tag(sync=True)
     # Format of the single selected item, for the Preview button's label:
-    # {"path", "format", "query"} ("format" is "" if it cannot be previewed;
-    # "query": whether it opens in the data browser); empty unless exactly one
-    # item is selected. The path lets the frontend ignore an answer for a
+    # {"path", "format"} ("format" is "" if it cannot be previewed); empty
+    # unless exactly one item is selected. The path lets the frontend ignore an answer for a
     # previous selection.
     _selected_format = traitlets.Dict().tag(sync=True)
     # Largest file that can be uploaded from the user's computer (bytes), or
@@ -322,7 +316,7 @@ class StorageExplorer(
         formats: Sequence[DataFormat] | None = None,
         supports: Sequence[type[FormatSupport] | FormatSupport] | None = None,
         format_options: Mapping[str, Mapping[str, Mapping[str, Any]]] | None = None,
-        preview_limits: PreviewLimits | None = None,
+        view_limits: ViewLimits | None = None,
         max_upload_bytes: int | None = 10 * 1024 * 1024,
         download_to_jupyterlab_path: str = ".",
         states: ExplorerStates | str | os.PathLike[str] | None = None,
@@ -367,9 +361,9 @@ class StorageExplorer(
         self._listing_version = 0
         # Data browser: path -> the data being queried.
         self._queries: dict[str, DataQuery] = {}
-        # Data browsers in tabs of their own ("query_tab"): model id -> widget,
+        # Views in tabs of their own ("view_tab"): model id -> widget,
         # kept here while the tab is open.
-        self._query_tabs: dict[str, DataExplorer] = {}
+        self._view_tabs: dict[str, DataExplorer | ViewTab] = {}
         # The launcher's settings file and the function creating it (see
         # _offer_settings); None in notebooks.
         self._settings_file: tuple[str, Callable[[], Any]] | None = None
@@ -383,7 +377,7 @@ class StorageExplorer(
                 [f.name for f in self._formats],
             )
         )
-        self._preview_limits = preview_limits or PreviewLimits()
+        self._view_limits = view_limits or ViewLimits()
         # Files being received from the user's computer (see _jobs/incoming.py).
         self._incoming = IncomingFiles(max_upload_bytes)
         # Name -> (filesystem, top-level path), and the folder each was left in.
@@ -641,7 +635,7 @@ class StorageExplorer(
 
         As ``DataExplorer.result()``: built on the data itself, so it covers
         all of it, also after In memory mode, where the browser showed the
-        first rows only. Query data in a new tab is not the preview panel's:
+        first rows only. Data viewed in a new tab is not the preview panel's:
         its ``DataExplorer`` gives its own.
 
         Parameters
@@ -757,7 +751,7 @@ class StorageExplorer(
         message's binary pieces (a file's piece, for "upload_chunk")."""
         return {
             "menu_info": lambda c: self._menu_info(c["path"]),
-            "vendor": lambda c: self._vendor_source(c["name"]),
+            "vendor": lambda c: _static.vendor_source(c["name"]),
             # The listing has no locations (see _make_listing): asked for
             # when copying, and for the list's tooltips.
             "locations": lambda c: {
@@ -770,7 +764,7 @@ class StorageExplorer(
             "query_save": self._query_request,
             "query_reload": self._query_request,
             "query_mode": self._query_request,
-            "query_tab": self._query_tab_request,
+            "view_tab": self._view_tab_request,
             # Bookmarks.
             "bookmarks": lambda c: self._bookmark_list(),
             "bookmark_add": lambda c: self._add_bookmark(c["path"]),
@@ -807,15 +801,7 @@ class StorageExplorer(
             "job_cancel": self._cancel_job,
             # Files cut here were pasted in another explorer (told by its frontend).
             "changed": lambda c: self._sources_changed(c["filesystem"], c["paths"]),
-            "query_tab_closed": lambda c: self._query_tab_closed(c["model_id"]),
-        }
-
-    def _vendor_source(self, name: str) -> dict[str, Any]:
-        """Source of a bundled library, e.g. marked for Markdown previews."""
-        if name not in _VENDOR_FILES:
-            return {"error": f"unknown library {name!r}"}
-        return {
-            "source": (_static.STATIC / "vendor" / name).read_text(encoding="utf-8")
+            "view_tab_closed": lambda c: self._view_tab_closed(c["model_id"]),
         }
 
     # --- The folder shown and the selection, set by the frontend (here, as
@@ -844,7 +830,6 @@ class StorageExplorer(
         return {
             "path": path,
             "format": formats[0].name if formats else "",
-            "query": bool(formats) and self._supports.can_query(formats[0]),
         }
 
     @traitlets.observe("_preview")
