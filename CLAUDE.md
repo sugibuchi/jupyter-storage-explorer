@@ -72,7 +72,10 @@ explorer of exactly its own version (`launcher/hatch_build.py` sets its dependen
   (`StorageExplorer`'s mixins, with `states.py`, `listing.py` and `jupyterlab_files.py`), `_jobs/` (`tasks.py`:
   `FileTasks`; `runner.py`: `JobRunner`; `incoming.py`, `properties.py`, `transfer_policy.py`) and `_query/`
   (`filters.py`, `settings.py`: `QuerySettings`, `QueryState`; `data_query.py`: `DataQuery`, `fetch_rows`). Users import
-  from the top level, `filesystems`, `formats` and `formats.supports` only.
+  from the top level, `filesystems`, `formats` and `formats.supports` only, whose `__all__` are the public API:
+  what users construct, subclass, call or annotate with. The explorer's machinery (`SupportChain`, `Recipe`,
+  `InstallView`, `OperationChain`, `detect`, `matching_formats`, the `DEFAULT_*` tuples) stays out of them,
+  imported from its modules by the package and the tests.
 - `jupyter-storage-explorer-launcher` (`launcher/`): a JupyterLab launcher item opening a tab whose kernel runs
   `launch()`. It merges every `storage-explorer/launcher.py` in Jupyter's config paths as layers, system to user
   (their `filesystems()`, `formats()`, `supports()`, `format_options()` (merged by library, format, then option), `operations()`, `filesystem_mappers()`, `transfer_policy()`, `parameters()`;
@@ -371,7 +374,7 @@ so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
 
 **Format options.** `format_options` is `{library: {format name or "*": {option: value}}}` (`SupportChain`,
 `FormatOptions`): a support gets its library's (`engine.package`) options for `"*"`, then for its `format.name`, only
-those its `options_model` has (`option_names()`), as an `options_model` object passed to each of its methods. An entry
+those its `options_model` has (`_option_names()`), as an `options_model` object passed to each of its methods. An entry
 may instead be a function of the item's `Location` returning the dict (options per storage, e.g. by
 `account_name`): `SupportChain.options_of(support, location)` calls it at each view and recipe, for the support
 called only, and checks what it returns then (format names are checked at once). The launcher merges layers option

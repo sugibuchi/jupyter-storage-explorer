@@ -13,17 +13,13 @@ from items import local_item
 from jupyter_storage_explorer import StorageExplorer
 from jupyter_storage_explorer.filesystems import AbfsLocation
 from jupyter_storage_explorer.formats import (
-    DEFAULT_FORMATS,
-    DEFAULT_SUPPORTS,
     Capability,
     Csv,
     DeltaLake,
     FormatSupport,
-    InstallView,
     Parquet,
     PythonPackage,
     QueryView,
-    SupportChain,
     SupportOptions,
     ViewLimits,
     default_formats,
@@ -31,6 +27,7 @@ from jupyter_storage_explorer.formats import (
     secret_dict_field,
     secret_field,
 )
+from jupyter_storage_explorer.formats.support import SupportChain
 from jupyter_storage_explorer.formats.supports import (
     CsvByPandas,
     CsvByPolars,
@@ -45,6 +42,8 @@ from jupyter_storage_explorer.formats.supports import (
     TextByFsspec,
     TextByPython,
 )
+from jupyter_storage_explorer.formats.utils import DEFAULT_FORMATS, DEFAULT_SUPPORTS
+from jupyter_storage_explorer.formats.view import InstallView
 
 LIMITS = ViewLimits(max_display_rows=2)
 

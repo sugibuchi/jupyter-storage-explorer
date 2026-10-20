@@ -22,22 +22,14 @@ from jupyter_storage_explorer.formats.support import (
     Capability,
     FormatOptions,
     FormatSupport,
-    Recipe,
-    SupportChain,
     SupportOptions,
     format_kwargs,
     secret_dict_field,
     secret_field,
 )
 from jupyter_storage_explorer.formats.text import Csv, Json, JsonLines, Markdown, Text
-from jupyter_storage_explorer.formats.utils import (
-    DEFAULT_FORMATS,
-    DEFAULT_SUPPORTS,
-    default_formats,
-    default_supports,
-)
+from jupyter_storage_explorer.formats.utils import default_formats, default_supports
 from jupyter_storage_explorer.formats.view import (
-    InstallView,
     MarkdownView,
     MediaView,
     QueryView,
@@ -49,8 +41,6 @@ from jupyter_storage_explorer.formats.view import (
 )
 
 __all__ = [
-    "DEFAULT_FORMATS",
-    "DEFAULT_SUPPORTS",
     "FILE_ICONS",
     "Capability",
     "Csv",
@@ -60,7 +50,6 @@ __all__ = [
     "FormatOptions",
     "FormatSupport",
     "Image",
-    "InstallView",
     "ItemContext",
     "Json",
     "JsonLines",
@@ -71,8 +60,6 @@ __all__ = [
     "ParquetLayout",
     "PythonPackage",
     "QueryView",
-    "Recipe",
-    "SupportChain",
     "SupportOptions",
     "TableView",
     "Text",

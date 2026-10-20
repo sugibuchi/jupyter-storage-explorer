@@ -16,7 +16,6 @@ from jupyter_storage_explorer.formats import (
     DeltaLake,
     Excel,
     Image,
-    InstallView,
     Json,
     JsonLines,
     Markdown,
@@ -25,7 +24,6 @@ from jupyter_storage_explorer.formats import (
     Parquet,
     PythonPackage,
     QueryView,
-    SupportChain,
     TableView,
     Text,
     TextView,
@@ -34,6 +32,7 @@ from jupyter_storage_explorer.formats import (
     default_supports,
 )
 from jupyter_storage_explorer.formats.packages import Pillow
+from jupyter_storage_explorer.formats.support import SupportChain
 from jupyter_storage_explorer.formats.supports import (
     CsvByPandas,
     DeltaLakeByPolars,
@@ -44,6 +43,7 @@ from jupyter_storage_explorer.formats.supports import (
     ParquetByPandas,
 )
 from jupyter_storage_explorer.formats.supports.pyspark import spark_url
+from jupyter_storage_explorer.formats.view import InstallView
 
 CHAIN = SupportChain(default_supports())
 

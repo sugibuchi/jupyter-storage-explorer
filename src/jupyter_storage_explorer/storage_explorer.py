@@ -30,22 +30,21 @@ from jupyter_storage_explorer._jobs.transfer_policy import TransferPolicy
 from jupyter_storage_explorer.filesystems import (
     LocalLocation,
     MapperChain,
-    OperationChain,
     default_mappers,
 )
 from jupyter_storage_explorer.filesystems import (
     default_operations as _default_operations,
 )
+from jupyter_storage_explorer.filesystems.operation import OperationChain
 from jupyter_storage_explorer.formats import (
-    DEFAULT_SUPPORTS,
     DataFormat,
     FormatSupport,
-    SupportChain,
     Text,
     ViewLimits,
     default_formats,
 )
-from jupyter_storage_explorer.formats.utils import format_icons
+from jupyter_storage_explorer.formats.support import SupportChain
+from jupyter_storage_explorer.formats.utils import DEFAULT_SUPPORTS, format_icons
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
@@ -451,8 +450,9 @@ class StorageExplorer(
         Returns
         -------
         list of FormatSupport classes or objects
-            By default ``jupyter_storage_explorer.formats.DEFAULT_SUPPORTS``:
-            polars, pandas, Spark, fsspec and Pillow for the default formats,
+            By default the classes of
+            ``jupyter_storage_explorer.formats.default_supports()``: polars,
+            pandas, Spark, fsspec and Pillow for the default formats,
             and the previews needing no package (text, JSON, images). Each
             gets its options from ``format_options``.
         """

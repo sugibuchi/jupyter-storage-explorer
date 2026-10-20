@@ -14,11 +14,11 @@ from jupyter_storage_explorer._view_tab import ViewTab
 from jupyter_storage_explorer.data_explorer import DataExplorer
 from jupyter_storage_explorer.formats import (
     PythonPackage,
-    SupportChain,
     TableView,
     TextView,
     ViewLimits,
 )
+from jupyter_storage_explorer.formats.support import SupportChain
 from jupyter_storage_explorer.formats.supports import CsvByPandas, CsvByPolars
 
 

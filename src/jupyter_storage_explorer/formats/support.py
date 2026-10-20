@@ -316,7 +316,7 @@ class FormatSupport:
         return cls.engine.package if cls.engine is not None else "python"
 
     @classmethod
-    def option_names(cls) -> frozenset[str]:
+    def _option_names(cls) -> frozenset[str]:
         """The options it takes: the fields of ``options_model``."""
         return frozenset(f.name for f in dataclasses.fields(cls.options_model))
 
@@ -474,7 +474,7 @@ class SupportChain:
                     self._format_names,
                 )
             merged.update(values or {})
-        taken = support.option_names()
+        taken = support._option_names()
         return support.options_model(**{k: v for k, v in merged.items() if k in taken})
 
     def of(self, fmt: DataFormat, capability: Capability) -> list[FormatSupport]:
@@ -592,7 +592,7 @@ def _check_format_options(
     taken: set[str] = set()
     for support in supports:
         if name in (ALL_FORMATS, support.format.name):
-            taken |= support.option_names()
+            taken |= support._option_names()
     unknown = values.keys() - taken
     if unknown:
         raise ValueError(
