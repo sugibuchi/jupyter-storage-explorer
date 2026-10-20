@@ -290,7 +290,7 @@ unfiltered.
 per library of the predefined supports in `supports/` (`polars.py`, `pandas.py`, `pyspark.py`, `fsspec.py`,
 `pillow.py`; `python.py` for those needing no package; named after the libraries, which they import only inside
 methods; exported by `formats.supports`, not `formats`); the predefined packages in `requirements.py`, the
-previews in `preview.py` (tables from dataframes in `frames.py`), the generated code's helpers in `base.py`
+previews in `preview.py` (tables made from dataframes in each library's support module, their notes in `frames.py`), the generated code's helpers in `base.py`
 (`snippet_options`, `format_kwargs`, `library_url`: a location as most libraries read it, a local
 file's plain path), and the defaults in `utils.py` (`DEFAULT_FORMATS`,
 `DEFAULT_SUPPORTS`, `create_supports`). A format only detects; a support handles one format's data with one library,

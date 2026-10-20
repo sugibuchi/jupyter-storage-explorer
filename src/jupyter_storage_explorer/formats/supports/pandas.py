@@ -6,6 +6,7 @@ import io
 from inspect import cleandoc
 from typing import TYPE_CHECKING, Any
 
+from jupyter_storage_explorer._json import jsonable
 from jupyter_storage_explorer.formats.base import (
     format_kwargs,
     head_text,
@@ -15,8 +16,9 @@ from jupyter_storage_explorer.formats.base import (
     snippet_options,
 )
 from jupyter_storage_explorer.formats.excel import Excel
-from jupyter_storage_explorer.formats.frames import pandas_table, rows_note, with_sheets
+from jupyter_storage_explorer.formats.frames import rows_note, with_sheets
 from jupyter_storage_explorer.formats.parquet import Parquet
+from jupyter_storage_explorer.formats.preview import TablePreview
 from jupyter_storage_explorer.formats.requirements import Openpyxl, Pandas, PyArrow
 from jupyter_storage_explorer.formats.support import FormatSupport
 from jupyter_storage_explorer.formats.text import Csv, Json, JsonLines
@@ -31,6 +33,18 @@ if TYPE_CHECKING:
 
 # Data files read for a directory preview: enough for the first rows.
 _PREVIEW_FILES = 10
+
+
+def _table(df: Any, **kwargs: Any) -> TablePreview:
+    """A pandas DataFrame as a table preview."""
+    # Object dtype makes NaN/NaT/NA replaceable with None.
+    cells = df.astype(object).where(df.notna(), None)
+    return TablePreview(
+        columns=[str(c) for c in df.columns],
+        rows=[[jsonable(v) for v in row] for row in cells.itertuples(index=False)],
+        dtypes=[str(t) for t in df.dtypes],
+        **kwargs,
+    )
 
 
 class _PandasByUrl(FormatSupport):
@@ -70,7 +84,7 @@ class CsvByPandas(_PandasByUrl):
             nrows=limits.max_rows,
         )
         more = truncated or len(df) == limits.max_rows
-        return pandas_table(df, note=rows_note(len(df), more))
+        return _table(df, note=rows_note(len(df), more))
 
     recipe_template = cleandoc("""
         import pandas as pd
@@ -113,7 +127,7 @@ class JsonLinesByPandas(_PandasByUrl):
         text, truncated = head_text(fs, path, limits.max_bytes)
         df = pd.read_json(io.StringIO(text), lines=True, nrows=limits.max_rows)
         more = truncated or len(df) == limits.max_rows
-        return pandas_table(df, note=rows_note(len(df), more, "records"))
+        return _table(df, note=rows_note(len(df), more, "records"))
 
     recipe_template = cleandoc("""
         import pandas as pd
@@ -184,7 +198,7 @@ class ExcelByPandas(_PandasByUrl):
         # One extra row tells whether there are more.
         df = workbook.parse(name, nrows=limits.max_rows + 1)
         note = rows_note(min(len(df), limits.max_rows), len(df) > limits.max_rows)
-        return pandas_table(
+        return _table(
             df.head(limits.max_rows),
             title=name,
             note=with_sheets(note, workbook.sheet_names),
@@ -246,7 +260,7 @@ class ParquetByPandas(_PandasByUrl):
         else:
             total = dataset.count_rows()
             note = rows_note(len(df), len(df) < total, total=total)
-        return pandas_table(df, note=note)
+        return _table(df, note=note)
 
     recipe_template = cleandoc("""
         import pandas as pd

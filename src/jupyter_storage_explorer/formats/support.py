@@ -5,7 +5,6 @@ are in supports/, a module per library: polars.py, pandas.py, ...)."""
 
 from __future__ import annotations
 
-import inspect
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, TypeAlias
 
@@ -265,13 +264,6 @@ class FormatSupport:
             By default, or for an item it has no code for.
         """
         raise self.NotSupported
-
-
-def support_options(cls: type[FormatSupport]) -> frozenset[str]:
-    """The options a support class takes: its ``__init__``'s keyword-only
-    arguments."""
-    parameters = inspect.signature(cls.__init__).parameters.values()
-    return frozenset(p.name for p in parameters if p.kind is p.KEYWORD_ONLY)
 
 
 class SupportChain:

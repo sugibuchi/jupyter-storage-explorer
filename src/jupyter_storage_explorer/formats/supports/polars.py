@@ -6,6 +6,7 @@ import io
 from inspect import cleandoc
 from typing import TYPE_CHECKING, Any
 
+from jupyter_storage_explorer._json import jsonable
 from jupyter_storage_explorer.formats.base import (
     format_kwargs,
     head_text,
@@ -16,8 +17,9 @@ from jupyter_storage_explorer.formats.base import (
 )
 from jupyter_storage_explorer.formats.delta import DeltaLake
 from jupyter_storage_explorer.formats.excel import Excel
-from jupyter_storage_explorer.formats.frames import polars_table, rows_note, with_sheets
+from jupyter_storage_explorer.formats.frames import rows_note, with_sheets
 from jupyter_storage_explorer.formats.parquet import Parquet
+from jupyter_storage_explorer.formats.preview import TablePreview
 from jupyter_storage_explorer.formats.requirements import DeltaLake as DeltaLakePackage
 from jupyter_storage_explorer.formats.requirements import Fastexcel, Fsspec, Polars
 from jupyter_storage_explorer.formats.support import FormatSupport
@@ -30,6 +32,16 @@ if TYPE_CHECKING:
 
     from jupyter_storage_explorer.formats.preview import Preview, PreviewLimits
     from jupyter_storage_explorer.location import Location
+
+
+def _table(df: Any, **kwargs: Any) -> TablePreview:
+    """A polars DataFrame as a table preview."""
+    return TablePreview(
+        columns=list(df.columns),
+        rows=[[jsonable(v) for v in row] for row in df.rows()],
+        dtypes=[str(t) for t in df.dtypes],
+        **kwargs,
+    )
 
 
 class _PolarsByUrl(FormatSupport):
@@ -85,7 +97,7 @@ class CsvByPolars(_PolarsByUrl):
             truncate_ragged_lines=True,
         )
         more = truncated or df.height == limits.max_rows
-        return polars_table(df, note=rows_note(df.height, more))
+        return _table(df, note=rows_note(df.height, more))
 
     def query(
         self,
@@ -149,7 +161,7 @@ class JsonLinesByPolars(_PolarsByUrl):
         text, truncated = head_text(fs, path, limits.max_bytes)
         df = pl.read_ndjson(io.BytesIO(text.encode()), n_rows=limits.max_rows)
         more = truncated or df.height == limits.max_rows
-        return polars_table(df, note=rows_note(df.height, more, "records"))
+        return _table(df, note=rows_note(df.height, more, "records"))
 
     def query(
         self,
@@ -240,7 +252,7 @@ class ExcelByPolars(FormatSupport):
             df.height, sheet.total_height > df.height, total=sheet.total_height
         )
         note = with_sheets(note, reader.sheet_names)
-        return polars_table(df, title=sheet.name, note=note)
+        return _table(df, title=sheet.name, note=note)
 
     def query(
         self,
@@ -300,7 +312,7 @@ class ParquetByPolars(_PolarsByUrl):
             # Counting rows only reads the file's metadata.
             total = lf.select(pl.len()).collect().item()
             note = rows_note(df.height, df.height < total, total=total)
-        return polars_table(df, note=note)
+        return _table(df, note=note)
 
     def query(
         self,
@@ -403,7 +415,7 @@ class DeltaLakeByPolars(_PolarsByUrl):
     ) -> Preview:
         lf = self.query(fmt, location, fs, path, is_dir)
         df = lf.head(limits.max_rows).collect()
-        return polars_table(df, note=rows_note(df.height, df.height == limits.max_rows))
+        return _table(df, note=rows_note(df.height, df.height == limits.max_rows))
 
     def query(
         self,

@@ -3,6 +3,7 @@ explorers' ``format_options``, and the formats' file icons."""
 
 from __future__ import annotations
 
+import inspect
 from typing import TYPE_CHECKING, Any
 
 from jupyter_storage_explorer.formats.base import FILE_ICONS
@@ -10,7 +11,7 @@ from jupyter_storage_explorer.formats.delta import DeltaLake
 from jupyter_storage_explorer.formats.excel import Excel
 from jupyter_storage_explorer.formats.images import Image
 from jupyter_storage_explorer.formats.parquet import Parquet
-from jupyter_storage_explorer.formats.support import FormatSupport, support_options
+from jupyter_storage_explorer.formats.support import FormatSupport
 from jupyter_storage_explorer.formats.supports.fsspec import JsonByFsspec, TextByFsspec
 from jupyter_storage_explorer.formats.supports.pandas import (
     CsvByPandas,
@@ -106,6 +107,13 @@ def default_supports(
     return create_supports(DEFAULT_SUPPORTS, options)
 
 
+def _support_options(cls: type[FormatSupport]) -> frozenset[str]:
+    """The options a support class takes: its ``__init__``'s keyword-only
+    arguments."""
+    parameters = inspect.signature(cls.__init__).parameters.values()
+    return frozenset(p.name for p in parameters if p.kind is p.KEYWORD_ONLY)
+
+
 def create_supports(
     supports: Sequence[type[FormatSupport] | FormatSupport],
     options: Mapping[str, Mapping[str, Mapping[str, Any]]] | None = None,
@@ -144,7 +152,7 @@ def create_supports(
             **library.get(ALL_FORMATS, {}),
             **library.get(support.format.name, {}),
         }
-        taken = support_options(support)
+        taken = _support_options(support)
         created.append(support(**{k: v for k, v in merged.items() if k in taken}))
     return created
 
@@ -201,7 +209,7 @@ def _check_format_options(
     taken: set[str] = set()
     for cls in classes:
         if name in (ALL_FORMATS, cls.format.name):
-            taken |= support_options(cls)
+            taken |= _support_options(cls)
     unknown = values.keys() - taken
     if unknown:
         raise ValueError(

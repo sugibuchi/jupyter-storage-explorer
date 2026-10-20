@@ -1,14 +1,7 @@
-"""Table sections from DataFrames loaded by library previews.
-
-Duck-typed, so neither polars nor pandas is imported here.
-"""
+"""The notes under table previews, shared by the libraries' supports (their
+tables are made in their modules: supports/polars.py, supports/pandas.py)."""
 
 from __future__ import annotations
-
-from typing import Any
-
-from jupyter_storage_explorer._json import jsonable
-from jupyter_storage_explorer.formats.preview import TablePreview
 
 
 def rows_note(
@@ -26,23 +19,3 @@ def rows_note(
 def with_sheets(note: str, sheets: list[str]) -> str:
     """The note under a workbook's first sheet's table, mentioning the other sheets."""
     return f"{note}; other sheets: {', '.join(sheets[1:])}" if len(sheets) > 1 else note
-
-
-def polars_table(df: Any, **kwargs: Any) -> TablePreview:
-    return TablePreview(
-        columns=list(df.columns),
-        rows=[[jsonable(v) for v in row] for row in df.rows()],
-        dtypes=[str(t) for t in df.dtypes],
-        **kwargs,
-    )
-
-
-def pandas_table(df: Any, **kwargs: Any) -> TablePreview:
-    # Object dtype makes NaN/NaT/NA replaceable with None.
-    cells = df.astype(object).where(df.notna(), None)
-    return TablePreview(
-        columns=[str(c) for c in df.columns],
-        rows=[[jsonable(v) for v in row] for row in cells.itertuples(index=False)],
-        dtypes=[str(t) for t in df.dtypes],
-        **kwargs,
-    )

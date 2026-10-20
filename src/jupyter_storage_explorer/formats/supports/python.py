@@ -29,7 +29,7 @@ if TYPE_CHECKING:
     from jupyter_storage_explorer.location import Location
 
 
-def size_note(fs: AbstractFileSystem, path: str, limits: PreviewLimits) -> str:
+def _size_note(fs: AbstractFileSystem, path: str, limits: PreviewLimits) -> str:
     """The note under a preview of the file's beginning."""
     size = file_size(fs, path)
     total = f" of {size:,} bytes" if size is not None else ""
@@ -56,7 +56,7 @@ def _highlight(text: str, language: str | None) -> str | None:
     return result
 
 
-def text_preview(text: str, language: str | None, note: str = "") -> TextPreview:
+def _text_preview(text: str, language: str | None, note: str = "") -> TextPreview:
     """A text section, highlighted as ``language`` (Pygments' name) if known."""
     return TextPreview(
         text=text, language=language, html=_highlight(text, language), note=note
@@ -80,8 +80,8 @@ class TextByPython(FormatSupport):
         limits: PreviewLimits,
     ) -> Preview:
         text, truncated = head_text(fs, path, limits.max_bytes)
-        note = size_note(fs, path, limits) if truncated else ""
-        return text_preview(text, fmt.language(path), note)
+        note = _size_note(fs, path, limits) if truncated else ""
+        return _text_preview(text, fmt.language(path), note)
 
 
 class MarkdownByPython(FormatSupport):
@@ -102,7 +102,7 @@ class MarkdownByPython(FormatSupport):
         limits: PreviewLimits,
     ) -> Preview:
         text, truncated = head_text(fs, path, limits.max_bytes)
-        note = size_note(fs, path, limits) if truncated else ""
+        note = _size_note(fs, path, limits) if truncated else ""
         return MarkdownPreview(text=text, note=note)
 
 
@@ -124,12 +124,12 @@ class JsonByPython(FormatSupport):
     ) -> Preview:
         text, truncated = head_text(fs, path, limits.max_bytes)
         if truncated:
-            note = f"{size_note(fs, path, limits)}; too large to show as a tree"
-            return text_preview(text, "json", note)
+            note = f"{_size_note(fs, path, limits)}; too large to show as a tree"
+            return _text_preview(text, "json", note)
         try:
             return TreePreview(value=json.loads(text))
         except json.JSONDecodeError as exc:
-            return text_preview(text, "json", f"Invalid JSON: {exc}")
+            return _text_preview(text, "json", f"Invalid JSON: {exc}")
 
 
 class ImageByPython(FormatSupport):
