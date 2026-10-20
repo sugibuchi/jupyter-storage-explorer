@@ -9,17 +9,20 @@ from __future__ import annotations
 
 import dataclasses
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, TypeAlias
 
+# At run time, not only for type checkers: FormatOptions, a public alias,
+# names it.
+from jupyter_storage_explorer.location import Location
+
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterable
+    from collections.abc import Iterable
 
     from jupyter_storage_explorer.formats.base import DataFormat, ItemContext
     from jupyter_storage_explorer.formats.package import PythonPackage
     from jupyter_storage_explorer.formats.view import View, ViewLimits
-    from jupyter_storage_explorer.location import Location
 
 # What a support can do with a format's data, each the name of the method
 # doing it: view it (the preview panel, a tab), give recipes, the code
@@ -29,7 +32,9 @@ Capability: TypeAlias = Literal["view", "recipe"]
 # StorageExplorer's format_options: {library: {format name or "*": options}},
 # the options a dict, or a function of the item's location returning one
 # (see StorageExplorer's format_options).
-FormatOptions: TypeAlias = "Mapping[str, Mapping[str, Mapping[str, Any] | Callable[[Location], Mapping[str, Any]]]]"
+FormatOptions: TypeAlias = Mapping[
+    str, Mapping[str, Mapping[str, Any] | Callable[[Location], Mapping[str, Any]]]
+]
 
 
 def format_kwargs(**kwargs: Any) -> str:

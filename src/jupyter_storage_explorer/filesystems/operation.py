@@ -33,8 +33,6 @@ from fsspec.callbacks import Callback
 from jupyter_storage_explorer import _infos
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
     from fsspec import AbstractFileSystem
 
 
@@ -54,13 +52,10 @@ class Progress:
     as done, so a folder moved by a single rename still counts all its files.
 
     Thread-safe: the job's worker thread reports; the kernel's main thread
-    reads (``snapshot``) and cancels.
-
-    Parameters
-    ----------
-    on_change : callable, optional
-        Called with no arguments after each report, in the reporting thread
-        (the job runner sends progress to the frontend from it).
+    reads and cancels. The explorer gives operations a subclass of its own
+    (its job runner's), which also keeps the totals, reports to the page and
+    cancels; a plain ``Progress()`` serves to call operations outside an
+    explorer, e.g. in their tests.
 
     Attributes
     ----------
@@ -70,21 +65,18 @@ class Progress:
         Files and bytes done so far.
     current : str
         The name of the file being worked on.
+    cancelled : bool
+        Whether the user has cancelled.
     """
 
-    def __init__(self, on_change: Callable[[], None] | None = None) -> None:
+    def __init__(self) -> None:
         self._lock = threading.Lock()
         self._cancel = threading.Event()
-        self._on_change = on_change
         self.files_total = 0
         self.bytes_total = 0
         self.files_done = 0
         self.bytes_done = 0
         self.current = ""  # the name of the file being worked on
-        # Counts when the current item started, and its totals.
-        self._item: tuple[int, int, int, int] | None = None
-
-    # --- Reported by FileSystemOperations methods ---
 
     def advance(self, files: int = 0, bytes: int = 0) -> None:
         """Report work done since the last report.
@@ -143,55 +135,13 @@ class Progress:
         """
         return _ProgressCallback(self, count)
 
-    # --- Reported by the job ---
-
-    def add_total(self, files: int = 0, bytes: int = 0) -> None:
-        """Add files and bytes to the totals (from ``measure``, before the work)."""
-        with self._lock:
-            self.files_total += files
-            self.bytes_total += bytes
-        self._changed()
-
-    def begin_item(self, files: int, bytes: int) -> None:
-        """An item of ``files`` files and ``bytes`` bytes (as measured) starts."""
-        with self._lock:
-            self._item = (self.files_done, self.bytes_done, files, bytes)
-
-    def end_item(self) -> None:
-        """The current item is done: count what its method did not report."""
-        with self._lock:
-            if self._item is not None:
-                files_at, bytes_at, files, size = self._item
-                self.files_done = max(self.files_done, files_at + files)
-                self.bytes_done = max(self.bytes_done, bytes_at + size)
-                self._item = None
-        self._changed()
-
-    # --- Used by the job's owner ---
-
-    def cancel(self) -> None:
-        """Ask the operation to stop (at its next ``check()``)."""
-        self._cancel.set()
-
     @property
     def cancelled(self) -> bool:
-        """Whether the user has cancelled."""
         return self._cancel.is_set()
 
-    def snapshot(self) -> dict[str, Any]:
-        """The counts, consistent with one another, for the frontend."""
-        with self._lock:
-            return {
-                "files_total": self.files_total,
-                "bytes_total": self.bytes_total,
-                "files_done": self.files_done,
-                "bytes_done": self.bytes_done,
-                "current": self.current,
-            }
-
     def _changed(self) -> None:
-        if self._on_change is not None:
-            self._on_change()
+        """After each report: nothing here; the job runner's subclass reports
+        to the page."""
 
 
 class _ProgressCallback(Callback):

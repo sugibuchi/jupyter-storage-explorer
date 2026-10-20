@@ -126,7 +126,7 @@ class TestViewTab:
         tab = local._view_tabs[reply["model_id"]]
         assert isinstance(tab, DataExplorer)
         # Labelled with the file's format, as in the preview, not its library.
-        assert (tab.height, tab.library) == ("fill", "Parquet")
+        assert (tab._height, tab._library) == ("fill", "Parquet")
         assert tab.settings.to_dict()["sort"] == {"column": "a", "descending": True}
         # Its settings are remembered by location, as the preview's.
         tab._data.handle(

@@ -108,7 +108,8 @@ explorer of exactly its own version (`launcher/hatch_build.py` sets its dependen
 
 **Widgets.** `storage_explorer.py` and `data_explorer.py` (and the private `_view_tab.py`) are
 `anywidget.AnyWidget` subclasses. State shared with the
-browser is in `traitlets` tagged `sync=True` (underscore-prefixed). Everything else is custom messages, dispatched by
+browser is in `traitlets` tagged `sync=True` (underscore-prefixed, in every widget: a public trait would be public
+API). Everything else is custom messages, dispatched by
 `type` in `_on_custom_msg`: requests (`{"type": ..., "rid": ...}`, handled by `_requests()`) are answered with
 `{"type": "reply", "rid": ..., ...}`; notices (`_notices()`) are not, their effects showing in the traits (or, for
 "download", in a message per file, its bytes attached). Uploads carry file pieces in binary `buffers`. A reply's
@@ -209,7 +210,10 @@ a time) and records what it changed as each item is done (`Task.record`, under a
 reports: items gone are dropped from the list and tree without listing, at most every `_FOLLOW_INTERVAL`; folders with
 new items are listed again, keeping the selection, at most every `_RELIST_INTERVAL`), and all of them once it has ended
 (`_finish`). Work functions must not touch traits or `send`; they report to the `Progress` and stop when
-`progress.check()` raises `OperationCancelled`. A drop from JupyterLab's file browser is a copy from the kernel's local
+`progress.check()` raises `OperationCancelled`. The runner's is a `JobProgress` (`_jobs/progress.py`): the public
+`Progress` (filesystems/operation.py) has only what operations do (`advance`, `working_on`, `check`, `callback`,
+`cancelled`); the subclass adds the job's bookkeeping (`add_total`, `begin_item`/`end_item`, `cancel`, `snapshot`,
+`on_change`). A drop from JupyterLab's file browser is a copy from the kernel's local
 disk (`FileTasks.upload`); files from the computer arrive in pieces (`_jobs/incoming.py`), and the last piece starts
 `FileTasks.upload_file`. Requests answer `{"job": id}`; the kernel sends `{"type": "job", ...}` as the job runs and with
 its result when it ends, which the frontend's `x.jobs.result()` waits for. The main thread is reached through the

@@ -28,20 +28,20 @@ function render({ model, el }) {
   let panel = null;
 
   function renderHead() {
-    title.textContent = title.title = model.get("title");
-    badge.textContent = model.get("library");
+    title.textContent = title.title = model.get("_title");
+    badge.textContent = model.get("_library");
   }
 
   function renderPanel() {
     panel?.dispose();
-    panel = createQueryPanel({ request, ask, answer, flash }, "", model.get("query"));
+    panel = createQueryPanel({ request, ask, answer, flash }, "", model.get("_query"));
     body.replaceChildren(panel.el);
   }
 
-  // Height of the table area: the `height` trait until resized by dragging;
+  // Height of the table area: the `_height` trait until resized by dragging;
   // "fill": the widget fills its container (see "jse-fill" in the CSS).
   function applyHeight() {
-    const height = model.get("height");
+    const height = model.get("_height");
     el.classList.toggle("jse-fill", height === "fill");
     body.style.height = height === "fill" ? "" : height;
   }
@@ -53,10 +53,10 @@ function render({ model, el }) {
 
   const onCustomMsg = (msg) => msg.type === "reply" && onReply(msg);
   const handlers = {
-    "change:title": renderHead,
-    "change:library": renderHead,
-    "change:query": renderPanel,
-    "change:height": applyHeight,
+    "change:_title": renderHead,
+    "change:_library": renderHead,
+    "change:_query": renderPanel,
+    "change:_height": applyHeight,
     "msg:custom": onCustomMsg,
   };
   for (const [event, handler] of Object.entries(handlers)) model.on(event, handler);
