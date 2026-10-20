@@ -33,10 +33,8 @@ from jupyter_storage_explorer.formats.supports.pyspark import (
 )
 from jupyter_storage_explorer.formats.supports.python import (
     ImageByPython,
-    JsonByFsspec,
     JsonByPython,
     MarkdownByPython,
-    TextByFsspec,
     TextByPython,
 )
 from jupyter_storage_explorer.formats.text import Csv, Json, JsonLines, Markdown, Text
@@ -75,7 +73,6 @@ DEFAULT_SUPPORTS: tuple[type[FormatSupport], ...] = (
     ExcelByPolars,
     ExcelByPandas,
     JsonByPython,
-    JsonByFsspec,
     JsonByPolars,
     JsonByPandas,
     JsonLinesByPolars,
@@ -83,7 +80,6 @@ DEFAULT_SUPPORTS: tuple[type[FormatSupport], ...] = (
     JsonLinesByPySpark,
     MarkdownByPython,
     TextByPython,
-    TextByFsspec,
     ImageByPython,
     ImageByPillow,
 )

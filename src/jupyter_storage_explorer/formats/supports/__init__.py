@@ -1,7 +1,7 @@
 """The predefined format supports and their engines, a module per library:
-polars.py, pandas.py, pyspark.py, pillow.py, and python.py for what needs no
-package beyond the explorer's own (the built-in views, and code reading files
-with fsspec), with their options (``PolarsOptions``, ...). Import them from
+polars.py, pandas.py, pyspark.py, pillow.py, and python.py for those without
+an engine, needing only the explorer's own packages (the built-in views, and
+code reading files with fsspec), with their options (``PolarsOptions``, ...). Import them from
 here, e.g. ``from jupyter_storage_explorer.formats.supports import
 CsvByPolars, PolarsEngine``.
 
@@ -39,13 +39,10 @@ from jupyter_storage_explorer.formats.supports.pyspark import (
     PySparkEngine,
 )
 from jupyter_storage_explorer.formats.supports.python import (
-    FsspecEngine,
     FsspecOptions,
     ImageByPython,
-    JsonByFsspec,
     JsonByPython,
     MarkdownByPython,
-    TextByFsspec,
     TextByPython,
 )
 
@@ -59,11 +56,9 @@ __all__ = [
     "ExcelByPandas",
     "ExcelByPolars",
     "ExcelByPolarsOptions",
-    "FsspecEngine",
     "FsspecOptions",
     "ImageByPillow",
     "ImageByPython",
-    "JsonByFsspec",
     "JsonByPandas",
     "JsonByPolars",
     "JsonByPython",
@@ -80,6 +75,5 @@ __all__ = [
     "PolarsEngine",
     "PolarsOptions",
     "PySparkEngine",
-    "TextByFsspec",
     "TextByPython",
 ]

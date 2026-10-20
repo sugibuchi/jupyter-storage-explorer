@@ -41,7 +41,6 @@ from jupyter_storage_explorer.formats.supports import (
     PandasOptions,
     ParquetByPolars,
     PolarsOptions,
-    TextByFsspec,
     TextByPython,
 )
 
@@ -115,13 +114,18 @@ class TestOptions:
         # Only the options a support's model has: Excel's code reads with fsspec.
         assert options[ExcelByPolars] == ExcelByPolarsOptions()
         assert options[CsvByPandas] == PandasOptions()  # pandas' own
-        assert options[TextByPython] == SupportOptions()  # none
+        assert options[TextByPython] == FsspecOptions()  # "python"'s
 
     def test_by_library(self):
+        # The supports without an engine take "python"'s.
         options = options_by_class(
-            {"fsspec": {"text": {"storage_options": {"anon": True}}}}
+            {"python": {"text": {"storage_options": {"anon": True}}}}
         )
-        assert options[TextByFsspec].storage_options == {"anon": True}
+        assert options[TextByPython].storage_options == {"anon": True}
+
+    def test_python_is_no_engine(self):
+        with pytest.raises(ValueError, match=r"unknown engines \['python'\]"):
+            SupportChain(default_supports(), engine_preference=["python"])
 
     @pytest.mark.parametrize(
         ("options", "error"),

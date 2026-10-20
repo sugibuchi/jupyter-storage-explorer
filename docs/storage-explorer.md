@@ -305,8 +305,8 @@ To handle a format with another library, see [Another library for a format](../D
 
 ## Format options
 
-`format_options` gives the engines' options, by engine key, then format name, or `"*"` for all formats (a format's
-options override those for all):
+`format_options` gives the engines' options, by engine key (`"python"` for the explorer's own views and code), then
+format name, or `"*"` for all formats (a format's options override those for all):
 
 ```python
 StorageExplorer(
@@ -330,7 +330,7 @@ StorageExplorer(
 | `polars` | `use_pyarrow`            | `delta`                                         | `scan_delta`'s `use_pyarrow`.                                                                                  |
 | `polars` | `pyarrow_options`        | `delta`                                         | `scan_delta`'s `pyarrow_options`.                                                                              |
 | `pandas` | `storage_options`        | `parquet`, `csv`, `json-lines`, `json`, `excel` | pandas' `storage_options` (fsspec's), in the code.                                                             |
-| `fsspec` | `storage_options`        | `json`, `markdown`, `text`                      | `fsspec.open`'s keyword arguments, in the code.                                                                |
+| `python` | `storage_options`        | `json`, `text` (also Markdown's code)           | `fsspec.open`'s keyword arguments, in the code.                                                                |
 | `pillow` | `storage_options`        | `image`                                         | `fsspec.open`'s keyword arguments, in the code (which reads the file with fsspec).                             |
 
 Options that look like credentials are left out of the code. A library, format or option name that no support takes is

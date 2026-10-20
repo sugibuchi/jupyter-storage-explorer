@@ -301,8 +301,8 @@ and the explorer's `detect` and `matching_formats`, not exported), `FormatSuppor
 fields, `_shown_options`; only what plugin authors use) and `PythonPackage`
 (`package.py`); a module per predefined format (`delta.py`, `parquet.py`, `excel.py`, `text.py`, `images.py`) and
 per library of the predefined supports, each with its `Engine`, in `supports/` (`polars.py`, `pandas.py`,
-`pyspark.py`, `pillow.py`; `python.py` for what needs no package beyond the explorer's own: the built-in views and
-fsspec's code, `FsspecEngine`; named after the libraries, which they import only inside methods, through
+`pyspark.py`, `pillow.py`; `python.py` for the supports without an engine, needing only the explorer's own packages:
+the built-in views, `TextByPython` and `JsonByPython` also with fsspec's code; named after the libraries, which they import only inside methods, through
 `PythonPackage.load()`; exported by `formats.supports`, not `formats`); the predefined packages in `packages.py`, the
 views in `view.py` (`View`s, `ViewLimits`; `TableView`s, for plugins (the defaults give none), give their counts, `TableView.more`, `total` and `unit`, and the explorer words them in the note, `section()`'s
 `_rows_note`: presentation stays out of `formats`, which never imports `_explorer`), and the defaults in `defaults.py` (`DEFAULT_FORMATS`,
@@ -324,7 +324,7 @@ so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
   `priority` wins (Delta 20 > Parquet 10 > default 0 > Text -10). What supports share about a format is on it
   (`Csv.separator`, `Text.language`, `Image.mime_type`, `Parquet.data_url`, ...).
 - `Engine` (`engine.py`; the predefined ones with their supports, exported by `formats.supports`: `PolarsEngine`,
-  `PandasEngine`, `PySparkEngine` (pyspark or databricks-connect), `FsspecEngine`, `PillowEngine`): a library users choose, with `key`
+  `PandasEngine`, `PySparkEngine` (pyspark or databricks-connect), `PillowEngine`): a library users choose, with `key`
   (`engine_preference`, `format_options`), `label` and `requirements`, `PythonPackage` instances: a tuple, all needed,
   or a tuple of tuples, alternatives (`alternatives()`, `packages()`: the first installed, `is_installed()`).
 - `FormatSupport` subclasses declare `format` (matched with `isinstance`, so subclasses too: `MarkdownByPython` comes
@@ -405,7 +405,8 @@ Paste; Edit (JupyterLab's editor), Rename, Create a folder, Delete; downloads; P
 separators left without visible rows around them (`tidySeparators`, overlays.js).
 
 **Format options.** `format_options` is `{library: {format name or "*": {option: value}}}` (`SupportChain`,
-`FormatOptions`): a support gets its library's (`engine.package`) options for `"*"`, then for its `format.name`, only
+`FormatOptions`): a support gets its library's (`library()`: its engine's key, "python" for none; only engines' keys go in
+`engine_preference`) options for `"*"`, then for its `format.name`, only
 those its `options_model` has (`options_model.option_names()`), as an `options_model` object passed to each of its methods. An entry
 may instead be a function of the item's `Location` returning the dict (options per storage, e.g. by
 `account_name`): `SupportChain.options_of(support, location)` calls it at each view and recipe, for the support

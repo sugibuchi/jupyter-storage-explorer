@@ -134,8 +134,8 @@ class StorageExplorer(
         created without arguments. To change the defaults themselves,
         override ``default_supports`` in a subclass.
     format_options : mapping, optional
-        The supports' options, by engine key, then format name or ``"*"``
-        for all formats, e.g. ``{"polars": {"*": {"storage_options": {...}},
+        The supports' options, by engine key (``"python"`` for the supports
+        without an engine), then format name or ``"*"`` for all formats, e.g. ``{"polars": {"*": {"storage_options": {...}},
         "delta": {"use_pyarrow": True}}}``: each support gets those of its
         engine that its ``options_model`` has (see "Format options" in
         docs/storage-explorer.md). Instead of a dict of options, a function

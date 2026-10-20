@@ -463,8 +463,8 @@ class TestFormatOptionsInCode:
         )
         assert "storage_options" not in code["pyspark: Load as DataFrame"]
 
-    def test_fsspec_options(self, make_item):
-        chain = options_chain({"fsspec": {"*": {"storage_options": {"anon": True}}}})
+    def test_python_options(self, make_item):
+        chain = options_chain({"python": {"*": {"storage_options": {"anon": True}}}})
         [recipe] = chain.recipes(Text(), make_item("/a.txt", b""))
         assert recipe.title == "Read the text"
         assert "fsspec.open('memory:///a.txt', 'rt', anon=True)" in recipe.code

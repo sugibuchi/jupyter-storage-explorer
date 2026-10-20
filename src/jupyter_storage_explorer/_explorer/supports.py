@@ -62,7 +62,8 @@ class SupportChain:
     options.
 
     Supports given as classes are created (without arguments). Each gets an
-    ``options_model`` made from ``format_options``, by engine key, then
+    ``options_model`` made from ``format_options``, by engine key ("python"
+    for the supports without an engine: the built-in views and code), then
     format name, or ``"*"`` for all formats, e.g. ``{"polars": {"*":
     {"storage_options": {...}}, "delta": {"use_pyarrow": True}}}``: those of
     its engine for all formats, then for its format (``format.name``), each
@@ -94,12 +95,12 @@ class SupportChain:
     ) -> None:
         self.supports = [_created(s) for s in supports]
         self.format_options = format_options or {}
-        # The supports of each engine, and the format names options may
-        # name: what options are checked against.
+        # The supports of each library (an engine's key, or "python"), and
+        # the format names options may name: what options are checked against.
         self._libraries: dict[str, list[FormatSupport]] = {}
         for support in self.supports:
-            if support.engine is not None:
-                self._libraries.setdefault(support.library(), []).append(support)
+            self._libraries.setdefault(support.library(), []).append(support)
+        engine_keys = {s.engine.key for s in self.supports if s.engine is not None}
         self._format_names = list(
             dict.fromkeys([*format_names, *(s.format.name for s in self.supports)])
         )
@@ -107,11 +108,11 @@ class SupportChain:
         if engine_preference is None:
             engine_preference = DEFAULT_ENGINE_PREFERENCE
         else:
-            unknown = [k for k in engine_preference if k not in self._libraries]
+            unknown = [k for k in engine_preference if k not in engine_keys]
             if unknown:
                 raise ValueError(
                     f"engine_preference: unknown engines {unknown}; "
-                    f"choose from {sorted(self._libraries)}"
+                    f"choose from {sorted(engine_keys)}"
                 )
         self.engines = _ordered_engines(self.supports, engine_preference)
 
@@ -121,7 +122,7 @@ class SupportChain:
         has (see the class docstring). ValueError for options a function
         returned that no support of the library takes."""
         library = support.library()
-        by_format = self.format_options.get(library, {}) if support.engine else {}
+        by_format = self.format_options.get(library, {})
         merged: dict[str, Any] = {}
         for name in (ALL_FORMATS, support.format.name):
             values = by_format.get(name)
