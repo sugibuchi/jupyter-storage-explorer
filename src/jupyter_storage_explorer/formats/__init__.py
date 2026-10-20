@@ -15,13 +15,17 @@ explorers use by default.
 from jupyter_storage_explorer.formats.base import (
     FILE_ICONS,
     DataFormat,
-    Recipe,
-    Target,
+    child_names,
     detect,
+    file_size,
     format_kwargs,
+    head,
+    head_text,
+    library_url,
     matching_formats,
+    name_of,
+    read_whole,
     snippet_options,
-    spark_url,
 )
 from jupyter_storage_explorer.formats.delta import DeltaLake
 from jupyter_storage_explorer.formats.excel import Excel
@@ -41,6 +45,7 @@ from jupyter_storage_explorer.formats.requirement import Requirement, Requiremen
 from jupyter_storage_explorer.formats.support import (
     Capability,
     FormatSupport,
+    Recipe,
     SupportChain,
 )
 from jupyter_storage_explorer.formats.text import Csv, Json, JsonLines, Markdown, Text
@@ -78,16 +83,21 @@ __all__ = [
     "Requirements",
     "SupportChain",
     "TablePreview",
-    "Target",
     "Text",
     "TextPreview",
     "TreePreview",
+    "child_names",
     "create_supports",
     "default_formats",
     "default_supports",
     "detect",
+    "file_size",
     "format_kwargs",
+    "head",
+    "head_text",
+    "library_url",
     "matching_formats",
+    "name_of",
+    "read_whole",
     "snippet_options",
-    "spark_url",
 ]

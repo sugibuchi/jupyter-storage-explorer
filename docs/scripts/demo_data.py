@@ -412,17 +412,31 @@ def supports() -> list[Any]:
     by polars), for an explorer's ``supports``: tried before its own
     defaults, they are those used."""
 
-    def local(url: str) -> str:
-        if url.startswith("memory:///"):
-            return str(local_copy() / url.removeprefix("memory:///"))
-        return url
+    from jupyter_storage_explorer.filesystems import (  # noqa: PLC0415
+        LocalLocation,
+        MapperChain,
+        MemoryLocation,
+        default_mappers,
+    )
+
+    local_fs = fsspec.filesystem("file")
+    mappers = MapperChain(default_mappers())
+
+    def local(location, fs, path):
+        """The local copy's location, filesystem and path of a demo item."""
+        if not isinstance(location, MemoryLocation):
+            return location, fs, path
+        copy = (local_copy() / location.path.lstrip("/")).as_posix()
+        copy_location = mappers.location_of(local_fs, copy)
+        assert isinstance(copy_location, LocalLocation)
+        return copy_location, local_fs, copy
 
     result = default_supports()
     for support in result:
         if "query" in support.capabilities:
             query = support.query
-            support.query = lambda fmt, url, is_dir, query=query: query(
-                fmt, local(url), is_dir
+            support.query = lambda fmt, location, fs, path, is_dir, query=query: query(
+                fmt, *local(location, fs, path), is_dir
             )
     return result
 

@@ -98,11 +98,3 @@ class Location:
             return known(**values)
         except (TypeError, AttributeError) as exc:  # missing, or None for text
             raise ValueError(f"not a location: {exc}") from exc
-
-
-def trim(path: str) -> str:
-    """``path`` without trailing "/", except a top folder ("/", "C:/")."""
-    trimmed = path.rstrip("/")
-    if trimmed.endswith(":") or (trimmed == "" and path.startswith("/")):
-        return trimmed + "/"
-    return trimmed

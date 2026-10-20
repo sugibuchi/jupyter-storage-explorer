@@ -6,11 +6,12 @@ from __future__ import annotations
 import io
 import json
 
-import fsspec
 import pandas as pd
 import polars as pl
 import pytest
+from items import local_item
 
+from jupyter_storage_explorer.filesystems import S3Location
 from jupyter_storage_explorer.formats import (
     Csv,
     DeltaLake,
@@ -27,7 +28,6 @@ from jupyter_storage_explorer.formats import (
     Requirement,
     SupportChain,
     TablePreview,
-    Target,
     Text,
     TextPreview,
     TreePreview,
@@ -40,6 +40,7 @@ from jupyter_storage_explorer.formats.supports import (
     ParquetByPandas,
     ParquetByPolars,
 )
+from jupyter_storage_explorer.formats.supports.pyspark import spark_url
 
 CHAIN = SupportChain(default_supports())
 
@@ -60,7 +61,7 @@ def last_line(code: str) -> str:
 
 
 class TestParquetDetection:
-    def test_spark_output(self, make_target, memfs):
+    def test_spark_output(self, make_item, memfs):
         for i in range(3):
             memfs.pipe_file(
                 f"/out/part-0000{i}-2e8a686a-d04f-4489-ad50-a834723e6591-c000.snappy.parquet",
@@ -68,30 +69,30 @@ class TestParquetDetection:
             )
         memfs.pipe_file("/out/_SUCCESS", b"")
         memfs.pipe_file("/out/.part-00000.crc", b"")
-        assert Parquet().matches(make_target("/out"))
+        assert Parquet().matches(*make_item("/out").match_args)
 
-    def test_differently_named_tables_are_not_one_dataset(self, make_target, memfs):
+    def test_differently_named_tables_are_not_one_dataset(self, make_item, memfs):
         memfs.pipe_file("/d/orders.parquet", b"")
         memfs.pipe_file("/d/customers.parquet", b"")
-        assert not Parquet().matches(make_target("/d"))
+        assert not Parquet().matches(*make_item("/d").match_args)
 
-    def test_folder_with_other_files(self, make_target, memfs):
+    def test_folder_with_other_files(self, make_item, memfs):
         memfs.pipe_file("/d/part-0.parquet", b"")
         memfs.pipe_file("/d/readme.md", b"")
-        assert not Parquet().matches(make_target("/d"))
+        assert not Parquet().matches(*make_item("/d").match_args)
 
-    def test_hive_files_checked_by_magic_bytes(self, make_target, memfs):
+    def test_hive_files_checked_by_magic_bytes(self, make_item, memfs):
         memfs.pipe_file("/hive/000000_0", parquet_bytes(pl.DataFrame({"a": [1]})))
         memfs.pipe_file("/hive/000001_0", b"")
-        assert Parquet().matches(make_target("/hive"))
+        assert Parquet().matches(*make_item("/hive").match_args)
         memfs.pipe_file("/orc/000000_0", b"ORC...")
-        assert not Parquet().matches(make_target("/orc"))
+        assert not Parquet().matches(*make_item("/orc").match_args)
 
-    def test_hudi_table_is_not_a_dataset(self, make_target, memfs):
+    def test_hudi_table_is_not_a_dataset(self, make_item, memfs):
         # Its files hold versions of rows: read as Parquet, stale ones show.
         memfs.pipe_file("/h/part-0.parquet", b"")
         memfs.pipe_file("/h/.hoodie/hoodie.properties", b"")
-        assert not Parquet().matches(make_target("/h"))
+        assert not Parquet().matches(*make_item("/h").match_args)
 
 
 class TestPartitionedParquetDetection:
@@ -118,28 +119,28 @@ class TestPartitionedParquetDetection:
                 memfs.pipe_file(f"{root}/year={year}/month={month}/_SUCCESS", b"")
         memfs.pipe_file(f"{root}/_SUCCESS", b"")
 
-    def test_two_columns_with_two_more_listings(self, make_target, memfs, listings):
+    def test_two_columns_with_two_more_listings(self, make_item, memfs, listings):
         self.table(memfs)
-        target = make_target("/t")
+        item = make_item("/t")
         listings.clear()
         fmt = Parquet()
-        assert fmt.matches(target)
+        assert fmt.matches(*item.match_args)
         assert listings == ["/t/year=2025", "/t/year=2025/month=1"]
-        assert fmt.layout("memory://t").glob("memory://t") == (
-            "memory://t/year=*/month=*/*.parquet"
+        assert fmt.layout(item.location).glob(item.location.url) == (
+            "memory:///t/year=*/month=*/*.parquet"
         )
 
-    def test_a_partition_of_it_too(self, make_target, memfs):
+    def test_a_partition_of_it_too(self, make_item, memfs):
         self.table(memfs)
-        assert Parquet().matches(make_target("/t/year=2025"))
-        assert Parquet().matches(make_target("/t/year=2025/month=1"))
+        assert Parquet().matches(*make_item("/t/year=2025").match_args)
+        assert Parquet().matches(*make_item("/t/year=2025/month=1").match_args)
 
-    def test_other_folders_cost_nothing(self, make_target, memfs, listings):
+    def test_other_folders_cost_nothing(self, make_item, memfs, listings):
         memfs.pipe_file("/d/year=2025/part-0.parquet", b"")
         memfs.pipe_file("/d/notes/a.txt", b"")
-        target = make_target("/d")
+        item = make_item("/d")
         listings.clear()
-        assert not Parquet().matches(target)
+        assert not Parquet().matches(*item.match_args)
         assert listings == []
 
     @pytest.mark.parametrize(
@@ -157,92 +158,91 @@ class TestPartitionedParquetDetection:
             ["year=2025/data/part-0.parquet"],
         ],
     )
-    def test_not_partitioned_parquet(self, make_target, memfs, paths):
+    def test_not_partitioned_parquet(self, make_item, memfs, paths):
         for path in paths:
             memfs.pipe_file(f"/d/{path}", b"")
-        assert not Parquet().matches(make_target("/d"))
+        assert not Parquet().matches(*make_item("/d").match_args)
 
-    def test_an_empty_partition_passed_over(self, make_target, memfs):
+    def test_an_empty_partition_passed_over(self, make_item, memfs):
         memfs.pipe_file("/t/year=2024/_SUCCESS", b"")
         memfs.pipe_file("/t/year=2025/part-0.parquet", b"")
-        assert Parquet().matches(make_target("/t"))
+        assert Parquet().matches(*make_item("/t").match_args)
         memfs.pipe_file("/u/year=2023/_SUCCESS", b"")
         memfs.pipe_file("/u/year=2024/_SUCCESS", b"")
         memfs.pipe_file("/u/year=2025/part-0.parquet", b"")
-        assert not Parquet().matches(make_target("/u"))  # two empty: given up
+        assert not Parquet().matches(*make_item("/u").match_args)  # two empty: given up
 
-    def test_at_most_five_columns(self, make_target, memfs):
+    def test_at_most_five_columns(self, make_item, memfs):
         memfs.pipe_file("/t/a=1/b=1/c=1/d=1/e=1/part-0.parquet", b"")
-        assert Parquet().matches(make_target("/t"))
+        assert Parquet().matches(*make_item("/t").match_args)
         memfs.pipe_file("/u/a=1/b=1/c=1/d=1/e=1/f=1/part-0.parquet", b"")
-        assert not Parquet().matches(make_target("/u"))
+        assert not Parquet().matches(*make_item("/u").match_args)
 
-    def test_hive_files_checked_by_magic_bytes(self, make_target, memfs):
+    def test_hive_files_checked_by_magic_bytes(self, make_item, memfs):
         data = parquet_bytes(pl.DataFrame({"a": [1]}))
         memfs.pipe_file("/t/dt=2026-10-01/000000_0", data)
         fmt = Parquet()
-        assert fmt.matches(make_target("/t"))
-        assert fmt.layout("memory://t").files == "*"
+        item = make_item("/t")
+        assert fmt.matches(*item.match_args)
+        assert fmt.layout(item.location).files == "*"
         memfs.pipe_file("/orc/dt=2026-10-01/000000_0", b"ORC...")
-        assert not Parquet().matches(make_target("/orc"))
+        assert not Parquet().matches(*make_item("/orc").match_args)
 
 
-def test_delta_detection(make_target, memfs):
+def test_delta_detection(make_item, memfs):
     memfs.pipe_file("/t/_delta_log/0.json", b"{}")
-    assert DeltaLake().matches(make_target("/t"))
+    assert DeltaLake().matches(*make_item("/t").match_args)
     memfs.pipe_file("/u/part-0.parquet", b"")
-    assert not DeltaLake().matches(make_target("/u"))
+    assert not DeltaLake().matches(*make_item("/u").match_args)
 
 
 class TestPreviews:
     limits = PreviewLimits(max_rows=2)
 
-    def preview(self, fmt, target, limits):
+    def preview(self, fmt, item, limits):
         """``fmt``'s preview, by the support the explorer would pick."""
-        return CHAIN.preview(fmt, target, limits)
+        return CHAIN.preview(fmt, *item.args, limits=limits)
 
-    def test_csv_detects_separator(self, make_target):
-        target = make_target("/a.csv", b"x;y\n1;2\n3;4\n5;6\n")
-        table = self.preview(Csv(), target, self.limits)
+    def test_csv_detects_separator(self, make_item):
+        item = make_item("/a.csv", b"x;y\n1;2\n3;4\n5;6\n")
+        table = self.preview(Csv(), item, self.limits)
         assert isinstance(table, TablePreview)
         assert table.columns == ["x", "y"]
         assert table.rows == [[1, 2], [3, 4]]
 
-    def test_json_tree(self, make_target):
-        tree = self.preview(
-            Json(), make_target("/a.json", b'{"a": [1, 2]}'), self.limits
-        )
+    def test_json_tree(self, make_item):
+        tree = self.preview(Json(), make_item("/a.json", b'{"a": [1, 2]}'), self.limits)
         assert isinstance(tree, TreePreview)
         assert tree.value == {"a": [1, 2]}
 
-    def test_invalid_json_shown_as_text(self, make_target):
-        text = self.preview(Json(), make_target("/a.json", b"{oops"), self.limits)
+    def test_invalid_json_shown_as_text(self, make_item):
+        text = self.preview(Json(), make_item("/a.json", b"{oops"), self.limits)
         assert isinstance(text, TextPreview)
         assert text.note.startswith("Invalid JSON")
 
-    def test_json_lines(self, make_target):
+    def test_json_lines(self, make_item):
         data = b"".join(json.dumps({"i": i}).encode() + b"\n" for i in range(5))
-        table = self.preview(JsonLines(), make_target("/a.jsonl", data), self.limits)
+        table = self.preview(JsonLines(), make_item("/a.jsonl", data), self.limits)
         assert table.rows == [[0], [1]]
 
-    def test_parquet_file_with_pandas(self, make_target):
-        # pyarrow reads through the target's fsspec filesystem, so memory:// works.
+    def test_parquet_file_with_pandas(self, make_item):
+        # pyarrow reads through the item's fsspec filesystem, so memory:// works.
         data = parquet_bytes(pl.DataFrame({"a": [1, 2, 3]}))
-        target = make_target("/a.parquet", data)
-        table = ParquetByPandas().preview(Parquet(), target, self.limits)
+        item = make_item("/a.parquet", data)
+        table = ParquetByPandas().preview(Parquet(), *item.args, limits=self.limits)
         assert table.rows == [[1], [2]]
         assert "of 3" in table.note
 
-    def test_parquet_file_with_polars(self, tmp_path, memfs):
+    def test_parquet_file_with_polars(self, tmp_path):
         # polars reads by URL: a local path.
         path = tmp_path / "a.parquet"
         pl.DataFrame({"a": [1, 2, 3]}).write_parquet(path)
-        target = Target(fs=memfs, path=str(path), url=str(path), info={})
-        table = ParquetByPolars().preview(Parquet(), target, self.limits)
+        item = local_item(path)
+        table = ParquetByPolars().preview(Parquet(), *item.args, limits=self.limits)
         assert table.rows == [[1], [2]]
         assert "of 3" in table.note
 
-    def test_excel_first_sheet(self, make_target):
+    def test_excel_first_sheet(self, make_item):
         buffer = io.BytesIO()
         with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
             pd.DataFrame({"a": [1, 2, 3]}).to_excel(
@@ -250,75 +250,78 @@ class TestPreviews:
             )
             pd.DataFrame({"b": [1]}).to_excel(writer, sheet_name="two", index=False)
         table = self.preview(
-            Excel(), make_target("/a.xlsx", buffer.getvalue()), self.limits
+            Excel(), make_item("/a.xlsx", buffer.getvalue()), self.limits
         )
         assert table.title == "one"
         assert table.rows == [[1], [2]]
         assert "other sheets: two" in table.note
 
-    def test_text_highlighted(self, make_target):
-        text = self.preview(Text(), make_target("/a.py", b"import os\n"), self.limits)
+    def test_text_highlighted(self, make_item):
+        text = self.preview(Text(), make_item("/a.py", b"import os\n"), self.limits)
         assert text.language == "python"
         assert text.html is not None
         assert '<span class="kn">import</span>' in text.html
 
-    def test_text_truncated(self, make_target):
+    def test_text_truncated(self, make_item):
         limits = PreviewLimits(max_bytes=4)
-        text = self.preview(Text(), make_target("/a.txt", b"ab\ncd\nef\n"), limits)
+        text = self.preview(Text(), make_item("/a.txt", b"ab\ncd\nef\n"), limits)
         assert text.text == "ab\n"
         assert text.note.startswith("First 0 KB of 9 bytes")
 
-    def test_markdown(self, make_target):
-        md = self.preview(Markdown(), make_target("/a.md", b"# Title\n"), self.limits)
+    def test_markdown(self, make_item):
+        md = self.preview(Markdown(), make_item("/a.md", b"# Title\n"), self.limits)
         assert isinstance(md, MarkdownPreview)
         assert md.text == "# Title\n"
 
-    def test_image(self, make_target):
-        media = self.preview(Image(), make_target("/a.png", b"\x89PNG"), self.limits)
+    def test_image(self, make_item):
+        media = self.preview(Image(), make_item("/a.png", b"\x89PNG"), self.limits)
         assert isinstance(media, MediaPreview)
         assert (media.mime, media.data) == ("image/png", b"\x89PNG")
 
-    def test_install_hint_when_nothing_installed(self, make_target, monkeypatch):
+    def test_install_hint_when_nothing_installed(self, make_item, monkeypatch):
         monkeypatch.setattr(Requirement, "is_installed", lambda self: False)
-        hint = self.preview(Csv(), make_target("/a.csv", b"a\n"), self.limits)
+        hint = self.preview(Csv(), make_item("/a.csv", b"a\n"), self.limits)
         assert isinstance(hint, InstallPreview)
         assert hint.options == [["polars"], ["pandas"]]
 
-    def test_image_needs_no_package(self, make_target, monkeypatch):
+    def test_image_needs_no_package(self, make_item, monkeypatch):
         # The browser shows images itself: Pillow is for the load code only.
         monkeypatch.setattr(Requirement, "is_installed", lambda self: False)
-        media = self.preview(Image(), make_target("/a.png", b"\x89PNG"), self.limits)
+        media = self.preview(Image(), make_item("/a.png", b"\x89PNG"), self.limits)
         assert isinstance(media, MediaPreview)
 
 
 class TestRecipes:
-    def code(self, fmt, target) -> dict[str, str]:
-        return {library(r): r.code for r in CHAIN.recipes(fmt, target)}
+    def code(self, fmt, item) -> dict[str, str]:
+        return {library(r): r.code for r in CHAIN.recipes(fmt, *item.args)}
 
-    def test_csv(self, make_target):
-        code = self.code(Csv(), make_target("/a.tsv", b"x\ty\n"))
+    def test_csv(self, make_item):
+        code = self.code(Csv(), make_item("/a.tsv", b"x\ty\n"))
         assert (
             last_line(code["polars"])
-            == "df = pl.read_csv('memory://a.tsv', separator='\\t')"
+            == "df = pl.read_csv('memory:///a.tsv', separator='\\t')"
         )
         assert code["polars"].startswith("import polars as pl")
         assert (
-            last_line(code["pandas"]) == "df = pd.read_csv('memory://a.tsv', sep='\\t')"
+            last_line(code["pandas"])
+            == "df = pd.read_csv('memory:///a.tsv', sep='\\t')"
         )
         assert last_line(code["pyspark"]) == (
-            "df = spark.read.csv('memory://a.tsv', header=True, inferSchema=True, sep='\\t')"
+            "df = spark.read.csv('memory:///a.tsv', header=True, inferSchema=True, sep='\\t')"
         )
 
-    def test_parquet_directory_reads_its_own_files(self, make_target, memfs):
+    def test_parquet_directory_reads_its_own_files(self, make_item, memfs):
         memfs.pipe_file("/d/part-0.parquet", b"")
-        code = self.code(Parquet(), make_target("/d"))
+        code = self.code(Parquet(), make_item("/d"))
         assert (
-            last_line(code["polars"]) == "df = pl.scan_parquet('memory://d/*.parquet')"
+            last_line(code["polars"]) == "df = pl.scan_parquet('memory:///d/*.parquet')"
         )
 
-    def test_delta(self, make_target, memfs):
+    def test_delta(self, make_item, memfs):
         memfs.pipe_file("/t/_delta_log/0.json", b"{}")
-        code = self.code(DeltaLake(), make_target("/t", url="s3://b/t"))
+        code = self.code(
+            DeltaLake(), make_item("/t", location=S3Location(bucket="b", key="t"))
+        )
         assert last_line(code["polars"]) == "df = pl.scan_delta('s3://b/t')"
         # The session is obtained, not configured: Delta Lake's setup in
         # Spark is left to the user.
@@ -330,37 +333,49 @@ class TestRecipes:
             "df = spark.read.format(\"delta\").load('s3a://b/t')"
         )
 
-    def test_json(self, make_target):
-        code = self.code(Json(), make_target("/a.json", b"{}"))
+    def test_json(self, make_item):
+        code = self.code(Json(), make_item("/a.json", b"{}"))
         assert "data = json.load(f)" in code["fsspec"]
-        assert last_line(code["polars"]) == "df = pl.read_json('memory://a.json')"
+        assert last_line(code["polars"]) == "df = pl.read_json('memory:///a.json')"
 
-    def test_svg_has_no_recipe(self, make_target):
-        assert CHAIN.recipes(Image(), make_target("/a.svg", b"<svg/>")) == []
+    def test_svg_has_no_recipe(self, make_item):
+        assert CHAIN.recipes(Image(), *make_item("/a.svg", b"<svg/>").args) == []
 
-    def test_runs_in_a_new_notebook(self, make_target, monkeypatch):
+    def test_runs_in_a_new_notebook(self, make_item, monkeypatch):
         # Its imports first, whatever the notebook has imported; missing
         # packages are not installed by the code.
         monkeypatch.setattr(Pillow, "is_installed", lambda self: False)
-        [recipe] = CHAIN.recipes(Image(), make_target("/a.png", b""))
+        [recipe] = CHAIN.recipes(Image(), *make_item("/a.png", b"").args)
         assert recipe.code == (
             "import fsspec\n"
             "import PIL.Image\n"
             "\n"
-            "with fsspec.open('memory://a.png', 'rb') as f:\n"
+            "with fsspec.open('memory:///a.png', 'rb') as f:\n"
             "    img = PIL.Image.open(f)\n"
             "    img.load()\n"
             "img"
         )
 
-    def test_spark_session_created(self, make_target):
-        code = self.code(Parquet(), make_target("/a.parquet", b""))
+    def test_spark_session_created(self, make_item):
+        code = self.code(Parquet(), make_item("/a.parquet", b""))
         assert code["pyspark"] == (
             "from pyspark.sql import SparkSession\n"
             "\n"
             "spark = SparkSession.builder.getOrCreate()\n"
-            "df = spark.read.parquet('memory://a.parquet')"
+            "df = spark.read.parquet('memory:///a.parquet')"
         )
+
+
+def test_spark_url(tmp_path):
+    assert spark_url("s3://bucket/x") == "s3a://bucket/x"
+    assert (
+        spark_url("abfs://c@a.dfs.core.windows.net/x")
+        == "abfss://c@a.dfs.core.windows.net/x"
+    )
+    assert spark_url("az://c/x") == "abfss://c/x"
+    assert spark_url("gs://bucket/x") == "gs://bucket/x"
+    # Local files: Spark reads their file:/// URLs.
+    assert spark_url(local_item(tmp_path).location.url).startswith("file:///")
 
 
 def options_chain(options):
@@ -368,7 +383,7 @@ def options_chain(options):
 
 
 class TestFormatOptionsInCode:
-    def test_polars_and_pandas_options(self, make_target):
+    def test_polars_and_pandas_options(self, make_item):
         chain = options_chain(
             {
                 "polars": {
@@ -382,29 +397,30 @@ class TestFormatOptionsInCode:
                 "pandas": {"*": {"storage_options": {"anon": True}}},
             }
         )
-        recipes = chain.recipes(Csv(), make_target("/a.csv", b"x,y\n"))
+        recipes = chain.recipes(Csv(), *make_item("/a.csv", b"x,y\n").args)
         code = {library(r): r.code for r in recipes}
         assert last_line(code["polars"]) == (
-            "df = pl.read_csv('memory://a.csv', storage_options={'aws_region': 'eu'})"
+            "df = pl.read_csv('memory:///a.csv', storage_options={'aws_region': 'eu'})"
         )
         assert last_line(code["pandas"]) == (
-            "df = pd.read_csv('memory://a.csv', storage_options={'anon': True})"
+            "df = pd.read_csv('memory:///a.csv', storage_options={'anon': True})"
         )
         assert "storage_options" not in code["pyspark"]
 
-    def test_fsspec_options(self, make_target):
+    def test_fsspec_options(self, make_item):
         chain = options_chain({"fsspec": {"*": {"storage_options": {"anon": True}}}})
-        [recipe] = chain.recipes(Text(), make_target("/a.txt", b""))
-        assert "fsspec.open('memory://a.txt', 'rt', anon=True)" in recipe.code
+        [recipe] = chain.recipes(Text(), *make_item("/a.txt", b"").args)
+        assert "fsspec.open('memory:///a.txt', 'rt', anon=True)" in recipe.code
 
-    def test_delta_options(self, make_target, memfs):
+    def test_delta_options(self, make_item, memfs):
         memfs.pipe_file("/t/_delta_log/0.json", b"{}")
         support = DeltaLakeByPolars(
             storage_options={"region": "eu"},
             use_pyarrow=True,
             delta_table_options={"version": 1},
         )
-        code = support.recipe(DeltaLake(), make_target("/t", url="s3://b/t"))
+        item = make_item("/t", location=S3Location(bucket="b", key="t"))
+        code = support.recipe(DeltaLake(), *item.args)
         assert last_line(code) == (
             "df = pl.scan_delta('s3://b/t', storage_options={'region': 'eu'}, "
             "delta_table_options={'version': 1}, use_pyarrow=True)"
@@ -422,28 +438,21 @@ class TestFormatOptionsInCode:
 def test_query_local_file(tmp_path, fmt, write, name):
     path = tmp_path / name
     write(pl.DataFrame({"a": [1, 2]}), path)
-    assert CHAIN.query(fmt, str(path), False).collect()["a"].to_list() == [1, 2]
+    lf = CHAIN.query(fmt, *local_item(path).args)
+    assert lf.collect()["a"].to_list() == [1, 2]
 
 
 def test_query_csv_separator(tmp_path):
     path = tmp_path / "a.csv"
     path.write_text("a;b\n1;2\n")
-    assert CsvByPolars().query(Csv(), str(path), False).collect().columns == ["a", "b"]
+    lf = CsvByPolars().query(Csv(), *local_item(path).args)
+    assert lf.collect().columns == ["a", "b"]
 
 
 def test_query_delta_table(tmp_path):
     pl.DataFrame({"a": [1, 2]}).write_delta(tmp_path / "t")
-    lf = CHAIN.query(DeltaLake(), str(tmp_path / "t"), True)
+    lf = CHAIN.query(DeltaLake(), *local_item(tmp_path / "t").args)
     assert lf.collect().height == 2
-
-
-def local_target(path) -> Target:
-    """A local directory's Target, as the explorer gives it to ``matches``."""
-    fs = fsspec.filesystem("file")
-    path = path.as_posix()
-    return Target(
-        fs=fs, path=path, url=path, info={}, children=fs.ls(path, detail=True)
-    )
 
 
 class TestPartitionedParquetReading:
@@ -463,8 +472,8 @@ class TestPartitionedParquetReading:
     def test_scan_with_partition_columns(self, tmp_path):
         self.write(tmp_path)
         fmt = Parquet()
-        assert fmt.matches(local_target(tmp_path))
-        df = CHAIN.query(fmt, tmp_path.as_posix(), True).collect().sort("a")
+        assert fmt.matches(*local_item(tmp_path).match_args)
+        df = CHAIN.query(fmt, *local_item(tmp_path).args).collect().sort("a")
         assert df.columns == ["a", "year", "month"]
         assert df.rows() == [
             (202501, 2025, 1),
@@ -473,10 +482,10 @@ class TestPartitionedParquetReading:
             (202602, 2026, 2),
         ]
 
-    def test_scan_of_a_url_not_detected(self, tmp_path):
-        # E.g. rewritten by a support's query: its layout is found then.
+    def test_scan_of_a_folder_not_detected(self, tmp_path):
+        # Its layout is found then, through the filesystem given.
         self.write(tmp_path)
-        df = CHAIN.query(Parquet(), tmp_path.as_posix(), True).collect()
+        df = CHAIN.query(Parquet(), *local_item(tmp_path).args).collect()
         assert (df.columns, df.height) == (["a", "year", "month"], 4)
 
     def test_scan_hive_files(self, tmp_path):
@@ -485,41 +494,43 @@ class TestPartitionedParquetReading:
         pl.DataFrame({"a": [1, 2]}).write_parquet(folder / "000000_0")
         (folder / "_SUCCESS").write_bytes(b"")
         fmt = Parquet()
-        assert fmt.matches(local_target(tmp_path))
-        df = CHAIN.query(fmt, tmp_path.as_posix(), True).collect()
+        assert fmt.matches(*local_item(tmp_path).match_args)
+        df = CHAIN.query(fmt, *local_item(tmp_path).args).collect()
         assert df["a"].to_list() == [1, 2]
         assert df.columns == ["a", "dt"]
 
-    def test_pandas_preview_of_one_partition(self, make_target, memfs):
+    def test_pandas_preview_of_one_partition(self, make_item, memfs):
         for year in (2025, 2026):
             data = parquet_bytes(pl.DataFrame({"a": [year, year]}))
             memfs.pipe_file(f"/t/year={year}/part-0.parquet", data)
         fmt = Parquet()
-        target = make_target("/t")
-        assert fmt.matches(target)
-        table = ParquetByPandas().preview(fmt, target, PreviewLimits(max_rows=5))
+        item = make_item("/t")
+        assert fmt.matches(*item.match_args)
+        table = ParquetByPandas().preview(
+            fmt, *item.args, limits=PreviewLimits(max_rows=5)
+        )
         assert table.columns == ["a", "year"]
         assert table.rows == [[2025, 2025], [2025, 2025]]
 
-    def test_code(self, make_target, memfs):
+    def test_code(self, make_item, memfs):
         memfs.pipe_file("/t/year=2025/month=1/part-0.parquet", b"")
         fmt = Parquet()
-        code = {library(r): r.code for r in CHAIN.recipes(fmt, make_target("/t"))}
+        code = {library(r): r.code for r in CHAIN.recipes(fmt, *make_item("/t").args)}
         assert last_line(code["polars"]) == (
-            "df = pl.scan_parquet('memory://t/year=*/month=*/*.parquet', "
+            "df = pl.scan_parquet('memory:///t/year=*/month=*/*.parquet', "
             "hive_partitioning=True)"
         )
         # pandas (pyarrow) and Spark find partitions themselves.
-        assert last_line(code["pandas"]) == "df = pd.read_parquet('memory://t')"
-        assert last_line(code["pyspark"]) == "df = spark.read.parquet('memory://t')"
+        assert last_line(code["pandas"]) == "df = pd.read_parquet('memory:///t')"
+        assert last_line(code["pyspark"]) == "df = spark.read.parquet('memory:///t')"
 
-    def test_code_for_hive_files(self, make_target, memfs):
+    def test_code_for_hive_files(self, make_item, memfs):
         data = parquet_bytes(pl.DataFrame({"a": [1]}))
         memfs.pipe_file("/t/dt=2026-10-01/000000_0", data)
-        recipes = CHAIN.recipes(Parquet(), make_target("/t"))
+        recipes = CHAIN.recipes(Parquet(), *make_item("/t").args)
         code = {library(r): r.code for r in recipes}
         assert last_line(code["polars"]) == (
-            "df = pl.scan_parquet('memory://t/dt=*/*', hive_partitioning=True, "
+            "df = pl.scan_parquet('memory:///t/dt=*/*', hive_partitioning=True, "
             "hidden_file_prefix=['.', '_'])"
         )
 
@@ -530,5 +541,5 @@ def test_scan_parquet_directory_skips_hidden_files(tmp_path):
     (tmp_path / "_SUCCESS").write_bytes(b"")
     (tmp_path / "sub").mkdir()
     pl.DataFrame({"a": [3]}).write_parquet(tmp_path / "sub" / "part-0.parquet")
-    df = CHAIN.query(Parquet(), str(tmp_path), True).collect()
+    df = CHAIN.query(Parquet(), *local_item(tmp_path).args).collect()
     assert sorted(df["a"].to_list()) == [1, 2]

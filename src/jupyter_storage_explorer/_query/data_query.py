@@ -32,18 +32,6 @@ def _memory_backend() -> str | None:
     return "polars" if Polars().is_installed() else None
 
 
-def as_lazy(frame: Any) -> nw.LazyFrame:
-    """A dataframe of any library narwhals supports, as a narwhals LazyFrame.
-
-    Eager dataframes (pandas, PyArrow, ...) are queried in memory (see
-    ``_memory_backend``).
-    """
-    data = nw.from_native(frame)
-    if isinstance(data, nw.DataFrame):
-        return data.lazy(_memory_backend())
-    return data
-
-
 def fetch_rows(lf: nw.LazyFrame, offset: int, length: int) -> nw.DataFrame:
     """Read one page of a query's result, for the data browser's table.
 

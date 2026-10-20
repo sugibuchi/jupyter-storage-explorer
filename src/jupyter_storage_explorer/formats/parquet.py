@@ -7,12 +7,14 @@ import itertools
 import re
 from typing import TYPE_CHECKING, Any
 
-import fsspec
-
-from jupyter_storage_explorer.formats.base import DataFormat, Target
+from jupyter_storage_explorer.formats.base import DataFormat, child_names, library_url
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Mapping
+    from collections.abc import Iterable, Mapping, Sequence
+
+    from fsspec import AbstractFileSystem
+
+    from jupyter_storage_explorer.location import Location
 
 # Items of a directory looked at to decide whether it is a Parquet dataset.
 _MAX_DETECT_ITEMS = 100
@@ -232,8 +234,8 @@ def _data_files(entries: Iterable[Mapping[str, Any]], limit: int) -> list[str]:
 class Parquet(DataFormat):
     """Parquet files, and directories of them, partitioned or not.
 
-    ``matches`` keeps each directory's layout by URL (``layout()``), for the
-    supports reading it.
+    ``matches`` keeps each directory's layout by location (``layout()``),
+    for the supports reading it.
     """
 
     name = "parquet"
@@ -243,64 +245,75 @@ class Parquet(DataFormat):
     priority = 10  # above generic directories, below table formats such as Delta Lake
 
     def __init__(self) -> None:
-        # Directory URL -> its layout, found by ``matches`` for the supports'
-        # ``query``, which is given the URL only.
-        self._layouts: dict[str, ParquetLayout] = {}
+        # Directory location -> its layout, found by ``matches`` for the
+        # supports. One format object serves every storage of an explorer.
+        self._layouts: dict[Location, ParquetLayout] = {}
 
-    def matches(self, target: Target) -> bool:
+    def matches(
+        self,
+        location: Location,
+        fs: AbstractFileSystem,
+        path: str,
+        info: Mapping[str, Any],
+        children: Sequence[Mapping[str, Any]] | None,
+    ) -> bool:
         """A Parquet file by its extension; a directory if it is a dataset of
         Parquet files, directly in it or in Hive-style partition folders (see
         ``_dataset_files`` and ``_partitioned_layout``), and not a Hudi table."""
-        if not target.is_dir:
-            return super().matches(target)
-        if _HUDI_FOLDER in target.child_names:
+        if children is None:
+            return super().matches(location, fs, path, info, children)
+        if _HUDI_FOLDER in child_names(children):
             return False
-        children = list(target.children or ())
-        if (files := _dataset_files(children, target.fs)) is not None:
-            layout = ParquetLayout((), files, target.path)
-        elif (layout := _partitioned_layout(children, target.fs)) is None:
+        children = list(children)
+        if (files := _dataset_files(children, fs)) is not None:
+            layout = ParquetLayout((), files, path)
+        elif (layout := _partitioned_layout(children, fs)) is None:
             return False
         if len(self._layouts) >= _MAX_LAYOUTS:
             del self._layouts[next(iter(self._layouts))]
-        self._layouts[target.url.rstrip("/")] = layout
+        self._layouts[location] = layout
         return True
 
-    def layout(self, url: str) -> ParquetLayout:
-        """The layout of directory ``url``, as ``matches`` found it, else as
-        found now (see ``_discover``); without one, its own "*.parquet" files."""
-        layout = self._layouts.get(url.rstrip("/")) or self._discover(url)
-        return layout or ParquetLayout((), "*.parquet", url)
+    def layout(
+        self,
+        location: Location,
+        fs: AbstractFileSystem | None = None,
+        path: str | None = None,
+    ) -> ParquetLayout:
+        """The layout of the directory at ``location``, as ``matches`` found
+        it; else, given its filesystem and path, as found now; else (e.g. for
+        a recipe, which has no filesystem to read) its own "*.parquet" files."""
+        if location not in self._layouts and fs is not None and path is not None:
+            try:
+                children = fs.ls(path, detail=True)
+            except Exception:
+                children = None
+            if children is not None:
+                info = {"name": path, "type": "directory"}
+                self.matches(location, fs, path, info, children)
+        return self._layouts.get(location) or ParquetLayout((), "*.parquet", path or "")
 
-    def _discover(self, url: str) -> ParquetLayout | None:
-        """The layout of directory ``url``, which ``matches`` was not given
-        (e.g. a URL a support's ``query`` rewrote): read with fsspec, with the
-        environment's credentials. None if it cannot be read or is no dataset."""
-        try:
-            fs, path = fsspec.core.url_to_fs(url)
-            children = fs.ls(path, detail=True)
-        except Exception:
-            return None
-        info = {"name": path, "type": "directory"}
-        target = Target(fs=fs, path=path, url=url, info=info, children=children)
-        return self._layouts.get(url.rstrip("/")) if self.matches(target) else None
+    def data_url(
+        self,
+        location: Location,
+        fs: AbstractFileSystem | None,
+        path: str | None,
+        is_dir: bool,
+        url: str | None = None,
+    ) -> str:
+        """The URL of the data files, from ``url`` (the location as the
+        library reads it; by default ``library_url``): a file's as it is, a
+        directory's data files as a glob (see ``ParquetLayout.glob``), rather
+        than the directory itself, which libraries would search recursively."""
+        url = url if url is not None else library_url(location)
+        return self.layout(location, fs, path).glob(url) if is_dir else url
 
-    def target_layout(self, target: Target) -> ParquetLayout:
-        """The layout of directory ``target``, found now if ``matches`` has
-        not been given it."""
-        if target.url.rstrip("/") not in self._layouts:
-            self.matches(target)
-        return self.layout(target.url)
-
-    def data_url(self, url: str, is_dir: bool) -> str:
-        """The URL of the data files: a file's as it is, a directory's data
-        files as a glob (see ``ParquetLayout.glob``), rather than the
-        directory itself, which libraries would search recursively."""
-        return self.layout(url).glob(url) if is_dir else url
-
-    def first_files(self, target: Target, limit: int) -> list[str]:
+    def first_files(
+        self, location: Location, fs: AbstractFileSystem, path: str, limit: int
+    ) -> list[str]:
         """Paths of a directory's first ``limit`` data files, in its first
-        partition if it is partitioned (``target_layout(target).keys``)."""
-        layout = self.target_layout(target)
-        if layout.keys:
-            return _data_files(target.fs.ls(layout.leaf, detail=True), limit)
-        return _data_files(target.children or (), limit)
+        partition if it is partitioned (``layout(...).keys``)."""
+        layout = self.layout(location, fs, path)
+        return _data_files(
+            fs.ls(layout.leaf if layout.keys else path, detail=True), limit
+        )

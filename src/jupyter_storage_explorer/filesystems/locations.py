@@ -10,13 +10,21 @@ import dataclasses
 import os
 import urllib.parse
 
-from jupyter_storage_explorer.location import Location, trim
+from jupyter_storage_explorer.location import Location
 
 
 def _set(location: Location, **values: object) -> None:
     """Set normalized fields of a frozen ``location`` in ``__post_init__``."""
     for name, value in values.items():
         object.__setattr__(location, name, value)
+
+
+def _trim(path: str) -> str:
+    """``path`` without trailing "/", except a top folder ("/", "C:/")."""
+    trimmed = path.rstrip("/")
+    if trimmed.endswith(":") or (trimmed == "" and path.startswith("/")):
+        return trimmed + "/"
+    return trimmed
 
 
 def origin(url: str) -> str:
@@ -209,7 +217,7 @@ class LocalLocation(Location):
     machine_id: str | None = None
 
     def __post_init__(self) -> None:
-        _set(self, path=trim(self.path), hostname=self.hostname.lower())
+        _set(self, path=_trim(self.path), hostname=self.hostname.lower())
 
     @property
     def url(self) -> str:

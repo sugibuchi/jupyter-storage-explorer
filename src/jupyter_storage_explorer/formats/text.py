@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import csv
+from typing import TYPE_CHECKING
 
-from jupyter_storage_explorer.formats.base import DataFormat, Target
+from jupyter_storage_explorer.formats.base import DataFormat, head_text, name_of
+
+if TYPE_CHECKING:
+    from fsspec import AbstractFileSystem
 
 
 class Text(DataFormat):
@@ -25,9 +29,9 @@ class Text(DataFormat):
     priority = -10  # the fallback: any more specific format is the default
     # No file_icon: files get the icon of their extension (Python, YAML, ...).
 
-    def language(self, target: Target) -> str | None:
-        """The language to highlight the file as (Pygments' name), if known."""
-        return self.languages.get("." + target.name.lower().rsplit(".", 1)[-1])
+    def language(self, path: str) -> str | None:
+        """The language to highlight the file at `path` as (Pygments' name), if known."""
+        return self.languages.get("." + name_of(path).lower().rsplit(".", 1)[-1])
 
 
 class Markdown(Text):
@@ -56,9 +60,9 @@ class Csv(DataFormat):
         except csv.Error:
             return ","
 
-    def code_separator(self, target: Target) -> str | None:
+    def code_separator(self, fs: AbstractFileSystem, path: str) -> str | None:
         """The file's separator for load code; None for ",", the default."""
-        sep = self.separator(target.name, target.head_text(4096)[0])
+        sep = self.separator(name_of(path), head_text(fs, path, 4096)[0])
         return None if sep == "," else sep
 
 

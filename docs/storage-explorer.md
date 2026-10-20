@@ -300,16 +300,19 @@ class ParquetByDuckDB(FormatSupport):
     use = DuckDB
     capabilities = ("query",)
 
-    def query(self, fmt, url, is_dir):
+    def query(self, fmt, location, fs, path, is_dir):
         # A folder's data files, as detection found them.
-        partitioned = is_dir and bool(fmt.layout(url).keys)
-        return DuckDB().load().read_parquet(fmt.data_url(url, is_dir), hive_partitioning=partitioned)
+        partitioned = is_dir and bool(fmt.layout(location, fs, path).keys)
+        url = fmt.data_url(location, fs, path, is_dir)
+        return DuckDB().load().read_parquet(url, hive_partitioning=partitioned)
 
 
 StorageExplorer("data", supports=[ParquetByDuckDB])
 ```
 
-`FormatSupport`'s docstring has the rules for writing one.
+Each method gets where the item is (`location`, which libraries doing their own I/O read: `library_url(location)`),
+the explorer's fsspec filesystem and the item's path in it (to read it through the explorer, e.g. for a preview), and
+whether it is a folder. `FormatSupport`'s docstring has the rules for writing one.
 
 ## Format options
 
