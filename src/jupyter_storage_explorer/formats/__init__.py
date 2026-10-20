@@ -26,7 +26,6 @@ from jupyter_storage_explorer.formats.base import (
     name_of,
     read_whole,
     snippet_options,
-    spark_url,
 )
 from jupyter_storage_explorer.formats.delta import DeltaLake
 from jupyter_storage_explorer.formats.excel import Excel
@@ -101,5 +100,4 @@ __all__ = [
     "name_of",
     "read_whole",
     "snippet_options",
-    "spark_url",
 ]

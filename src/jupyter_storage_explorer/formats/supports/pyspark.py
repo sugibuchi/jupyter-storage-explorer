@@ -7,7 +7,7 @@ from __future__ import annotations
 from inspect import cleandoc
 from typing import TYPE_CHECKING
 
-from jupyter_storage_explorer.formats.base import format_kwargs, spark_url
+from jupyter_storage_explorer.formats.base import format_kwargs
 from jupyter_storage_explorer.formats.delta import DeltaLake
 from jupyter_storage_explorer.formats.parquet import Parquet
 from jupyter_storage_explorer.formats.requirements import DeltaSpark, PySpark
@@ -18,6 +18,26 @@ if TYPE_CHECKING:
     from fsspec import AbstractFileSystem
 
     from jupyter_storage_explorer.location import Location
+
+
+# Spark (Hadoop) names for storage URLs: TLS "abfss" for Azure, as Spark
+# expects it (storage accounts usually require secure transfer); "s3a", the
+# S3 connector of open-source Hadoop (Databricks and EMR accept it too).
+_SPARK_SCHEMES = {"abfs": "abfss", "az": "abfss", "s3": "s3a"}
+
+
+def spark_url(url: str) -> str:
+    """``url`` as Spark reads it, e.g. "abfss://c@a.dfs.core.windows.net/x" for
+    "abfs://c@a.dfs.core.windows.net/x" or "s3a://bucket/x" for "s3://bucket/x".
+
+    Other URLs and local paths are unchanged.
+    """
+    scheme, sep, rest = url.partition("://")
+    return (
+        f"{_SPARK_SCHEMES[scheme]}://{rest}"
+        if sep and scheme in _SPARK_SCHEMES
+        else url
+    )
 
 
 class CsvByPySpark(FormatSupport):

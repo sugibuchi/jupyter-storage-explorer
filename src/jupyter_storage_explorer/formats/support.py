@@ -70,8 +70,9 @@ class FormatSupport:
       image format the library cannot read): the next support is then
       tried, and for "recipe", the support's code is left out.
     - Each method gets the item as its location (where it is, for libraries
-      doing their own I/O and for the code: ``library_url(location)``,
-      ``spark_url(location.url)``), the explorer's fsspec filesystem and the
+      doing their own I/O and for the code: ``library_url(location)``, for
+      Spark ``supports.pyspark.spark_url(location.url)``), the explorer's
+      fsspec filesystem and the
       item's path in it (to read it through the explorer's filesystem, e.g.
       with ``head_text(fs, path, n)``), and whether it is a folder.
     - Options are keyword-only arguments of ``__init__``. Explorers create
@@ -227,7 +228,8 @@ class FormatSupport:
         The code runs as it is in a new notebook: its imports first, and what
         else it needs, e.g. a Spark session. Installing the packages and
         configuring access to the storage are left to the user. It reads the
-        location (``library_url(location)``, ``spark_url(location.url)``);
+        location (``library_url(location)``; for Spark,
+        ``supports.pyspark.spark_url(location.url)``);
         ``fs`` and ``path`` are for what the code needs to know of the file,
         e.g. a CSV file's separator.
 

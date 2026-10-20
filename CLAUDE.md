@@ -291,7 +291,7 @@ per library of the predefined supports in `supports/` (`polars.py`, `pandas.py`,
 `pillow.py`; `python.py` for those needing no package; named after the libraries, which they import only inside
 methods; exported by `formats.supports`, not `formats`); the predefined packages in `requirements.py`, the
 previews in `preview.py` (tables from dataframes in `frames.py`), the generated code's helpers in `base.py`
-(`snippet_options`, `format_kwargs`, `spark_url`, `library_url`: a location as most libraries read it, a local
+(`snippet_options`, `format_kwargs`, `library_url`: a location as most libraries read it, a local
 file's plain path), and the defaults in `utils.py` (`DEFAULT_FORMATS`,
 `DEFAULT_SUPPORTS`, `create_supports`). A format only detects; a support handles one format's data with one library,
 so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
@@ -315,7 +315,7 @@ so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
   `capabilities`, so a method not listed is never called (no runtime check of that, by design: users are expected to
   generate supports with AI from the written rules in `FormatSupport`'s docstring, kept by
   `test_capabilities_are_the_methods_implemented` for the defaults). Each method gets the detected format object first, then the item: its location (for
-  libraries doing their own I/O and for the code: `library_url(location)`, `spark_url(location.url)`), the explorer's
+  libraries doing their own I/O and for the code: `library_url(location)`; Spark's `spark_url(location.url)`, in `supports/pyspark.py`), the explorer's
   fsspec filesystem and the item's path in it (to read it through the explorer, with its credentials), and `is_dir`;
   `preview`'s `limits` is keyword-only. Any may raise `FormatSupport.NotSupported`
   for an item, and the next support is tried. Options are keyword-only `__init__` arguments, no `**kwargs`. Class

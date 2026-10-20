@@ -28,7 +28,6 @@ from jupyter_storage_explorer.formats import (
     name_of,
     read_whole,
     snippet_options,
-    spark_url,
 )
 from jupyter_storage_explorer.formats.requirements import Polars
 from jupyter_storage_explorer.formats.utils import format_icons
@@ -73,23 +72,11 @@ def test_library_url(tmp_path):
     local = LocalLocation(path=tmp_path.as_posix(), hostname="h")
     assert library_url(local) == tmp_path.as_posix()  # polars and pandas take it
     assert library_url(S3Location(bucket="b", key="k")) == "s3://b/k"
-    assert spark_url(local.url).startswith("file:///")
 
 
 def test_format_kwargs_leaves_out_none():
     assert format_kwargs(sep=";", storage_options=None) == ", sep=';'"
     assert format_kwargs(storage_options=None) == ""
-
-
-def test_spark_url():
-    assert spark_url("s3://bucket/x") == "s3a://bucket/x"
-    assert (
-        spark_url("abfs://c@a.dfs.core.windows.net/x")
-        == "abfss://c@a.dfs.core.windows.net/x"
-    )
-    assert spark_url("az://c/x") == "abfss://c/x"
-    assert spark_url("gs://bucket/x") == "gs://bucket/x"
-    assert spark_url("/local/path") == "/local/path"
 
 
 class TestSnippetOptions:

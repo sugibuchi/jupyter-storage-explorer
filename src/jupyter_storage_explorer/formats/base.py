@@ -2,7 +2,7 @@
 reading a file through its fsspec filesystem (``head_text``,
 ``read_whole``, ...); and helpers for the code
 supports generate ("Python code"): storage options fit to show, keyword
-arguments for recipe templates, and URLs as libraries and Spark read them.
+arguments for recipe templates, and URLs as libraries read them.
 The predefined formats each have a module (delta.py, parquet.py, text.py,
 ...); handling the data is ``FormatSupport``'s (support.py)."""
 
@@ -254,28 +254,9 @@ def format_kwargs(**kwargs: Any) -> str:
     return "".join(f", {k}={v!r}" for k, v in kwargs.items() if v is not None)
 
 
-# Spark (Hadoop) names for storage URLs: TLS "abfss" for Azure, as Spark
-# expects it (storage accounts usually require secure transfer); "s3a", the
-# S3 connector of open-source Hadoop (Databricks and EMR accept it too).
-_SPARK_SCHEMES = {"abfs": "abfss", "az": "abfss", "s3": "s3a"}
-
-
-def spark_url(url: str) -> str:
-    """``url`` as Spark reads it, e.g. "abfss://c@a.dfs.core.windows.net/x" for
-    "abfs://c@a.dfs.core.windows.net/x" or "s3a://bucket/x" for "s3://bucket/x".
-
-    Other URLs and local paths are unchanged.
-    """
-    scheme, sep, rest = url.partition("://")
-    return (
-        f"{_SPARK_SCHEMES[scheme]}://{rest}"
-        if sep and scheme in _SPARK_SCHEMES
-        else url
-    )
-
-
 def library_url(location: Location) -> str:
     """Where most libraries read ``location`` (polars, pandas, DuckDB, ...):
     its URL, but a local file's plain path, which they all take (not all of
-    them read ``file://`` URLs). Spark reads ``spark_url(location.url)``."""
+    them read ``file://`` URLs). Spark reads its own spelling of
+    ``location.url`` (``supports.pyspark.spark_url``)."""
     return location.path if isinstance(location, LocalLocation) else location.url

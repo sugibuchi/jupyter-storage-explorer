@@ -40,6 +40,7 @@ from jupyter_storage_explorer.formats.supports import (
     ParquetByPandas,
     ParquetByPolars,
 )
+from jupyter_storage_explorer.formats.supports.pyspark import spark_url
 
 CHAIN = SupportChain(default_supports())
 
@@ -363,6 +364,18 @@ class TestRecipes:
             "spark = SparkSession.builder.getOrCreate()\n"
             "df = spark.read.parquet('memory:///a.parquet')"
         )
+
+
+def test_spark_url(tmp_path):
+    assert spark_url("s3://bucket/x") == "s3a://bucket/x"
+    assert (
+        spark_url("abfs://c@a.dfs.core.windows.net/x")
+        == "abfss://c@a.dfs.core.windows.net/x"
+    )
+    assert spark_url("az://c/x") == "abfss://c/x"
+    assert spark_url("gs://bucket/x") == "gs://bucket/x"
+    # Local files: Spark reads their file:/// URLs.
+    assert spark_url(local_item(tmp_path).location.url).startswith("file:///")
 
 
 def options_chain(options):
