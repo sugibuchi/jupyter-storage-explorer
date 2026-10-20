@@ -391,8 +391,10 @@ snippets never get storage options (`spark_url()` rewrites `abfs`/`s3` to `abfss
 - The root README is the quick start and highlights only; user-facing details are in `docs/storage-explorer.md`
   ("File operation extensions" (a table: add new ones there), "Using the explorer", "Unsafe operations", "Transfer
   policy", "Supported formats", "Format options", "StorageExplorer options") and `docs/data-explorer.md` (the data
-  browser, `result()`, `on_change()`, `QuerySettings`, "DataExplorer options"). Update them when operations, formats
-  or options change, and the README's highlights for new features. Keep them short.
+  browser, `result()`, `on_change()`, `QuerySettings`, "DataExplorer options"). Extending the explorer in Python
+  (icons, filesystem mappers, file operations, "Another library for a format": supports, their options and secrets) is
+  in DEVELOPMENT.md's "Customizing". Update them when operations, formats or options change, and the README's
+  highlights for new features. Keep them short.
 - Images and links to other files in the READMEs are absolute URLs (`raw.githubusercontent.com/.../main/...` for
   images, `github.com/.../blob/main/...` for files): PyPI shows the README but cannot resolve relative paths. `docs/`
   is read on GitHub only, so it uses relative paths. Screenshots are in `docs/figs/` (the launcher's in

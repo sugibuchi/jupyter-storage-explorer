@@ -68,7 +68,7 @@ The file has some of these functions, all optional:
 |------------------------|-------------------------------------------------------------------------------------------|
 | `filesystems()`        | `{name: URL or fsspec filesystem}`                                                        |
 | `formats()`            | Formats of your own (`DataFormat`), tried before the defaults                             |
-| `supports()`           | [Libraries of your own for formats](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#another-library-for-a-format) (`FormatSupport`), tried before the defaults |
+| `supports()`           | [Libraries of your own for formats](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/DEVELOPMENT.md#another-library-for-a-format) (`FormatSupport`), tried before the defaults |
 | `format_options()`     | The libraries' options, by library and format ([Format options](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#format-options)) |
 | `operations()`         | File operations of your own (`FileSystemOperations`), tried before the defaults           |
 | `filesystem_mappers()` | The locations of storages' paths (`FileSystemMapper`), by which [storages are told apart](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#file-transfer-between-file-systems) |

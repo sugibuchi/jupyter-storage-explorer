@@ -278,53 +278,8 @@ may work, but are not guaranteed to.
 
 Each format's view (the preview, the data browser) is the first installed library's, in the order above, and its code is
 shown for every library, grouped by library in **Python code** (a support given for a library replaces the default one's). The name identifies the format in CSS (see
-[Icons](../DEVELOPMENT.md#icons)) and in [Format options](#format-options).
-
-### Another library for a format
-
-A *support* handles a format's data with a library: a `FormatSupport` subclass, listing in `capabilities` the methods it
-implements: `"view"`, returning what to show (a `QueryView` of data for the data browser, or e.g. a `TableView` or
-`TextView`), and `"recipe"`, the code of "Python code" by title. Supports given as `supports` are tried before the
-defaults, e.g. DuckDB for the data browser on Parquet:
-
-```python
-from jupyter_storage_explorer import StorageExplorer
-from jupyter_storage_explorer.formats import FormatSupport, Parquet, PythonPackage, QueryView
-
-
-class DuckDB(PythonPackage):
-    package = "duckdb"
-    import_name = "duckdb"
-
-
-class ParquetByDuckDB(FormatSupport):
-    format = Parquet
-    engine = DuckDB
-    capabilities = ("view",)
-
-    def view(self, fmt, ctx, options, limits):
-        # A folder's data files, as detection found them.
-        partitioned = ctx.is_dir and bool(fmt.layout(ctx).keys)
-        url = fmt.data_url(ctx)
-        return QueryView(data=DuckDB().load().read_parquet(url, hive_partitioning=partitioned))
-
-
-StorageExplorer("data", supports=[ParquetByDuckDB])
-```
-
-Each method gets the format detected and the item, an `ItemContext` (`ctx`): where it is (`ctx.location`, which
-libraries doing their own I/O read: `library_url(ctx.location)`), the explorer's fsspec filesystem and the item's path in
-it (`ctx.fs`, `ctx.path`: to read it through the explorer, e.g. for a text view), its info, its listing if it is a folder
-(`ctx.children`, `ctx.is_dir`); then its options, and `view` also `limits` (`ViewLimits`: bytes and rows to read).
-Formats' `matches(ctx)` gets the same context. A support's options are the fields of a frozen dataclass, its
-`options_model` (a `SupportOptions` subclass, each field with a default), made from [`format_options`](#format-options)
-under its library's name (`engine.package`, e.g. `"duckdb"`). Mark credentials so that "Python code" never shows them:
-`secret_field(default=None)` for a whole value, `secret_dict_field(default=None, secret_keys=["connection_string"])` for
-keys of a mapping such as storage options; the code gets options through `options.code_value(name)`, which leaves them
-out. A view holding something to release, e.g. a database connection, releases it in a function given to its
-`on_close` (`view.on_close(lambda view: con.close())`), as `StorageExplorer.on_change` takes one: the explorer calls it
-once it no longer shows the view. `recipe` returns code by
-title, e.g. `{"Load as DataFrame": "import duckdb\n..."}`, the title saying what the code does, not the library. `FormatSupport`'s docstring has the rules for writing one.
+[Icons](../DEVELOPMENT.md#icons)) and in [Format options](#format-options). To handle a format with another
+library, see [Another library for a format](../DEVELOPMENT.md#another-library-for-a-format).
 
 ## Format options
 
@@ -461,5 +416,5 @@ Filter by channel in the data browser, and the chart shows that channel's sales.
 | `transfer_policy=[...]`             | Rules for transfers of files between storages; see [Transfer policy](#transfer-policy).                                               |
 | `states="states.json"`              | Where bookmarks and the data browser's settings are kept (a path or an `ExplorerStates`); see [Remembered states](#remembered-states). |
 | `formats=[...]`                     | The formats files are detected as, replacing the defaults (`default_formats()`).                                                      |
-| `supports=[...]`                    | Libraries of your own for formats, tried before the defaults; see [Another library for a format](#another-library-for-a-format).     |
+| `supports=[...]`                    | Libraries of your own for formats, tried before the defaults; see [Another library for a format](../DEVELOPMENT.md#another-library-for-a-format). |
 | `format_options={...}`              | The libraries' options (see [Format options](#format-options)).                                                                       |
