@@ -55,7 +55,9 @@ dev = [
     "pyspark>=3.5",
     "delta-spark>=3.0",
     # The tests' (tests/), besides the libraries.
-    "duckdb>=1.5.6",
+    # Below 2 until sqlframe stops calling fetch_arrow_table(), which DuckDB
+    # 2.0 removed (sqlframe 4.5.0 still does).
+    "duckdb>=1.5.6,<2",
     "pytest>=9.1.1",
     "sqlframe>=4.4.0",
 ]

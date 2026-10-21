@@ -97,6 +97,101 @@ const FILE_ICON_SVGS = {
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="#000" d="M108.4 0h23v22.8h21.2V0h23v69h-23V46h-21v23h-23.2M206 23h-20.3V0h63.7v23H229v46h-23m53.5-69h24.1l14.8 24.3L313.2 0h24.1v69h-23V34.8l-16.1 24.8-16.1-24.8V69h-22.6m89.2-69h23v46.2h32.6V69h-55.6" class="jp-icon0 jp-icon-selectable"/><path fill="#e44d26" d="m107.6 471-33-370.4h362.8l-33 370.2L255.7 512" class="jp-icon-selectable"/><path fill="#f16529" d="M256 480.5V131h148.3L376 447" class="jp-icon-selectable"/><path fill="#ebebeb" d="M142 176.3h114v45.4h-64.2l4.2 46.5h60v45.3H154.4m2 22.8H202l3.2 36.3 50.8 13.6v47.4l-93.2-26" class="jp-icon-selectable-inverse"/><path fill="#fff" d="M369.6 176.3H255.8v45.4h109.6m-4.1 46.5H255.8v45.4h56l-5.3 59-50.7 13.6v47.2l93-25.8" class="jp-icon-selectable-inverse"/></svg>',
 };
 
+// The icons of folders a storage's structure makes more than folders (their
+// level: FileSystemMapper.levels, the explorer's _fs_levels), drawn as the folder icon above,
+// in JupyterLab's grey: from Material Design Icons (filled; Apache License
+// 2.0), the bucket and the hard disk from Pictogrammers' Material Design Icons
+// (Apache License 2.0), see vendor/README.md. Not the clouds' own pictograms,
+// whose licences cover diagrams and documents only.
+const LEVEL_ICON_PATHS = {
+  // An Azure account; the top of S3 or GCS, holding the buckets.
+  cloud:
+    "M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z",
+  // Material's inventory_2: a box, for an Azure container.
+  box: "M20 2H4c-1 0-2 .9-2 2v3.01c0 .72.43 1.34 1 1.69V20c0 1.1 1.1 2 2 2h14c.9 0 2-.9 2-2V8.7c.57-.35 1-.97 1-1.69V4c0-1.1-1-2-2-2zm-5 12H9v-2h6v2zm5-7H4V4h16v3z",
+  bucket: "M3 4H21V7H20L17.5 21H6.5L4 7H3V4Z",
+  // Material's dns: a server, for an SFTP host.
+  server:
+    "M20 13H4c-.55 0-1 .45-1 1v6c0 .55.45 1 1 1h16c.55 0 1-.45 1-1v-6c0-.55-.45-1-1-1zM7 19c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zM20 3H4c-.55 0-1 .45-1 1v6c0 .55.45 1 1 1h16c.55 0 1-.45 1-1V4c0-.55-.45-1-1-1zM7 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z",
+  harddisk:
+    "M6,2H18A2,2 0 0,1 20,4V20A2,2 0 0,1 18,22H6A2,2 0 0,1 4,20V4A2,2 0 0,1 6,2M12,4A6,6 0 0,0 6,10C6,13.31 8.69,16 12.1,16L11.22,13.77C10.95,13.29 11.11,12.68 11.59,12.4L12.45,11.9C12.93,11.63 13.54,11.79 13.82,12.27L15.74,14.69C17.12,13.59 18,11.9 18,10A6,6 0 0,0 12,4M12,9A1,1 0 0,1 13,10A1,1 0 0,1 12,11A1,1 0 0,1 11,10A1,1 0 0,1 12,9M7,18A1,1 0 0,0 6,19A1,1 0 0,0 7,20A1,1 0 0,0 8,19A1,1 0 0,0 7,18M12.09,13.27L14.58,19.58L17.17,18.08L12.95,12.77L12.09,13.27Z",
+  // Material's memory: a chip, for fsspec's memory filesystem.
+  chip: "M15 9H9v6h6V9zm-2 4h-2v-2h2v2zm8-2V9h-2V7c0-1.1-.9-2-2-2h-2V3h-2v2h-2V3H9v2H7c-1.1 0-2 .9-2 2v2H3v2h2v2H3v2h2v2c0 1.1.9 2 2 2h2v2h2v-2h2v2h2v-2h2c1.1 0 2-.9 2-2v-2h2v-2h-2v-2h2zm-4 6H7V7h10v10z",
+  // Databricks (DatabricksMapper.level). Unity Catalog: its catalogs (MDI's
+  // bookshelf), a catalog (Material Symbols' book_2), a schema (MDI's
+  // database), a volume (Material Symbols' files); /Workspace (Material's work).
+  bookshelf: "M9 3V18H12V3H9M12 5L16 18L19 17L15 4L12 5M5 5V18H8V5H5M3 19V21H21V19H3Z",
+  book2:
+    "M290-80q-54 0-92-38t-38-92v-540q0-54 38-92t92-38h510v600q-26 0-43 21t-17 49q0 28 17 49t43 21v60H290Zm30-260h60v-480h-60v480Zm-30 200h409q-9-15-14-33t-5-37q0-20 5-37.5t15-32.5H290q-29 0-49.5 20.5T220-210q0 29 20.5 49.5T290-140Z",
+  files:
+    "M140-160q-24.75 0-42.37-17.63Q80-195.25 80-220v-160h360q24.75 0 42.38-17.63Q500-415.25 500-440v-360h320q24.75 0 42.38 17.62Q880-764.75 880-740v520q0 24.75-17.62 42.37Q844.75-160 820-160H140ZM80-406v-254q0-24.75 17.63-42.38Q115.25-720 140-720h254L80-406Zm119-34 241-241v241H199Z",
+  work: "M20 6h-4V4c0-1.11-.89-2-2-2h-4c-1.11 0-2 .89-2 2v2H4c-1.11 0-1.99.89-1.99 2L2 19c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2zm-6 0h-4V4h4v2z",
+  database:
+    "M12,3C7.58,3 4,4.79 4,7C4,9.21 7.58,11 12,11C16.42,11 20,9.21 20,7C20,4.79 16.42,3 12,3M4,9V12C4,14.21 7.58,16 12,16C16.42,16 20,14.21 20,12V9C20,11.21 16.42,13 12,13C7.58,13 4,11.21 4,9M4,14V17C4,19.21 7.58,21 12,21C16.42,21 20,19.21 20,17V14C20,16.21 16.42,18 12,18C7.58,18 4,16.21 4,14Z",
+  // Workspace files: Material's group, person and folder_shared;
+  // MDI's source-repository(-multiple) for Repos and a repository.
+  group:
+    "M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z",
+  person: "M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z",
+  "folder-shared":
+    "M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-5 3c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2zm4 8h-8v-1c0-1.33 2.67-2 4-2s4 .67 4 2v1z",
+  repositories:
+    "M8,0H20A2,2 0 0,1 22,2V18A2,2 0 0,1 20,20H8A2,2 0 0,1 6,18V2A2,2 0 0,1 8,0M14.75,11.5C17.5,11.5 18.24,9.47 18.43,8.4C19.34,8.11 20,7.26 20,6.25C20,5 19,4 17.75,4C16.5,4 15.5,5 15.5,6.25C15.5,7.19 16.07,8 16.89,8.33C16.67,9 16,10 14,10C12.62,10 11.66,10.35 11,10.84V6.87C11.87,6.56 12.5,5.73 12.5,4.75C12.5,3.5 11.5,2.5 10.25,2.5C9,2.5 8,3.5 8,4.75C8,5.73 8.63,6.56 9.5,6.87V13.13C8.63,13.44 8,14.27 8,15.25C8,16.5 9,17.5 10.25,17.5C11.5,17.5 12.5,16.5 12.5,15.25C12.5,14.32 11.94,13.5 11.13,13.18C11.41,12.5 12.23,11.5 14.75,11.5M10.25,14.5A0.75,0.75 0 0,1 11,15.25A0.75,0.75 0 0,1 10.25,16A0.75,0.75 0 0,1 9.5,15.25A0.75,0.75 0 0,1 10.25,14.5M10.25,4A0.75,0.75 0 0,1 11,4.75A0.75,0.75 0 0,1 10.25,5.5A0.75,0.75 0 0,1 9.5,4.75A0.75,0.75 0 0,1 10.25,4M17.75,5.5A0.75,0.75 0 0,1 18.5,6.25A0.75,0.75 0 0,1 17.75,7A0.75,0.75 0 0,1 17,6.25A0.75,0.75 0 0,1 17.75,5.5M16,22V24H4A2,2 0 0,1 2,22V6H4V22H16Z",
+  repository:
+    "M6,2H18A2,2 0 0,1 20,4V20A2,2 0 0,1 18,22H6A2,2 0 0,1 4,20V4A2,2 0 0,1 6,2M12.75,13.5C15.5,13.5 16.24,11.47 16.43,10.4C17.34,10.11 18,9.26 18,8.25C18,7 17,6 15.75,6C14.5,6 13.5,7 13.5,8.25C13.5,9.19 14.07,10 14.89,10.33C14.67,11 14,12 12,12C10.62,12 9.66,12.35 9,12.84V8.87C9.87,8.56 10.5,7.73 10.5,6.75C10.5,5.5 9.5,4.5 8.25,4.5C7,4.5 6,5.5 6,6.75C6,7.73 6.63,8.56 7.5,8.87V15.13C6.63,15.44 6,16.27 6,17.25C6,18.5 7,19.5 8.25,19.5C9.5,19.5 10.5,18.5 10.5,17.25C10.5,16.32 9.94,15.5 9.13,15.18C9.41,14.5 10.23,13.5 12.75,13.5M8.25,16.5A0.75,0.75 0 0,1 9,17.25A0.75,0.75 0 0,1 8.25,18A0.75,0.75 0 0,1 7.5,17.25A0.75,0.75 0 0,1 8.25,16.5M8.25,6A0.75,0.75 0 0,1 9,6.75A0.75,0.75 0 0,1 8.25,7.5A0.75,0.75 0 0,1 7.5,6.75A0.75,0.75 0 0,1 8.25,6M15.75,7.5A0.75,0.75 0 0,1 16.5,8.25A0.75,0.75 0 0,1 15.75,9A0.75,0.75 0 0,1 15,8.25A0.75,0.75 0 0,1 15.75,7.5Z",
+  // Legacy DBFS's top folders: MDI's folder-clock.
+  "folder-clock":
+    "M3,4C1.89,4 1,4.89 1,6V18A2,2 0 0,0 3,20H10.26C11.57,21.88 13.71,23 16,23A7,7 0 0,0 23,16C23,14.17 22.28,12.42 21,11.11V8C21,6.89 20.1,6 19,6H11L9,4H3M16,11A5,5 0 0,1 21,16A5,5 0 0,1 16,21A5,5 0 0,1 11,16A5,5 0 0,1 16,11M15,12V17L18.61,19.16L19.36,17.94L16.5,16.25V12H15Z",
+};
+
+// Icons drawn on Material Symbols' grid; the others on the 24-pixel one.
+const LEVEL_ICON_VIEWBOXES = { book2: "0 -960 960 960", files: "0 -960 960 960" };
+
+// A level of the predefined mappers -> its icon. Other levels (a mapper's own) keep
+// the folder icon; CSS can give them one ([data-fs-level], DEVELOPMENT.md).
+const LEVEL_ICONS = {
+  account: "cloud",
+  endpoint: "cloud",
+  container: "box",
+  bucket: "bucket",
+  host: "server",
+  drive: "harddisk",
+  memory: "chip",
+  // Databricks: a workspace's files.
+  workspace: "cloud",
+  volumes: "bookshelf",
+  catalog: "book2",
+  schema: "database",
+  volume: "files",
+  "workspace-files": "work",
+  repos: "repositories",
+  users: "group",
+  user: "person",
+  shared: "folder-shared",
+  repository: "repository",
+  legacy: "folder-clock",
+};
+
+// A folder's icon by its level, or null for the folder icon.
+function levelIcon(level) {
+  const name = level && Object.hasOwn(LEVEL_ICONS, level) ? LEVEL_ICONS[level] : null;
+  if (!name) return null;
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", LEVEL_ICON_VIEWBOXES[name] ?? "0 0 24 24");
+  // jse-level-svg: in its storage's colour (--jse-storage-color, the CSS).
+  svg.setAttribute("class", "jse-svg jse-file-svg jse-level-svg");
+  svg.setAttribute("aria-hidden", "true");
+  svg.dataset.icon = name;
+  const path = document.createElementNS(ns, "path");
+  path.setAttribute("fill", "#616161");
+  // JupyterLab's classes, as the folder icon's: its theme recolours them.
+  path.setAttribute("class", "jp-icon3 jp-icon-selectable");
+  path.setAttribute("d", LEVEL_ICON_PATHS[name]);
+  svg.append(path);
+  return svg;
+}
+
 // The icons of files no format of the explorer sets one for (their
 // DataFormat.file_icon, e.g. CSV and Parquet files' "spreadsheet"): by
 // extension, JupyterLab's default file types (@jupyterlab/docregistry, and
@@ -134,8 +229,13 @@ const FILE_ICON_EXTENSIONS = {
 // The icon of an item, as an SVG element: `formatIcon`, the file_icon of the
 // file's format if it has one, else the one JupyterLab's file browser shows.
 // An icon of the format's own comes with its SVG `markup`: shown as an
-// image, in which its scripts, if any, never run.
-function fileIcon(name, isDir, formatIcon = null, markup = null) {
+// image, in which its scripts, if any, never run. A folder of a `level`
+// (FileSystemMapper.levels, e.g. "bucket") gets that level's icon.
+function fileIcon(name, isDir, formatIcon = null, markup = null, level = null) {
+  if (isDir && level) {
+    const svg = levelIcon(level);
+    if (svg) return svg;
+  }
   if (!isDir && formatIcon && markup) {
     const img = h("img", { className: "jse-svg jse-file-svg", alt: "", src: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(markup)}` });
     img.setAttribute("aria-hidden", "true");

@@ -9,11 +9,13 @@ import fsspec
 import pytest
 from adlfs import AzureBlobFileSystem
 from fsspec import AbstractFileSystem
+from fsspec.implementations.dbfs import DatabricksFileSystem
 from fsspec.implementations.dirfs import DirFileSystem
 
 from jupyter_storage_explorer import Location
 from jupyter_storage_explorer.filesystems import (
     AbfsLocation,
+    AzureBlobMapper,
     FileSystemMapper,
     FsspecLocation,
     GcsLocation,
@@ -76,6 +78,19 @@ class SSHFileSystem(AbstractFileSystem):
 
     __module__ = "sshfs.spec"
     protocol = ("sftp", "ssh")
+
+
+class FsspecDatabricks(AbstractFileSystem):
+    """fsspec-databricks' (https://github.com/sugibuchi/fsspec-databricks)."""
+
+    __module__ = "fsspec_databricks.spec"
+    __qualname__ = "DatabricksFileSystem"
+    protocol = "dbfs"
+    root_marker = "/"
+
+
+# Both implementations of Databricks' files: fsspec's own, and fsspec-databricks'.
+DATABRICKS = [DatabricksFileSystem, FsspecDatabricks]
 
 
 class OtherFileSystem(AbstractFileSystem):
@@ -350,3 +365,81 @@ def test_mappers_given_first(memfs):
     assert mine.location_of(memfs, "/x").url == "memory://tests/x"
     assert mine.locate(TestsLocation(path="/x"), [memfs]) == (memfs, "/x")
     assert location_of(memfs, "/x").url == "memory:///x"
+
+
+class TestLevels:
+    """What the storages make of their folders, for their icons."""
+
+    def test_by_depth(self):
+        levels = {type(m).__name__: m.levels for m in default_mappers()}
+        assert levels["AzureBlobMapper"] == ("account", "container")
+        assert levels["S3Mapper"] == levels["GCSMapper"] == ("endpoint", "bucket")
+        assert levels["SFTPMapper"] == levels["SSHFSMapper"] == ("host",)
+        assert levels["MemoryMapper"] == ("memory",)
+        assert levels["LocalMapper"][-1] == "drive"
+        assert FileSystemMapper.levels == ()
+
+    def test_level_from_levels(self, memfs):
+        level = AzureBlobMapper().level
+        assert [level(memfs, p) for p in ("", "c", "/c/", "c/d")] == [
+            "account",
+            "container",
+            "container",
+            None,
+        ]
+
+    def test_in_a_dir_filesystem(self, memfs):
+        assert chain.level_of(memfs, "/") == "memory"
+        assert chain.level_of(DirFileSystem("/a", memfs), "") is None
+
+    @pytest.mark.parametrize(
+        ("path", "level"),
+        [
+            ("", "workspace"),
+            ("/", "workspace"),
+            ("/Volumes", "volumes"),
+            ("/Volumes/main", "catalog"),
+            ("Volumes/main/sales", "schema"),
+            ("/Volumes/main/sales/raw", "volume"),
+            ("/Volumes/main/sales/raw/2026", None),
+            ("/Workspace", "workspace-files"),
+            ("/Workspace/Repos", "repos"),
+            ("/Workspace/Users", "users"),
+            ("/Workspace/Shared", "shared"),
+            ("/Workspace/Repos/me@example.com", "user"),
+            ("/Workspace/Users/me@example.com", "user"),
+            ("/Workspace/Repos/me@example.com/project", "repository"),
+            ("/Workspace/Users/me@example.com/project", None),
+            ("/Workspace/Shared/team", None),
+            ("/FileStore", "legacy"),
+            ("/FileStore/tables", None),
+            ("/volumes/main", None),  # paths are case-sensitive
+        ],
+    )
+    @pytest.mark.parametrize("cls", DATABRICKS)
+    def test_databricks(self, cls, path, level):
+        fs = cls.__new__(cls)  # no workspace
+        assert chain.level_of(fs, path) == level
+
+
+class TestDatabricks:
+    """fsspec-databricks' DatabricksFileSystem and fsspec's own."""
+
+    @pytest.mark.parametrize("cls", DATABRICKS)
+    def test_urls_fsspec_reads(self, cls):
+        """dbfs://Volumes/...: fsspec takes a protocol only before "://", and
+        fsspec-databricks refuses dbfs:///Volumes/..."""
+        fs = cls.__new__(cls)
+        location = location_of(fs, "/Volumes/main/sales/raw/x.csv")
+        assert location == FsspecLocation(url="dbfs://Volumes/main/sales/raw/x.csv")
+        assert location.protocol == "dbfs"
+        assert path_in(fs, location) == "/Volumes/main/sales/raw/x.csv"
+        assert location_of(fs, "").url == "dbfs://"
+
+    @pytest.mark.parametrize(
+        "url", ["dbfs:/Volumes/x", "dbfs://Volumes/x", "dbfs:///Volumes/x"]
+    )
+    def test_any_form_found(self, url):
+        fs = FsspecDatabricks.__new__(FsspecDatabricks)
+        assert path_in(fs, FsspecLocation(url=url)) == "/Volumes/x"
+        assert path_in(fs, FsspecLocation(url="other:///Volumes/x")) is None

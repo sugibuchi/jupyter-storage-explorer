@@ -48,9 +48,11 @@ function createToolbar(x) {
     // In a span of its own, left to right: pathEl is right to left, so that a
     // path too long is cut at its start, and the current folder stays in view.
     const crumbs = h("span", { className: "jse-crumbs" });
+    const root = rootLabel(chain[0]);
     chain.forEach((path, i) => {
-      if (i > 0) crumbs.append(h("span", { className: "jse-sep", textContent: "/" }));
-      const name = i === 0 ? rootLabel(path) : basename(path);
+      // Not after a root ending with "/" ("/", "C:/"): "/ data", not "/ / data".
+      if (i > 1 || (i === 1 && !root.endsWith("/"))) crumbs.append(h("span", { className: "jse-sep", textContent: "/" }));
+      const name = i === 0 ? root : basename(path);
       const crumb = h("span", { className: "jse-crumb", textContent: visible(name), title: visible(path) });
       crumb.addEventListener("click", () => x.navigate(path));
       crumbs.append(crumb);

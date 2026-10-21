@@ -1064,6 +1064,65 @@ def local_paths_copied(lab: Lab, page: Page) -> None:
     assert page.evaluate(clipboard) == str(folder / "notes.txt")
 
 
+# Memory filesystems as an Azure account and as S3, to their mappers: folders
+# at their top are containers and buckets (FileSystemMapper.levels).
+STORAGE_LEVELS = """\
+from fsspec.implementations.memory import MemoryFileSystem
+from jupyter_storage_explorer import StorageExplorer
+from jupyter_storage_explorer.filesystems import FileSystemMapper, AbfsLocation, S3Location
+
+class Account(MemoryFileSystem):
+    store, pseudo_dirs = {}, [""]
+
+class Buckets(MemoryFileSystem):
+    store, pseudo_dirs = {}, [""]
+
+class AccountMapper(FileSystemMapper):
+    classes, levels = ("__main__.Account",), ("account", "container")
+    def to_location(self, fs, path):
+        container, _, key = path.strip("/").partition("/")
+        return AbfsLocation(account_name="lake", container_name=container, path=key)
+
+class BucketMapper(FileSystemMapper):
+    classes, levels = ("__main__.Buckets",), ("endpoint", "bucket")
+    def to_location(self, fs, path):
+        bucket, _, key = path.strip("/").partition("/")
+        return S3Location(bucket=bucket, key=key)
+
+account, buckets = Account(), Buckets()
+account.pipe_file("/raw/sales/a.csv", b"a")
+buckets.pipe_file("/landing/b.csv", b"b")
+StorageExplorer(
+    filesystems={"Azure": account, "S3": buckets},
+    filesystem_mappers=[AccountMapper(), BucketMapper()],
+)"""
+
+
+@lab_check
+def storage_levels(lab: Lab, page: Page) -> None:
+    # Accounts, containers and buckets get icons of their own, and their rows
+    # data-fs-level; the explorer data-fs-protocol; plain folders neither.
+    x = Explorer(lab, page, STORAGE_LEVELS)
+    icon = ".jse-icon svg"
+    expect(x.el).to_have_attribute("data-fs-protocol", "abfs")
+    root = x.el.locator(".jse-tree .jse-node").first
+    expect(root).to_have_attribute("data-fs-level", "account")
+    expect(root.locator(icon)).to_have_attribute("data-icon", "cloud")
+    expect(x.node("raw")).to_have_attribute("data-fs-level", "container")
+    expect(x.row("raw")).to_have_attribute("data-fs-level", "container")
+    expect(x.row("raw").locator(icon)).to_have_attribute("data-icon", "box")
+    x.row("raw").dblclick()
+    # The path: "/ raw", no separator after a root of "/".
+    expect(x.el.locator(".jse-crumb")).to_have_text(["/", "raw"])
+    expect(x.el.locator(".jse-crumbs .jse-sep")).to_have_count(0)
+    expect(x.row("sales")).not_to_have_attribute("data-fs-level", re.compile("."))
+    expect(x.row("sales").locator(icon)).to_have_attribute("data-icon", "folder")
+    x.el.locator(".jse-fs-select").select_option("S3")
+    expect(x.el).to_have_attribute("data-fs-protocol", "s3")
+    expect(x.row("landing").locator(icon)).to_have_attribute("data-icon", "bucket")
+    expect(x.node("landing")).to_have_attribute("data-fs-level", "bucket")
+
+
 @lab_check
 def python_callbacks(lab: Lab, page: Page) -> None:
     x = Explorer(lab, page, CALLBACKS)

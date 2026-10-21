@@ -5,9 +5,86 @@ from __future__ import annotations
 import fsspec
 import pytest
 from explorers import Explorer, entries, make, path_of
+from fsspec.implementations.dirfs import DirFileSystem
 
 from jupyter_storage_explorer import Location
 from jupyter_storage_explorer._explorer.states import ExplorerStates
+from jupyter_storage_explorer.filesystems import AbfsLocation, FileSystemMapper
+
+
+class AzureLike(FileSystemMapper):
+    """The memory filesystem as an Azure account: containers at its top."""
+
+    classes = ("fsspec.implementations.memory.MemoryFileSystem",)
+    levels = ("account", "container")
+
+    def to_location(self, fs, path):
+        container, _, key = path.strip("/").partition("/")
+        return AbfsLocation(account_name="a", container_name=container, path=key)
+
+
+class NoLocations(FileSystemMapper):
+    classes = AzureLike.classes
+
+    def to_location(self, fs, path):
+        return None
+
+
+class TestStorageLevels:
+    """Folders' levels (FileSystemMapper.level), for their icons: the top
+    folder's (_root_level), the tree's and the listing's; and _fs_protocol."""
+
+    def levels(self, explorer):
+        return {e["name"]: e["level"] for e in entries(explorer)}
+
+    def test_memory(self, mem_explorer):
+        assert mem_explorer._fs_protocol == "memory"
+        assert mem_explorer._root_level == "memory"
+        assert set(self.levels(mem_explorer).values()) == {None}
+
+    def test_by_folder(self, memfs):
+        memfs.mkdir("/c/d")
+        memfs.pipe_file("/c/x.csv", b"x")
+        explorer = make("/", fs=memfs, filesystem_mappers=[AzureLike()])
+        assert (explorer._fs_protocol, explorer._root_level) == ("abfs", "account")
+        assert self.levels(explorer) == {"c": "container"}
+        assert explorer._tree["/"] == [
+            {"name": "c", "path": "/c", "level": "container"}
+        ]
+        explorer._current_dir = "/c"
+        assert self.levels(explorer) == {"d": None, "x.csv": None}  # files: none
+
+    @pytest.mark.parametrize(("folder", "level"), [("/c", "container"), ("/c/d", "")])
+    def test_from_the_top_folder(self, memfs, folder, level):
+        memfs.mkdir("/c/d")
+        explorer = make(folder, fs=memfs, filesystem_mappers=[AzureLike()])
+        assert explorer._root_level == level
+
+    def test_in_a_dir_filesystem(self, memfs):
+        """Its folders are those of the filesystem it wraps."""
+        memfs.mkdir("/c/d")
+        within = make(fs=DirFileSystem("/", memfs), filesystem_mappers=[AzureLike()])
+        assert (within._fs_protocol, within._root_level) == ("abfs", "account")
+        assert self.levels(within) == {"c": "container"}
+
+    def test_without_locations(self, memfs):
+        explorer = make("/", fs=memfs, filesystem_mappers=[NoLocations()])
+        assert explorer._fs_protocol == "memory"
+
+    def test_a_mappers_error_costs_an_icon(self, memfs):
+        class Broken(AzureLike):
+            def level(self, fs, path):
+                raise RuntimeError("no")
+
+        memfs.mkdir("/c")
+        explorer = make("/", fs=memfs, filesystem_mappers=[Broken()])
+        assert (explorer._root_level, self.levels(explorer)) == ("", {"c": None})
+
+    def test_with_the_storage_shown(self, memfs, tmp_path):
+        explorer = make(filesystems={"mem": memfs, "local": str(tmp_path)})
+        explorer._filesystem = "local"
+        assert explorer._fs_protocol == "file"
+        assert explorer._root_level == ""  # not a drive's top folder
 
 
 class TestListing:

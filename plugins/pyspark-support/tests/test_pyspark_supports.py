@@ -97,6 +97,9 @@ def test_spark_url(tmp_path):
     )
     assert spark_url("az://c/x") == "abfss://c/x"
     assert spark_url("gs://bucket/x") == "gs://bucket/x"
+    # Databricks' form; "dbfs://Volumes" would name a host.
+    assert spark_url("dbfs://Volumes/c/s/v/x") == "dbfs:/Volumes/c/s/v/x"
+    assert spark_url("dbfs:/Volumes/c/s/v/x") == "dbfs:/Volumes/c/s/v/x"
     # Local files: Spark reads their file:/// URLs.
     assert spark_url(local_item(tmp_path).location.url).startswith("file:///")
 

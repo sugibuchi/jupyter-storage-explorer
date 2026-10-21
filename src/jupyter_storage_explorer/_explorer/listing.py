@@ -170,9 +170,18 @@ class Listing:
             "dir": c["dir"],
             **{
                 key: [c[key][i] for i in indexes]
-                for key in ("names", "is_dir", "sizes", "mtimes", "ctimes", "format")
+                for key in (
+                    "names",
+                    "is_dir",
+                    "sizes",
+                    "mtimes",
+                    "ctimes",
+                    "format",
+                    "level",
+                )
             },
             "formats": c["formats"],
+            "levels": c["levels"],
             "paths": None if c["paths"] is None else [c["paths"][i] for i in indexes],
             "no_url": [j for j, i in enumerate(indexes) if i in no_url],
         }

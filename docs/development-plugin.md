@@ -338,6 +338,7 @@ class MyLocation(Location):
 
 class MyMapper(FileSystemMapper):
     classes = ("mypackage.MyFileSystem",)  # matched by qualified name, subclasses too: no import
+    levels = ("server",)  # optional: what the folders at each depth from the top are, for icons and CSS
 
     def to_location(self, fs, path):
         return MyLocation(server=fs.server.lower(), path=path)
@@ -349,9 +350,17 @@ class MyMapper(FileSystemMapper):
         return None
 ```
 
+`level(fs, path)` tells what a folder is when it is more than a folder: the rows get `data-fs-level`, and the
+predefined levels (DEVELOPMENT.md's "Icons") their icons; others keep the folder icon unless CSS gives them one. By
+default it is `levels` by the folder's depth from the filesystem's top folder (e.g. adlfs's `("account",
+"container")`; "" for a depth of plain folders). Override it when the level depends on the path, as
+`DatabricksMapper`'s does (`/Volumes/<catalog>/<schema>/<volume>`, `/Workspace/Repos/<user>/<repository>`, ...). It
+is called for every folder listed: decide from the path and the instance's settings, never by reading the storage.
+
 Normalize locations when made (lower-case hosts, no trailing "/"): equal locations must name the same item. The
-predefined mappers cover Azure, S3, Google Cloud Storage, SFTP, local disks and memory; other filesystems get fsspec's
-URLs.
+predefined mappers cover Azure, S3, Google Cloud Storage, SFTP, local disks, memory and Databricks
+([fsspec-databricks](https://github.com/sugibuchi/fsspec-databricks) and fsspec's own; fsspec's URLs,
+`dbfs://Volumes/...`); other filesystems get fsspec's URLs.
 
 ## Packaging a plugin
 

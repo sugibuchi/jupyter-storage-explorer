@@ -21,8 +21,8 @@ const LIST_COLUMNS = [
 // for each call, which made sorting a large folder by name slow.
 const nameOrder = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
 
-// Items, {name, path, type, size, mtime, ctime, format, no_url}, from the
-// kernel's columns (see _make_listing).
+// Items, {name, path, type, size, mtime, ctime, format, level, no_url}, from
+// the kernel's columns (see _make_listing); level null for plain folders.
 function decodeColumns(l) {
   const noUrl = new Set(l.no_url ?? []);
   return (l.names ?? []).map((name, i) => ({
@@ -33,6 +33,7 @@ function decodeColumns(l) {
     mtime: l.mtimes[i],
     ctime: l.ctimes?.[i],
     format: l.formats[l.format[i]],
+    level: l.levels?.[l.level[i]] || null,
     no_url: noUrl.has(i),
   }));
 }
@@ -277,22 +278,25 @@ function createList(x) {
   function row(entry, selected, columns) {
     const isDir = isFolder(entry);
     const formatIcon = model.get("_format_icons")[entry.format];
+    // Depth from the root, as in the tree: ancestors() lists the root down to
+    // this folder, so a top-level folder gives 2 entries, i.e. depth 1.
+    const depth = isDir && entry.path.startsWith(model.get("_root")) ? x.ancestors(entry.path).length - 1 : null;
+    const level = isDir ? entry.level : null;
     const tr = h(
       "tr",
       { className: selected.has(entry.path) ? "jse-selected" : "" },
       h(
         "td",
         { className: "jse-col-name" },
-        h("span", { className: "jse-icon" }, fileIcon(entry.name, isDir, formatIcon, model.get("_file_icon_svgs")[formatIcon])),
+        h("span", { className: "jse-icon" }, fileIcon(entry.name, isDir, formatIcon, model.get("_file_icon_svgs")[formatIcon], level)),
         visible(entry.name),
       ),
       ...columns.filter((col) => col.key !== "name").map((col) => h("td", { className: `jse-col-${col.key}`, textContent: CELLS[col.key](entry) })),
     );
     if (isDir) {
       tr.dataset.dropDir = entry.path; // files dropped here are uploaded or moved into this folder
-      // Depth from the root, as in the tree: ancestors() lists the root down to
-      // this folder, so a top-level folder gives 2 entries, i.e. depth 1.
-      if (entry.path.startsWith(model.get("_root"))) tr.dataset.depth = x.ancestors(entry.path).length - 1;
+      if (depth !== null) tr.dataset.depth = depth;
+      if (level) tr.dataset.fsLevel = level; // e.g. [data-fs-level="bucket"]
     } else if (entry.format) {
       // e.g. "csv", "json-lines"; lets CSS style the icon per format.
       tr.dataset.fileFormat = entry.format;

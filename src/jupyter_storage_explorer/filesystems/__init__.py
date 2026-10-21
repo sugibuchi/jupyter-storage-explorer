@@ -27,6 +27,7 @@ from jupyter_storage_explorer.filesystems.mapper import (
 )
 from jupyter_storage_explorer.filesystems.mappers import (
     AzureBlobMapper,
+    DatabricksMapper,
     GCSMapper,
     LocalMapper,
     MemoryMapper,
@@ -54,6 +55,7 @@ __all__ = [
     "AsyncFsspecOperations",
     "AtomicMoveOperation",
     "AzureBlobMapper",
+    "DatabricksMapper",
     "FileSystemMapper",
     "FileSystemOperations",
     "FsspecLocation",

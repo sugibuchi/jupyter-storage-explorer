@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any
 
 from jupyter_storage_explorer.filesystems.locations import (
     AbfsLocation,
+    FsspecLocation,
     GcsLocation,
     LocalLocation,
     MemoryLocation,
@@ -26,6 +27,7 @@ from jupyter_storage_explorer.filesystems.locations import (
 )
 from jupyter_storage_explorer.filesystems.mapper import (
     FileSystemMapper,
+    FsspecMapper,
     MapperChain,
 )
 
@@ -51,6 +53,7 @@ class AzureBlobMapper(FileSystemMapper):
     """
 
     classes = ("adlfs.spec.AzureBlobFileSystem",)
+    levels = ("account", "container")
 
     def to_location(self, fs: AbstractFileSystem, path: str) -> AbfsLocation:
         host = _blob_host(fs) or ""
@@ -94,6 +97,8 @@ class S3Mapper(FileSystemMapper):
     """
 
     classes = ("s3fs.core.S3FileSystem",)
+    # The top: the buckets of an endpoint or partition.
+    levels = ("endpoint", "bucket")
 
     def to_location(self, fs: AbstractFileSystem, path: str) -> S3Location:
         bucket, _, key = path.strip("/").partition("/")
@@ -128,6 +133,7 @@ class GCSMapper(FileSystemMapper):
     with another one (an emulator)."""
 
     classes = ("gcsfs.core.GCSFileSystem",)
+    levels = ("endpoint", "bucket")
 
     def to_location(self, fs: AbstractFileSystem, path: str) -> GcsLocation:
         bucket, _, key = path.strip("/").partition("/")
@@ -155,6 +161,9 @@ class LocalMapper(FileSystemMapper):
     """
 
     classes = ("fsspec.implementations.local.LocalFileSystem",)
+    # A drive's top folder: "/", or on Windows "C:/" (one folder deep, as
+    # the explorer counts: "C:" is its name).
+    levels = ("", "drive") if sys.platform == "win32" else ("drive",)
 
     def to_location(self, fs: AbstractFileSystem, path: str) -> LocalLocation:
         return LocalLocation(path=path, **_machine())
@@ -208,6 +217,7 @@ class MemoryMapper(FileSystemMapper):
     files copied in another kernel are never looked for in this one's memory."""
 
     classes = ("fsspec.implementations.memory.MemoryFileSystem",)
+    levels = ("memory",)
 
     def to_location(self, fs: AbstractFileSystem, path: str) -> MemoryLocation:
         return MemoryLocation(path=path, process=_PROCESS)
@@ -225,6 +235,7 @@ class SFTPMapper(FileSystemMapper):
     tree of their own (a chroot)."""
 
     classes = ("fsspec.implementations.sftp.SFTPFileSystem",)
+    levels = ("host",)
 
     def server(self, fs: AbstractFileSystem) -> dict[str, Any]:
         """{"host", "port", "user"} of ``fs``."""
@@ -270,6 +281,83 @@ class SSHFSMapper(SFTPMapper):
         }
 
 
+class DatabricksMapper(FsspecMapper):
+    """A Databricks workspace's files (https://docs.databricks.com/aws/en/files/):
+    fsspec-databricks' ``DatabricksFileSystem`` (Unity Catalog volumes,
+    workspace files and legacy DBFS), and fsspec's own (legacy DBFS).
+
+    Its locations' URLs are ``dbfs://Volumes/...``: the form both read
+    through fsspec, which takes a protocol only before "://" (so not
+    Databricks' ``dbfs:/Volumes/...``, which Spark reads, see pyspark-support's
+    ``spark_url``; nor ``dbfs:///Volumes/...``, which fsspec-databricks
+    refuses). Nothing in them tells the workspace, so, as fsspec's URLs, they
+    are looked for among the explorer's storages only, and two instances are
+    one filesystem only if fsspec says so.
+    """
+
+    classes = (
+        "fsspec_databricks.spec.DatabricksFileSystem",
+        "fsspec.implementations.dbfs.DatabricksFileSystem",
+    )
+
+    def matches(self, fs: AbstractFileSystem) -> bool:
+        return FileSystemMapper.matches(self, fs)
+
+    def to_location(self, fs: AbstractFileSystem, path: str) -> FsspecLocation:
+        return FsspecLocation(url=f"dbfs://{path.lstrip('/')}")
+
+    def path_of(self, fs: AbstractFileSystem, location: Location) -> str | None:
+        # Any of the forms: dbfs:/x, dbfs://x, dbfs:///x.
+        if not isinstance(location, FsspecLocation) or location.protocol != "dbfs":
+            return None
+        return "/" + location.url.removeprefix("dbfs:").lstrip("/")
+
+    def level(self, fs: AbstractFileSystem, path: str) -> str | None:
+        """What the folder at ``path`` is in the workspace's file systems:
+
+        - Unity Catalog volumes: /Volumes/<catalog>/<schema>/<volume>/...
+        - workspace files: /Workspace/Repos/<user>/<repository>/...,
+          /Workspace/Users/<user>/..., /Workspace/Shared/...
+        - legacy DBFS: every other top folder (/FileStore, ...)
+
+        The folders inside a volume, a repository, a user's folder, Shared or
+        a legacy folder are plain folders.
+        """
+        match [part for part in path.split("/") if part]:
+            case []:
+                return "workspace"
+            case ["Volumes", *rest]:
+                # /Volumes, then a catalog, a schema and a volume.
+                levels = ("volumes", "catalog", "schema", "volume")
+                return levels[len(rest)] if len(rest) < len(levels) else None
+            case ["Workspace", *rest]:
+                return self._workspace_level(rest)
+            # Legacy DBFS: its top folders, so that CSS can mark them.
+            case [_]:
+                return "legacy"
+            case _:
+                return None
+
+    @staticmethod
+    def _workspace_level(parts: list[str]) -> str | None:
+        """The level of /Workspace's folder of these ``parts`` (after it)."""
+        match parts:
+            case []:
+                return "workspace-files"
+            case ["Repos"]:
+                return "repos"
+            case ["Users"]:
+                return "users"
+            case ["Shared"]:
+                return "shared"
+            case ["Repos", _] | ["Users", _]:
+                return "user"
+            case ["Repos", _, _]:
+                return "repository"
+            case _:
+                return None
+
+
 def default_mappers() -> list[FileSystemMapper]:
     """The mappers tried after an explorer's ``filesystem_mappers``.
 
@@ -277,8 +365,8 @@ def default_mappers() -> list[FileSystemMapper]:
     -------
     list of FileSystemMapper
         New objects each time: ``AzureBlobMapper``, ``S3Mapper``,
-        ``GCSMapper``, ``LocalMapper``, ``MemoryMapper``, ``SFTPMapper`` and
-        ``SSHFSMapper``.
+        ``GCSMapper``, ``LocalMapper``, ``MemoryMapper``, ``SFTPMapper``,
+        ``SSHFSMapper`` and ``DatabricksMapper``.
         Filesystems none of them maps get ``FsspecMapper``.
     """
     return [
@@ -289,6 +377,7 @@ def default_mappers() -> list[FileSystemMapper]:
         MemoryMapper(),
         SFTPMapper(),
         SSHFSMapper(),
+        DatabricksMapper(),
     ]
 
 

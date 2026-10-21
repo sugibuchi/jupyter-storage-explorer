@@ -19,6 +19,15 @@ The SVG paths of `ICON_PATHS` in `../icons.js` (menus, buttons) are from
 [Material Design Icons](https://github.com/google/material-design-icons) (filled style), as JupyterLab's own icons
 are. Apache License 2.0, https://www.apache.org/licenses/LICENSE-2.0.
 
+`LEVEL_ICON_PATHS` there (the icons of accounts, containers, buckets, hosts, drives, memory and Databricks' folders in
+the tree and list): `cloud`, `box` (`inventory_2`), `server` (`dns`), `chip` (`memory`), `work`, `group`, `person`
+and `folder-shared` (`folder_shared`) from the same Material Design Icons; `book2` (`book_2`) and `files` from
+[Material Symbols](https://github.com/google/material-design-icons) (filled, `@material-symbols/svg-400` 0.27.0);
+`bucket`, `harddisk`, `bookshelf`, `database`, `repository` (`source-repository`), `repositories`
+(`source-repository-multiple`) and `folder-clock` from
+[Pictogrammers' Material Design Icons](https://github.com/Templarian/MaterialDesign) (`@mdi/svg` 7.4.47). All Apache
+License 2.0. No cloud provider's own icons: their licences allow them in diagrams and documents only.
+
 `FILE_ICON_SVGS` there (the tree and list) are JupyterLab's file icons, copied from JupyterLab 4.6.4
 (`@jupyterlab/ui-components`), and `FILE_ICON_EXTENSIONS` its default file types' extensions, for files whose format sets
 no icon (plus old Excel files, with its CSV icon). BSD-3-Clause,
