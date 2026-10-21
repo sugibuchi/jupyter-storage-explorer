@@ -12,14 +12,6 @@
   display: none;
 }
 
-/* The tab's toolbar keeps its height while it has nothing to show. JupyterLab
-   4.0 to 4.3 collapse it until the debugger's button appears, as the tab is
-   first activated: under the first click, the explorer moved down between the
-   press and the release, and the click was lost. */
-.jse-launcher-panel > .jp-Toolbar {
-  min-height: var(--jp-private-toolbar-height);
-}
-
 /* The console splits its height between the cells and the (hidden) input;
    the cells take it all. Lumino sets the split's sizes inline. */
 .jse-launcher-panel .jp-CodeConsole-split > .lm-SplitPanel-handle {
@@ -56,7 +48,7 @@
   min-height: 0;
 }
 
-/* No margins: the widget fills the tab to its edges, under the tab's toolbar,
+/* No margins: the widget fills the tab to its edges (the console's toolbar is hidden),
    without the room the console keeps around cells and outputs, nor a border
    of its own against the tab's. */
 .jse-launcher-panel .jp-CodeConsole-content,

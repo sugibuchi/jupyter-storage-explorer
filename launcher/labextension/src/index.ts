@@ -41,6 +41,7 @@ import { filesPlugin } from './files';
 import { queryTabsPlugin } from './queryTabs';
 import { ExplorerSidePanel } from './sidePanel';
 import iconSvg from '../style/storage-explorer.svg';
+import monoIconSvg from '../style/storage-explorer-mono.svg';
 
 const PLUGIN_ID = 'jupyter-storage-explorer-launcher:plugin';
 const COMMAND = 'storage-explorer:open';
@@ -74,8 +75,12 @@ export const storageExplorerIcon = new LabIcon({
 // set afterwards (e.g. a restored console, which ExplorerTab sets up when it is
 // already there) would otherwise show the SVG at its own size, 128px.
 const tabIcon = storageExplorerIcon.bindprops({ stylesheet: 'mainAreaTab' });
-// The same in the side bar.
-const sideBarIcon = storageExplorerIcon.bindprops({ stylesheet: 'sideBar' });
+// The side bar's: one colour, as JupyterLab's own icons there, which the
+// theme recolours (the colourful one stood out among them).
+const sideBarIcon = new LabIcon({
+  name: 'jupyter-storage-explorer-launcher:side-bar-icon',
+  svgstr: monoIconSvg
+}).bindprops({ stylesheet: 'sideBar' });
 
 // The view saved for the tab whose console session has path `path`.
 const viewKey = (path: string): string => `${PLUGIN_ID}:view:${path}`;
@@ -118,6 +123,10 @@ class ExplorerTab {
   ) {
     const session = panel.sessionContext;
     panel.addClass(PANEL_CLASS);
+    // No toolbar (run, restart, kernel status, debugger): the explorer has
+    // its own, and a restart replaces the tab anyway. Hidden through Lumino,
+    // which lays the console out again (hidden with CSS, it would keep its room).
+    panel.toolbar.hide();
     this.decorate();
     // The kernel only serves this tab (restored consoles lose this preference).
     session.kernelPreference = { ...session.kernelPreference, shutdownOnDispose: true };

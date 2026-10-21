@@ -105,9 +105,7 @@ export class ExplorerSidePanel extends BoxPanel {
 
   private adoptNow(panel: ConsolePanel): void {
     this.current = panel;
-    // No toolbar (kernel status, debugger): the side bar is narrow, and the
-    // explorer has its own. Hidden through Lumino, which lays it out again.
-    panel.toolbar.hide();
+    // Its toolbar is hidden, as in the tabs (ExplorerTab).
     this.addWidget(panel);
     BoxPanel.setStretch(panel, 1);
     // Added to the main area without being activated, it was a hidden tab there.
