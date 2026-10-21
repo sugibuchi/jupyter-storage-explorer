@@ -13,11 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 from jupyter_storage_explorer.formats.delta import DeltaLake
 from jupyter_storage_explorer.formats.engine import Engine
-from jupyter_storage_explorer.formats.packages import (
-    DatabricksConnect,
-    DeltaSpark,
-    PySpark,
-)
+from jupyter_storage_explorer.formats.package import PythonPackage
 from jupyter_storage_explorer.formats.parquet import Parquet
 from jupyter_storage_explorer.formats.support import (
     FormatSupport,
@@ -38,6 +34,31 @@ if TYPE_CHECKING:
 # expects it (storage accounts usually require secure transfer); "s3a", the
 # S3 connector of open-source Hadoop (Databricks and EMR accept it too).
 _SPARK_SCHEMES = {"abfs": "abfss", "az": "abfss", "s3": "s3a"}
+
+
+# The engine's libraries, and those only Spark uses (the support libraries
+# several engines use are the core's: jupyter_storage_explorer.formats.packages).
+
+
+class PySpark(PythonPackage):
+    package = "pyspark"
+    import_name = "pyspark"
+
+
+class DeltaSpark(PythonPackage):
+    """Delta Lake for Spark, set up in the session (on Databricks, it is)."""
+
+    package = "delta-spark"
+    import_name = "delta"
+
+
+class DatabricksConnect(PythonPackage):
+    """Spark sessions on a Databricks cluster: PySpark's API without pyspark
+    itself, an alternative of ``PySparkEngine``."""
+
+    package = "databricks-connect"
+    # "databricks" alone is a namespace other packages share (databricks-sdk).
+    import_name = "databricks.connect"
 
 
 def spark_url(url: str) -> str:

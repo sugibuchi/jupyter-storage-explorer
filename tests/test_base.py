@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import dataclasses
 
-import polars
+import fsspec
 import pytest
 from items import local_item
 
@@ -22,7 +22,7 @@ from jupyter_storage_explorer.formats import (
     format_kwargs,
 )
 from jupyter_storage_explorer.formats.base import detect, matching_formats
-from jupyter_storage_explorer.formats.packages import Polars
+from jupyter_storage_explorer.formats.packages import Fsspec
 
 
 class TestReading:
@@ -113,8 +113,8 @@ class TestCodeValue:
 
 class TestRequirement:
     def test_installed_and_loaded(self):
-        assert Polars().is_installed()
-        assert Polars().load() is polars
+        assert Fsspec().is_installed()
+        assert Fsspec().load() is fsspec
 
     def test_missing(self):
         missing = type(

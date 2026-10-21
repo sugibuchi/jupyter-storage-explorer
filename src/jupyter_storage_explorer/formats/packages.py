@@ -1,5 +1,8 @@
-"""The predefined packages the supports use (``PythonPackage`` subclasses, see
-package.py)."""
+"""The predefined packages supports use (``PythonPackage`` subclasses, see
+package.py): the libraries several engines' supports may need (to read a
+format, or the item's bytes), and the core's own (Pillow, for images). An
+engine's own packages, and libraries only it uses (e.g. delta-spark for
+Spark, fastexcel for polars), are its plugin's, with its ``Engine``."""
 
 from __future__ import annotations
 
@@ -11,45 +14,12 @@ class Fsspec(PythonPackage):
     import_name = "fsspec"
 
 
-class Polars(PythonPackage):
-    package = "polars"
-    import_name = "polars"
-
-
-class Pandas(PythonPackage):
-    package = "pandas"
-    import_name = "pandas"
-
-
 class Pillow(PythonPackage):
     package = "pillow"
     import_name = "PIL"
 
 
-class PySpark(PythonPackage):
-    """Spark, used only in load code."""
-
-    package = "pyspark"
-    import_name = "pyspark"
-
-
-class DatabricksConnect(PythonPackage):
-    """Spark sessions on a Databricks cluster: PySpark's API without pyspark
-    itself, an alternative of ``PySparkEngine``."""
-
-    package = "databricks-connect"
-    # "databricks" alone is a namespace other packages share (databricks-sdk).
-    import_name = "databricks.connect"
-
-
-# Optional dependencies of the packages above: installed, never imported by snippets.
-
-
-class DeltaSpark(PythonPackage):
-    """Delta Lake for Spark, set up in the session (on Databricks, it is)."""
-
-    package = "delta-spark"
-    import_name = "delta"
+# Optional dependencies of the engines: installed, never imported by snippets.
 
 
 class PyArrow(PythonPackage):
@@ -67,14 +37,7 @@ class DeltaLake(PythonPackage):
 
 
 class Openpyxl(PythonPackage):
-    """Excel engine for pandas."""
+    """Excel engine for pandas (and one of polars')."""
 
     package = "openpyxl"
     import_name = "openpyxl"
-
-
-class Fastexcel(PythonPackage):
-    """Excel engine for polars."""
-
-    package = "fastexcel"
-    import_name = "fastexcel"

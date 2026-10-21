@@ -133,6 +133,12 @@ An engine is defined once, by one plugin: another plugin using it imports its cl
 error). The predefined ones are `PolarsEngine`, `PandasEngine` and `PySparkEngine`, from their plugins' packages
 (`jupyter_storage_explorer_polars_support`, ...). The explorer offers the engines installed that view something.
 
+Packages are defined where they belong: an engine's own (`Polars`, `Pandas`, `PySpark`, `DatabricksConnect`) and
+the libraries only that engine uses (`Fastexcel` for polars, `DeltaSpark` for Spark) by the engine's plugin, beside
+its `Engine`; the support libraries several engines may use (`Fsspec`, `PyArrow`, `DeltaLake`, `Openpyxl`, and the
+core's `Pillow`) by the core, in `jupyter_storage_explorer.formats.packages`. A new plugin imports those, and defines
+its own engine's and its engine-only libraries.
+
 ## Format supports
 
 A `FormatSupport` handles one format's data with one engine:

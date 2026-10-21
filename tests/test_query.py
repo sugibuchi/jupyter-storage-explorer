@@ -243,26 +243,32 @@ class TestDataQuery:
         assert [row[:2] for row in last["rows"]] == [["Water", 1], [None, 2]]
         assert last["more"] is False
 
-    def test_paging_without_offsets(self, monkeypatch):
-        # pandas, without polars to query it with: rows are read up to the
-        # window's end and the first ones dropped.
-        monkeypatch.setattr(data_query.Polars, "is_installed", lambda self: False)
+    def test_paging_without_offsets(self):
+        # pandas: rows are read up to the window's end and the first ones dropped.
         query = DataQuery(DF.to_pandas(), "k", ExplorerStates())
         assert query.lf.implementation.is_pandas()
         reply = query.handle({"type": "query_rows", "offset": 1, "window": 2})
         assert [row[0] for row in reply["rows"]] == ["coffee", "Water"]
         assert reply["more"] is True
 
-    def test_missing_values_from_pandas(self, monkeypatch):
-        monkeypatch.setattr(data_query.Polars, "is_installed", lambda self: False)
+    def test_missing_values_from_pandas(self):
         data = DF.to_pandas(use_pyarrow_extension_array=True)
         query = DataQuery(data, "k", ExplorerStates())
         reply = query.handle({"type": "query_rows", "offset": 3, "window": 1})
         assert reply["rows"] == [[None, 2, "2025-01-04", None]]
 
-    def test_eager_data_queried_with_polars(self):
+    def test_eager_data_queried_in_its_library(self):
+        # As result() is: no other library needed, and filters behave alike.
         query = DataQuery(DF.to_pandas(), "k", ExplorerStates())
-        assert query.lf.implementation.is_polars()
+        assert query.lf.implementation.is_pandas()
+
+    def test_pandas_nan_is_missing(self):
+        # pandas marks missing text with NaN: shown as missing, as nulls are.
+        data = DF.to_pandas()
+        assert data["name"].isna().any()
+        query = DataQuery(data, "k", ExplorerStates())
+        reply = query.handle({"type": "query_rows", "offset": 3, "window": 1})
+        assert reply["rows"][0][0] is None
 
     def test_rows_as_json(self):
         reply = self.query().handle({"type": "query_rows", "offset": 0, "window": 1})
@@ -470,12 +476,15 @@ class TestSparkLike:
         assert reply["rows"] == [[45], [46], [47], [48], [49]]
         assert (reply["more"], reply["limited"]) == (False, False)
 
-    def test_in_memory_with_polars(self):
+    def test_in_memory(self):
+        # In the library narwhals collects Spark's rows into, not Spark.
         query = self.query()
         reply = query.handle({"type": "query_mode", "mode": "memory"})
         assert reply["mode"]["memory"] == {"rows": 20, "cut": True}
-        assert query.lf.implementation.is_polars()
+        assert not query.lf.implementation.is_spark_like()
         assert rows_of(query, window=5)["total"] == 20
+        f = {"filters": {"n": {"op": "range", "min": "15", "max": ""}}}
+        assert rows_of(query, settings=f)["rows"] == [[15], [16], [17], [18], [19]]
 
     def test_small_data_kept_in_memory(self):
         query = self.query(rows=8)

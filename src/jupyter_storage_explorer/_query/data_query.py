@@ -3,6 +3,7 @@ rows and requests; and ``fetch_rows``, how a page is read."""
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING, Any
 
 import narwhals as nw
@@ -15,7 +16,6 @@ from jupyter_storage_explorer._query.filters import (
     normalize_settings,
 )
 from jupyter_storage_explorer._query.settings import QuerySettings
-from jupyter_storage_explorer.formats.packages import Polars
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -26,10 +26,8 @@ if TYPE_CHECKING:
 MODES = ("auto", "live", "memory")
 
 
-def _memory_backend() -> str | None:
-    """The library data in memory is queried with: polars when it is installed,
-    as it is faster and the same for all data; otherwise the data's own."""
-    return "polars" if Polars().is_installed() else None
+def _is_nan(value: Any) -> bool:
+    return isinstance(value, float) and math.isnan(value)
 
 
 def fetch_rows(lf: nw.LazyFrame, offset: int, length: int) -> nw.DataFrame:
@@ -100,7 +98,10 @@ class DataQuery:
       read all rows before each page.
     - "memory": on rows read into memory once, at most ``max_memory_rows``
       (the first ones; filters and sorting then apply to those only), queried
-      with polars when installed (see ``_memory_backend``).
+      in the data's own library: eager data as it is (e.g. pandas), lazy data
+      in the library narwhals collects it into (polars for polars, PyArrow
+      for DuckDB and Spark). So filters behave as ``result()``'s, which run
+      on the data itself, and no other library is needed.
 
     ``mode`` chooses the mode to start in. "auto" (the default) is "live" for
     lazy data, unless it has at most ``max_live_rows`` rows: the first query
@@ -169,8 +170,8 @@ class DataQuery:
         data = nw.from_native(native)
         # The data as given (or as the function returned it), for ``result``.
         self.native = native
-        # The data's own library (queries in memory may run in polars instead)
-        # and type, e.g. "LazyFrame".
+        # The data's own library (lazy data in memory may be in another, e.g.
+        # DuckDB's in PyArrow) and type, e.g. "LazyFrame".
         self.implementation = data.implementation
         self.type_name = type(nw.to_native(native, pass_through=True)).__name__
         if isinstance(data, nw.DataFrame):
@@ -192,7 +193,7 @@ class DataQuery:
 
     def _fits_live_rows(self) -> bool:
         """Keep the data in memory if it has at most ``max_live_rows`` rows."""
-        head = self.source.head(self.max_live_rows + 1).collect(_memory_backend())
+        head = self.source.head(self.max_live_rows + 1).collect()
         if len(head) > self.max_live_rows:
             return False
         self._hold(head, cut=False)
@@ -202,14 +203,14 @@ class DataQuery:
 
     def _load_memory(self) -> None:
         """Read the first ``max_memory_rows`` rows into memory, to query them there."""
-        rows = self.source.head(self.max_memory_rows + 1).collect(_memory_backend())
+        rows = self.source.head(self.max_memory_rows + 1).collect()
         cut = len(rows) > self.max_memory_rows
         self._hold(rows.head(self.max_memory_rows), cut=cut)
 
     def _hold(self, df: nw.DataFrame, *, cut: bool) -> None:
         """Query ``df`` in memory; ``cut``: the data has more rows."""
         self.mode = "memory"
-        self.lf = df.lazy(_memory_backend())
+        self.lf = df.lazy()
         self.schema = self.lf.collect_schema()
         self.memory = {"rows": len(df), "cut": cut}
         self.fixed = ""
@@ -302,9 +303,9 @@ class DataQuery:
         Built on the data itself, not on rows held in memory: it covers all of
         it, and stays lazy if the data is (e.g. a polars LazyFrame or a Spark
         DataFrame); eager data (e.g. pandas) gives the result computed. Filters
-        run in the data's library, so their details (e.g. regex syntax) may
-        differ from what the data browser showed in memory mode, which uses
-        polars.
+        run in the data's library, as in memory mode (for lazy data, in the
+        library it was collected into, which may differ in details such as
+        regex syntax, e.g. PyArrow's for Spark's).
         """
         data = nw.from_native(self.native)
         schema = data.collect_schema()
@@ -344,8 +345,8 @@ class DataQuery:
         try:
             # One extra row tells whether there are more.
             query = build_query(self.lf, self.schema, settings)
-            # ``fetch`` is for the data's library: rows in memory may be in
-            # polars. It returns None to leave a page to the default.
+            # ``fetch`` is for the data's library: lazy data's rows in memory
+            # may be in another. It returns None to leave a page to the default.
             df = None
             if self.mode == "live" and self.fetch is not None:
                 df = self.fetch(query, offset, window + 1)
@@ -359,11 +360,17 @@ class DataQuery:
         beyond = len(df) > window
         limited = beyond and limit is not None and offset + window >= limit
         df = df.head(window)
+        # pandas marks missing values with NaN, also in text columns: shown as
+        # missing, as other libraries' nulls (a NaN of theirs is a value).
+        nan_missing = df.implementation.is_pandas_like()
         return {
             "offset": offset,
             "columns": df.columns,
             "dtypes": [str(t) for t in df.schema.values()],
-            "rows": [[jsonable(v) for v in row] for row in df.rows()],
+            "rows": [
+                [None if nan_missing and _is_nan(v) else jsonable(v) for v in row]
+                for row in df.rows()
+            ],
             "more": beyond and not limited,
             "limited": limited,
             "total": total,

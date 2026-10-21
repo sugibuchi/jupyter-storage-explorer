@@ -91,7 +91,7 @@ def test_fetch_rows_given():
     reply = explorer.request({"type": "query_rows", "offset": 25, "window": 10})
     assert reply["rows"] == [[25], [26], [27], [28], [29]]
     assert fetched == [(25, 11)]  # one extra row tells whether there are more
-    # Rows in memory (in polars) are read by the default, not for the data's library.
+    # Rows in memory (collected into another library) are read by the default.
     explorer.request({"type": "query_mode", "mode": "memory"})
     reply = explorer.request({"type": "query_rows", "offset": 25, "window": 10})
     assert len(reply["rows"]) == 5
