@@ -27,8 +27,8 @@ class Explorer(DataExplorer):
 
 def test_lazy_frame():
     explorer = Explorer(DF.lazy())
-    assert (explorer.title, explorer.library) == ("LazyFrame", "polars")
-    assert [c["name"] for c in explorer.query["columns"]] == ["a", "b"]
+    assert (explorer._title, explorer._library) == ("LazyFrame", "polars")
+    assert [c["name"] for c in explorer._query["columns"]] == ["a", "b"]
     reply = explorer.request({"type": "query_rows", "offset": 2, "window": 5})
     assert reply == {
         "type": "reply",
@@ -40,7 +40,7 @@ def test_lazy_frame():
         "more": False,
         "limited": False,
         "total": 3,  # 3 rows: kept in memory, where they are counted
-        "settings": explorer.query["settings"],
+        "settings": explorer._query["settings"],
     }
 
 
@@ -54,9 +54,9 @@ def test_lazy_frame():
 )
 def test_eager_dataframes(data, library, title):
     explorer = Explorer(data)
-    assert (explorer.library, explorer.title) == (library, title)
-    assert explorer.query["mode"]["mode"] == "memory"
-    assert explorer.query["mode"]["fixed"]
+    assert (explorer._library, explorer._title) == (library, title)
+    assert explorer._query["mode"]["mode"] == "memory"
+    assert explorer._query["mode"]["fixed"]
     with pytest.raises(ValueError, match="live mode needs lazy data"):
         Explorer(data, mode="live")
 
@@ -64,8 +64,8 @@ def test_eager_dataframes(data, library, title):
 def test_duckdb_with_options():
     data = duckdb.from_arrow(pl.DataFrame({"n": list(range(30))}).to_arrow())
     explorer = Explorer(data, max_live_rows=10, max_memory_rows=20, title="Numbers")
-    assert (explorer.title, explorer.library) == ("Numbers", "DuckDB")
-    assert explorer.query["mode"]["mode"] == "live"
+    assert (explorer._title, explorer._library) == ("Numbers", "DuckDB")
+    assert explorer._query["mode"]["mode"] == "live"
     reply = explorer.request({"type": "query_mode", "mode": "memory"})
     assert reply["mode"]["memory"] == {"rows": 20, "cut": True}
 
@@ -74,9 +74,9 @@ def test_spark_like_dataframe():
     # sqlframe stands in for Spark (which needs Java); narwhals treats both alike.
     data = DuckDBSession().createDataFrame([(i,) for i in range(30)], schema="n bigint")
     explorer = Explorer(data, max_live_rows=10)
-    assert (explorer.title, explorer.library) == ("DuckDBDataFrame", "SQLFrame")
-    assert explorer.query["mode"]["mode"] == "live"
-    assert explorer.query["mode"]["live_limit"] == 100_000  # max_memory_rows
+    assert (explorer._title, explorer._library) == ("DuckDBDataFrame", "SQLFrame")
+    assert explorer._query["mode"]["mode"] == "live"
+    assert explorer._query["mode"]["live_limit"] == 100_000  # max_memory_rows
 
 
 def test_fetch_rows_given():
@@ -141,11 +141,11 @@ def test_settings_in_and_out():
         hidden=["gone"],  # not a column: left out
     )
     explorer = Explorer(DF.lazy(), settings=settings)
-    assert explorer.query["settings"]["filters"] == {
+    assert explorer._query["settings"]["filters"] == {
         "a": {"op": "range", "min": "2", "max": ""}
     }
     reply = explorer.request(
-        {"type": "query_rows", "window": 10, "settings": explorer.query["settings"]}
+        {"type": "query_rows", "window": 10, "settings": explorer._query["settings"]}
     )
     assert reply["rows"] == [[3, "x"], [2, None]]
     assert explorer.settings == QuerySettings(
@@ -203,7 +203,7 @@ class TestResult:
     def test_all_the_data_after_memory_mode(self):
         data = pl.LazyFrame({"a": list(range(100)), "b": ["x"] * 100})
         explorer = self.explorer(data, mode="memory", max_memory_rows=10)
-        assert explorer.query["mode"]["memory"] == {"rows": 10, "cut": True}
+        assert explorer._query["mode"]["memory"] == {"rows": 10, "cut": True}
         # The widget showed rows 0-9 only; the result covers all 100.
         assert explorer.result().collect()["a"].to_list()[:3] == [99, 98, 97]
 
@@ -232,7 +232,9 @@ class TestOnChange:
     def test_filters_sort_and_columns(self):
         explorer, calls = self.explorer()
         # The rows first shown, with the settings it started with: no change.
-        explorer.request({"type": "query_rows", "settings": explorer.query["settings"]})
+        explorer.request(
+            {"type": "query_rows", "settings": explorer._query["settings"]}
+        )
         assert calls == []
         explorer.request({"type": "query_rows", "settings": RESULT_SETTINGS})
         assert calls == [[3, 2]]
@@ -337,6 +339,6 @@ class TestQuerySettings:
         )
         explorer = Explorer(df, settings=settings)
         reply = explorer.request(
-            {"type": "query_rows", "settings": explorer.query["settings"]}
+            {"type": "query_rows", "settings": explorer._query["settings"]}
         )
         assert reply["rows"] == [[0, "2025-01-01"], [1, "2025-01-02"]]

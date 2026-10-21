@@ -108,6 +108,14 @@ class DataQuery:
     PyArrow, polars DataFrames, ...) is always queried in memory, so "live"
     raises ValueError for it. When all the data is in memory, the mode cannot
     be switched.
+
+    ``cut``, if given, tells whether eager data the source gave holds only
+    the first rows of the data (e.g. read with pandas, which reads eagerly):
+    the browser then says so, as it does of rows read into memory.
+
+    ``on_close`` is called by ``close()``, once nothing shows the query any
+    more, to release what its data holds (the explorer closes the views
+    its data came from).
     """
 
     def __init__(
@@ -121,10 +129,13 @@ class DataQuery:
         max_memory_rows: int = 100_000,
         page_rows: int = 100,
         fetch: Callable[[nw.LazyFrame, int, int], nw.DataFrame | None] | None = None,
+        cut: Callable[[], bool] | None = None,
+        on_close: Callable[[], object] | None = None,
     ) -> None:
         if mode not in MODES:
             raise ValueError(f"mode must be one of {MODES}, not {mode!r}")
         self.scan: Callable[[], Any] = source if callable(source) else lambda: source
+        self.on_close = on_close
         self.key = key
         self.states = states
         self.max_live_rows = max_live_rows
@@ -132,9 +143,16 @@ class DataQuery:
         # Rows of a page of the browser's table.
         self.page_rows = max(1, page_rows)
         self.fetch = fetch
+        self.cut = cut
         # The mode asked for, by the caller or the user: reloading starts in it.
         self.requested = mode
         self._open(mode)
+
+    def close(self) -> None:
+        """Call ``on_close``, the first time only."""
+        on_close, self.on_close = self.on_close, None
+        if on_close is not None:
+            on_close()
 
     # --- Modes ---
 
@@ -163,7 +181,7 @@ class DataQuery:
                     f"memory"
                 )
             self.source = None
-            self._hold(data, cut=False)
+            self._hold(data, cut=self.cut is not None and self.cut())
             self.fixed = "The data is a dataframe in memory."
             return
         self.source = data

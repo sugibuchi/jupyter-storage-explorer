@@ -40,7 +40,6 @@ from jupyter_storage_explorer.filesystems.operation import (
     FileSystemOperations,
     Measurement,
     OperationCancelled,
-    OperationChain,
     Progress,
 )
 from jupyter_storage_explorer.filesystems.operations import (
@@ -69,7 +68,6 @@ __all__ = [
     "MemoryLocation",
     "MemoryMapper",
     "OperationCancelled",
-    "OperationChain",
     "Progress",
     "S3Location",
     "S3Mapper",

@@ -3,47 +3,82 @@ menu's formats and code (a mixin of the class)."""
 
 from __future__ import annotations
 
+import atexit
 import base64
 import dataclasses
+import logging
 from typing import TYPE_CHECKING, Any, NamedTuple
 
 from jupyter_storage_explorer import _paths
-from jupyter_storage_explorer._explorer.common import error_text
+from jupyter_storage_explorer._explorer.common import error_text, explorers
 from jupyter_storage_explorer._json import jsonable
 from jupyter_storage_explorer._query.data_query import DataQuery
 from jupyter_storage_explorer._view_tab import ViewTab
 from jupyter_storage_explorer.data_explorer import DataExplorer
 from jupyter_storage_explorer.formats import (
     DataFormat,
+    ItemContext,
     MediaView,
     QueryView,
+    TableView,
     View,
-    matching_formats,
 )
+from jupyter_storage_explorer.formats.base import matching_formats
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+    from types import EllipsisType
 
-    from jupyter_storage_explorer.location import Location
+log = logging.getLogger(__name__)
 
 
 class _Detected(NamedTuple):
-    """An item of the storage shown with a location, and the formats it
-    matches, best first (see ``PreviewsMixin._detect``)."""
+    """An item of the storage shown with a location, as formats and supports
+    are given it, and the formats it matches, best first (see
+    ``PreviewsMixin._detect``)."""
 
-    path: str
-    location: Location
-    is_dir: bool
+    ctx: ItemContext
     formats: list[DataFormat]
+
+
+def _close_views_at_exit() -> None:
+    """Close the views of the kernel's explorers as it exits (shut down or
+    restarted), so that what they hold is released: e.g. temporary copies of
+    files, connections. Each explorer's, even if another's fails. A kernel
+    killed outright runs no exit function."""
+    for explorer in list(explorers.values()):
+        try:
+            explorer._release_views()
+        except Exception:
+            log.exception("Closing the views of an explorer failed")
+
+
+atexit.register(_close_views_at_exit)
 
 
 def section(view: View) -> dict[str, Any]:
     """A view other than a ``QueryView`` as JSON for the frontend (a section
     of the preview panel or a view tab); media bytes are base64-encoded."""
-    data = {f.name: getattr(view, f.name) for f in dataclasses.fields(view)}
+    data = {
+        f.name: getattr(view, f.name)
+        for f in dataclasses.fields(view)
+        if not f.name.startswith("_")
+    }
     if isinstance(view, MediaView) and view.data is not None:
         data["data"] = base64.b64encode(view.data).decode("ascii")
+    if isinstance(view, TableView):
+        data["note"] = "; ".join(filter(None, [_rows_note(view), view.note]))
     return {"kind": view.kind, **jsonable(data)}
+
+
+def _rows_note(table: TableView) -> str:
+    """How many rows a table view shows, e.g. "First 100 of 1,234 rows"."""
+    count, unit = len(table.rows), table.unit
+    if not table.more:
+        return f"{count:,} {unit}"
+    if table.total is not None:
+        return f"First {count:,} of {table.total:,} {unit}"
+    return f"First {count:,} {unit}"
 
 
 class PreviewsMixin:
@@ -60,21 +95,64 @@ class PreviewsMixin:
             return None
         info = self._info(path)
         children = self._ls(path) if info.get("type") == "directory" else None
-        formats = matching_formats(
-            location, self._fs, path, info, children, formats=self._formats
+        ctx = ItemContext(
+            location=location, fs=self._fs, path=path, info=info, children=children
         )
-        return _Detected(path, location, children is not None, formats)
+        return _Detected(ctx, matching_formats(ctx, formats=self._formats))
 
-    def _viewer(self, fmt: DataFormat, item: _Detected) -> Callable[[], View]:
-        """Views ``item`` as ``fmt`` (by the first support installed; with
-        none, what to install), each time it is called: on the storage it is
-        on, also after switching storages."""
-        fs, limits = self._fs, self._view_limits
+    def _engine_label(self, key: str | None) -> str:
+        """The label of the engine of ``key``, e.g. "Polars"; "" for the
+        built-in views (None)."""
+        if key is None:
+            return ""
+        engine = next((e for e in self._supports.engines if e.key == key), None)
+        return engine.label if engine is not None else key
+
+    def _view_engine(
+        self, fmt: DataFormat, name: str, engine: str | EllipsisType | None = ...
+    ) -> str | None:
+        """The engine viewing an item named ``name`` as ``fmt``: ``engine``
+        (a key; None for the built-in views) if given, "Preview as"; by
+        default (...), the one chosen (``_engine``), or the built-in views
+        for formats it does not handle. ValueError if that cannot view it."""
+        if engine is not ...:
+            if engine not in self._supports.viewers(fmt):
+                with_ = self._engine_label(engine) or "the built-in views"
+                raise ValueError(f"{name} cannot be viewed as {fmt.label} with {with_}")
+            return engine
+        try:
+            return self._supports.engine_for(fmt, self._engine or None)
+        except LookupError:
+            if not self._engine:
+                raise ValueError(
+                    f"{name} cannot be viewed as {fmt.label}: "
+                    f"no library viewing it is installed"
+                ) from None
+            raise ValueError(
+                f"{name} cannot be viewed as {fmt.label} with "
+                f"{self._engine_label(self._engine)}: choose another engine in "
+                f'"Preview as"'
+            ) from None
+
+    def _viewable(self, fmt: DataFormat) -> bool:
+        """Whether ``fmt`` can be viewed with the engine chosen (or the
+        built-in views): the Preview button's, and the menu's."""
+        try:
+            self._supports.engine_for(fmt, self._engine or None)
+        except LookupError:
+            return False
+        return True
+
+    def _viewer(
+        self, fmt: DataFormat, item: _Detected, engine: str | None
+    ) -> Callable[[], View]:
+        """Views ``item`` as ``fmt`` with ``engine`` (a key; None for the
+        built-in views; see ``_view_engine``), each time it is called: on
+        the storage it is on (its context's), also after switching storages."""
+        limits = self._view_limits
 
         def view() -> View:
-            return self._supports.view(
-                fmt, item.location, fs, item.path, item.is_dir, limits=limits
-            )
+            return self._supports.view(fmt, item.ctx, limits, engine)
 
         return view
 
@@ -95,22 +173,33 @@ class PreviewsMixin:
             raise ValueError(f"{_paths.basename(path)} cannot be viewed {what}")
         return item, formats[0]
 
-    def _open_preview(self, path: str, format: str | None = None) -> None:
+    def _open_preview(
+        self,
+        path: str,
+        format: str | None = None,
+        engine: str | EllipsisType | None = ...,
+    ) -> None:
         """Preview the file or directory at ``path`` in the preview panel: the
         data browser for a ``QueryView``, else the view's section.
 
         ``format`` names one of the formats matching it (e.g. "text" for a JSON
-        file); by default the best match is used.
+        file); by default the best match is used. ``engine`` (a key; None for
+        the built-in views) views it instead of the one chosen (see
+        ``_view_engine``).
         """
         base = {
             "path": path,
             "name": _paths.basename(path),
             "format": None,
+            "engine": None,
+            "engine_label": "",
             "sections": [],
             "error": "",
         }
         # Shown while the (possibly remote) reads below run.
         self._preview = {**base, "loading": True}
+        view: View | None = None
+        data: DataQuery | None = None
         try:
             item = self._detect(path)
             if item is None:
@@ -123,21 +212,52 @@ class PreviewsMixin:
             if formats:
                 fmt = formats[0]
                 base["format"] = fmt.name
-                viewer = self._viewer(fmt, item)
+                key = self._view_engine(fmt, item.ctx.name, engine)
+                base["engine"], base["engine_label"] = key, self._engine_label(key)
+                viewer = self._viewer(fmt, item, key)
                 view = viewer()
                 if isinstance(view, QueryView):
                     data = self._new_query(view, viewer, item)
-                    self._queries[path] = data
                     base["query"] = data.opening()
                 else:
                     base["sections"] = [section(view)]
         except Exception as exc:
             base["error"] = error_text(exc)
+            # Nothing shows them: released at once (closing is idempotent).
+            if data is not None:
+                data.close()
+            if view is not None:
+                view.close()
+            view = data = None
+        # The previous preview's, closed once the new one is open.
+        self._release_preview()
+        if data is not None:
+            self._queries[path] = data
+        else:
+            self._preview_view = view
         self._preview = base
 
     def _close_preview(self) -> None:
-        self._queries.clear()
+        self._release_preview()
         self._preview = {}
+
+    def _release_preview(self) -> None:
+        """Close what the preview panel shows: the data browser's query (and
+        so the view its data came from), or the view shown."""
+        queries, self._queries = list(self._queries.values()), {}
+        view, self._preview_view = self._preview_view, None
+        for data in queries:
+            data.close()
+        if view is not None:
+            view.close()
+
+    def _release_views(self) -> None:
+        """Close the views the explorer shows, the preview panel's and its
+        tabs', without closing any widget: at the kernel's exit
+        (``_close_views_at_exit``), when no message reaches the page."""
+        self._release_preview()
+        for widget in list(self._view_tabs.values()):
+            widget._release()
 
     # --- The query in the preview panel, for query_result() and
     # on_query_change() ---
@@ -167,27 +287,39 @@ class PreviewsMixin:
         ``item``: read again with ``viewer`` (reload).
 
         Settings are remembered by location, so they follow the data across
-        explorers and tabs, with the mode last chosen for it.
+        explorers and tabs, with the mode last chosen for it. The query owns
+        the view its data came from: each reload's view replaces it (closed
+        once the new one is open), and closing the query closes the last.
         """
         first = [view.data]
+        # The view the query's data is from, the only one open.
+        current = [view]
 
         def source() -> Any:
             if first:  # the data just viewed, not read twice
                 return first.pop()
             again = viewer()
             if not isinstance(again, QueryView):
-                raise ValueError(f"{_paths.basename(item.path)} cannot be queried now")
+                again.close()
+                raise ValueError(f"{item.ctx.name} cannot be queried now")
+            previous, current[0] = current[0], again
+            previous.close()
             return again.data
 
-        key = item.location
+        def close() -> None:
+            current[0].close()
+
+        key = item.ctx.location
         state = self._states.query(key)
         mode = state.mode if state is not None else "auto"
         limits = self._view_limits
         options = {
             "fetch": self._fetch_rows,
+            "cut": lambda: current[0].more,
             "max_live_rows": limits.max_live_rows,
             "max_memory_rows": limits.max_memory_rows,
             "page_rows": limits.max_display_rows,
+            "on_close": close,
         }
         try:
             return DataQuery(source, key, self._states, mode=mode, **options)
@@ -208,11 +340,16 @@ class PreviewsMixin:
         until the tab closes ("view_tab_closed"). {"model_id", "title",
         "url"} or {"error"}."""
         path = content.get("path")
+        view: View | None = None
+        data: DataQuery | None = None
         try:
             item, fmt = self._formats_of(path, content.get("format") or None)
-            viewer = self._viewer(fmt, item)
+            engine = content.get("engine", ...)
+            key = self._view_engine(fmt, item.ctx.name, engine)
+            viewer = self._viewer(fmt, item, key)
             view = viewer()
             title = _paths.basename(path)
+            label = " · ".join(filter(None, [fmt.label, self._engine_label(key)]))
             if isinstance(view, QueryView):
                 data = self._new_query(view, viewer, item)
                 widget: DataExplorer | ViewTab = DataExplorer._of_query(
@@ -220,18 +357,29 @@ class PreviewsMixin:
                     self._states,
                     data.key,
                     title=title,
-                    label=fmt.label,
+                    label=label,
                     height="fill",
                 )
             else:
-                widget = ViewTab(section(view), title=title, label=fmt.label)
+                widget = ViewTab(
+                    section(view), title=title, label=label, on_close=view.close
+                )
         except Exception as exc:
+            if data is not None:
+                data.close()
+            if view is not None:
+                view.close()
             return {"error": error_text(exc)}
         self._view_tabs[widget.model_id] = widget
-        return {"model_id": widget.model_id, "title": title, "url": item.location.url}
+        return {
+            "model_id": widget.model_id,
+            "title": title,
+            "url": item.ctx.location.url,
+        }
 
     def _view_tab_closed(self, model_id: str) -> None:
-        """The tab of a "view_tab" closed: its widget is no longer kept."""
+        """The tab of a "view_tab" closed: its widget is no longer kept, and
+        closing it closes its view."""
         widget = self._view_tabs.pop(model_id, None)
         if widget is not None:
             widget.close()
@@ -245,28 +393,44 @@ class PreviewsMixin:
         return data.handle(content) or {}
 
     def _menu_info(self, path: str) -> dict[str, Any]:
-        """Answer "menu_info", the right-click menu's: {"formats": names of
-        those matching ("Preview as"), "recipes": load code ("Python code",
-        by library)}, or {"error"}."""
+        """Answer "menu_info", the right-click menu's, or {"error"}:
+        "formats", the names of those matching; "view", the best format and
+        the engine viewing it ("Preview", "View in a new tab"; None if the
+        engine chosen cannot); "views", each format and engine that can
+        ("Preview as", "View in new tab as"); "recipes", the best format's
+        load code ("Python code"), with their engine's label."""
         try:
             item = self._detect(path)
             formats = item.formats if item is not None else []
-            recipes = (
-                self._supports.recipes(
-                    formats[0], item.location, self._fs, path, item.is_dir
-                )
-                if formats
-                else []
-            )
+            recipes = self._supports.recipes(formats[0], item.ctx) if formats else []
         except Exception as exc:
             return {"error": error_text(exc)}
+        view = None
+        if formats and self._viewable(formats[0]):
+            key = self._supports.engine_for(formats[0], self._engine or None)
+            view = {"format": formats[0].name, "engine": key}
         return {
             "formats": [f.name for f in formats],
-            # Recipes' packages are classes: the frontend gets their names,
-            # the first the library it groups the recipes by.
+            "view": view,
+            "views": [
+                {
+                    "format": f.name,
+                    "engine": key,
+                    "label": " ".join(
+                        filter(
+                            None,
+                            [f.label, f"({self._engine_label(key)})" if key else ""],
+                        )
+                    ),
+                }
+                for f in formats
+                for key in self._supports.viewers(f)
+            ],
+            # The frontend gets the packages' names, listed under the code.
             "recipes": [
                 {
                     "title": r.title,
+                    "engine": r.engine.label if r.engine is not None else "Python",
                     "packages": [p.package for p in r.requirements],
                     "code": r.code,
                 }

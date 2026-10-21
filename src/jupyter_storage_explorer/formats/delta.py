@@ -2,16 +2,12 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
-from jupyter_storage_explorer.formats.base import DataFormat, child_names
+from jupyter_storage_explorer.formats.base import DataFormat
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping, Sequence
-
-    from fsspec import AbstractFileSystem
-
-    from jupyter_storage_explorer.location import Location
+    from jupyter_storage_explorer.formats.base import ItemContext
 
 
 class DeltaLake(DataFormat):
@@ -19,12 +15,5 @@ class DeltaLake(DataFormat):
     label = "Delta Lake table"
     priority = 20  # a Delta table is also a directory of Parquet files
 
-    def matches(
-        self,
-        location: Location,
-        fs: AbstractFileSystem,
-        path: str,
-        info: Mapping[str, Any],
-        children: Sequence[Mapping[str, Any]] | None,
-    ) -> bool:
-        return children is not None and "_delta_log" in child_names(children)
+    def matches(self, ctx: ItemContext) -> bool:
+        return ctx.is_dir and "_delta_log" in ctx.child_names

@@ -1,19 +1,29 @@
-"""Views needing no package: text and code (highlighted), Markdown and
-JSON from the beginning of the file, and images, which the browser shows."""
+"""The built-in views and code, which need no engine, only the explorer's
+own packages: text and code (highlighted), Markdown and JSON from the
+beginning of the file, and images, which the browser shows; and code reading
+text and JSON with fsspec, and images with Pillow, for any storage. Their
+options are the "python" entry of ``format_options``."""
 
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING
+from dataclasses import dataclass
+from inspect import cleandoc
+from typing import TYPE_CHECKING, Any
 
 from pygments import highlight
 from pygments.formatters import HtmlFormatter
 from pygments.lexers import get_lexer_by_name
 from pygments.util import ClassNotFound
 
-from jupyter_storage_explorer.formats.base import file_size, head, head_text
 from jupyter_storage_explorer.formats.images import Image
-from jupyter_storage_explorer.formats.support import FormatSupport
+from jupyter_storage_explorer.formats.packages import Fsspec, Pillow
+from jupyter_storage_explorer.formats.support import (
+    FormatSupport,
+    SupportOptions,
+    format_kwargs,
+    secret_dict_field,
+)
 from jupyter_storage_explorer.formats.text import Json, Markdown, Text
 from jupyter_storage_explorer.formats.view import (
     MarkdownView,
@@ -23,16 +33,15 @@ from jupyter_storage_explorer.formats.view import (
 )
 
 if TYPE_CHECKING:
-    from fsspec import AbstractFileSystem
+    from collections.abc import Mapping
 
+    from jupyter_storage_explorer.formats.base import ItemContext
     from jupyter_storage_explorer.formats.view import View, ViewLimits
-    from jupyter_storage_explorer.location import Location
 
 
-def _size_note(fs: AbstractFileSystem, path: str, limits: ViewLimits) -> str:
+def _size_note(ctx: ItemContext, limits: ViewLimits) -> str:
     """The note under a view of the file's beginning."""
-    size = file_size(fs, path)
-    total = f" of {size:,} bytes" if size is not None else ""
+    total = f" of {ctx.size:,} bytes" if ctx.size is not None else ""
     return f"First {limits.max_bytes // 1024} KB{total}"
 
 
@@ -63,25 +72,78 @@ def _text_view(text: str, language: str | None, note: str = "") -> TextView:
     )
 
 
-class TextByPython(FormatSupport):
-    """Text and code files, from their beginning, highlighted by their extension."""
+READ_TEXT = "Read the text"
+LOAD_VALUE = "Load the JSON value"
+OPEN_IMAGE = "Open the image"
+
+
+@dataclass(frozen=True, kw_only=True)
+class FsspecOptions(SupportOptions):
+    """The options of code opening the file with ``fsspec.open``.
+
+    Attributes
+    ----------
+    storage_options : mapping or None, default None
+        ``fsspec.open``'s keyword arguments in the code; those that look like
+        credentials are left out.
+    """
+
+    storage_options: Mapping[str, Any] | None = secret_dict_field(
+        default=None,
+        secret_keys=[
+            "account_key",
+            "sas_token",
+            "connection_string",
+            "client_secret",
+            "key",
+            "secret",
+            "token",
+            "password",
+        ],
+    )
+
+    def code_kwargs(self) -> str:
+        """``{kwargs}`` of the template: the storage options fit to show."""
+        return format_kwargs(**(self.code_value("storage_options") or {}))
+
+
+class OpenedByFsspec(FormatSupport):
+    """Code opening the file with ``fsspec.open`` (also for libraries reading
+    the file opened, e.g. Pillow), with its options."""
+
+    additional_requirements = (Fsspec(),)
+    options_model = FsspecOptions
+
+
+class TextByPython(OpenedByFsspec):
+    """Text and code files: from their beginning, highlighted by their
+    extension; their text read with fsspec."""
 
     format = Text
-    capabilities = ("view",)
+    capabilities = ("view", "recipe")
 
     def view(
-        self,
-        fmt: Text,
-        location: Location,
-        fs: AbstractFileSystem,
-        path: str,
-        is_dir: bool,
-        *,
-        limits: ViewLimits,
+        self, fmt: Text, ctx: ItemContext, options: SupportOptions, limits: ViewLimits
     ) -> View:
-        text, truncated = head_text(fs, path, limits.max_bytes)
-        note = _size_note(fs, path, limits) if truncated else ""
-        return _text_view(text, fmt.language(path), note)
+        text, truncated = ctx.head_text(limits.max_bytes)
+        note = _size_note(ctx, limits) if truncated else ""
+        return _text_view(text, fmt.language(ctx.path), note)
+
+    text_template = cleandoc("""
+        import fsspec
+
+        with fsspec.open({url}, 'rt'{kwargs}) as f:
+            text = f.read()
+        """)
+
+    def recipe(
+        self, fmt: Text, ctx: ItemContext, options: FsspecOptions
+    ) -> dict[str, str]:
+        return {
+            READ_TEXT: self.text_template.format(
+                url=repr(ctx.library_url), kwargs=options.code_kwargs()
+            )
+        }
 
 
 class MarkdownByPython(FormatSupport):
@@ -94,42 +156,51 @@ class MarkdownByPython(FormatSupport):
     def view(
         self,
         fmt: Markdown,
-        location: Location,
-        fs: AbstractFileSystem,
-        path: str,
-        is_dir: bool,
-        *,
+        ctx: ItemContext,
+        options: SupportOptions,
         limits: ViewLimits,
     ) -> View:
-        text, truncated = head_text(fs, path, limits.max_bytes)
-        note = _size_note(fs, path, limits) if truncated else ""
+        text, truncated = ctx.head_text(limits.max_bytes)
+        note = _size_note(ctx, limits) if truncated else ""
         return MarkdownView(text=text, note=note)
 
 
-class JsonByPython(FormatSupport):
-    """JSON as a tree; as text if it is too large or invalid."""
+class JsonByPython(OpenedByFsspec):
+    """JSON as a tree, or as text if it is too large or invalid; its value
+    loaded with fsspec and Python's json."""
 
     format = Json
-    capabilities = ("view",)
+    capabilities = ("view", "recipe")
 
     def view(
-        self,
-        fmt: Json,
-        location: Location,
-        fs: AbstractFileSystem,
-        path: str,
-        is_dir: bool,
-        *,
-        limits: ViewLimits,
+        self, fmt: Json, ctx: ItemContext, options: SupportOptions, limits: ViewLimits
     ) -> View:
-        text, truncated = head_text(fs, path, limits.max_bytes)
+        text, truncated = ctx.head_text(limits.max_bytes)
         if truncated:
-            note = f"{_size_note(fs, path, limits)}; too large to show as a tree"
+            note = f"{_size_note(ctx, limits)}; too large to show as a tree"
             return _text_view(text, "json", note)
         try:
             return TreeView(value=json.loads(text))
         except json.JSONDecodeError as exc:
             return _text_view(text, "json", f"Invalid JSON: {exc}")
+
+    value_template = cleandoc("""
+        import json
+
+        import fsspec
+
+        with fsspec.open({url}, 'rt'{kwargs}) as f:
+            data = json.load(f)
+        """)
+
+    def recipe(
+        self, fmt: Json, ctx: ItemContext, options: FsspecOptions
+    ) -> dict[str, str]:
+        return {
+            LOAD_VALUE: self.value_template.format(
+                url=repr(ctx.library_url), kwargs=options.code_kwargs()
+            )
+        }
 
 
 class ImageByPython(FormatSupport):
@@ -140,23 +211,47 @@ class ImageByPython(FormatSupport):
     capabilities = ("view",)
 
     def view(
-        self,
-        fmt: Image,
-        location: Location,
-        fs: AbstractFileSystem,
-        path: str,
-        is_dir: bool,
-        *,
-        limits: ViewLimits,
+        self, fmt: Image, ctx: ItemContext, options: SupportOptions, limits: ViewLimits
     ) -> View:
-        mime = fmt.mime_type(path)
-        size = file_size(fs, path)
+        mime = fmt.mime_type(ctx.path)
+        size = ctx.size
         if size is not None and size <= limits.max_whole_file_bytes:
-            return MediaView(mime=mime, data=head(fs, path, size))
+            return MediaView(mime=mime, data=ctx.head(size))
         # Too large to send through the kernel: let the browser fetch it, if the
         # storage can issue a temporary link.
         try:
-            return MediaView(mime=mime, src=fs.sign(path))
+            return MediaView(mime=mime, src=ctx.fs.sign(ctx.path))
         except NotImplementedError:
             limit = limits.max_whole_file_bytes // (1024 * 1024)
             raise ValueError(f"too large to view (over {limit} MB)") from None
+
+
+class ImageByPillow(OpenedByFsspec):
+    """The image, read with fsspec and opened with Pillow; not SVG, which it
+    cannot read. Code only, apart from ``ImageByPython``: Pillow, which only
+    the code needs, would otherwise be needed to view images."""
+
+    format = Image
+    additional_requirements = (Fsspec(), Pillow())
+    capabilities = ("recipe",)
+
+    image_template = cleandoc("""
+        import fsspec
+        import PIL.Image
+
+        with fsspec.open({url}, 'rb'{kwargs}) as f:
+            img = PIL.Image.open(f)
+            img.load()
+        img
+        """)
+
+    def recipe(
+        self, fmt: Image, ctx: ItemContext, options: FsspecOptions
+    ) -> dict[str, str]:
+        if fmt.mime_type(ctx.path) == "image/svg+xml":
+            raise self.NotSupported
+        return {
+            OPEN_IMAGE: self.image_template.format(
+                url=repr(ctx.library_url), kwargs=options.code_kwargs()
+            )
+        }

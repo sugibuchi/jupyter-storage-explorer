@@ -12,7 +12,6 @@ from jupyter_storage_explorer_launcher.launcher import LauncherError, load_setti
 
 from jupyter_storage_explorer.filesystems import FsspecOperations
 from jupyter_storage_explorer.filesystems.operation import FileSystemOperations
-from jupyter_storage_explorer.formats import default_formats
 
 if TYPE_CHECKING:
     import pathlib
@@ -107,17 +106,45 @@ class TestMerging:
         assert kwargs["max_upload_bytes"] == 1000 and kwargs["height"] == "fill"
         assert settings.warnings == []
 
+    def test_options_by_location_merged_option_by_option(self, tmp_path, system):
+        # A later layer's function over the system's dicts, then the user's
+        # dict over that function: the later layer's options still win,
+        # option by option, for each location.
+        team = layer(
+            tmp_path,
+            "team",
+            """
+            def format_options():
+                return {
+                    "polars": {
+                        "*": lambda location: {"storage_options": {"at": location}},
+                    },
+                }
+            """,
+        )
+        user = layer(
+            tmp_path,
+            "user",
+            """
+            def format_options():
+                return {"polars": {"*": {"credential_provider": None}}}
+            """,
+        )
+        settings = load_settings([user, team, system])
+        merged = settings.format_options["polars"]["*"]
+        assert merged("here") == {
+            "storage_options": {"at": "here"},
+            "credential_provider": None,
+        }
+        assert settings.format_options["polars"]["delta"] == {"use_pyarrow": True}
+
     def test_lists_come_first_then_the_defaults(self, tmp_path):
         system = layer(
             tmp_path,
             "system",
             """
             from jupyter_storage_explorer.filesystems import FsspecOperations
-            from jupyter_storage_explorer.formats import Csv
             from jupyter_storage_explorer.formats.supports import CsvByPandas
-
-            def formats():
-                return [Csv()]
 
             def supports():
                 return [CsvByPandas]
@@ -135,11 +162,7 @@ class TestMerging:
             "user",
             """
             from jupyter_storage_explorer.filesystems.operation import FileSystemOperations
-            from jupyter_storage_explorer.formats import Json
             from jupyter_storage_explorer.formats.supports import JsonByPandas
-
-            def formats():
-                return [Json()]
 
             def supports():
                 return [JsonByPandas()]
@@ -153,10 +176,7 @@ class TestMerging:
             """,
         )
         _, kwargs = load_settings([user, system]).explorer_arguments()
-        names = [f.name for f in kwargs["formats"]]
-        assert names[:2] == ["json", "csv"]  # the user's first
-        assert names[2:] == [f.name for f in default_formats()]
-        # The explorer tries the defaults after them.
+        # The user's first; the explorer tries the defaults after them.
         supports = [s if isinstance(s, type) else type(s) for s in kwargs["supports"]]
         assert [s.__name__ for s in supports] == ["JsonByPandas", "CsvByPandas"]
         kinds = [type(o) for o in kwargs["operations"]]
@@ -269,6 +289,22 @@ class TestFinal:
         assert warning.startswith(f"{path}: style() is no longer used and is ignored")
         assert "custom.css" in warning
 
+    def test_retired_formats_is_ignored_with_a_warning(self, tmp_path):
+        """formats() is no longer used: formats are those of the supports."""
+        path = layer(
+            tmp_path,
+            "user",
+            """
+            def formats():
+                return []
+            """,
+        )
+        settings = load_settings([path])
+        assert settings.explorer_arguments() == defaults()
+        [warning] = settings.warnings
+        assert warning.startswith(f"{path}: formats() is no longer used and is ignored")
+        assert "supports()" in warning
+
     def test_final_applies_to_later_layers_only(self, tmp_path):
         path = layer(
             tmp_path,
@@ -311,7 +347,7 @@ class TestErrors:
                 "def filesystems():\n    return ['a']",
                 "filesystems() must return a dict",
             ),
-            ("def formats():\n    return 'csv'", "formats() must return a list"),
+            ("def supports():\n    return 'csv'", "supports() must return a list"),
             (
                 # The flat options of versions before 0.14.
                 "def format_options():\n"

@@ -1,15 +1,18 @@
 // The right-click menu of items of the list and the tree. Some rows depend
-// on the item's formats, which only the kernel knows ("menu_info"): "Preview
-// as" and "Python code", filled in when its reply arrives, and for folders
-// "Preview" and "View in a new tab", shown then if it has a format.
+// on the item's formats and the engine chosen, which only the kernel knows
+// ("menu_info"): "Preview <format>" and "View <format> in new tab" (disabled
+// when the engine chosen cannot view the item), "Preview as" and "View in
+// new tab as" (each format and engine that can), and "Python code" (each
+// recipe, with its engine), filled in when its reply arrives.
 
 // Returns itemMenu(targets, withOpen = true): the menu items for one or more
 // items ({path, type, no_url}). The tree passes withOpen = false: clicking a
 // tree folder already opens it.
 function createItemMenu(x) {
   const { model, request } = x;
-  // For the open menu: {path, previewRow, viewTabRow, previewAsRow, previewAsSub, codeRow, codeSub},
-  // the elements to fill when the kernel's "menu_info" reply arrives.
+  // For the open menu: {path, previewRow, viewTabRow, previewAsRow,
+  // previewAsSub, viewTabAsRow, viewTabAsSub, codeRow, codeSub}, the
+  // elements to fill when the kernel's "menu_info" reply arrives.
   let menuInfo = null;
 
   // The rows are set (by the menu's `ref`s) before the reply arrives.
@@ -20,22 +23,52 @@ function createItemMenu(x) {
     return info;
   }
 
+  const canTab = () => x.jupyterlab.canOpenViewTab();
+
+  // "Preview <format>" and "View <format> in new tab": with the engine
+  // chosen, so the kernel picks it; disabled if it cannot view the item.
+  const previewItem = (path, label, view) => ({
+    label: `Preview ${label}`,
+    icon: "eye",
+    disabled: !view,
+    title: view ? "" : "The engine chosen cannot view it: see Preview as",
+    action: () => x.preview.open(path),
+  });
+  const viewTabItem = (path, label, view) => ({
+    label: `View ${label} in new tab`,
+    icon: "open-in-new",
+    disabled: !view,
+    title: view ? "" : "The engine chosen cannot view it: see View in new tab as",
+    action: () => x.jupyterlab.openViewTab(path),
+  });
+
   // `info`: the menu the request was for; ignored once another has opened.
   function onMenuInfo(info, msg) {
     if (menuInfo !== info) return;
-    const { path, previewRow, previewAsRow, previewAsSub, codeRow, codeSub } = info;
+    const { path } = info;
     // A folder's rows, hidden until now: shown if it has a format (an error
     // shows in "Python code").
-    if (msg.error || msg.formats.length) codeRow.hidden = false;
+    if (msg.error || msg.formats.length) info.codeRow.hidden = false;
     if (!msg.error && msg.formats.length) {
-      previewRow.hidden = false;
-      info.viewTabRow.hidden = !x.jupyterlab.canOpenViewTab();
+      // The best format's rows, now that the kernel says whether the engine
+      // chosen can view it.
+      const label = x.formatLabel(msg.formats[0]);
+      const [preview] = x.menu.rows([previewItem(path, label, msg.view)]);
+      info.previewRow.replaceWith(preview);
+      if (canTab()) {
+        const [viewTab] = x.menu.rows([viewTabItem(path, label, msg.view)]);
+        info.viewTabRow.replaceWith(viewTab);
+      }
     }
-    // "Preview as" only appears when the item matches more than one format.
-    if (!msg.error && msg.formats.length > 1) {
-      const items = msg.formats.map((format) => ({ label: `Preview as ${x.formatLabel(format)}`, action: () => x.preview.open(path, format) }));
-      previewAsSub.replaceChildren(...x.menu.rows(items));
-      previewAsRow.hidden = false;
+    // Each format and engine that can view it ("CSV (Polars)"), for either.
+    if (!msg.error && msg.views.length) {
+      const items = (open) => msg.views.map((v) => ({ label: v.label, action: () => open(path, v.format, v.engine) }));
+      info.previewAsSub.replaceChildren(...x.menu.rows(items(x.preview.open)));
+      info.previewAsRow.hidden = false;
+      if (canTab()) {
+        info.viewTabAsSub.replaceChildren(...x.menu.rows(items(x.jupyterlab.openViewTab)));
+        info.viewTabAsRow.hidden = false;
+      }
     }
     let items;
     if (msg.error) {
@@ -43,27 +76,13 @@ function createItemMenu(x) {
     } else if (!msg.recipes.length) {
       items = [{ label: "No code for this item", disabled: true }];
     } else {
-      // A submenu per library (a recipe's first package), its recipes' titles in it.
-      const byLibrary = new Map();
-      for (const recipe of msg.recipes) {
-        const library = recipeLibrary(recipe);
-        if (!byLibrary.has(library)) byLibrary.set(library, []);
-        byLibrary.get(library).push(recipe);
-      }
-      items = [...byLibrary].map(([library, recipes]) => ({
-        label: library,
-        submenu: (sub) =>
-          sub.replaceChildren(
-            ...x.menu.rows(
-              recipes.map((recipe) => ({
-                label: recipe.title,
-                action: () => x.modal.show(`${recipe.title} (${library})`, recipeBlocks(recipe)),
-              })),
-            ),
-          ),
-      }));
+      // Each recipe, with the engine it loads with: "Load as DataFrame (Polars)".
+      items = msg.recipes.map((recipe) => {
+        const title = `${recipe.title} (${recipe.engine})`;
+        return { label: title, action: () => x.modal.show(title, recipeBlocks(recipe)) };
+      });
     }
-    codeSub.replaceChildren(...x.menu.rows(items));
+    info.codeSub.replaceChildren(...x.menu.rows(items));
     x.menu.place(); // rows shown above may have pushed it out of the widget
   }
 
@@ -83,32 +102,28 @@ function createItemMenu(x) {
     const withUrls = targets.every(hasUrl);
 
     // Groups of items, joined by separators; groups left empty are dropped.
-    // Opening comes first, as in JupyterLab's file browser.
     const open = [];
-    if (single && x.jupyterlab.canOpen(single)) {
-      open.push({ label: "Open in JupyterLab", icon: "open-in-new", action: () => x.jupyterlab.open(single.path) });
-    }
     if (withOpen && folder) open.push({ label: "Open", icon: "folder", action: () => x.navigate(folder.path) });
+    const viewAs = [];
     if (info) {
       // Only for what has a format: a file's is in the listing; whether a
       // folder has one (a Delta table, a Parquet dataset) only the kernel
       // tells (onMenuInfo), so its rows appear then.
       const hasFormat = !isFolder(data) && Boolean(data.format);
+      const label = hasFormat ? x.formatLabel(data.format) : "";
+      // Shown as offered until the reply tells whether the engine chosen can view it.
       open.push(
+        { ...viewTabItem(single.path, label, true), hidden: !hasFormat || !canTab(), ref: (row) => (info.viewTabRow = row) },
+        { ...previewItem(single.path, label, true), hidden: !hasFormat, ref: (row) => (info.previewRow = row) },
+      );
+      viewAs.push(
         {
-          label: "Preview",
-          icon: "eye",
-          hidden: !hasFormat,
-          ref: (row) => (info.previewRow = row),
-          action: () => x.preview.open(single.path),
-        },
-        {
-          // The same view in a JupyterLab tab of its own (with the launcher's extension).
-          label: "View in a new tab",
+          // The same views in a JupyterLab tab of their own (with the launcher's extension).
+          label: "View in new tab as",
           icon: "open-in-new",
-          hidden: !hasFormat || !x.jupyterlab.canOpenViewTab(),
-          ref: (row) => (info.viewTabRow = row),
-          action: () => x.jupyterlab.openViewTab(single.path),
+          hidden: true,
+          ref: (row) => (info.viewTabAsRow = row),
+          submenu: (sub) => (info.viewTabAsSub = sub),
         },
         {
           label: "Preview as",
@@ -129,14 +144,23 @@ function createItemMenu(x) {
         },
       );
     }
+
+    // "Copy" and "Cut" copy for "Paste" (and put the URLs on the clipboard).
+    const clipboard = [];
+    if (withUrls && allowed) {
+      clipboard.push({ label: count ? `Copy ${count}${what}` : "Copy", icon: "copy", action: () => x.clipboard.copyFiles(targets) });
+      if (!targets.some((t) => t.path === model.get("_root"))) {
+        clipboard.push({ label: count ? `Cut ${count}${what}` : "Cut", icon: "cut", action: () => x.clipboard.copyFiles(targets, true) });
+      }
+    }
     // Locations are copied as URLs, and on a local disk as plain paths too:
     // elsewhere fsspec's paths can differ from the storage's own notion of a
-    // path (e.g. abfs's "container/key"). "Copy" below also puts files' URLs
+    // path (e.g. abfs's "container/key"). "Copy" above also puts files' URLs
     // on the clipboard, so "Copy URL" is for folders, which "Copy" leaves to
     // unsafe mode; on a local disk, "Copy" gives paths, so it is for files too.
     const local = model.get("_local_paths");
     if (withUrls && (!files || local)) {
-      open.push({
+      clipboard.push({
         label: `Copy ${count}URL${count ? "s" : ""}`,
         icon: "link",
         action: async () =>
@@ -147,7 +171,7 @@ function createItemMenu(x) {
       });
     }
     if (withUrls && local) {
-      open.push({
+      clipboard.push({
         label: `Copy ${count}path${count ? "s" : ""}`,
         icon: "file",
         action: async () =>
@@ -157,23 +181,19 @@ function createItemMenu(x) {
           ),
       });
     }
-
-    // "Copy" and "Cut" copy for "Paste" (and put the URLs on the clipboard).
-    const clipboard = [];
-    if (withUrls && allowed) {
-      clipboard.push({ label: count ? `Copy ${count}${what}` : "Copy", icon: "copy", action: () => x.clipboard.copyFiles(targets) });
-      if (!targets.some((t) => t.path === model.get("_root"))) {
-        clipboard.push({ label: count ? `Cut ${count}${what}` : "Cut", icon: "cut", action: () => x.clipboard.copyFiles(targets, true) });
-      }
-    }
     const paste = folder && x.clipboard.pasteItem(folder.path);
     if (paste) clipboard.push(paste);
 
     const change = [];
-    if (folder) change.push({ label: "Create a folder", icon: "new-folder", action: () => x.operations.createFolder(folder.path) });
+    // "Edit": the file in JupyterLab's own editor or viewer, in a tab of its
+    // own (so the icon of "View in new tab").
+    if (single && x.jupyterlab.canOpen(single)) {
+      change.push({ label: "Edit", icon: "open-in-new", action: () => x.jupyterlab.open(single.path) });
+    }
     if (single && allowed && single.path !== model.get("_root")) {
       change.push({ label: "Rename", icon: "edit", action: () => x.operations.rename(single) });
     }
+    if (folder) change.push({ label: "Create a folder", icon: "new-folder", action: () => x.operations.createFolder(folder.path) });
     if (allowed) change.push({ label: count ? `Delete ${count}${what}` : "Delete", icon: "close", action: () => x.operations.remove(targets) });
 
     // Files only: downloading folders is intentionally not supported. The
@@ -194,6 +214,6 @@ function createItemMenu(x) {
     const about = [{ label: "Properties", icon: "info", action: () => x.properties.show(targets) }];
     if (folder) about.push(x.bookmarks.item(folder.path));
 
-    return [open, clipboard, change, downloads, about].filter((group) => group.length).flatMap((group, i) => (i ? ["-", ...group] : group));
+    return [open, viewAs, clipboard, change, downloads, about].filter((group) => group.length).flatMap((group, i) => (i ? ["-", ...group] : group));
   };
 }

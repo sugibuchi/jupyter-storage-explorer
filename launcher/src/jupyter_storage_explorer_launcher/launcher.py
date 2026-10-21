@@ -20,17 +20,16 @@ final. Each file may have these functions, all optional:
     ``{name: URL or fsspec filesystem}``, merged by name: a later layer adds
     entries or replaces them, and removes them with ``None``. Without any,
     the tab browses the folder it opens on (``"."``).
-``formats()``
-    ``[DataFormat, ...]``: formats of your own, tried before the defaults;
-    a later layer's come first.
 ``supports()``
     ``[FormatSupport, ...]``: how formats' data is handled with libraries
     of your own (classes or objects), tried before the defaults; a later
-    layer's come first.
+    layer's come first. Their formats are detected with the defaults'.
 ``format_options()``
     ``{library: {format or "*": {option: value}}}`` for the supports (see
     ``StorageExplorer``'s ``format_options``), merged option by option (a
-    value is replaced whole, e.g. a ``storage_options`` dict).
+    value is replaced whole, e.g. a ``storage_options`` dict). Options may
+    be a function of the item's location returning them: merged with
+    another layer's, the later layer's options still win option by option.
 ``operations()``
     ``[FileSystemOperations, ...]``: file operations of your own, tried
     before ``StorageExplorer.default_operations()``; a later layer's come
@@ -104,7 +103,6 @@ LAUNCHER_FILE = pathlib.Path("storage-explorer", "launcher.py")
 # The functions a launcher.py may have, besides final().
 HOOKS = (
     "filesystems",
-    "formats",
     "supports",
     "format_options",
     "operations",
@@ -119,6 +117,8 @@ RETIRED = {
     # CSS applied to the page while the tab was open: not to explorers in
     # notebooks, which JupyterLab's custom.css reaches.
     "style": "use JupyterLab's custom.css instead, for every page (see Icons in the project's DEVELOPMENT.md)",
+    # Formats are those of the supports.
+    "formats": "give supports() of your formats instead: explorers detect their formats",
 }
 
 # StorageExplorer arguments that are not "parameters": set by their own
@@ -129,7 +129,6 @@ _NOT_PARAMETERS = frozenset(
         "path",
         "fs",
         "filesystems",
-        "formats",
         "supports",
         "format_options",
         "operations",
@@ -153,11 +152,9 @@ class Settings:
     """
 
     filesystems: dict[str, Any] = dataclasses.field(default_factory=dict)
-    formats: list[Any] = dataclasses.field(default_factory=list)
     supports: list[Any] = dataclasses.field(default_factory=list)
-    format_options: dict[str, dict[str, dict[str, Any]]] = dataclasses.field(
-        default_factory=dict
-    )
+    # {library: {format or "*": a dict of options, or a function of the location}}
+    format_options: dict[str, dict[str, Any]] = dataclasses.field(default_factory=dict)
     operations: list[Any] = dataclasses.field(default_factory=list)
     filesystem_mappers: list[Any] = dataclasses.field(default_factory=list)
     transfer_policy: list[Any] = dataclasses.field(default_factory=list)
@@ -166,15 +163,11 @@ class Settings:
 
     def explorer_arguments(self) -> tuple[tuple[Any, ...], dict[str, Any]]:
         """The positional and keyword arguments to create the explorer with."""
-        from jupyter_storage_explorer.formats import default_formats  # noqa: PLC0415
-
         kwargs: dict[str, Any] = {
             "height": "fill",
             "states": states_file(),
             **self.parameters,
         }
-        if self.formats:
-            kwargs["formats"] = [*self.formats, *default_formats()]
         if self.supports:
             kwargs["supports"] = list(self.supports)
         if self.format_options:
@@ -319,7 +312,6 @@ def _allowed(
 # module docstring); parameters() is merged parameter by parameter.
 _MERGES = {
     "filesystems": "by name",
-    "formats": "first",
     "supports": "first",
     "format_options": "by option",
     "operations": "first",
@@ -363,21 +355,45 @@ def _mapping(value: Any, path: pathlib.Path, name: str) -> dict[str, Any]:
 
 
 def _merge_format_options(
-    merged: dict[str, dict[str, dict[str, Any]]], value: Any, path: pathlib.Path
+    merged: dict[str, dict[str, Any]], value: Any, path: pathlib.Path
 ) -> None:
     """Merge one layer's ``format_options()`` into ``merged``: by library,
     format, then option, so a layer changes one option of a format without
     restating the others. Whether the names exist is checked by the explorer."""
     for library, by_format in _mapping(value, path, "format_options").items():
         if not isinstance(by_format, dict) or not all(
-            isinstance(options, dict) for options in by_format.values()
+            isinstance(options, dict) or callable(options)
+            for options in by_format.values()
         ):
             raise LauncherError(
                 f"{path}: format_options(): {library!r} must map format names "
-                f'(or "*") to dicts of options'
+                f'(or "*") to dicts of options, or functions of the location '
+                f"returning them"
             )
+        formats = merged.setdefault(library, {})
         for name, options in by_format.items():
-            merged.setdefault(library, {}).setdefault(name, {}).update(options)
+            formats[name] = _merged_options(formats.get(name), options)
+
+
+def _merged_options(earlier: Any, later: Any) -> Any:
+    """A later layer's options of a format over an earlier layer's, option by
+    option: a dict while both are dicts, else a function of the location
+    (as either may be) giving the earlier's options updated with the
+    later's."""
+    if earlier is None:
+        return dict(later) if isinstance(later, dict) else later
+    if isinstance(earlier, dict) and isinstance(later, dict):
+        return {**earlier, **later}
+
+    def options(location: Any) -> dict[str, Any]:
+        return {**_options_at(earlier, location), **_options_at(later, location)}
+
+    return options
+
+
+def _options_at(options: Any, location: Any) -> dict[str, Any]:
+    """``options``, or what the function ``options`` gives for ``location``."""
+    return dict(options(location) if callable(options) else options)
 
 
 def _sequence(value: Any, path: pathlib.Path, name: str) -> list[Any]:

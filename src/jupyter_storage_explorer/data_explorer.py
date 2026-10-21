@@ -125,11 +125,11 @@ class DataExplorer(anywidget.AnyWidget):
 
     # Shown above the table: the title, and the data's library (in a query
     # tab of StorageExplorer, the file's format instead).
-    title = traitlets.Unicode().tag(sync=True)
-    library = traitlets.Unicode().tag(sync=True)
+    _title = traitlets.Unicode().tag(sync=True)
+    _library = traitlets.Unicode().tag(sync=True)
     # The data's columns, settings and mode: {"columns", "settings", "mode"}.
-    query = traitlets.Dict().tag(sync=True)
-    height = traitlets.Unicode("400px").tag(sync=True)
+    _query = traitlets.Dict().tag(sync=True)
+    _height = traitlets.Unicode("400px").tag(sync=True)
 
     def __init__(
         self,
@@ -201,10 +201,10 @@ class DataExplorer(anywidget.AnyWidget):
         """Set the widget up, once ``_states``, ``_key`` and ``_data`` are."""
         library = self._data.implementation.value
         super().__init__(
-            title=title if title is not None else self._data.type_name,
-            library=label or _LIBRARY_LABELS.get(library, library),
-            query=self._data.opening(),
-            height=height,
+            _title=title if title is not None else self._data.type_name,
+            _library=label or _LIBRARY_LABELS.get(library, library),
+            _query=self._data.opening(),
+            _height=height,
         )
         self._change_callbacks = Callbacks()
         # What result() was built from when on_change's functions last heard of it.
@@ -302,6 +302,21 @@ class DataExplorer(anywidget.AnyWidget):
         >>> chart  # in the cell that shows the chart
         """
         self._change_callbacks.register(callback, remove=remove)
+
+    def close(self) -> None:
+        """Close the widget. A tab of a ``StorageExplorer``'s data ("View in
+        a new tab") also closes the view its data came from (``View.close``)."""
+        self._release()
+        super().close()
+
+    def _release(self) -> None:
+        """Close the view the data came from, if any, without closing the
+        widget: when it closes, and at the kernel's exit (its comm is gone
+        then)."""
+        # Also called on deletion, of explorers whose __init__ failed too.
+        data = getattr(self, "_data", None)
+        if data is not None:
+            data.close()
 
     def _on_custom_msg(
         self, _widget: Any, content: dict[str, Any], _buffers: Any

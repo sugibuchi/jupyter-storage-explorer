@@ -17,9 +17,11 @@ function createPreview(x) {
   const el = h("div", { className: "jse-preview-panel", tabIndex: -1, hidden: true }, splitter, head, body);
   let queryPanel = null; // the data browser shown in the panel
 
-  // `format` (a format name) previews with that format instead of the best match.
-  function open(path, format = null) {
-    model.send({ type: "preview", path, format });
+  // `format` (a format name) previews with that format instead of the best
+  // match; `engine` (a key, or null for the built-in views) with that
+  // engine instead of the one chosen ("Preview as").
+  function open(path, format = null, engine = undefined) {
+    model.send({ type: "preview", path, format, ...(engine === undefined ? {} : { engine }) });
   }
 
   function close() {
@@ -47,11 +49,15 @@ function createPreview(x) {
     const opening = el.hidden || head.dataset.path !== preview.path;
     head.dataset.path = preview.path;
     head.replaceChildren(h("span", { className: "jse-preview-name", textContent: visible(preview.path), title: visible(preview.path) }));
-    if (preview.format) head.append(h("span", { className: "jse-badge", textContent: x.formatLabel(preview.format) }));
-    // The view in a tab of its own (with the launcher's extension).
+    // The format, and the engine viewing it (none for the built-in views).
+    if (preview.format) {
+      const badge = [x.formatLabel(preview.format), preview.engine_label].filter(Boolean).join(" · ");
+      head.append(h("span", { className: "jse-badge", textContent: badge }));
+    }
+    // The same view in a tab of its own (with the launcher's extension).
     if (preview.format && !preview.loading && !preview.error && x.jupyterlab.canOpenViewTab()) {
       const tabBtn = iconButton("open-in-new", "View in a new tab");
-      tabBtn.addEventListener("click", () => x.jupyterlab.openViewTab(preview.path, preview.format));
+      tabBtn.addEventListener("click", () => x.jupyterlab.openViewTab(preview.path, preview.format, preview.engine));
       head.append(h("span", { className: "jse-spacer" }), tabBtn);
     }
 
@@ -68,12 +74,6 @@ function createPreview(x) {
       children = [queryPanel.el];
     } else {
       children = preview.sections.map(renderSection);
-      if (preview.sections.some((s) => s.kind === "install")) {
-        // After installing, this re-runs the preview with the same format.
-        const again = h("button", { className: "jse-btn jse-primary", textContent: "Preview again" });
-        again.addEventListener("click", () => open(preview.path, preview.format));
-        children.push(again);
-      }
     }
     body.replaceChildren(...children);
     el.hidden = false;

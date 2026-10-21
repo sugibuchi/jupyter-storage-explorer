@@ -11,12 +11,15 @@ import pytest
 
 from jupyter_storage_explorer import StorageExplorer, _paths
 from jupyter_storage_explorer._infos import mtime
+from jupyter_storage_explorer._jobs.operation_chain import OperationChain
+from jupyter_storage_explorer._jobs.progress import JobProgress
 from jupyter_storage_explorer._jobs.properties import file_properties, scan
 from jupyter_storage_explorer._jobs.runner import JobRunner
-from jupyter_storage_explorer.filesystems.operation import OperationChain, Progress
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    from jupyter_storage_explorer.filesystems.operation import Progress
 
 DAY = 24 * 3600
 
@@ -51,7 +54,7 @@ class TestScan:
     ops = OperationChain(StorageExplorer.default_operations())
 
     def scan(self, paths: list[str], progress: Progress | None = None) -> Any:
-        return scan(self.ops, self.fs, paths, progress or Progress())
+        return scan(self.ops, self.fs, paths, progress or JobProgress())
 
     def test_one_folder_what_it_holds(self, tree):
         result = self.scan([at(tree, "data")])
@@ -74,7 +77,7 @@ class TestScan:
         assert result["newest"]["path"] == at(tree, "top.txt")
 
     def test_progress(self, tree):
-        progress = Progress()
+        progress = JobProgress()
         self.scan([at(tree, "data")], progress)
         assert (progress.files_done, progress.bytes_done) == (3, 6)
 
@@ -89,7 +92,7 @@ class TestScan:
             if progress.files_done:
                 progress.cancel()
 
-        progress = Progress(on_change=cancel_once_files_counted)
+        progress = JobProgress(on_change=cancel_once_files_counted)
         result = self.scan([at(tree, "top.txt"), at(tree, "data")], progress)
         assert result["cancelled"] is True
         assert result["files"] == 1  # top.txt; data not measured
@@ -102,7 +105,7 @@ class TestScan:
             return {k: v for k, v in info(path, **kwargs).items() if k != "created"}
 
         monkeypatch.setattr(memfs, "info", without_times)
-        result = scan(self.ops, memfs, ["/d/a"], Progress())
+        result = scan(self.ops, memfs, ["/d/a"], JobProgress())
         assert (result["files"], result["oldest"], result["newest"]) == (1, None, None)
 
 

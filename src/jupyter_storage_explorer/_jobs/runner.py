@@ -1,6 +1,6 @@
 """Jobs: long file operations run in a worker thread, so the kernel stays free.
 
-A job's work (a function given a ``Progress``) runs in the ``JobRunner``'s
+A job's work (a function given a ``JobProgress``) runs in the ``JobRunner``'s
 thread; everything else about it runs on the kernel's main thread, where
 widget state may change: reporting its progress (``notify``) and finishing
 it (e.g. refreshing the file list). In a kernel, the main thread runs an
@@ -19,7 +19,8 @@ import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from jupyter_storage_explorer.filesystems.operation import OperationCancelled, Progress
+from jupyter_storage_explorer._jobs.progress import JobProgress
+from jupyter_storage_explorer.filesystems.operation import OperationCancelled
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -39,7 +40,7 @@ class Job:
     id: str
     kind: str
     title: str
-    progress: Progress = field(default_factory=Progress)
+    progress: JobProgress = field(default_factory=JobProgress)
     state: str = "queued"
     result: dict[str, Any] = field(default_factory=dict)
     error: str = ""
@@ -104,7 +105,7 @@ class JobRunner:
         self,
         kind: str,
         title: str,
-        work: Callable[[Progress], dict[str, Any]],
+        work: Callable[[JobProgress], dict[str, Any]],
         finish: Callable[[Job], None] | None = None,
         update: Callable[[Job], None] | None = None,
     ) -> Job:
@@ -125,7 +126,7 @@ class JobRunner:
                 last[0] = now
             self._main(lambda: self._report(job, update))
 
-        job.progress = Progress(on_change=report)
+        job.progress = JobProgress(on_change=report)
         self.jobs[job.id] = job
         self._notify(job)
         self._executor.submit(self._run, job, work, finish)
@@ -159,7 +160,7 @@ class JobRunner:
     def _run(
         self,
         job: Job,
-        work: Callable[[Progress], dict[str, Any]],
+        work: Callable[[JobProgress], dict[str, Any]],
         finish: Callable[[Job], None] | None,
     ) -> None:
         """In the job's thread: do the work, then finish on the main thread."""

@@ -9,11 +9,12 @@ import polars as pl
 import pytest
 from explorers import Explorer, make
 from fsspec.implementations.memory import MemoryFileSystem
-from items import Item, item_of
+from items import item_of
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from jupyter_storage_explorer.formats import ItemContext
     from jupyter_storage_explorer.location import Location
 
 
@@ -38,13 +39,13 @@ def memfs() -> MemoryFileSystem:
 
 
 @pytest.fixture
-def make_item(memfs: MemoryFileSystem) -> Callable[..., Item]:
+def make_item(memfs: MemoryFileSystem) -> Callable[..., ItemContext]:
     """Write a file (``data``) or list a directory on ``memfs`` and return it
-    as an ``Item``; ``location`` instead of its own, e.g. an S3 one."""
+    as an ``ItemContext``; ``location`` instead of its own, e.g. an S3 one."""
 
     def make(
         path: str, data: bytes | None = None, location: Location | None = None
-    ) -> Item:
+    ) -> ItemContext:
         if data is not None:
             memfs.pipe_file(path, data)
         return item_of(memfs, path, location)

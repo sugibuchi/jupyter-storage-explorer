@@ -34,9 +34,8 @@ Python and `static/` changes need no build: restart the kernel. The launcher's J
 ## Tests
 
 The Python tests: fixtures in `tests/conftest.py` are `memfs` (a cleared fsspec memory filesystem), `make_item`
-(writes a file there and returns it as an `Item` of `tests/items.py`: its location, filesystem, path, info and
-listing, spread into formats' and supports' methods as `*item.match_args` and `*item.args`; `local_item` for a
-local file), and `mem_explorer` and `local` (explorers of those). Anything polars
+(writes a file there and returns it as formats and supports are given it, an `ItemContext`, made by
+`tests/items.py`'s `item_of`; `local_item` for a local file), and `mem_explorer` and `local` (explorers of those). Anything polars
 reads by URL (`query`, polars previews, the data browser) needs real local files (`tmp_path`), as polars cannot read
 `memory://`. The data browser's tests run each filter on polars, pandas, PyArrow, DuckDB and sqlframe (the PySpark API
 on DuckDB, which narwhals queries as it does Spark; real Spark needs Java, so it is not tested). The widget tests
@@ -71,13 +70,17 @@ explorer of exactly its own version (`launcher/hatch_build.py` sets its dependen
   `operation.py`: the `FileSystemOperations` interface; `operations.py`: the predefined operations; `abfs.py`: the
   opt-in Data Lake operation) and `formats/`; private, `_explorer/`
   (`StorageExplorer`'s mixins, with `states.py`, `listing.py` and `jupyterlab_files.py`), `_jobs/` (`tasks.py`:
-  `FileTasks`; `runner.py`: `JobRunner`; `incoming.py`, `properties.py`, `transfer_policy.py`) and `_query/`
+  `FileTasks`; `runner.py`: `JobRunner`; `operation_chain.py`: `OperationChain`; `incoming.py`, `properties.py`,
+  `transfer_policy.py`) and `_query/`
   (`filters.py`, `settings.py`: `QuerySettings`, `QueryState`; `data_query.py`: `DataQuery`, `fetch_rows`). Users import
-  from the top level, `filesystems`, `formats` and `formats.supports` only.
+  from the top level, `filesystems`, `formats` and `formats.supports` only, whose `__all__` are the public API:
+  what users construct, subclass, call or annotate with. The explorer's machinery (`SupportChain` and `Recipe`,
+  in `_explorer/supports.py`; `OperationChain`, in `_jobs/operation_chain.py`; `detect`, `matching_formats`, the `DEFAULT_*` tuples) stays out of
+  them, imported from its modules by the package and the tests.
 - `jupyter-storage-explorer-launcher` (`launcher/`): a JupyterLab launcher item opening a tab whose kernel runs
   `launch()`. It merges every `storage-explorer/launcher.py` in Jupyter's config paths as layers, system to user
-  (their `filesystems()`, `formats()`, `supports()`, `format_options()` (merged by library, format, then option), `operations()`, `filesystem_mappers()`, `transfer_policy()`, `parameters()`;
-  `final()` names what later layers cannot change; a retired `style()` is ignored with a warning, `RETIRED`; see `load_settings`, tested in
+  (their `filesystems()`, `supports()`, `format_options()` (merged by library, format, then option), `operations()`, `filesystem_mappers()`, `transfer_policy()`, `parameters()`;
+  `final()` names what later layers cannot change; retired `style()` and `formats()` are ignored with a warning, `RETIRED`; see `load_settings`, tested in
   `tests/test_launcher.py`). The tab's explorer gets a settings button (`_offer_settings`, trait `_settings_path`;
   never in notebooks) opening the user's `launcher.py` through the `files.ts` drive, created from
   `launcher_template.py` if missing, once the user confirms (`"settings_open"`: `{"missing"}`, then with `"create"`; `"jupyterlab_get"`/`"jupyterlab_save"` with `"settings"` read
@@ -105,7 +108,8 @@ explorer of exactly its own version (`launcher/hatch_build.py` sets its dependen
 
 **Widgets.** `storage_explorer.py` and `data_explorer.py` (and the private `_view_tab.py`) are
 `anywidget.AnyWidget` subclasses. State shared with the
-browser is in `traitlets` tagged `sync=True` (underscore-prefixed). Everything else is custom messages, dispatched by
+browser is in `traitlets` tagged `sync=True` (underscore-prefixed, in every widget: a public trait would be public
+API). Everything else is custom messages, dispatched by
 `type` in `_on_custom_msg`: requests (`{"type": ..., "rid": ...}`, handled by `_requests()`) are answered with
 `{"type": "reply", "rid": ..., ...}`; notices (`_notices()`) are not, their effects showing in the traits (or, for
 "download", in a message per file, its bytes attached). Uploads carry file pieces in binary `buffers`. A reply's
@@ -131,7 +135,7 @@ view tabs) + the widget's parts (`static/<widget>/*.js`, if any) + `<widget>.js`
 functions and constants; the widget's file has `render` and the `export`), and likewise for CSS (`sections.css`;
 without parts). The storage explorer's parts are a feature each (`tree.js`,
 `list.js`, `preview.js`, `item_menu.js`, `operations.js` with the clipboard, `transfers.js` (drag and drop, uploads,
-downloads), `jupyterlab.js`, `properties.js`, `toolbar.js` with unsafe mode and bookmarks, `jobs.js`, `overlays.js`
+downloads), `jupyterlab.js`, `properties.js`, `toolbar.js` with unsafe mode and bookmarks, `engine.js` (the engine chosen, in the status bar), `jobs.js`, `overlays.js`
 (busy screen, modal, menus), `util.js`): a `createX(x)` returning its elements and
 functions. `x` is the explorer, made in `render()`: what the features share (`model`, `el`, `request`, `ask`,
 `flash`, `navigate`, ...) and the features themselves (`x.list`, `x.preview`, ...), used when needed, not when made,
@@ -206,7 +210,10 @@ a time) and records what it changed as each item is done (`Task.record`, under a
 reports: items gone are dropped from the list and tree without listing, at most every `_FOLLOW_INTERVAL`; folders with
 new items are listed again, keeping the selection, at most every `_RELIST_INTERVAL`), and all of them once it has ended
 (`_finish`). Work functions must not touch traits or `send`; they report to the `Progress` and stop when
-`progress.check()` raises `OperationCancelled`. A drop from JupyterLab's file browser is a copy from the kernel's local
+`progress.check()` raises `OperationCancelled`. The runner's is a `JobProgress` (`_jobs/progress.py`): the public
+`Progress` (filesystems/operation.py) has only what operations do (`advance`, `working_on`, `check`, `callback`,
+`cancelled`); the subclass adds the job's bookkeeping (`add_total`, `begin_item`/`end_item`, `cancel`, `snapshot`,
+`on_change`). A drop from JupyterLab's file browser is a copy from the kernel's local
 disk (`FileTasks.upload`); files from the computer arrive in pieces (`_jobs/incoming.py`), and the last piece starts
 `FileTasks.upload_file`. Requests answer `{"job": id}`; the kernel sends `{"type": "job", ...}` as the job runs and with
 its result when it ends, which the frontend's `x.jobs.result()` waits for. The main thread is reached through the
@@ -287,60 +294,95 @@ The list's is cleared when another folder's listing arrives, not on the click, s
 unfiltered.
 
 **Formats** (`formats/`). Laid out as `filesystems/`: the interfaces `DataFormat` (`base.py`, with
-`detect`, `FILE_ICONS`, the helpers reading a file through its filesystem, `head_text`, `read_whole`,
-`file_size`, `name_of`, `child_names`, and the generated code's helpers), `FormatSupport` (`support.py`, with `SupportChain`, `Capability` and `Recipe`) and `PythonPackage`
+`ItemContext`, which reads the item for formats and supports (`head`, `head_text`, `read_whole`; `name`, `size`,
+`child_names`, `library_url`: the location as most libraries read it, a local file's plain path), `FILE_ICONS`,
+and the explorer's `detect` and `matching_formats`, not exported), `FormatSupport` (`support.py`, with
+`SupportOptions`, `Capability`, `FormatOptions`, and the generated code's helpers: `format_kwargs`, the secret
+fields, `_shown_options`; only what plugin authors use) and `PythonPackage`
 (`package.py`); a module per predefined format (`delta.py`, `parquet.py`, `excel.py`, `text.py`, `images.py`) and
-per library of the predefined supports in `supports/` (`polars.py`, `pandas.py`, `pyspark.py`, `fsspec.py`,
-`pillow.py`; `python.py` for those needing no package; named after the libraries, which they import only inside
-methods; exported by `formats.supports`, not `formats`); the predefined packages in `packages.py`, the
-views in `view.py` (`View`s, `ViewLimits`; tables made from dataframes in each library's support module, their notes in `frames.py`), the generated code's helpers in `base.py`
-(`snippet_options`, `format_kwargs`, `library_url`: a location as most libraries read it, a local
-file's plain path), and the defaults in `utils.py` (`DEFAULT_FORMATS`,
-`DEFAULT_SUPPORTS`, `create_supports`). A format only detects; a support handles one format's data with one library,
+per library of the predefined supports, each with its `Engine`, in `supports/` (`polars.py`, `pandas.py`,
+`pyspark.py`; `python.py` for the supports without an engine (library "python"): the built-in views, `TextByPython`
+and `JsonByPython` also with fsspec's code, and `ImageByPillow`'s code (apart, so that Pillow is not needed to view
+images); named after the libraries, which they import only inside methods, through
+`PythonPackage.load()`; exported by `formats.supports`, not `formats`); the predefined packages in `packages.py`, the
+views in `view.py` (`View`s, `ViewLimits`; `TableView`s, for plugins (the defaults give none), give their counts, `TableView.more`, `total` and `unit`, and the explorer words them in the note, `section()`'s
+`_rows_note`: presentation stays out of `formats`, which never imports `_explorer`), and the defaults in `defaults.py` (`DEFAULT_SUPPORTS`;
+the formats are the supports'). A format only detects; a support handles one format's data with one library,
 so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
 - `DataFormat` subclasses declare `name`, `label`, `priority`, `extensions`, `file_icon` (its files' icon in the list:
   one of `FILE_ICONS`, or `(name, svg)` for one of its own, shown as an `<img>` so its scripts never run; sent as
-  `_format_icons` and `_file_icon_svgs`, checked by `format_icons()`; files of formats without one, e.g. Text's, get
-  their extension's icon, `FILE_ICON_EXTENSIONS` in `icons.js`) and implement `matches(location, fs, path, info,
-  children)`: cheap detection, called on every click (`children` the listing of a folder, None for a file; `fs` and
-  `path` the explorer's, to read more); directory formats (Delta, Parquet datasets) inspect `children`. `detect` and
-  `matching_formats` take the same and `formats=`. Parquet also takes
+  `_format_icons` and `_file_icon_svgs`, checked by `format_icons()` (`_explorer/icons.py`); files of formats without one, e.g. Text's, get
+  their extension's icon, `FILE_ICON_EXTENSIONS` in `icons.js`) and implement `matches(ctx)`: cheap detection, called on
+  every click. `ctx` is an `ItemContext` (`base.py`): a frozen dataclass of the item's `location`, the explorer's
+  `fs` and its `path` there (to read more), its fsspec `info` and `children` (a folder's listing, None for a file;
+  `is_dir`, `name`), one object rather than parameters so that it can grow without changing the methods'
+  signatures; directory formats (Delta, Parquet datasets) inspect `ctx.children`. `detect` and `matching_formats`
+  take a context and `formats=`. Parquet also takes
   Hive-style partition folders (`year=…/month=…/`), followed down one branch (one more `ls` per partition column,
   `_partitioned_layout`), and keeps each directory's `ParquetLayout` by location, for the supports
-  (`layout(location, fs, path)`: one not seen is detected then through `fs`; without `fs`, its own "*.parquet" files;
-  `data_url`, `first_files`). The highest
+  (`layout(ctx)`: one not seen is detected then from `ctx.children`; else its own "*.parquet" files;
+  `data_url(ctx)`, `first_files(ctx, n)`). The highest
   `priority` wins (Delta 20 > Parquet 10 > default 0 > Text -10). What supports share about a format is on it
   (`Csv.separator`, `Text.language`, `Image.mime_type`, `Parquet.data_url`, ...).
+- `Engine` (`engine.py`; the predefined ones with their supports, exported by `formats.supports`: `PolarsEngine`,
+  `PandasEngine`, `PySparkEngine` (pyspark or databricks-connect)): a library users choose, with `key`
+  (`engine_preference`, `format_options`), `label` and `requirements`, `PythonPackage` instances: a tuple, all needed,
+  or a tuple of tuples, alternatives (`alternatives()`, `packages()`: the first installed, `is_installed()`).
 - `FormatSupport` subclasses declare `format` (matched with `isinstance`, so subclasses too: `MarkdownByPython` comes
-  before `TextByPython`), `engine` (the library's `PythonPackage`, None for none; names its code, `library()`, and its
-  options), `additional_requirements`, and `capabilities`, the names of the methods it implements (`"view"`,
+  before `TextByPython`), `engine` (an `Engine` class; None for the built-in views, engine-neutral: used for the
+  formats the engine chosen does not handle; `library()` is its key, "python" for none), `additional_requirements` (`PythonPackage` instances, besides the engine's), and `capabilities`, the names of the methods it implements (`"view"`,
   `"recipe"`; `Capability`; not "jobs" or "tasks", which are file operations here): the explorer reads only
   `capabilities`, so a method not listed is never called (no runtime check of that, by design: users are expected to
   generate supports with AI from the written rules in `FormatSupport`'s docstring, kept by
-  `test_capabilities_are_the_methods_implemented` for the defaults). Each method gets the detected format object first, then the item: its location (for
-  libraries doing their own I/O and for the code: `library_url(location)`; Spark's `spark_url(location.url)`, in `supports/pyspark.py`), the explorer's
-  fsspec filesystem and the item's path in it (to read it through the explorer, with its credentials), and `is_dir`;
-  `view`'s `limits` (`ViewLimits`) is keyword-only. Any may raise `FormatSupport.NotSupported`
-  for an item, and the next support is tried. Options are keyword-only `__init__` arguments, no `**kwargs`. Class
-  names are `<Format>By<Library>`.
-- `SupportChain` (the explorer's `_supports`: `supports=` then `StorageExplorer.default_supports()`, i.e.
-  `DEFAULT_SUPPORTS`, ordered format by format, most preferred first) calls them: `view` of the first support
-  installed for the format (`installed`), `recipes` with the first support with `"recipe"` of each library (so one
-  given replaces the default's), installed or not (the code may run elsewhere).
-- `view(fmt, location, fs, path, is_dir, *, limits)`: one `View` dataclass of `view.py`. A `QueryView` (`data`: any
-  dataframe narwhals supports, best lazy) opens the data browser (`_new_query`: the first view's data, then the view
-  again on reload, with the filesystem it was opened with); whether an item opens in the data browser is known only
+  `test_capabilities_are_the_methods_implemented` for the defaults). Each method gets the detected format object first, then the item's `ItemContext`
+  (`ctx`): its location (for libraries doing their own I/O and for the code: `ctx.library_url`; Spark's
+  `spark_url(ctx.location.url)`, in `supports/pyspark.py`), the explorer's fsspec filesystem and the item's path in it
+  (to read it through the explorer, with its credentials); then its options, and for `view` the `limits`
+  (`ViewLimits`), all positional, never in the context. Any may raise `FormatSupport.NotSupported` for an item, and
+  the next support is tried. Options are the fields of the class's `options_model` (`SupportOptions`, the default,
+  has none): a frozen, keyword-only dataclass, each field with a default, its helpers as methods (e.g.
+  `PolarsOptions.storage()`); a library's supports share a base model (`PolarsOptions`, `PandasOptions`,
+  `FsspecOptions`; exported by `formats.supports`). Supports take no `__init__` arguments: the chain creates those
+  given as classes. Class names are `<Format>By<Library>`, options `<Library>Options` or `<Format>By<Library>Options`.
+- `SupportChain(supports, format_options)` (`_explorer/supports.py`, with `Recipe` and the
+  `format_options` checks; the explorer's `_supports`: `supports=` then `StorageExplorer.default_supports()`, i.e.
+  `DEFAULT_SUPPORTS`, ordered format by format, most preferred first) has the explorer's `formats` (`_formats`: one
+  object of each support's `format`, in their order; there is no `formats=` argument) and calls the supports, with
+  their options:
+  `of(fmt, capability)` lists the supports for the format with the capability whose packages are installed (empty:
+  none of the registered ones can); `engines`: the installed engines with a view support, `engine_preference` (keys;
+  default `DEFAULT_ENGINE_PREFERENCE`, polars then pandas) first, then by key; `viewers(fmt)`: the engine keys that can view it,
+  then None for the built-in views ("Preview as"); `engine_for(fmt, engine)`: the engine chosen if it handles the
+  format (no fallback to another engine: LookupError if its support is not installed), else the built-in views;
+  `view(fmt, ctx, limits, engine)` with that engine's supports (ValueError if each refuses it; RuntimeError, the
+  caller's error, if it has none: the explorer resolves the engine first, `_view_engine`, and reports why it cannot
+  view); `recipes` with the first support with `"recipe"` of each library
+  (so one given replaces the default's), installed or not (the code may run elsewhere; `_registered`).
+- `view(fmt, ctx, options, limits)`: one `View` dataclass of `view.py`. A `QueryView` (`data`: any
+  dataframe narwhals supports, best lazy; `more`: eager data of the first rows only, e.g. pandas' `max_memory_rows`,
+  which the browser notes as rows cut in memory, `DataQuery(cut=)`; PySpark's read the URL in the kernel's Spark
+  session, `spark_session()`, faked with sqlframe in `tests/test_pyspark_views.py`) opens the data browser (`_new_query`: the first view's data, then the view
+  again on reload, with the context it was opened with); whether an item opens in the data browser is known only
   once viewed, so the menu offers "Preview" and "View in a new tab" for whatever has a format. The others
   (`TableView`, `TextView`, `TreeView`, `MarkdownView`, `MediaView`...) are sent as the one item of the preview's
-  `"sections"` (`section()`), which the frontend renders by `kind`. With no support installed, the chain returns an
-  `InstallView` naming the missing packages per support, so supports never check. `ViewLimits`: `max_bytes`,
+  `"sections"` (`section()`), which the frontend renders by `kind`. Supports never check their packages: the
+  chain calls only installed ones. `ViewLimits`: `max_bytes`,
   `max_display_rows` (table views' rows and the data browser's page size, sent as `"page_rows"`),
   `max_whole_file_bytes`, `max_live_rows` and `max_memory_rows` (the data browser's; `StorageExplorer(view_limits=)`).
+  The functions given to a view's `on_close(callback, *, remove=False)` (the widgets' `on_change` idiom; kept in a
+  private field, not sent to the frontend) are called with the view by `View.close()`, the first time only, errors
+  logged: the explorer closes a view once it no longer shows it (`_release_preview`: another preview, the panel closed,
+  another storage; a view tab closed; `StorageExplorer.close()`; the kernel's exit: `previews._close_views_at_exit`,
+  an `atexit` function over the `explorers` registry, calling each one's `_release_views()`, which closes the views
+  of the preview and the tabs, `_release()` of `DataExplorer` and `ViewTab`, without closing widgets). A
+  `QueryView`'s `DataQuery` owns it (its
+  `on_close`): a reload's view replaces it, the previous one closed, and closing the query (`DataExplorer.close()` for
+  a tab) closes the last.
   `_query/data_query.py`'s `DataQuery` does filters, sort and paging as narwhals expressions, either on the data itself
   ("live") or on rows read into memory (queried with polars); behaviour such as regex syntax then follows the data's
   library.
-- `recipe(fmt, location, fs, path, is_dir)`: the code of "Python code", by title, e.g. `{"Load as LazyFrame": ...,
-  "Load as DataFrame": ...}` (`fs` and `path` only for what the code must know of the file, e.g. a CSV file's
+- `recipe(fmt, ctx, options)`: the code of "Python code", by title, e.g. `{"Load as LazyFrame": ...,
+  "Load as DataFrame": ...}` (`ctx.fs` and `ctx.path` only for what the code must know of the file, e.g. a CSV file's
   separator; titles never name the library: the chain makes a `Recipe` of each, adding the support's
   `requirements()`, and the frontend groups them in a submenu per library, the first package, and lists the packages
   under the code), run as it is in a new notebook: its imports (`import polars as
@@ -351,11 +393,36 @@ so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
   left to the user. `PythonPackage`s (`packages.py`) only say what a support needs (`package`, `import_name`,
   `is_installed()`, `load()`).
 
-**Format options.** `format_options` is `{library: {format name or "*": {option: value}}}` (`create_supports`): a
-support class gets its library's (`engine.package`) options for `"*"`, then for its `format.name`, only those its
-`__init__` takes. Unknown libraries, formats (of the explorer's formats or the supports') and options (taken by no
-support of that library and format) are ValueErrors. Supports given as objects are used as they are. Storage options
-go into generated code through `snippet_options()`, which drops credential-looking keys and non-literal values. Spark
+**Engines in the explorer.** `StorageExplorer(engine_preference=)` orders the chain's `engines`, synced as
+`_engines` (`[{"key", "label"}]`); `_engine` is the one chosen: the user's last (`ExplorerStates.engine`, its JSON
+"engine") if still offered, else the first; the frontend sets it from the status bar (engine.js: a button left of Preview, with
+the engine's label, opening a menu of the engines), `_on_engine` remembers it
+(`remember_engine`; not the value `__init__` sets, `_engine_ready`) and shows again what can be previewed
+(`_selected_format`, `_current_format` via `_viewable`, and the preview open). Requests "preview" and "view_tab"
+take an optional "engine" (a key, or null for the built-in views; absent: the one chosen, `...` in Python), the
+preview keeps "engine" and "engine_label" (its badge, "Parquet · Polars"), and "menu_info" answers "view" (the best
+format and its engine, or None: "Preview <format>" disabled), "views" ("Preview as", "View in new tab as":
+"CSV (pandas)") and recipes with their engine's label ("Load as DataFrame (Polars)"). The right-click menu
+(item_menu.js): View/Preview <format>; View in new tab as, Preview as, Python code; Copy, Cut, Copy URL/path,
+Paste; Edit (JupyterLab's editor), Rename, Create a folder, Delete; downloads; Properties, bookmark. The menu hides
+separators left without visible rows around them (`tidySeparators`, overlays.js).
+
+**Format options.** `format_options` is `{library: {format name or "*": {option: value}}}` (`SupportChain`,
+`FormatOptions`): a support gets its library's (`library()`: its engine's key, "python" for none; only engines' keys go in
+`engine_preference`) options for `"*"`, then for its `format.name`, only
+those its `options_model` has (`options_model.option_names()`), as an `options_model` object passed to each of its methods. An entry
+may instead be a function of the item's `Location` returning the dict (options per storage, e.g. by
+`account_name`): `SupportChain.options_of(support, location)` calls it at each view and recipe, for the support
+called only, and checks what it returns then (format names are checked at once). The launcher merges layers option
+by option even so: an entry that is a function in either layer becomes a function giving the earlier layer's options
+updated with the later's (`_merged_options`). Unknown
+libraries, formats (of the explorer's formats or the supports') and options (taken by no support of that library and
+format) are ValueErrors. Supports given as objects get options as classes do (they carry none). Secrets are
+declared on the fields (`support.py`): `secret_field(...)` (metadata `is_secret`; also `repr=False`) for a whole value,
+`secret_dict_field(..., secret_keys=[...])` for keys of a mapping (storage options); generated code gets options
+only through `SupportOptions.code_value(name)`, which drops secret fields, secret keys at any depth, and, through
+`_shown_options(value, secret_keys)`, credential-looking keys anyway (a safety net: storage options' keys come from
+many backends) and non-literal values. ruff's `extend-immutable-calls` (pyproject.toml) knows the two helpers. Spark
 snippets never get storage options (`spark_url()` rewrites `abfs`/`s3` to `abfss`/`s3a`).
 
 ## Conventions
@@ -364,7 +431,7 @@ snippets never get storage options (`spark_url()` rewrites `abfs`/`s3` to `abfss
 - Docstrings of the public API, what users construct, call, subclass or override (`StorageExplorer`, `DataExplorer`,
   `fetch_rows` (the `fetch_rows=` default of both), `QuerySettings`, `ExplorerStates` (with `Bookmark`,
   `QueryState`), `FileSystemOperations` and its subclasses (with `_copy_file`, `_move_file`), `Measurement`,
-  `Progress`, `DataFormat`, `FormatSupport`, `Location` and its subclasses, `FileSystemMapper` and its subclasses, `MapperChain`, `same_filesystem`), are in numpy style:
+  `Progress`, `DataFormat`, `FormatSupport`, `View`, `Location` and its subclasses, `FileSystemMapper` and its subclasses, `MapperChain`, `same_filesystem`), are in numpy style:
   `Parameters`, `Returns`, `Raises`, `Attributes`, `See Also`, `Examples`. Internal ones (underscore names,
   `DataQuery`, `FileTasks`, `JobRunner`, the mixins, ...) stay prose.
 - `from __future__ import annotations` everywhere, with type-only imports under `TYPE_CHECKING` (ruff `TC` rules).
@@ -372,10 +439,14 @@ snippets never get storage options (`spark_url()` rewrites `abfs`/`s3` to `abfss
   (JavaScript), each one feature; its tests go in a `tests/test_explorer_*.py` and, for what users do, a check in
   `tests/browser/smoke.py`.
 - The root README is the quick start and highlights only; user-facing details are in `docs/storage-explorer.md`
-  ("File operation extensions" (a table: add new ones there), "Using the explorer", "Unsafe operations", "Transfer
-  policy", "Supported formats", "Format options", "StorageExplorer options") and `docs/data-explorer.md` (the data
-  browser, `result()`, `on_change()`, `QuerySettings`, "DataExplorer options"). Update them when operations, formats
-  or options change, and the README's highlights for new features. Keep them short.
+  ("Using the explorer", "Unsafe operations", "Transfer policy", "Supported formats", "Format options",
+  "StorageExplorer options", grouped by use, and last "Extensions" with "File operation extensions" (a table: add new
+  ones there)) and `docs/data-explorer.md` (the data
+  browser, `result()`, `on_change()`, `QuerySettings`, "DataExplorer options"). Extending the explorer in Python
+  (icons, filesystem mappers, file operations, "Another library for a format": supports, their options and secrets) is
+  in DEVELOPMENT.md's "Customizing". Update them when operations, formats or options change, and the README's
+  highlights for new features. Keep them short: what users do, not how it works. `supports`, `operations` and
+  `filesystem_mappers` are for development: last in the docs, the options tables and the launcher's template.
 - Images and links to other files in the READMEs are absolute URLs (`raw.githubusercontent.com/.../main/...` for
   images, `github.com/.../blob/main/...` for files): PyPI shows the README but cannot resolve relative paths. `docs/`
   is read on GitHub only, so it uses relative paths. Screenshots are in `docs/figs/` (the launcher's in

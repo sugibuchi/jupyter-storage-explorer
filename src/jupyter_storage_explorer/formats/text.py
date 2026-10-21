@@ -5,10 +5,11 @@ from __future__ import annotations
 import csv
 from typing import TYPE_CHECKING
 
-from jupyter_storage_explorer.formats.base import DataFormat, head_text, name_of
+from jupyter_storage_explorer import _paths
+from jupyter_storage_explorer.formats.base import DataFormat
 
 if TYPE_CHECKING:
-    from fsspec import AbstractFileSystem
+    from jupyter_storage_explorer.formats.base import ItemContext
 
 
 class Text(DataFormat):
@@ -31,7 +32,9 @@ class Text(DataFormat):
 
     def language(self, path: str) -> str | None:
         """The language to highlight the file at `path` as (Pygments' name), if known."""
-        return self.languages.get("." + name_of(path).lower().rsplit(".", 1)[-1])
+        return self.languages.get(
+            "." + _paths.basename(path).lower().rsplit(".", 1)[-1]
+        )
 
 
 class Markdown(Text):
@@ -60,9 +63,9 @@ class Csv(DataFormat):
         except csv.Error:
             return ","
 
-    def code_separator(self, fs: AbstractFileSystem, path: str) -> str | None:
+    def code_separator(self, ctx: ItemContext) -> str | None:
         """The file's separator for load code; None for ",", the default."""
-        sep = self.separator(name_of(path), head_text(fs, path, 4096)[0])
+        sep = self.separator(ctx.name, ctx.head_text(4096)[0])
         return None if sep == "," else sep
 
 

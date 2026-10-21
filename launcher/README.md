@@ -67,13 +67,13 @@ The file has some of these functions, all optional:
 | Function               | Returns                                                                                   |
 |------------------------|-------------------------------------------------------------------------------------------|
 | `filesystems()`        | `{name: URL or fsspec filesystem}`                                                        |
-| `formats()`            | Formats of your own (`DataFormat`), tried before the defaults                             |
-| `supports()`           | [Libraries of your own for formats](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#another-library-for-a-format) (`FormatSupport`), tried before the defaults |
 | `format_options()`     | The libraries' options, by library and format ([Format options](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#format-options)) |
-| `operations()`         | File operations of your own (`FileSystemOperations`), tried before the defaults           |
-| `filesystem_mappers()` | The locations of storages' paths (`FileSystemMapper`), by which [storages are told apart](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#file-transfer-between-file-systems) |
 | `transfer_policy()`    | Rules of a [transfer policy](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#transfer-policy) |
-| `parameters()`         | Other `StorageExplorer` arguments ([StorageExplorer options](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#storageexplorer-options)), e.g. `{"height": "fill"}` |
+| `parameters()`         | Other `StorageExplorer` arguments ([StorageExplorer options](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#storageexplorer-options)), e.g. `{"engine_preference": ["pandas"]}` |
+
+For extending the explorer in Python ([Customizing](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/DEVELOPMENT.md#customizing)),
+tried before the defaults: `supports()` (`FormatSupport`: formats and the libraries handling them), `operations()`
+(`FileSystemOperations`) and `filesystem_mappers()` (`FileSystemMapper`).
 
 ### Other configuration files
 
@@ -105,7 +105,7 @@ A later layer changes an earlier one's settings this way:
 | `filesystems()`                                 | By name: added or replaced; `None` removes one |
 | `parameters()`                                  | By name                                        |
 | `format_options()`                              | By library, format, then option                |
-| `formats()`, `supports()`, `operations()`, `filesystem_mappers()` | Later layers' first, all before the defaults |
+| `supports()`, `operations()`, `filesystem_mappers()` | Later layers' first, all before the defaults |
 | `transfer_policy()`                             | Later layers' rules first, so they decide first |
 
 `final()` returns the settings later layers cannot change: function names (except `parameters`) and parameter names.

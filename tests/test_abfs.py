@@ -10,12 +10,12 @@ import pytest
 from adlfs import AzureBlobFileSystem
 from azure.core import MatchConditions
 
+from jupyter_storage_explorer._jobs.progress import JobProgress
 from jupyter_storage_explorer.filesystems import abfs
 from jupyter_storage_explorer.filesystems.abfs import AzureDataLakeGen2Operation
 from jupyter_storage_explorer.filesystems.operation import (
     FileSystemOperations,
     OperationCancelled,
-    Progress,
 )
 
 
@@ -101,7 +101,7 @@ class TestMove:
     def test_folder_renamed_in_one_request(self, lake, service, monkeypatch):
         is_dir(monkeypatch, lake, True)
         AzureDataLakeGen2Operation().move(
-            lake, "data/raw/2026", lake, "archive/2026", Progress(), same=True
+            lake, "data/raw/2026", lake, "archive/2026", JobProgress(), same=True
         )
         assert service.calls == [
             ("rename_directory", "data", "raw/2026", "archive/2026"),
@@ -114,7 +114,7 @@ class TestMove:
     def test_file(self, lake, service, monkeypatch):
         is_dir(monkeypatch, lake, False)
         AzureDataLakeGen2Operation().move(
-            lake, "data/a.csv", lake, "data/b/a.csv", Progress(), same=True
+            lake, "data/a.csv", lake, "data/b/a.csv", JobProgress(), same=True
         )
         assert service.calls[0] == ("rename_file", "data", "a.csv", "data/b/a.csv")
 
@@ -127,7 +127,7 @@ class TestMove:
             (lake, "data", lake, "other", True),  # containers
         ]:
             with pytest.raises(FileSystemOperations.NotSupported):
-                ops.move(*args, Progress(), same=same)
+                ops.move(*args, JobProgress(), same=same)
         assert service.calls == []
 
 
@@ -271,7 +271,7 @@ class TestCopy:
 
     def test_file(self, lake, service, blobs, monkeypatch):
         is_dir(monkeypatch, lake, False)
-        progress = Progress()
+        progress = JobProgress()
         ops().copy(lake, "data/a.csv", lake, "other/b.csv", progress, same=True)
         assert blobs.calls == [
             ("copy", "https://lake.blob.core.windows.net/data/a.csv", "other/b.csv")
@@ -302,7 +302,7 @@ class TestCopy:
         blobs.statuses = {
             f"data/copy/{n}": ["pending", "pending", "success"] for n in "abc"
         }
-        progress = Progress()
+        progress = JobProgress()
         ops(concurrency=2).copy(
             lake, "data/raw", lake, "data/copy", progress, same=True
         )
@@ -350,7 +350,7 @@ class TestCopy:
         if description:
             blobs.descriptions = {"data/b.csv": description}
         with pytest.raises(OSError, match=message):
-            ops().copy(lake, "data/a.csv", lake, "data/b.csv", Progress(), same=True)
+            ops().copy(lake, "data/a.csv", lake, "data/b.csv", JobProgress(), same=True)
         assert blobs.calls[-1] == ("delete", "data/b.csv")
         assert not any(c[0] == "abort" for c in blobs.calls)
 
@@ -359,14 +359,14 @@ class TestCopy:
         is_dir(monkeypatch, lake, False)
         blobs.statuses = {"data/b.csv": ["failed"]}
         with pytest.raises(OSError, match="copy failed"):
-            ops().copy(lake, "data/a.csv", lake, "data/b.csv", Progress(), same=True)
+            ops().copy(lake, "data/a.csv", lake, "data/b.csv", JobProgress(), same=True)
         assert blobs.calls[-1] == ("delete", "data/b.csv")
 
     def test_cancelled_copies_are_deleted(self, lake, service, blobs, monkeypatch):
         is_dir(monkeypatch, lake, True)
         tree({"data/raw": [(n, 1) for n in "abcd"]})
         blobs.statuses = {f"data/copy/{n}": ["pending"] for n in "abcd"}
-        progress = Progress()
+        progress = JobProgress()
         started = []
 
         async def cancel_soon() -> None:
@@ -407,7 +407,7 @@ class TestCopy:
         is_dir(monkeypatch, lake, True)
         tree({"data/raw": [("ok.csv", 1), (bad, 2)]})
         with pytest.raises(ValueError, match="is not a file name"):
-            ops().copy(lake, "data/raw", lake, "data/copy", Progress(), same=True)
+            ops().copy(lake, "data/raw", lake, "data/copy", JobProgress(), same=True)
         assert blobs.calls == []
         assert not [c for c in service.calls if c[0] == "create_directory"]
 
@@ -419,5 +419,5 @@ class TestCopy:
             (lake, "data", lake, "copy", True),  # containers
         ]:
             with pytest.raises(FileSystemOperations.NotSupported):
-                ops().copy(*args, Progress(), same=same)
+                ops().copy(*args, JobProgress(), same=same)
         assert blobs.calls == []

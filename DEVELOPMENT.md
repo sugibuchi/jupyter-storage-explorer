@@ -200,8 +200,8 @@ uv run --group docs docs/scripts/make_all.py
 
 ## Customizing
 
-Icons are changed with CSS; how storages are named and how files are moved and copied, with Python objects given to
-`StorageExplorer` (or returned by functions of the launcher's `storage-explorer/launcher.py`, see the
+Icons are changed with CSS; how storages are named, how files are moved and copied, and how formats' data is handled,
+with Python objects given to `StorageExplorer` (or returned by functions of the launcher's `storage-explorer/launcher.py`, see the
 [launcher's README](launcher/README.md)), each tried before the defaults.
 
 ### Icons
@@ -369,3 +369,61 @@ StorageExplorer(fs=my_fs, operations=[ServerSideCopy()])
 Operations run in a worker thread: report to `progress` and call `progress.check()` between steps, so that Cancel
 stops them. In `launcher.py`, return them from `operations()`. `AzureDataLakeGen2Operation` (`filesystems/abfs.py`) is
 a complete example.
+
+### Another library for a format
+
+A *support* handles a format's data with an engine: a `FormatSupport` subclass, listing in `capabilities` the methods
+it implements: `"view"`, returning what to show (a `QueryView` of data for the data browser, or e.g. a `TableView` or
+`TextView`), and `"recipe"`, the code of "Python code" by title. Its `engine` is an `Engine` subclass, the library users
+choose in the explorer's status bar (with its `key`, `label` and `requirements`, `PythonPackage` instances): one of
+`formats.supports`' (`PolarsEngine`, `PandasEngine`, `PySparkEngine`, ...) or one of your own. Supports given as `supports` are
+tried before the defaults, e.g. DuckDB for the data browser on Parquet:
+
+```python
+from jupyter_storage_explorer import StorageExplorer
+from jupyter_storage_explorer.formats import Engine, FormatSupport, Parquet, PythonPackage, QueryView
+
+
+class DuckDB(PythonPackage):
+    package = "duckdb"
+    import_name = "duckdb"
+
+
+class DuckDBEngine(Engine):
+    key = "duckdb"
+    label = "DuckDB"
+    requirements = (DuckDB(),)  # or alternatives: ((A(),), (B(),))
+
+
+class ParquetByDuckDB(FormatSupport):
+    format = Parquet
+    engine = DuckDBEngine
+    capabilities = ("view",)
+
+    def view(self, fmt, ctx, options, limits):
+        # A folder's data files, as detection found them.
+        partitioned = ctx.is_dir and bool(fmt.layout(ctx).keys)
+        url = fmt.data_url(ctx)
+        return QueryView(data=DuckDB().load().read_parquet(url, hive_partitioning=partitioned))
+
+
+StorageExplorer("data", supports=[ParquetByDuckDB])
+```
+
+Each method gets the format detected and the item, an `ItemContext` (`ctx`): where it is (`ctx.location`; libraries
+doing their own I/O read `ctx.library_url`, a local file's plain path), the explorer's fsspec filesystem and the item's
+path in it (`ctx.fs`, `ctx.path`; `ctx.head_text(n)`, `ctx.head(n)` and `ctx.read_whole(limits)` read it through the
+explorer, e.g. for a text view), its info (`ctx.size`), its listing if it is a folder (`ctx.children`,
+`ctx.child_names`, `ctx.is_dir`); then its options, and `view` also `limits` (`ViewLimits`: bytes and rows to read).
+Formats' `matches(ctx)` gets the same context. A format of your own (a `DataFormat` subclass) is the `format` of
+your supports: explorers detect the formats of their supports. A support's options are the fields of a frozen dataclass, its
+`options_model` (a `SupportOptions` subclass, each field with a default), made from [`format_options`](docs/storage-explorer.md#format-options)
+under its engine's key (`engine.key`, e.g. `"duckdb"`; `"python"` for a support without an engine). Mark credentials so that "Python code" never shows them:
+`secret_field(default=None)` for a whole value, `secret_dict_field(default=None, secret_keys=["connection_string"])` for
+keys of a mapping such as storage options; the code gets options through `options.code_value(name)`, which leaves them
+out. A view holding something to release, e.g. a database connection, releases it in a function given to its
+`on_close` (`view.on_close(lambda view: con.close())`), as `StorageExplorer.on_change` takes one: the explorer calls it
+once it no longer shows the view, also when the kernel exits. `recipe` returns code by title, e.g. `{"Load as DataFrame": "import duckdb\n..."}`,
+the title saying what the code does, not the library. `FormatSupport`'s docstring has the rules for writing one. In
+`launcher.py`, return supports from `supports()`, and their options from `format_options()`; `engine_preference`
+(in `parameters()`) puts DuckDB first.

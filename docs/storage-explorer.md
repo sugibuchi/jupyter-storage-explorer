@@ -15,6 +15,7 @@ edit files. For installation, see the [README](../README.md).
 - [Format options](#format-options)
 - [Working with the explorer from Python](#working-with-the-explorer-from-python)
 - [StorageExplorer options](#storageexplorer-options)
+- [Extensions](#extensions)
 
 ## Storages
 
@@ -50,28 +51,6 @@ StorageExplorer(
 )
 ```
 
-### File operation extensions
-
-The explorer moves, copies, deletes and downloads files with fsspec's standard API, which works on any storage but not
-always efficiently: e.g. moving a folder copies and deletes each file in it. Extensions add implementations of some
-operations optimized for a particular storage. Pass them as `operations=[...]`.
-
-| Extension                    | Storage                                               | Operations                                         | Install                                      |
-|------------------------------|-------------------------------------------------------|----------------------------------------------------|----------------------------------------------|
-| `AzureDataLakeGen2Operation` | Azure Data Lake Storage Gen2 (hierarchical namespace) | Move folders in one step; copy within an account on the server, many files at once; create empty folders | `pip install "jupyter-storage-explorer[abfs]"` |
-
-```python
-from jupyter_storage_explorer import StorageExplorer
-from jupyter_storage_explorer.filesystems.abfs import AzureDataLakeGen2Operation
-
-StorageExplorer(
-    "abfs://lake@myaccount.dfs.core.windows.net/raw",
-    operations=[AzureDataLakeGen2Operation()],
-)
-```
-
-To write your own, subclass `FileSystemOperations` (see [filesystems/operation.py](../src/jupyter_storage_explorer/filesystems/operation.py)).
-
 ## Using the explorer
 
 ### Browse
@@ -89,32 +68,38 @@ Type in the field above the list to show names containing the text, or matching 
 
 <img src="figs/using-filter.png" width="562" alt="The list filtered with a regular expression">
 
-### Open files
+### View files
 
-Double-click a file, or right-click → **Open in JupyterLab**, to open it in JupyterLab's own editor or viewer, as in its
-file browser; **Save** writes it back to the storage. Files JupyterLab cannot show (Parquet, Excel, …) open in the
-[preview](#preview). Needs the [launcher](../launcher/README.md) package; up to 20 MB per file. Notebooks open untrusted,
-as JupyterLab opens notebooks from elsewhere: trust one (**Trust Notebook**) and save it, and it is trusted when you open
-it again.
-
-### Preview
-
-The **Preview** link at the bottom right of the list (with nothing selected: the current folder, e.g. a Delta Lake
-table), or right-click → **Preview**; **Preview as** chooses another format. Double-clicking a file previews it when
-JupyterLab cannot [open it](#open-files), e.g. Parquet or Excel. Tables open in the [data browser](#data-browser-and-view-tabs). While
-the panel is open, clicking a file previews it; `open_preview=True` opens it from the start. The same link, then
-**Close preview**, or Esc, closes it.
+Select a file and click **Preview** at the bottom right of the list (with nothing selected: the folder shown, e.g. a
+Delta Lake table), or double-click a file JupyterLab cannot open, e.g. Parquet. The preview panel opens below the list;
+tables open in the [data browser](#data-browser-and-view-tabs). Right-click → **View** *format* **in new tab** opens it in
+a JupyterLab tab of its own. **Close preview** or Esc closes the panel.
 
 <img src="figs/using-preview.png" width="562" alt="Preview in the status bar, and Preview as in the right-click menu of a Markdown file">
 
+### Edit files
+
+Double-click a file, or right-click → **Edit**, to open it in JupyterLab's editor; **Save** writes it back to the
+storage. Needs the [launcher](../launcher/README.md) package.
+
+### Switch engine
+
+Previews read data with an [engine](#engines), shown left of **Preview**: Polars, pandas or PySpark, each when
+installed. Click it to choose another; the preview open is shown again with it, and the choice is remembered.
+
+<img src="figs/using-engine.png" width="829" alt="The engines' menu, above the engine in the status bar">
+
 ### Right-click
 
-Open in JupyterLab (to edit), Preview, View in a new tab, Preview as, Python code to load the data (by library, e.g.
-polars ▸ Load as LazyFrame), Copy URL (and on a local disk Copy path); Copy, Cut, Paste; Create a folder, Rename, Delete; Download to local or to JupyterLab; Properties, Add
-bookmark. Preview, View in a new tab and Python code are offered for what has a format, e.g. not a plain folder. Local files' URLs are
-`file:///` URLs, e.g. `file:///home/jovyan/x.csv`; Copy path gives the plain path, as Copy puts it on the clipboard.
+- **View** *format* **in new tab**, **Preview** *format*: with the [engine](#engines) chosen
+- **View in new tab as**, **Preview as**: with another format or engine
+- **Python code**: code loading the data, for each engine
+- **Copy**, **Cut**, **Copy URL**, **Copy path** (local disk), **Paste**
+- **Edit**, **Rename**, **Create a folder**, **Delete**
+- **Download to local**, **Download to JupyterLab**
+- **Properties**, **Add bookmark**
 
-<img src="figs/using-right-click.png" width="385" alt="The right-click menu of a JSON Lines file">
+<img src="figs/using-right-click.png" width="402" alt="The right-click menu of a JSON Lines file">
 
 ### Properties
 
@@ -214,18 +199,23 @@ The `deny` after it has no groups, e.g. `{"rule": "deny", "src": r"abfs://[^@/]+
 
 ## Data browser and view tabs
 
-With [polars](https://pola.rs) installed (plus `deltalake` for Delta Lake, `fastexcel` for Excel), tables open in the
-data browser: page, sort, filter and choose columns, on the data itself (**Live**) or on its first 100,000 rows
-(**In memory**). It is `DataExplorer`'s browser; see [Using the data browser](data-explorer.md#using-the-data-browser).
+Tables open in the data browser: page, sort, filter and choose columns, on the data itself (**Live**) or on its first
+100,000 rows (**In memory**); see [Using the data browser](data-explorer.md#using-the-data-browser). With the
+[launcher](../launcher/README.md), **View in new tab** opens a view in a JupyterLab tab of its own, e.g. to compare
+tables side by side.
 
-With the [launcher](../launcher/README.md) package, the button at the right of the preview's title, or right-click →
-**View in a new tab**, opens what the preview shows in a JupyterLab tab of its own: a table in the data browser, with
-the same filters, sort and columns, and text, JSON, Markdown or an image as the preview panel shows them. Each tab is
-a view of its own: open several to compare tables side by side. The tabs close with the explorer's tab or
-notebook, or when its kernel restarts, and are not reopened after a page reload.
+### Engines
 
-polars reads the data with the credentials in the environment, not the explorer's options; see
-[Format options](#format-options) for its own.
+The engine is the library previews read data with, when installed: **Polars**, **pandas** or **PySpark**. Engines read storage with their
+own settings, e.g. credentials in the environment, not the explorer's: see [Format options](#format-options). Text,
+Markdown, JSON and images are shown by the explorer itself. When the engine chosen cannot view an item, use **Preview
+as**.
+
+`engine_preference` orders the engines offered; the first is chosen until the user chooses another:
+
+```python
+StorageExplorer("s3://my-bucket/lake", engine_preference=["pandas", "polars"])
+```
 
 ### Reading pages
 
@@ -248,7 +238,7 @@ StorageExplorer("s3://my-bucket/lake", fetch_rows=streaming_pages)
 
 ## Remembered states
 
-Bookmarks and the data browser's settings are shared by the explorers in the kernel. To keep them in a file, shared
+Bookmarks, the data browser's settings and the engine chosen are shared by the explorers in the kernel. To keep them in a file, shared
 with other kernels and [the launcher](../launcher/README.md)'s tabs, give its path, or an `ExplorerStates` for other
 options:
 
@@ -271,56 +261,20 @@ StorageExplorer("s3://my-bucket/data", states=ExplorerStates("states.json", max_
 | Excel (`.xlsx`)                                              | `excel`      | First rows of the first sheet | ✓            | polars, pandas                                      |
 | Markdown                                                     | `markdown`   | Rendered                      |              | Python                                              |
 | Text, code, configuration (YAML, SQL, Python, …)             | `text`       | With syntax highlighting      |              | Python                                              |
-| Images (PNG, JPEG, GIF, SVG, …)                              | `image`      | Shown                         |              | Pillow                                              |
+| Images (PNG, JPEG, GIF, SVG, …)                              | `image`      | Shown                         |              | Python (Pillow)                                     |
 
 Folders of Parquet files written by Spark or Hive, partitioned or not, are supported; folders written by other tools
 may work, but are not guaranteed to.
 
-Each format's view (the preview, the data browser) is the first installed library's, in the order above, and its code is
-shown for every library, grouped by library in **Python code** (a support given for a library replaces the default one's). The name identifies the format in CSS (see
-[Icons](../DEVELOPMENT.md#icons)) and in [Format options](#format-options).
-
-### Another library for a format
-
-A *support* handles a format's data with a library: a `FormatSupport` subclass, listing in `capabilities` the methods it
-implements: `"view"`, returning what to show (a `QueryView` of data for the data browser, or e.g. a `TableView` or
-`TextView`), and `"recipe"`, the code of "Python code" by title. Supports given as `supports` are tried before the
-defaults, e.g. DuckDB for the data browser on Parquet:
-
-```python
-from jupyter_storage_explorer import StorageExplorer
-from jupyter_storage_explorer.formats import FormatSupport, Parquet, PythonPackage, QueryView
-
-
-class DuckDB(PythonPackage):
-    package = "duckdb"
-    import_name = "duckdb"
-
-
-class ParquetByDuckDB(FormatSupport):
-    format = Parquet
-    engine = DuckDB
-    capabilities = ("view",)
-
-    def view(self, fmt, location, fs, path, is_dir, *, limits):
-        # A folder's data files, as detection found them.
-        partitioned = is_dir and bool(fmt.layout(location, fs, path).keys)
-        url = fmt.data_url(location, fs, path, is_dir)
-        return QueryView(data=DuckDB().load().read_parquet(url, hive_partitioning=partitioned))
-
-
-StorageExplorer("data", supports=[ParquetByDuckDB])
-```
-
-Each method gets where the item is (`location`, which libraries doing their own I/O read: `library_url(location)`),
-the explorer's fsspec filesystem and the item's path in it (to read it through the explorer, e.g. for a text view), and
-whether it is a folder; `view` also gets `limits` (`ViewLimits`: bytes and rows to read). `recipe` returns code by
-title, e.g. `{"Load as DataFrame": "import duckdb\n..."}`, the title saying what the code does, not the library. `FormatSupport`'s docstring has the rules for writing one.
+Each format's view (the preview, the data browser) is the [engine](#engines) chosen's, and its code is shown for
+every engine in **Python code**, each recipe with its engine (a support given for an engine replaces the default one's).
+The name identifies the format in CSS (see [Icons](../DEVELOPMENT.md#icons)) and in [Format options](#format-options).
+To handle a format with another library, see [Another library for a format](../DEVELOPMENT.md#another-library-for-a-format).
 
 ## Format options
 
-`format_options` gives the libraries' options, by library, then format name, or `"*"` for all formats (a format's
-options override those for all):
+`format_options` gives the engines' options, by engine key (`"python"` for the explorer's own views and code), then
+format name, or `"*"` for all formats (a format's options override those for all):
 
 ```python
 StorageExplorer(
@@ -344,11 +298,26 @@ StorageExplorer(
 | `polars` | `use_pyarrow`            | `delta`                                         | `scan_delta`'s `use_pyarrow`.                                                                                  |
 | `polars` | `pyarrow_options`        | `delta`                                         | `scan_delta`'s `pyarrow_options`.                                                                              |
 | `pandas` | `storage_options`        | `parquet`, `csv`, `json-lines`, `json`, `excel` | pandas' `storage_options` (fsspec's), in the code.                                                             |
-| `fsspec` | `storage_options`        | `json`, `markdown`, `text`                      | `fsspec.open`'s keyword arguments, in the code.                                                                |
-| `pillow` | `storage_options`        | `image`                                         | `fsspec.open`'s keyword arguments, in the code (which reads the file with fsspec).                             |
+| `python` | `storage_options`        | `json`, `text` (also Markdown's code), `image`  | `fsspec.open`'s keyword arguments, in the code.                                                                |
 
 Options that look like credentials are left out of the code. A library, format or option name that no support takes is
 an error.
+
+Options that depend on where the data is, e.g. one key per Azure storage account, are given by a function of the item's
+location instead of a dict. It is called each time a file is viewed or its code shown:
+
+```python
+keys = {"sales": "...", "finance": "..."}
+
+StorageExplorer(
+    filesystems={"Sales": "abfs://lake@sales.dfs.core.windows.net", "Finance": "abfs://lake@finance.dfs.core.windows.net"},
+    format_options={
+        "polars": {"*": lambda location: {"storage_options": {"account_key": keys[location.account_name]}}},
+    },
+)
+```
+
+The location's fields depend on the storage, e.g. `account_name` on Azure, `bucket` on S3.
 
 ## Working with the explorer from Python
 
@@ -364,10 +333,6 @@ explorer.folder_location  # where the folder shown is: its .url, and a local fol
 explorer.selected_locations  # the same for the selected items
 explorer.query_result()  # the table in the data browser, with its filters; None if none
 ```
-
-Locations (`jupyter_storage_explorer.Location`) are immutable and compare equal when they name the same item: an
-`S3Location` has the bucket, key and endpoint, an `AbfsLocation` the account, container and path, a `LocalLocation` the
-plain path (`.os_path` in your system's form) and its machine. `.to_json()` and `Location.from_json()` keep them.
 
 `on_change(f)` calls `f(explorer)` when the folder shown or the selection changes, and `on_query_change(f)` when
 `query_result()` does: another table opened in the preview panel (or none), other filters, sort or columns, or the data
@@ -437,20 +402,69 @@ Filter by channel in the data browser, and the chart shows that channel's sales.
 
 ## StorageExplorer options
 
+Storages and data:
+
+| Option                    | Meaning                                                                                                    |
+|---------------------------|------------------------------------------------------------------------------------------------------------|
+| `filesystems={...}`       | Several named storages; see [Several storages in one explorer](#several-storages-in-one-explorer).         |
+| `format_options={...}`    | The engines' options; see [Format options](#format-options).                                               |
+| `engine_preference=[...]` | The engines in the order they are offered, the first chosen until the user chooses; see [Engines](#engines). |
+
+Views:
+
+| Option                        | Meaning                                                                                                                               |
+|-------------------------------|---------------------------------------------------------------------------------------------------------------------------------------|
+| `height="400px"`              | Height of the tree and list; the preview panel adds its own space below. `"fill"`: as tall as the container, e.g. the launcher's tab. |
+| `open_preview=True`           | Start with the preview panel open, so that clicking a file previews it (default: closed).                                             |
+| `view_limits=ViewLimits(...)` | How much views read and show (`formats.ViewLimits`): `max_bytes`, `max_display_rows` (also the data browser's page size), `max_whole_file_bytes`, `max_live_rows`, `max_memory_rows`. |
+| `max_browser_items=20_000`    | Folders with more items are filtered, sorted and paged by the kernel, one page at a time, instead of the browser (`None`: never).     |
+| `fetch_rows=...`              | How the data browser reads pages; see [Reading pages](#reading-pages).                                                                |
+
+Downloads and states:
+
 | Option                              | Meaning                                                                                                                               |
 |-------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------|
-| `height="400px"`                    | Height of the tree and list; the preview panel adds its own space below. `"fill"`: as tall as the container, e.g. the launcher's tab. |
-| `open_preview=True`                 | Start with the preview panel open, so that clicking a file previews it (default: closed).                                             |
+| `download_to_jupyterlab_path="."`   | Folder "Download to JupyterLab" copies into, e.g. `"~/Downloads"`; default: where it runs.                                            |
 | `max_upload_bytes=10 * 1024 * 1024` | Largest file you can upload from your computer (default 10 MB; `None` for no limit).                                                  |
-| `download_to_jupyterlab_path="."`   | Folder "Download to JupyterLab" copies into, e.g. `"~/Downloads"`; default: where it runs. To refuse downloads, use `transfer_policy`. |
-| `filesystems={...}`                 | Several named storages; see [Several storages in one explorer](#several-storages-in-one-explorer).                                    |
-| `max_browser_items=20_000`          | Folders with more items are filtered, sorted and paged by the kernel, one page at a time, instead of the browser (`None`: never).     |
-| `fetch_rows=...`                    | How the data browser reads pages; see [Reading pages](#reading-pages).                                                                |
-| `view_limits=ViewLimits(...)`       | How much views read and show (`formats.ViewLimits`): `max_bytes`, `max_display_rows` (also the data browser's page size), `max_whole_file_bytes`, `max_live_rows`, `max_memory_rows`. |
-| `operations=[...]`                  | File operation extensions, tried before the defaults; see [File operation extensions](#file-operation-extensions).                   |
-| `filesystem_mappers=[...]`          | The locations of storages' paths, by which they are told apart, tried before the defaults; see [File transfer](#file-transfer-between-file-systems). |
-| `transfer_policy=[...]`             | Rules for transfers of files between storages; see [Transfer policy](#transfer-policy).                                               |
-| `states="states.json"`              | Where bookmarks and the data browser's settings are kept (a path or an `ExplorerStates`); see [Remembered states](#remembered-states). |
-| `formats=[...]`                     | The formats files are detected as, replacing the defaults (`default_formats()`).                                                      |
-| `supports=[...]`                    | Libraries of your own for formats, tried before the defaults; see [Another library for a format](#another-library-for-a-format).     |
-| `format_options={...}`              | The libraries' options (see [Format options](#format-options)).                                                                       |
+| `states="states.json"`              | Where bookmarks, the data browser's settings and the engine chosen are kept (a path or an `ExplorerStates`); see [Remembered states](#remembered-states). |
+
+Transfers:
+
+| Option                  | Meaning                                                                         |
+|-------------------------|---------------------------------------------------------------------------------|
+| `transfer_policy=[...]` | Where files may be copied or moved; see [Transfer policy](#transfer-policy).    |
+
+For extending the explorer (see [Extensions](#extensions)), tried before the defaults:
+
+| Option                     | Meaning                                                                                                               |
+|----------------------------|-----------------------------------------------------------------------------------------------------------------------|
+| `operations=[...]`         | File operations; see [File operation extensions](#file-operation-extensions).                                         |
+| `supports=[...]`           | Formats and the libraries handling them; see [Another library for a format](../DEVELOPMENT.md#another-library-for-a-format). |
+| `filesystem_mappers=[...]` | How storages are told apart; see [Filesystem mappers](../DEVELOPMENT.md#filesystem-mappers).                          |
+
+## Extensions
+
+The explorer can be extended in Python: file operations for a storage, formats and the libraries handling them, and
+storages of other kinds (see [Customizing](../DEVELOPMENT.md#customizing)).
+
+### File operation extensions
+
+The explorer moves, copies, deletes and downloads files with fsspec's standard API, which works on any storage but not
+always efficiently: e.g. moving a folder copies and deletes each file in it. Extensions add implementations of some
+operations optimized for a particular storage. Pass them as `operations=[...]`.
+
+| Extension                    | Storage                                               | Operations                                         | Install                                      |
+|------------------------------|-------------------------------------------------------|----------------------------------------------------|----------------------------------------------|
+| `AzureDataLakeGen2Operation` | Azure Data Lake Storage Gen2 (hierarchical namespace) | Move folders in one step; copy within an account on the server, many files at once; create empty folders | `pip install "jupyter-storage-explorer[abfs]"` |
+
+```python
+from jupyter_storage_explorer import StorageExplorer
+from jupyter_storage_explorer.filesystems.abfs import AzureDataLakeGen2Operation
+
+StorageExplorer(
+    "abfs://lake@myaccount.dfs.core.windows.net/raw",
+    operations=[AzureDataLakeGen2Operation()],
+)
+```
+
+To write your own, see [File operations](../DEVELOPMENT.md#file-operations).

@@ -33,6 +33,15 @@ class PySpark(PythonPackage):
     import_name = "pyspark"
 
 
+class DatabricksConnect(PythonPackage):
+    """Spark sessions on a Databricks cluster: PySpark's API without pyspark
+    itself, an alternative of ``PySparkEngine``."""
+
+    package = "databricks-connect"
+    # "databricks" alone is a namespace other packages share (databricks-sdk).
+    import_name = "databricks.connect"
+
+
 # Optional dependencies of the packages above: installed, never imported by snippets.
 
 

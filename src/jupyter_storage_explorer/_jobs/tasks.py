@@ -28,17 +28,15 @@ from jupyter_storage_explorer import _paths
 from jupyter_storage_explorer._jobs import properties
 from jupyter_storage_explorer.filesystems.mapper import MapperChain
 from jupyter_storage_explorer.filesystems.mappers import default_mappers
-from jupyter_storage_explorer.filesystems.operation import (
-    OperationCancelled,
-    Progress,
-)
+from jupyter_storage_explorer.filesystems.operation import OperationCancelled
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Sequence
 
     from fsspec import AbstractFileSystem
 
-    from jupyter_storage_explorer.filesystems.operation import OperationChain
+    from jupyter_storage_explorer._jobs.operation_chain import OperationChain
+    from jupyter_storage_explorer._jobs.progress import JobProgress
 
 
 @dataclasses.dataclass
@@ -63,7 +61,7 @@ class Task:
     kind: str  # "move", "delete", "paste", "upload", "download" or "properties"
     title: str  # e.g. "Moving a.csv to data", shown with its progress
     fs: AbstractFileSystem
-    work: Callable[[Progress], dict[str, Any]] = lambda progress: {}
+    work: Callable[[JobProgress], dict[str, Any]] = lambda progress: {}
     cleanup: Callable[[], None] | None = None
     moved: list[tuple[str, str]] = dataclasses.field(default_factory=list)
     removed: list[str] = dataclasses.field(default_factory=list)
@@ -233,7 +231,7 @@ class FileTasks:
         title = f"Moving {_describe(t for _, t, _ in moves)} to {_paths.basename(dest)}"
         task = Task("move", title, fs)
 
-        def work(progress: Progress) -> dict[str, Any]:
+        def work(progress: JobProgress) -> dict[str, Any]:
             sizes = [self.measure(fs, s) if f else (1, 0) for s, _, f in moves]
             skipped, failed = [], list(errors)
 
@@ -316,7 +314,7 @@ class FileTasks:
         fs, ops = self.fs, self.ops
         task = Task("move", f"Renaming {_paths.basename(path)} to {name}", fs)
 
-        def work(progress: Progress) -> dict[str, Any]:
+        def work(progress: JobProgress) -> dict[str, Any]:
             failed: list[str] = []
 
             def rename(item: tuple[str, str, bool]) -> None:
@@ -343,7 +341,7 @@ class FileTasks:
         fs, ops = self.fs, self.ops
         task = Task("delete", f"Deleting {_describe(p for p, _ in items)}", fs)
 
-        def work(progress: Progress) -> dict[str, Any]:
+        def work(progress: JobProgress) -> dict[str, Any]:
             # Counted by files only: deleting takes about as long whatever the size.
             sizes = [(self.measure(fs, p)[0] if f else 1, 0) for p, f in items]
             failed = list(errors)
@@ -470,7 +468,7 @@ class FileTasks:
         )
         task = Task(kind, title, fs)
 
-        def work(progress: Progress) -> dict[str, Any]:
+        def work(progress: JobProgress) -> dict[str, Any]:
             sizes = [self.measure(p.fs, p.source) for p in plans]
             done, skipped, failed = [], [], list(errors)
 
@@ -554,7 +552,7 @@ class FileTasks:
         name, dest = _paths.basename(target), _paths.parent(target, fs)
         task = Task("upload", f"Uploading {name} into {_paths.basename(dest)}", fs)
 
-        def work(progress: Progress) -> dict[str, Any]:
+        def work(progress: JobProgress) -> dict[str, Any]:
             failed: list[str] = []
 
             def upload(_: tuple[str]) -> None:
@@ -609,7 +607,7 @@ class FileTasks:
         title = f"Downloading {_describe(s for s, _ in files)} to {os.path.basename(dest) or dest}"
         task = Task("download", title, fs)
 
-        def work(progress: Progress) -> dict[str, Any]:
+        def work(progress: JobProgress) -> dict[str, Any]:
             sizes = [self.measure(fs, s) for s, _ in files]
             copied, skipped, failed = [], [], list(errors)
 
@@ -653,14 +651,14 @@ _Item = TypeVar("_Item")
 
 
 def _do_each(
-    progress: Progress,
+    progress: JobProgress,
     items: Sequence[_Item],
     sizes: Sequence[tuple[int, int]],
     act: Callable[[_Item], None],
     errors: list[str],
 ) -> _Stop | None:
     """Do ``act(item)`` for each of a task's ``items`` (in its worker thread),
-    whose files and bytes are ``sizes`` (see ``Progress``). Failures are added
+    whose files and bytes are ``sizes`` (see ``JobProgress``). Failures are added
     to ``errors`` ("name: reason") and the next item is done; a cancel stops
     at once. Returns None, or if the user cancelled, how it stopped."""
     progress.add_total(files=sum(n for n, _ in sizes), bytes=sum(b for _, b in sizes))

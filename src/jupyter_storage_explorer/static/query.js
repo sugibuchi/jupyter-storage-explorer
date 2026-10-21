@@ -155,16 +155,18 @@ function createQueryPanel(host, path, data) {
     );
   }
 
-  // A note on rows left out: in memory, only the first rows of the data; live,
+  // A note on rows left out: in memory, only the first rows of the data
+  // (also when only those were read, e.g. by pandas: the mode is fixed); live,
   // only the first rows of the result.
   function modeNote() {
     const m = view.mode;
     if (m.mode === "memory" && m.memory?.cut) {
       const n = m.memory.rows.toLocaleString();
+      const live = m.fixed ? "" : " Switch to Live to query all the data.";
       return h("span", {
         className: "jse-query-mode-note",
         textContent: `First ${n} rows`,
-        title: `Only the first ${n} rows of the data are in memory: filters and sorting apply to them. Switch to Live to query all the data.`,
+        title: `Only the first ${n} rows of the data are in memory: filters and sorting apply to them.${live}`,
       });
     }
     if (m.mode === "live" && view.limited) {

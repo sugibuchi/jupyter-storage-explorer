@@ -6,8 +6,8 @@ from typing import Any
 
 from jupyter_storage_explorer import _infos, _paths
 from jupyter_storage_explorer._explorer.listing import Listing
-from jupyter_storage_explorer.formats import DataFormat
-from jupyter_storage_explorer.formats import detect as detect_format
+from jupyter_storage_explorer.formats import DataFormat, ItemContext
+from jupyter_storage_explorer.formats.base import detect as detect_format
 
 
 def _entry(info: dict[str, Any]) -> dict[str, Any]:
@@ -36,14 +36,15 @@ class FoldersMixin:
             self._error = f"Cannot list {path}: {exc}"
             self._show_listing(self._make_listing(path, []))
             self._selected = []
-            self._current_format = ""
+            self._current_dir_format = None
+            self._show_current_format()
             return
         self._error = ""
         self._set_children(path, infos)
         self._show_listing(self._make_listing(path, infos))
         self._selected = []
-        fmt = self._directory_format(path, infos)
-        self._current_format = fmt.name if fmt is not None else ""
+        self._current_dir_format = self._directory_format(path, infos)
+        self._show_current_format()
 
     def _ancestors(self, path: str) -> list[str]:
         """Directories from the root down to (but excluding) ``path``."""
@@ -223,13 +224,20 @@ class FoldersMixin:
         location = self._location_of(path)
         if info.get("type") == "directory" or location is None:
             return ""
+        ctx = ItemContext(
+            location=location, fs=self._fs, path=path, info=info, children=None
+        )
         try:
-            fmt = detect_format(
-                location, self._fs, path, info, None, formats=self._formats
-            )
+            fmt = detect_format(ctx, formats=self._formats)
         except Exception:
             return ""  # detection is best-effort
         return fmt.name if fmt is not None else ""
+
+    def _show_current_format(self) -> None:
+        """``_current_format``: the folder's format, if it can be viewed with
+        the engine chosen (the Preview button, with nothing selected)."""
+        fmt = self._current_dir_format
+        self._current_format = fmt.name if fmt and self._viewable(fmt) else ""
 
     def _directory_format(
         self, path: str, infos: list[dict[str, Any]]
@@ -241,9 +249,10 @@ class FoldersMixin:
         # The listing is all directory formats need, so skip fetching the
         # directory's own info.
         info = {"name": path, "type": "directory"}
+        ctx = ItemContext(
+            location=location, fs=self._fs, path=path, info=info, children=infos
+        )
         try:
-            return detect_format(
-                location, self._fs, path, info, infos, formats=self._formats
-            )
+            return detect_format(ctx, formats=self._formats)
         except Exception:
             return None  # detection is best-effort; a failure just means no preview

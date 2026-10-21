@@ -23,7 +23,8 @@ if TYPE_CHECKING:
 
     from fsspec import AbstractFileSystem
 
-    from jupyter_storage_explorer.filesystems.operation import OperationChain, Progress
+    from jupyter_storage_explorer._jobs.operation_chain import OperationChain
+    from jupyter_storage_explorer.filesystems.operation import Progress
 
 
 def file_properties(info: dict[str, Any], url: str | None) -> dict[str, Any]:

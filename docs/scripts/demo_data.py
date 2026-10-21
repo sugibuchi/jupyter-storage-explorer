@@ -13,6 +13,7 @@ uv run --group docs docs/scripts/demo_data.py <folder>
 
 from __future__ import annotations
 
+import dataclasses
 import datetime as dt
 import io
 import json
@@ -421,27 +422,34 @@ def supports() -> list[Any]:
     local_fs = fsspec.filesystem("file")
     mappers = MapperChain(default_mappers())
 
-    def local(location, fs, path):
-        """The local copy's location, filesystem and path of a demo item, if
-        it has one (Scratch's files are in memory only)."""
-        if not isinstance(location, MemoryLocation):
-            return location, fs, path
-        copy = (local_copy() / location.path.lstrip("/")).as_posix()
+    def local(ctx):
+        """The local copy of a demo item, if it has one (Scratch's files are
+        in memory only)."""
+        if not isinstance(ctx.location, MemoryLocation):
+            return ctx
+        copy = (local_copy() / ctx.location.path.lstrip("/")).as_posix()
         if not local_fs.exists(copy):
-            return location, fs, path
+            return ctx
         copy_location = mappers.location_of(local_fs, copy)
         assert isinstance(copy_location, LocalLocation)
-        return copy_location, local_fs, copy
+        return dataclasses.replace(
+            ctx,
+            location=copy_location,
+            fs=local_fs,
+            path=copy,
+            info=local_fs.info(copy),
+            children=local_fs.ls(copy, detail=True) if ctx.is_dir else None,
+        )
 
     result = default_supports()
     for support in result:
         # Only polars reads by URL; the others read the demo's own files,
         # so that files saved from JupyterLab show as saved.
-        uses_polars = support.engine is not None and support.engine.package == "polars"
+        uses_polars = support.engine is not None and support.engine.key == "polars"
         if uses_polars and "view" in support.capabilities:
             view = support.view
-            support.view = lambda fmt, location, fs, path, is_dir, view=view, **kw: (
-                view(fmt, *local(location, fs, path), is_dir, **kw)
+            support.view = lambda fmt, ctx, options, limits, view=view: view(
+                fmt, local(ctx), options, limits
             )
     return result
 

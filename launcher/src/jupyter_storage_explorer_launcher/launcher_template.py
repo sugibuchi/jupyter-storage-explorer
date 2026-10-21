@@ -34,42 +34,6 @@ def filesystems():
 #     }
 
 
-# Formats of your own (DataFormat subclasses), tried before the defaults.
-#
-# def formats():
-#     from my_formats import AvroFormat
-#
-#     return [AvroFormat()]
-
-
-# Libraries of your own handling formats' data (FormatSupport subclasses),
-# tried before the defaults.
-#
-# def supports():
-#     from my_supports import ParquetByDuckDB
-#
-#     return [ParquetByDuckDB]
-
-
-# File operations of your own, tried before the defaults: e.g. renames and
-# copies on the server for Azure Data Lake Storage Gen2 accounts (needs
-# `pip install "jupyter-storage-explorer[abfs]"`).
-#
-# def operations():
-#     from jupyter_storage_explorer.filesystems.abfs import AzureDataLakeGen2Operation
-#
-#     return [AzureDataLakeGen2Operation()]
-
-
-# How filesystems the defaults do not know are told apart, and their URLs
-# (FileSystemMapper subclasses), tried before the defaults.
-#
-# def filesystem_mappers():
-#     from my_mappers import MyStorageMapper
-#
-#     return [MyStorageMapper()]
-
-
 # Where files may be copied or moved: the first rule whose src and dest
 # patterns both match a file's URLs decides; files go anywhere else.
 # "browser:///..." is your computer, "jupyterlab://..." the Jupyter server's
@@ -86,7 +50,36 @@ def filesystems():
 #
 # def parameters():
 #     return {
+#         "engine_preference": ["pandas", "polars"],
 #         "open_preview": True,
-#         "max_browser_items": 50_000,
 #         "max_upload_bytes": 100 * 1024 * 1024,
 #     }
+
+
+# --- For development: extending the explorer in Python, tried before the
+# defaults (see "Customizing" in the project's DEVELOPMENT.md). ---
+
+# Formats and the libraries handling their data (FormatSupport subclasses).
+#
+# def supports():
+#     from my_supports import ParquetByDuckDB
+#
+#     return [ParquetByDuckDB]
+
+
+# File operations, e.g. renames and copies on the server for Azure Data Lake
+# Storage Gen2 accounts (needs `pip install "jupyter-storage-explorer[abfs]"`).
+#
+# def operations():
+#     from jupyter_storage_explorer.filesystems.abfs import AzureDataLakeGen2Operation
+#
+#     return [AzureDataLakeGen2Operation()]
+
+
+# How filesystems the defaults do not know are told apart, and their URLs
+# (FileSystemMapper subclasses).
+#
+# def filesystem_mappers():
+#     from my_mappers import MyStorageMapper
+#
+#     return [MyStorageMapper()]
