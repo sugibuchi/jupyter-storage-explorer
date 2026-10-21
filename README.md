@@ -147,4 +147,8 @@ launcher also has a narrow side panel, for picking files beside your notebooks):
   [transfer policy](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#transfer-policy).
 - **Runs in your kernel**: with your credentials and your libraries, and no server setup.
 
-It complements JupyterLab's file browser rather than replacing it.
+It complements JupyterLab's file browser rather than replacing it. To mount storages in JupyterLab itself, as drives
+of the server, use [jupyter-fs](https://github.com/jpmorganchase/jupyter-fs) or
+[jupyter-fsspec](https://github.com/fsspec/jupyter-fsspec); to work with the data in them, Storage Explorer. They
+work side by side: see
+[Compared with jupyter-fs and jupyter-fsspec](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#compared-with-jupyter-fs-and-jupyter-fsspec).
