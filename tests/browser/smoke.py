@@ -1231,22 +1231,36 @@ def open_side_panel(page: Page, *, click: bool = True) -> Locator:
 @lab_check
 def side_panel(lab: Lab, page: Page) -> None:
     # The narrow explorer in the left side bar, of a kernel of its own: no
-    # tree, no preview panel (items open in new tabs), the path below the
-    # toolbar, after the storage chooser; the engine in the status bar.
+    # tree, no preview panel (items open in new tabs); the storage chooser in
+    # the toolbar, Unsafe mode in the settings menu, Up and the path below;
+    # the engine in the status bar.
     page.goto(lab.url())
     side = open_side_panel(page)
     expect(side).to_have_class(re.compile(r"\bjse-sidebar\b"))
     expect(side.locator(".jse-tree-pane")).to_be_hidden()
     expect(side.locator(".jse-tree-btn")).to_be_hidden()
     expect(side.locator(".jse-preview-btn")).to_be_hidden()
+    expect(side.locator(".jse-unsafe")).to_have_count(0)
     expect(side.locator(".jse-engine-btn")).to_have_text("Polars")
-    expect(side.locator(".jse-path-bar .jse-fs-select")).to_be_visible()
+    expect(side.locator(".jse-toolbar .jse-fs-select")).to_be_visible()
+    expect(
+        side.locator(".jse-path-bar button[title='Parent directory']")
+    ).to_be_visible()
     expect(side.locator(".jse-path-bar .jse-crumb").first).to_have_text("/sales-lake")
+    settings = side.locator(".jse-settings-btn")
+    menu = side.locator(".jse-menu:not(.jse-submenu) > .jse-menu-item:visible")
+    settings.click()
+    expect(menu.first).to_have_text("Unsafe mode: off")
+    menu.first.click()
+    expect(settings).to_have_class(re.compile(r"\bjse-unsafe-on\b"))
+    settings.click()
+    expect(menu.first).to_have_text("Unsafe mode: on")
+    menu.first.click()
+    expect(settings).not_to_have_class(re.compile(r"\bjse-unsafe-on\b"))
     row = side.locator(".jse-list tbody tr")
     row.filter(has=page.get_by_text("curated", exact=True)).dblclick()
     expect(side.locator(".jse-crumb").last).to_have_text("curated")
     row.filter(has=page.get_by_text("orders.parquet", exact=True)).click(button="right")
-    menu = side.locator(".jse-menu:not(.jse-submenu) > .jse-menu-item:visible")
     expect(menu.filter(has_text="View Parquet in new tab")).to_be_visible()
     expect(menu.filter(has_text="Preview")).to_have_count(0)
     side.press("Escape")

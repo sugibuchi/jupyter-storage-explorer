@@ -449,7 +449,7 @@ Views:
 | `height="400px"`              | Height of the tree and list; the preview panel adds its own space below. `"fill"`: as tall as the container, e.g. the launcher's tab. |
 | `tree_view="open"`            | The folder tree: `"open"`, `"closed"` (its button in the toolbar shows it) or `"disabled"` (no tree).                                |
 | `preview_panel="closed"`      | The preview panel: `"open"` starts with it open, so that clicking a file previews it; `"disabled"`: none, items open in new tabs.     |
-| `layout="standard"`           | `"sidebar"`: a narrow layout, the path below the toolbar and the list without Modified, as in the launcher's side panel.              |
+| `layout="standard"`           | `"sidebar"`: a narrow layout, as in the launcher's side panel: Unsafe mode in the ⚙ menu, Up and the path on a bar of their own, the list without Modified, the pager below it. |
 | `view_limits=ViewLimits(...)` | How much views read and show (`formats.ViewLimits`): `max_bytes`, `max_display_rows` (also the data browser's page size), `max_whole_file_bytes`, `max_live_rows`, `max_memory_rows`. |
 | `max_browser_items=20_000`    | Folders with more items are filtered, sorted and paged by the kernel, one page at a time, instead of the browser (`None`: never).     |
 | `fetch_rows=...`              | How the data browser reads pages; see [Reading pages](#reading-pages).                                                                |

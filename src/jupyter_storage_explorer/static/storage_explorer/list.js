@@ -55,9 +55,12 @@ function createList(x) {
   const headRow = h("tr");
   const tbody = h("tbody");
   const el = h("div", { className: "jse-list" }, h("table", {}, h("thead", {}, headRow), tbody));
-  // The storage chooser comes first here while the tree is hidden (see placeStorages in storage_explorer.js).
-  const bar = h("div", { className: "jse-pane-bar" }, filter.el, pagerEl);
-  const pane = h("div", { className: "jse-pane jse-list-pane" }, bar, el);
+  // The storage chooser comes first here while the tree is hidden (see
+  // placeStorages in storage_explorer.js). In the sidebar layout, the pager
+  // is below the list instead, shown when there are several pages.
+  const sidebar = model.get("_layout") === "sidebar";
+  const bar = h("div", { className: "jse-pane-bar" }, filter.el, ...(sidebar ? [] : [pagerEl]));
+  const pane = h("div", { className: "jse-pane jse-list-pane" }, bar, el, ...(sidebar ? [pagerEl] : []));
   const statusEl = h("div", { className: "jse-status" });
 
   // --- The listing, decoded and sorted ---

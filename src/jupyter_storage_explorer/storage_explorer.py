@@ -145,9 +145,11 @@ class StorageExplorer(
         launcher's extension.
     layout : {"standard", "sidebar"}, default "standard"
         "sidebar": a narrow layout, for JupyterLab's side bar (the
-        launcher's side panel): the toolbar, then the storage chooser and
-        the folder's path, the filter and the list (without the Modified
-        column), and the status bar.
+        launcher's side panel): a bar of the storage chooser, bookmarks,
+        Refresh and the settings menu (with Unsafe mode, first), a bar of
+        Up and the folder's path, the filter, the list (without the
+        Modified column), the pager when there are several pages, and the
+        status bar.
     open_preview : bool, optional
         Deprecated: ``preview_panel="open"`` instead.
     plugin_options : mapping, optional

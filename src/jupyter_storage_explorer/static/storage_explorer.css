@@ -41,37 +41,46 @@
   display: none;
 }
 
-/* The sidebar layout (layout="sidebar"): the path on a bar of its own below
-   the toolbar, after the storage chooser, which takes at most half of it. */
+/* The sidebar layout (layout="sidebar"): the storage chooser takes the
+   toolbar's room left by its buttons; Up and the path are on a bar of their
+   own below; the pager below the list. */
+.jse-storage-slot {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  margin-right: 4px;
+}
+
 .jse-path-bar {
   display: flex;
   align-items: center;
+  gap: 2px;
   min-height: 24px;
-  padding: 2px 6px 2px 0;
+  padding: 2px 6px;
   border-bottom: 1px solid var(--jse-border);
   background: var(--jse-bar-bg);
 }
 
-.jse-storage-slot {
-  display: flex;
-  flex: 0 1 auto;
-  min-width: 0;
-  max-width: 50%;
-  margin-left: 6px;
+.jse-path-bar .jse-path {
+  margin-left: 2px;
 }
 
-.jse-storage-slot:not(:has(.jse-fs-select:not([hidden]))) {
-  display: none;
+.jse-sidebar .jse-list-pane > .jse-pager {
+  justify-content: center;
+  margin-left: 0;
+  padding: 2px 6px;
+  border-top: 1px solid var(--jse-border);
+  background: var(--jse-bar-bg);
 }
 
-/* Narrow: the list shows the name and size only (the tooltip has the
-   times), and the Unsafe mode switch is shorter. */
+/* Unsafe mode on, from the settings menu (the sidebar layout has no switch). */
+.jse-settings-btn.jse-unsafe-on {
+  color: var(--jse-error);
+}
+
+/* Narrow: the list shows the name and size only (the tooltip has the times). */
 .jse-sidebar .jse-list .jse-col-mtime {
   display: none;
-}
-
-.jse-sidebar .jse-unsafe {
-  padding-left: 4px;
 }
 
 /* Right to left, so a long path is cut at its start (…/folder shown); the

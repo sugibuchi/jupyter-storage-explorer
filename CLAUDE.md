@@ -254,9 +254,10 @@ whichever key a filesystem uses.
 **Layout.** `tree_view` (trait `_tree_view`: `"open"`, `"closed"`, set by the toolbar's tree button, or
 `"disabled"`, fixed at creation, `_tree_disabled`), `preview_panel` (`_preview_panel`: `"open"` starts with
 `_preview` `{"empty": true}`; `"disabled"`: no Preview button or rows, the `"preview"` notice ignored, items viewed in
-new tabs, `x.preview.view`) and `layout` (`_layout`: `"sidebar"`, class `jse-sidebar`: the path on a bar of its own
-after the storage chooser, no Modified column). The storage chooser sits above the tree while it shows, else first in
-the list's bar (`placeStorages`). `open_preview` is deprecated (DeprecationWarning).
+new tabs, `x.preview.view`) and `layout` (`_layout`: `"sidebar"`, class `jse-sidebar`: a bar of the storage chooser,
+bookmarks, Refresh and ⚙, whose menu has Unsafe mode first (the button red while on, `renderUnsafe`); a bar of Up and
+the path; the filter; the list without Modified; the pager below it). Otherwise the storage chooser sits above the tree
+while it shows, else first in the list's bar (`placeStorages`). `open_preview` is deprecated (DeprecationWarning).
 
 **Unsafe mode.** Folder operations (move, copy or cut and paste, rename, delete) are offered only while the "Unsafe
 mode" slider in the toolbar is on (trait `_unsafe_mode`). In the frontend, every operation calls `x.unsafe.take()` as

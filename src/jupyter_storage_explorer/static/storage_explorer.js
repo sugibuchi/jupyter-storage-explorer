@@ -93,7 +93,8 @@ function render({ model, el }) {
   // "jse-browser" is for user styles too, e.g. icons by [data-depth] (DEVELOPMENT.md).
   el.classList.add("jse-widget", "jse-browser");
   // The narrow layout of JupyterLab's side bar (the launcher's side panel):
-  // the path on a bar of its own (toolbar.js) and fewer columns (the CSS).
+  // two bars (toolbar.js), the pager below the list (list.js) and fewer
+  // columns (the CSS).
   const sidebar = model.get("_layout") === "sidebar";
   el.classList.toggle("jse-sidebar", sidebar);
   // Focusable, so Escape reaches the widget after a click anywhere in it.
@@ -212,7 +213,10 @@ function render({ model, el }) {
     },
     "change:_current_format": x.preview.updateButton,
     "change:_selected_format": x.preview.updateButton,
-    "change:_unsafe_mode": x.unsafe.render,
+    "change:_unsafe_mode": () => {
+      x.unsafe.render();
+      x.toolbar.renderUnsafe();
+    },
     "change:_engines": x.engine.render,
     "change:_engine": x.engine.render,
     "msg:custom": onCustomMsg,
@@ -224,6 +228,7 @@ function render({ model, el }) {
   placeStorages();
   x.tree.renderStorages();
   x.unsafe.render();
+  x.toolbar.renderUnsafe();
   x.engine.render();
   onDirChange();
   x.list.render();
