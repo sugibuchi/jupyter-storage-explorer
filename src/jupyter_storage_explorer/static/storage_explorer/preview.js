@@ -24,6 +24,19 @@ function createPreview(x) {
     model.send({ type: "preview", path, format, ...(engine === undefined ? {} : { engine }) });
   }
 
+  // Without a preview panel (preview_panel="disabled"), the button is hidden
+  // and the menus offer no "Preview"; items are viewed in new tabs (view).
+  const enabled = () => model.get("_preview_panel") !== "disabled";
+  button.hidden = !enabled();
+
+  // Views the item where this explorer views items: in the panel, else in a
+  // new tab (with the launcher's extension), else not at all.
+  function view(path) {
+    if (enabled()) open(path);
+    else if (x.jupyterlab.canOpenViewTab()) void x.jupyterlab.openViewTab(path);
+    else x.flash("This explorer has no preview panel");
+  }
+
   function close() {
     // The kernel owns the preview; clearing it closes the panel.
     model.set("_preview", {});
@@ -37,7 +50,7 @@ function createPreview(x) {
       queryPanel = null;
     }
     if (!preview.path) {
-      // Open with nothing in it (open_preview=True): clicking a file fills it.
+      // Open with nothing in it (preview_panel="open"): clicking a file fills it.
       if (preview.empty) {
         delete head.dataset.path;
         head.replaceChildren(h("span", { className: "jse-preview-name", textContent: "Preview" }));
@@ -140,6 +153,8 @@ function createPreview(x) {
     button,
     splitter,
     open,
+    view,
+    enabled,
     close,
     render,
     updateButton,

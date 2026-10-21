@@ -1,13 +1,45 @@
-// The toolbar: bookmarks, Up, Refresh, the folder's path, Unsafe mode, and
-// the settings menu: "Edit configuration" in the launcher's tabs, "About".
+// The toolbar: the tree's button, bookmarks, Up, Refresh, the folder's path,
+// Unsafe mode, and the settings menu: "Edit configuration" in the launcher's
+// tabs, "About". In the sidebar layout, the path is on a bar of its own below
+// (pathBar), after the storage chooser (slot).
 
 function createToolbar(x) {
   const { model } = x;
+  const sidebar = model.get("_layout") === "sidebar";
+  // Shows or hides the folder tree (_tree_view); none without a tree.
+  const treeBtn = iconButton("tree", "Folder tree", "jse-tree-btn");
   const upBtn = iconButton("up", "Parent directory");
   const refreshBtn = iconButton("refresh", "Refresh");
   const pathEl = h("div", { className: "jse-path" });
   const settingsBtn = iconButton("settings", "Settings", "jse-settings-btn");
-  const el = h("div", { className: "jse-toolbar" }, x.bookmarks.button, upBtn, refreshBtn, pathEl, x.unsafe.el, settingsBtn);
+  // Where the storage chooser goes in the sidebar layout (see placeStorages
+  // in storage_explorer.js): before the path, too narrow a toolbar for both.
+  const slot = h("div", { className: "jse-storage-slot" });
+  const el = h(
+    "div",
+    { className: "jse-toolbar" },
+    treeBtn,
+    x.bookmarks.button,
+    upBtn,
+    refreshBtn,
+    sidebar ? h("span", { className: "jse-spacer" }) : pathEl,
+    x.unsafe.el,
+    settingsBtn,
+  );
+  const pathBar = sidebar ? h("div", { className: "jse-path-bar" }, slot, pathEl) : null;
+
+  function renderTreeButton() {
+    const state = model.get("_tree_view");
+    treeBtn.hidden = state === "disabled";
+    treeBtn.classList.toggle("jse-on", state === "open");
+    treeBtn.title = state === "open" ? "Hide the folder tree" : "Show the folder tree";
+    treeBtn.ariaLabel = treeBtn.title;
+  }
+
+  treeBtn.addEventListener("click", () => {
+    model.set("_tree_view", model.get("_tree_view") === "open" ? "closed" : "open");
+    model.save_changes();
+  });
 
   // The current folder's path, a crumb per folder from the root.
   function renderPath() {
@@ -54,7 +86,7 @@ function createToolbar(x) {
     else showSettingsMenu();
   });
 
-  return { el, renderPath };
+  return { el, pathBar, slot, renderPath, renderTreeButton };
 }
 
 // "Unsafe mode": while on, risky operations are offered (today: moving,

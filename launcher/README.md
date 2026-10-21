@@ -8,6 +8,11 @@ the folder JupyterLab's file browser shows.
 
 ![The Storage Explorer item in JupyterLab's launcher](https://raw.githubusercontent.com/sugibuchi/jupyter-storage-explorer/main/launcher/figs/launcher.png)
 
+It also adds a **side panel**: click the Storage Explorer icon in JupyterLab's left side bar (or *Show Storage
+Explorer in the Side Bar* in the command palette) for a narrow explorer next to your notebooks, with the same storages
+as the tab: the list of a folder, without the tree or the preview panel; files you view open in new tabs. Its kernel
+starts when you first open it, and it stays open after a page reload.
+
 It also integrates every Storage Explorer, in its tab or in a notebook, with JupyterLab:
 
 - **Drag and drop**: drag files onto JupyterLab's file browser to download them there.
@@ -82,7 +87,7 @@ def filesystems():
 
 
 def parameters():
-    return {"open_preview": True}
+    return {"preview_panel": "open"}
 ```
 
 The file has some of these functions, all optional:
@@ -94,6 +99,9 @@ The file has some of these functions, all optional:
 | `format_options()`  | The libraries' options, by library and format ([Format options](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#format-options))                                                 |
 | `transfer_policy()` | Rules of a [transfer policy](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#transfer-policy)                                                                                    |
 | `parameters()`      | Other `StorageExplorer` arguments ([StorageExplorer options](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#storageexplorer-options)), e.g. `{"engine_preference": ["pandas"]}` |
+
+The side panel uses the same settings, except its own layout: `height`, `tree_view`, `preview_panel` and `layout` are
+not taken from `parameters()` there.
 
 For extending the explorer in Python
 ([Developing plugins](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/development-plugin.md)),

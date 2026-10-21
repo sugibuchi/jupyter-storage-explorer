@@ -9,10 +9,16 @@ const TREE_FOLDERS = 50;
 function createTree(x) {
   const { model } = x;
   const el = h("div", { className: "jse-tree" });
-  // Storage chooser; hidden when there is only one.
+  // Storage chooser; hidden when there is only one. In the tree's bar while
+  // the tree shows, else elsewhere (see placeStorages in storage_explorer.js).
   const fsSelect = h("select", { className: "jse-fs-select", title: "Filesystem" });
+  const bar = h("div", { className: "jse-pane-bar" }, fsSelect);
   // Each pane is a column, its bar on top, so the bar follows the tree's width when it is resized.
-  const pane = h("div", { className: "jse-pane jse-tree-pane" }, h("div", { className: "jse-pane-bar" }, fsSelect), el);
+  const pane = h("div", { className: "jse-pane jse-tree-pane" }, bar, el);
+  // Hidden (closed or disabled, _tree_view), the tree is not drawn, nor are
+  // its folders asked for; it is drawn again as it opens (onTreeView in
+  // storage_explorer.js).
+  const shown = () => model.get("_tree_view") === "open";
 
   // Expanded tree folders, kept per filesystem so switching back restores them.
   const expandedByFs = new Map();
@@ -45,6 +51,8 @@ function createTree(x) {
   }
 
   function render() {
+    pane.hidden = !shown();
+    if (!shown()) return;
     const tree = model.get("_tree");
     const root = model.get("_root");
     const current = model.get("_current_dir");
@@ -163,5 +171,5 @@ function createTree(x) {
     model.save_changes();
   });
 
-  return { pane, render, showCurrent, renderStorages, onStorageChange };
+  return { pane, bar, fsSelect, shown, render, showCurrent, renderStorages, onStorageChange };
 }

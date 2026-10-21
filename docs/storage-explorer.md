@@ -90,7 +90,8 @@ StorageExplorer(
 
 Click a folder in the tree to show it in the list; double-click it, or click ▸, to expand or collapse it. Double-click a
 folder in the list to go into it; ↑ goes up, ⟳ refreshes, ◀ ▶ pages through the list. Ctrl+click (⌘+click) selects
-several items. Hover over an item for its size, times, format and URL.
+several items. Hover over an item for its size, times, format and URL. The tree button, first in the toolbar, hides
+the tree for more room for the list, and shows it again.
 
 <img src="figs/using-browse.png" width="830" alt="Browsing a folder, with two items selected">
 
@@ -398,7 +399,7 @@ An explorer of them, its preview panel open, so that clicking a file opens it in
 ```python
 from jupyter_storage_explorer import StorageExplorer
 
-explorer = StorageExplorer(folder, open_preview=True)
+explorer = StorageExplorer(folder, preview_panel="open")
 explorer
 ```
 
@@ -446,7 +447,9 @@ Views:
 | Option                        | Meaning                                                                                                                               |
 |-------------------------------|---------------------------------------------------------------------------------------------------------------------------------------|
 | `height="400px"`              | Height of the tree and list; the preview panel adds its own space below. `"fill"`: as tall as the container, e.g. the launcher's tab. |
-| `open_preview=True`           | Start with the preview panel open, so that clicking a file previews it (default: closed).                                             |
+| `tree_view="open"`            | The folder tree: `"open"`, `"closed"` (its button in the toolbar shows it) or `"disabled"` (no tree).                                |
+| `preview_panel="closed"`      | The preview panel: `"open"` starts with it open, so that clicking a file previews it; `"disabled"`: none, items open in new tabs.     |
+| `layout="standard"`           | `"sidebar"`: a narrow layout, the path below the toolbar and the list without Modified, as in the launcher's side panel.              |
 | `view_limits=ViewLimits(...)` | How much views read and show (`formats.ViewLimits`): `max_bytes`, `max_display_rows` (also the data browser's page size), `max_whole_file_bytes`, `max_live_rows`, `max_memory_rows`. |
 | `max_browser_items=20_000`    | Folders with more items are filtered, sorted and paged by the kernel, one page at a time, instead of the browser (`None`: never).     |
 | `fetch_rows=...`              | How the data browser reads pages; see [Reading pages](#reading-pages).                                                                |

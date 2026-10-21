@@ -55,7 +55,9 @@ final. Each file may have these functions, all optional:
     ``height`` is ``"fill"`` unless set, and ``states`` (bookmarks and
     recent queries) the file ``storage-explorer/states.json`` in the user's
     Jupyter configuration directory, shared by the tabs (``None``: in each
-    tab's memory only).
+    tab's memory only). The side panel's explorer has the same settings,
+    but its own ``height``, ``tree_view``, ``preview_panel`` and ``layout``
+    (``SIDEBAR``).
 ``final()``
     ``["filesystems", "height", ...]``: settings later layers cannot change:
     the names of the functions above, except ``parameters``, and the names
@@ -170,12 +172,17 @@ class Settings:
     parameters: dict[str, Any] = dataclasses.field(default_factory=dict)
     warnings: list[str] = dataclasses.field(default_factory=list)
 
-    def explorer_arguments(self) -> tuple[tuple[Any, ...], dict[str, Any]]:
-        """The positional and keyword arguments to create the explorer with."""
+    def explorer_arguments(
+        self, sidebar: bool = False
+    ) -> tuple[tuple[Any, ...], dict[str, Any]]:
+        """The positional and keyword arguments to create the explorer with;
+        ``sidebar``: for the side panel, whose layout ``SIDEBAR`` sets over
+        the parameters."""
         kwargs: dict[str, Any] = {
             "height": "fill",
             "states": states_file(),
             **self.parameters,
+            **(SIDEBAR if sidebar else {}),
         }
         if self.plugin_options:
             kwargs["plugin_options"] = self.plugin_options
@@ -194,14 +201,25 @@ class Settings:
             return (), {"filesystems": filesystems, **kwargs}
         return (".",), kwargs
 
-    def create_widget(self) -> Any:
-        """The explorer these settings describe."""
+    def create_widget(self, sidebar: bool = False) -> Any:
+        """The explorer these settings describe (for the side panel with
+        ``sidebar``)."""
         from jupyter_storage_explorer import StorageExplorer  # noqa: PLC0415
 
-        args, kwargs = self.explorer_arguments()
+        args, kwargs = self.explorer_arguments(sidebar)
         if "states" not in self.parameters:
             states_file().parent.mkdir(parents=True, exist_ok=True)
         return StorageExplorer(*args, **kwargs)
+
+
+# The side panel's explorer, whatever the parameters: narrow, filling the
+# panel, without the tree or the preview panel (items open in new tabs).
+SIDEBAR = {
+    "height": "fill",
+    "tree_view": "disabled",
+    "preview_panel": "disabled",
+    "layout": "sidebar",
+}
 
 
 def states_file() -> pathlib.Path:
@@ -464,30 +482,34 @@ def _check_final_name(name: str, path: pathlib.Path) -> None:
         )
 
 
-def create_widget() -> Any:
-    """The explorer the launcher.py files describe (see the module docstring)."""
-    return load_settings().create_widget()
+def create_widget(sidebar: bool = False) -> Any:
+    """The explorer the launcher.py files describe (see the module docstring);
+    with ``sidebar``, the side panel's (``SIDEBAR``)."""
+    return load_settings().create_widget(sidebar)
 
 
-def launch(view: str | None = None) -> None:
-    """Run by the launcher's tab: show the layers' warnings, and the explorer.
+def launch(view: str | None = None, sidebar: bool = False) -> None:
+    """Run by the launcher's tab or side panel: show the layers' warnings,
+    and the explorer.
 
     ``view``: the tab's view when it was last open, as JSON ({"filesystem":
     name, "folders": {name: folder}}), saved by the tab (see the extension's
     index.ts): the explorer reopens there. A view that cannot be used is
-    ignored.
+    ignored. ``sidebar``: the explorer of the side panel (``SIDEBAR``).
     """
     from IPython.display import display  # noqa: PLC0415
 
     settings = load_settings()
     for warning in settings.warnings:
         print(warning, file=sys.stderr)
-    display(_create_explorer(settings, view))
+    display(_create_explorer(settings, view, sidebar))
 
 
-def _create_explorer(settings: Settings, view: str | None) -> Any:
+def _create_explorer(
+    settings: Settings, view: str | None, sidebar: bool = False
+) -> Any:
     """The explorer ``settings`` describe, showing ``view`` (see ``launch``)."""
-    explorer = settings.create_widget()
+    explorer = settings.create_widget(sidebar)
     explorer._offer_settings(user_launcher_file(), create_user_launcher_file)
     if view:
         # Else (e.g. a storage unreachable now) the explorer as it starts.

@@ -92,6 +92,10 @@ function render({ model, el }) {
   const grip = h("div", { className: "jse-grip", title: "Drag to resize" });
   // "jse-browser" is for user styles too, e.g. icons by [data-depth] (DEVELOPMENT.md).
   el.classList.add("jse-widget", "jse-browser");
+  // The narrow layout of JupyterLab's side bar (the launcher's side panel):
+  // the path on a bar of its own (toolbar.js) and fewer columns (the CSS).
+  const sidebar = model.get("_layout") === "sidebar";
+  el.classList.toggle("jse-sidebar", sidebar);
   // Focusable, so Escape reaches the widget after a click anywhere in it.
   el.tabIndex = -1;
   // Keep JupyterLab's notebook shortcuts (e.g. "dd" deletes a cell) from
@@ -102,6 +106,7 @@ function render({ model, el }) {
   // item count stay in view when the panel opens. The jobs running are above it.
   el.replaceChildren(
     x.toolbar.el,
+    ...(x.toolbar.pathBar ? [x.toolbar.pathBar] : []),
     panesEl,
     x.jobs.el,
     h("div", { className: "jse-status-bar" }, x.list.statusEl, x.engine.button, x.preview.button),
@@ -141,6 +146,22 @@ function render({ model, el }) {
     el.classList.toggle("jse-fill", height === "fill");
     el.style.setProperty("--jse-height", height === "fill" ? "" : height);
     panesEl.style.height = ""; // a new `height` replaces any dragged size
+  }
+
+  // The storage chooser: in the toolbar in the sidebar layout; else above the
+  // tree while it shows, or first in the list's bar while it is hidden.
+  function placeStorages() {
+    const select = x.tree.fsSelect;
+    if (sidebar) x.toolbar.slot.append(select);
+    else if (x.tree.shown()) x.tree.bar.append(select);
+    else x.list.bar.prepend(select);
+  }
+
+  // The tree opened or closed (its button, toolbar.js).
+  function onTreeView() {
+    x.toolbar.renderTreeButton();
+    placeStorages();
+    x.tree.showCurrent(); // draws it as it opens; hides it
   }
 
   el.addEventListener("keydown", (ev) => {
@@ -184,6 +205,7 @@ function render({ model, el }) {
     "change:_selected": x.list.render,
     "change:_error": x.list.renderStatus,
     "change:_height": applyHeight,
+    "change:_tree_view": onTreeView,
     "change:_preview": () => {
       x.preview.render();
       x.preview.updateButton(); // "Close preview" while the panel shows the selected item
@@ -198,6 +220,8 @@ function render({ model, el }) {
   for (const [event, handler] of Object.entries(handlers)) model.on(event, handler);
 
   applyHeight();
+  x.toolbar.renderTreeButton();
+  placeStorages();
   x.tree.renderStorages();
   x.unsafe.render();
   x.engine.render();

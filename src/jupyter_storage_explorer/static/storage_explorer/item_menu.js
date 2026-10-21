@@ -24,6 +24,8 @@ function createItemMenu(x) {
   }
 
   const canTab = () => x.jupyterlab.canOpenViewTab();
+  // No "Preview" rows without a preview panel (preview_panel="disabled").
+  const canPreview = () => x.preview.enabled();
 
   // "Preview <format>" and "View <format> in new tab": with the engine
   // chosen, so the kernel picks it; disabled if it cannot view the item.
@@ -53,8 +55,10 @@ function createItemMenu(x) {
       // The best format's rows, now that the kernel says whether the engine
       // chosen can view it.
       const label = x.formatLabel(msg.formats[0]);
-      const [preview] = x.menu.rows([previewItem(path, label, msg.view)]);
-      info.previewRow.replaceWith(preview);
+      if (canPreview()) {
+        const [preview] = x.menu.rows([previewItem(path, label, msg.view)]);
+        info.previewRow.replaceWith(preview);
+      }
       if (canTab()) {
         const [viewTab] = x.menu.rows([viewTabItem(path, label, msg.view)]);
         info.viewTabRow.replaceWith(viewTab);
@@ -63,8 +67,10 @@ function createItemMenu(x) {
     // Each format and engine that can view it ("CSV (Polars)"), for either.
     if (!msg.error && msg.views.length) {
       const items = (open) => msg.views.map((v) => ({ label: v.label, action: () => open(path, v.format, v.engine) }));
-      info.previewAsSub.replaceChildren(...x.menu.rows(items(x.preview.open)));
-      info.previewAsRow.hidden = false;
+      if (canPreview()) {
+        info.previewAsSub.replaceChildren(...x.menu.rows(items(x.preview.open)));
+        info.previewAsRow.hidden = false;
+      }
       if (canTab()) {
         info.viewTabAsSub.replaceChildren(...x.menu.rows(items(x.jupyterlab.openViewTab)));
         info.viewTabAsRow.hidden = false;
@@ -114,7 +120,7 @@ function createItemMenu(x) {
       // Shown as offered until the reply tells whether the engine chosen can view it.
       open.push(
         { ...viewTabItem(single.path, label, true), hidden: !hasFormat || !canTab(), ref: (row) => (info.viewTabRow = row) },
-        { ...previewItem(single.path, label, true), hidden: !hasFormat, ref: (row) => (info.previewRow = row) },
+        { ...previewItem(single.path, label, true), hidden: !hasFormat || !canPreview(), ref: (row) => (info.previewRow = row) },
       );
       viewAs.push(
         {

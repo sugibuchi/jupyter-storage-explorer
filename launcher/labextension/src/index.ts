@@ -20,12 +20,16 @@
 // server: the explorer reports it with a DOM event, and `launch()` gets it
 // back, so the tab reopens where it was.
 //
+// The side panel (sidePanel.ts) is such a console too, of a session name of
+// its own, moved into a panel of JupyterLab's left side bar, where it runs
+// `launch(sidebar=True)`: the narrow explorer, without tree or preview panel.
+//
 // A second plugin (download.ts) downloads files dragged from any explorer,
 // in a tab or a notebook, onto JupyterLab's file browser; a third (files.ts)
 // opens the explorers' files in JupyterLab's own editors and viewers; a
 // fourth (queryTabs.ts) opens their data browser in tabs of its own.
 
-import { JupyterFrontEnd, JupyterFrontEndPlugin } from '@jupyterlab/application';
+import { ILayoutRestorer, JupyterFrontEnd, JupyterFrontEndPlugin } from '@jupyterlab/application';
 import { ICommandPalette } from '@jupyterlab/apputils';
 import { ConsolePanel, IConsoleTracker } from '@jupyterlab/console';
 import { ILauncher } from '@jupyterlab/launcher';
@@ -35,13 +39,17 @@ import { LabIcon } from '@jupyterlab/ui-components';
 import { downloadPlugin } from './download';
 import { filesPlugin } from './files';
 import { queryTabsPlugin } from './queryTabs';
+import { ExplorerSidePanel } from './sidePanel';
 import iconSvg from '../style/storage-explorer.svg';
 
 const PLUGIN_ID = 'jupyter-storage-explorer-launcher:plugin';
 const COMMAND = 'storage-explorer:open';
+const SIDE_PANEL_COMMAND = 'storage-explorer:show-side-panel';
 const TITLE = 'Storage Explorer';
-// Session name of explorer tabs; it survives page reloads, so it identifies them.
+// Session names of explorer tabs and of the side panel's console; they
+// survive page reloads, so they identify them.
 const SESSION_NAME = TITLE;
+const SIDE_SESSION_NAME = `${TITLE} (side panel)`;
 // Marks the console as an explorer tab, for the styles hiding its prompt and input.
 const PANEL_CLASS = 'jse-launcher-panel';
 // Dispatched by an explorer (static/storage_explorer.js) on its element, and
@@ -66,6 +74,8 @@ export const storageExplorerIcon = new LabIcon({
 // set afterwards (e.g. a restored console, which ExplorerTab sets up when it is
 // already there) would otherwise show the SVG at its own size, 128px.
 const tabIcon = storageExplorerIcon.bindprops({ stylesheet: 'mainAreaTab' });
+// The same in the side bar.
+const sideBarIcon = storageExplorerIcon.bindprops({ stylesheet: 'sideBar' });
 
 // The view saved for the tab whose console session has path `path`.
 const viewKey = (path: string): string => `${PLUGIN_ID}:view:${path}`;
@@ -92,7 +102,8 @@ async function openExplorer(
 }
 
 // A console with the explorer's session name, new or restored, as an
-// explorer tab: `launch()` runs in its kernel, with its saved view.
+// explorer tab: `launch()` runs in its kernel, with its saved view. With
+// `side`, the side panel's console instead, which it holds.
 class ExplorerTab {
   // The kernel `launch()` last ran in, so that it runs once per kernel.
   private launchedIn: string | null = null;
@@ -102,7 +113,8 @@ class ExplorerTab {
   constructor(
     private app: JupyterFrontEnd,
     private panel: ConsolePanel,
-    private state: IStateDB | null
+    private state: IStateDB | null,
+    private side: ExplorerSidePanel | null = null
   ) {
     const session = panel.sessionContext;
     panel.addClass(PANEL_CLASS);
@@ -163,9 +175,12 @@ class ExplorerTab {
     this.decorate();
     const view = await this.fetchView();
     // The view as a Python string (JSON is valid Python string syntax), parsed by launch().
-    const argument = view ? `view=${JSON.stringify(JSON.stringify(view))}` : '';
+    const args = [
+      ...(view ? [`view=${JSON.stringify(JSON.stringify(view))}`] : []),
+      ...(this.side ? ['sidebar=True'] : [])
+    ];
     await this.panel.console.inject(
-      `from jupyter_storage_explorer_launcher import launch as __jse_launch\n__jse_launch(${argument})`
+      `from jupyter_storage_explorer_launcher import launch as __jse_launch\n__jse_launch(${args.join(', ')})`
     );
   }
 
@@ -187,13 +202,18 @@ class ExplorerTab {
     if (view && this.state) {
       await this.state.save(viewKey(path), view as any);
     }
-    await openExplorer(this.app, undefined, {
-      path,
-      ref: panel.id,
-      insertMode: 'tab-after',
-      activate: panel.isVisible,
-      kernelPreference: { name: session.kernelPreference.name, shouldStart: true }
-    });
+    const kernelPreference = { name: session.kernelPreference.name, shouldStart: true };
+    if (this.side) {
+      await this.side.open({ path, kernelPreference });
+    } else {
+      await openExplorer(this.app, undefined, {
+        path,
+        ref: panel.id,
+        insertMode: 'tab-after',
+        activate: panel.isVisible,
+        kernelPreference
+      });
+    }
     await this.state?.remove(this.stateKey);
     panel.dispose();
   }
@@ -223,18 +243,36 @@ const plugin: JupyterFrontEndPlugin<void> = {
   description: 'Opens Storage Explorer in a new tab from the launcher.',
   autoStart: true,
   requires: [IConsoleTracker],
-  optional: [ILauncher, ICommandPalette, IStateDB],
+  optional: [ILauncher, ICommandPalette, IStateDB, ILayoutRestorer],
   activate: (
     app: JupyterFrontEnd,
     consoles: IConsoleTracker,
     launcher: ILauncher | null,
     palette: ICommandPalette | null,
-    state: IStateDB | null
+    state: IStateDB | null,
+    restorer: ILayoutRestorer | null
   ) => {
+    // The side panel, in the left side bar; its console is made when it is first shown.
+    const side = new ExplorerSidePanel(
+      app,
+      options => openExplorer(app, undefined, { name: SIDE_SESSION_NAME, ...options }),
+      sideBarIcon,
+      TITLE
+    );
+    app.shell.add(side, 'left', { rank: 300 });
+    // Reopened after a page reload if it was open.
+    restorer?.add(side, side.id);
     // Connected before JupyterLab restores the layout, so restored tabs are seen too.
     consoles.widgetAdded.connect((_, panel) => {
       if (panel.sessionContext.name === SESSION_NAME) {
         new ExplorerTab(app, panel, state);
+      } else if (panel.sessionContext.name === SIDE_SESSION_NAME) {
+        new ExplorerTab(app, panel, state, side);
+        // Restored by JupyterLab, in the main area: back into the panel. One
+        // the panel is making, it takes in itself.
+        if (!side.isOpening) {
+          side.adopt(panel);
+        }
       }
     });
     app.commands.addCommand(COMMAND, {
@@ -243,8 +281,14 @@ const plugin: JupyterFrontEndPlugin<void> = {
       icon: args => (args['isPalette'] ? undefined : storageExplorerIcon),
       execute: args => openExplorer(app, args['cwd'] as string | undefined)
     });
+    app.commands.addCommand(SIDE_PANEL_COMMAND, {
+      label: 'Show Storage Explorer in the Side Bar',
+      caption: 'Browse storage in the left side bar',
+      execute: () => app.shell.activateById(side.id)
+    });
     launcher?.add({ command: COMMAND, category: 'Other', rank: 0 });
     palette?.addItem({ command: COMMAND, category: TITLE });
+    palette?.addItem({ command: SIDE_PANEL_COMMAND, category: TITLE });
   }
 };
 

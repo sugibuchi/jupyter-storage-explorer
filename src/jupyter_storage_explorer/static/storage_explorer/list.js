@@ -55,7 +55,9 @@ function createList(x) {
   const headRow = h("tr");
   const tbody = h("tbody");
   const el = h("div", { className: "jse-list" }, h("table", {}, h("thead", {}, headRow), tbody));
-  const pane = h("div", { className: "jse-pane jse-list-pane" }, h("div", { className: "jse-pane-bar" }, filter.el, pagerEl), el);
+  // The storage chooser comes first here while the tree is hidden (see placeStorages in storage_explorer.js).
+  const bar = h("div", { className: "jse-pane-bar" }, filter.el, pagerEl);
+  const pane = h("div", { className: "jse-pane jse-list-pane" }, bar, el);
   const statusEl = h("div", { className: "jse-status" });
 
   // --- The listing, decoded and sorted ---
@@ -276,11 +278,12 @@ function createList(x) {
     tr.addEventListener("dragstart", (ev) => x.transfers.startDrag(ev, entry));
     tr.addEventListener("click", (ev) => select(entry.path, ev.ctrlKey || ev.metaKey));
     // As in JupyterLab's file browser: a folder opens, a file opens in
-    // JupyterLab's editor or viewer when it can show it, else in the preview.
+    // JupyterLab's editor or viewer when it can show it, else in the preview
+    // (in a new tab without a preview panel).
     tr.addEventListener("dblclick", () => {
       if (isDir) x.navigate(entry.path);
       else if (x.jupyterlab.canOpen(entry)) x.jupyterlab.open(entry.path);
-      else if (hasUrl(entry)) x.preview.open(entry.path); // no URL: no preview
+      else if (hasUrl(entry)) x.preview.view(entry.path); // no URL: no preview
     });
     tr.addEventListener("contextmenu", (ev) => {
       // Like file managers: right-clicking outside the selection selects that item.
@@ -430,6 +433,7 @@ function createList(x) {
 
   return {
     pane,
+    bar,
     el,
     statusEl,
     render,

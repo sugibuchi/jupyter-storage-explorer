@@ -71,6 +71,17 @@ _QUERY_REQUESTS = frozenset(
     {"query_rows", "query_check", "query_save", "query_reload", "query_mode"}
 )
 
+# The values of tree_view and preview_panel, and of layout.
+_PANEL_STATES = ("open", "closed", "disabled")
+_LAYOUTS = ("standard", "sidebar")
+
+
+def _check_choice(name: str, value: Any, choices: Sequence[str]) -> None:
+    if value not in choices:
+        raise ValueError(
+            f"{name} must be one of {', '.join(map(repr, choices))}, not {value!r}"
+        )
+
 
 # Its features are mixins (in _explorer/), each a group of the methods below
 # working on the state the class sets up; what the class keeps is that state,
@@ -121,11 +132,24 @@ class StorageExplorer(
         Height of the tree and the list (CSS); the preview panel adds its own.
         ``"fill"``: as tall as the container, e.g. the launcher's tab (not a
         notebook cell, which has no height of its own).
-    open_preview : bool, default False
-        Start with the preview panel open, empty until a file is clicked:
-        while it is open, clicking a file previews it (tables open in the
-        data browser, see ``query_result``). False: closed until the user
-        previews something.
+    tree_view : {"open", "closed", "disabled"}, default "open"
+        The folder tree beside the list: shown, or hidden until the user
+        shows it with the toolbar's tree button (which hides it again); or
+        "disabled": no tree, nor its button.
+    preview_panel : {"open", "closed", "disabled"}, default "closed"
+        The preview panel below the list: "open" starts with it open, empty
+        until a file is clicked: while it is open, clicking a file previews
+        it (tables open in the data browser, see ``query_result``).
+        "closed": closed until the user previews something. "disabled": no
+        preview panel; items are viewed in new tabs instead, with the
+        launcher's extension.
+    layout : {"standard", "sidebar"}, default "standard"
+        "sidebar": a narrow layout, for JupyterLab's side bar (the
+        launcher's side panel): the toolbar, then the storage chooser and
+        the folder's path, the filter and the list (without the Modified
+        column), and the status bar.
+    open_preview : bool, optional
+        Deprecated: ``preview_panel="open"`` instead.
     plugin_options : mapping, optional
         The plugins' options, by key (``StorageExplorerPlugin.key``), e.g.
         ``{"pandas-support": {"enabled": False}, "abfs-support":
@@ -232,8 +256,9 @@ class StorageExplorer(
         If ``filesystems`` is combined with ``path``, ``fs`` or storage
         options, or storage options with ``fs``.
     ValueError
-        If ``filesystems`` is empty, or ``transfer_policy`` has a rule that is not
-        of that form.
+        If ``filesystems`` is empty, ``transfer_policy`` has a rule that is not
+        of that form, or ``tree_view``, ``preview_panel`` or ``layout`` is
+        none of its values.
 
     See Also
     --------
@@ -256,7 +281,8 @@ class StorageExplorer(
     >>> StorageExplorer("s3://my-bucket/data", anon=True)
     >>> StorageExplorer("data", fs=my_filesystem)
     >>> StorageExplorer(filesystems={"Lake": s3, "Local": "file:///home/me/data"})
-    >>> StorageExplorer("s3://my-bucket/data", open_preview=True)
+    >>> StorageExplorer("s3://my-bucket/data", preview_panel="open")
+    >>> StorageExplorer("s3://my-bucket/data", tree_view="closed")
     """
 
     _esm = _static.esm("storage_explorer")
@@ -283,8 +309,17 @@ class StorageExplorer(
     # Preview shown in the panel: {"path", "name", "format", "sections",
     # "error", "loading"} ("query" instead of "sections" for the data
     # browser); {"empty": true} when the panel is open with nothing in it
-    # (open_preview); empty when the panel is closed.
+    # (preview_panel="open"); empty when the panel is closed.
     _preview = traitlets.Dict().tag(sync=True)
+    # The folder tree: "open", "closed" (the toolbar's tree button shows it;
+    # the frontend sets these two) or "disabled" (no tree, nor its button).
+    _tree_view = traitlets.Unicode("open").tag(sync=True)
+    # "disabled" when the explorer has no preview panel (views open in new
+    # tabs); else "open" or "closed", as given (whether the panel is open is
+    # _preview).
+    _preview_panel = traitlets.Unicode("closed").tag(sync=True)
+    # "standard", or "sidebar": the narrow layout of the launcher's side panel.
+    _layout = traitlets.Unicode("standard").tag(sync=True)
     # Format name -> label shown to the user, e.g. {"delta": "Delta Lake table"}.
     _format_labels = traitlets.Dict().tag(sync=True)
     # Formats of text files (Text and its subclasses, e.g. code, logs, Markdown),
@@ -343,7 +378,10 @@ class StorageExplorer(
         fs: AbstractFileSystem | None = None,
         filesystems: Mapping[str, AbstractFileSystem | str] | None = None,
         height: str = "400px",
-        open_preview: bool = False,
+        tree_view: str = "open",
+        preview_panel: str = "closed",
+        layout: str = "standard",
+        open_preview: bool | None = None,
         plugin_options: Mapping[str, Mapping[str, Any]] | None = None,
         supports: Sequence[type[FormatSupport] | FormatSupport] | None = None,
         format_options: FormatOptions | None = None,
@@ -360,6 +398,19 @@ class StorageExplorer(
         transfer_policy: Sequence[Mapping[str, str]] | None = None,
         **storage_options: Any,
     ) -> None:
+        if open_preview is not None:
+            warnings.warn(
+                'open_preview is deprecated: use preview_panel="open" (or "closed")',
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            if open_preview:
+                preview_panel = "open"
+        _check_choice("tree_view", tree_view, _PANEL_STATES)
+        _check_choice("preview_panel", preview_panel, _PANEL_STATES)
+        _check_choice("layout", layout, _LAYOUTS)
+        # Fixed: the frontend only opens and closes the tree (_validate_tree_view).
+        self._tree_disabled = tree_view == "disabled"
         # The functions given to on_change() and on_query_change(), and what
         # they last heard of (see _changed, _query_changed); first, as the
         # traits set up below call them.
@@ -449,6 +500,9 @@ class StorageExplorer(
         icons, svgs = format_icons(self._formats)
         super().__init__(
             _height=height,
+            _tree_view=tree_view,
+            _preview_panel=preview_panel,
+            _layout=layout,
             _format_labels={f.name: f.label for f in self._formats},
             _text_formats=[f.name for f in self._formats if isinstance(f, Text)],
             _format_icons=icons,
@@ -474,7 +528,7 @@ class StorageExplorer(
         self._engine = remembered if remembered in keys else (keys[0] if keys else "")
         self._engine_ready = True
         self._filesystem = name  # shows its top level (see _on_filesystem)
-        if open_preview:
+        if preview_panel == "open":
             self._preview = {"empty": True}
         if states_error:
             self._error = states_error
@@ -718,7 +772,7 @@ class StorageExplorer(
 
         Examples
         --------
-        >>> explorer = StorageExplorer("s3://my-bucket/sales", open_preview=True)
+        >>> explorer = StorageExplorer("s3://my-bucket/sales", preview_panel="open")
         >>> # ... click a CSV file, filter and sort it in the data browser ...
         >>> explorer.query_result().collect()
         """
@@ -768,7 +822,7 @@ class StorageExplorer(
         ...             df = lf.collect()
         ...             plt.plot(df["date"], df["amount"])
         ...             plt.show()
-        >>> explorer = StorageExplorer("s3://my-bucket/sales", open_preview=True)
+        >>> explorer = StorageExplorer("s3://my-bucket/sales", preview_panel="open")
         >>> explorer.on_query_change(redraw)
         >>> display(explorer, chart)
         """
@@ -867,9 +921,7 @@ class StorageExplorer(
         return {
             "expand": lambda c: self._load_children(c["path"]),
             "refresh": lambda c: self._refresh(),
-            "preview": lambda c: self._open_preview(
-                c["path"], c.get("format"), c.get("engine", ...)
-            ),
+            "preview": self._preview_notice,
             # Answered with one "download" message per file, its bytes attached.
             "download": lambda c: self._download(c["paths"]),
             "job_cancel": self._cancel_job,
@@ -877,6 +929,14 @@ class StorageExplorer(
             "changed": lambda c: self._sources_changed(c["filesystem"], c["paths"]),
             "view_tab_closed": lambda c: self._view_tab_closed(c["model_id"]),
         }
+
+    def _preview_notice(self, content: dict[str, Any]) -> None:
+        # Not sent without a preview panel (preview_panel="disabled"), which
+        # the explorer never opens.
+        if self._preview_panel != "disabled":
+            self._open_preview(
+                content["path"], content.get("format"), content.get("engine", ...)
+            )
 
     # --- The folder shown and the selection, set by the frontend (here, as
     # traitlets' observers must be on the class itself, not on a mixin) ---
@@ -916,6 +976,17 @@ class StorageExplorer(
                 f"unknown engine {proposal['value']!r}; choose from {keys}"
             )
         return proposal["value"]
+
+    @traitlets.validate("_tree_view")
+    def _validate_tree_view(self, proposal: dict[str, Any]) -> str:
+        # The frontend's tree button opens and closes the tree; whether there
+        # is one at all is the explorer's argument (_tree_disabled). Not the
+        # trait's value: ipywidgets validates after setting it.
+        value = proposal["value"]
+        if value not in _PANEL_STATES or (value == "disabled") != self._tree_disabled:
+            state = "has no tree" if self._tree_disabled else "has a tree"
+            raise traitlets.TraitError(f"the explorer {state}: not {value!r}")
+        return value
 
     @traitlets.observe("_engine")
     def _on_engine(self, change: dict[str, Any]) -> None:

@@ -40,10 +40,15 @@ interface IOwner extends Widget {
   };
 }
 
+// The notebook or console holding the explorer's element: a tab of the main
+// area, or the side panel's console (sidePanel.ts, `explorerConsole`).
 function ownerOf(app: JupyterFrontEnd, node: HTMLElement): IOwner | undefined {
-  for (const widget of app.shell.widgets('main')) {
-    if (widget.node.contains(node)) {
-      return widget as IOwner;
+  for (const area of ['main', 'left'] as const) {
+    for (const widget of app.shell.widgets(area)) {
+      if (widget.node.contains(node)) {
+        return ((widget as { explorerConsole?: IOwner | null }).explorerConsole ??
+          widget) as IOwner;
+      }
     }
   }
   return undefined;
@@ -86,7 +91,9 @@ async function openTab(app: JupyterFrontEnd, tab: IQueryTab): Promise<void> {
       close();
     }
   });
-  app.shell.add(panel, 'main', { mode: 'tab-after', ref: owner.id });
+  // Beside the owner's tab; for the side panel's, beside the tab shown.
+  const inMain = Array.from(app.shell.widgets('main')).includes(owner);
+  app.shell.add(panel, 'main', inMain ? { mode: 'tab-after', ref: owner.id } : {});
   app.shell.activateById(panel.id);
 }
 

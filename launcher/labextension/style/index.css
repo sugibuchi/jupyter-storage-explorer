@@ -95,3 +95,9 @@
   width: 100%;
   min-height: 0;
 }
+
+/* The side panel (sidePanel.ts): its console fills it, as a tab's does. */
+.jse-side-panel {
+  min-width: 240px;
+  background: var(--jp-layout-color1);
+}

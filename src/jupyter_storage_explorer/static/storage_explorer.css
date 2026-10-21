@@ -25,6 +25,55 @@
   display: none;
 }
 
+/* In the list's bar while the tree is hidden: before the filter, which
+   keeps most of the room. */
+.jse-list-pane .jse-fs-select {
+  flex: none;
+  max-width: 40%;
+}
+
+/* The tree's button, first in the toolbar: highlighted while the tree shows. */
+.jse-tree-btn.jse-on {
+  color: var(--jse-accent);
+}
+
+.jse-tree-btn[hidden] {
+  display: none;
+}
+
+/* The sidebar layout (layout="sidebar"): the path on a bar of its own below
+   the toolbar, after the storage chooser, which takes at most half of it. */
+.jse-path-bar {
+  display: flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 2px 6px 2px 0;
+  border-bottom: 1px solid var(--jse-border);
+  background: var(--jse-bar-bg);
+}
+
+.jse-storage-slot {
+  display: flex;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 50%;
+  margin-left: 6px;
+}
+
+.jse-storage-slot:not(:has(.jse-fs-select:not([hidden]))) {
+  display: none;
+}
+
+/* Narrow: the list shows the name and size only (the tooltip has the
+   times), and the Unsafe mode switch is shorter. */
+.jse-sidebar .jse-list .jse-col-mtime {
+  display: none;
+}
+
+.jse-sidebar .jse-unsafe {
+  padding-left: 4px;
+}
+
 /* Right to left, so a long path is cut at its start (…/folder shown); the
    crumbs themselves are left to right (.jse-crumbs). */
 .jse-path {
@@ -77,6 +126,11 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
+}
+
+/* The tree closed (its button) or disabled (tree_view). */
+.jse-pane[hidden] {
+  display: none;
 }
 
 .jse-tree-pane {
@@ -429,7 +483,8 @@
   color: var(--jse-fg-muted);
 }
 
-.jse-status-bar > .jse-engine-btn[hidden] {
+.jse-status-bar > .jse-engine-btn[hidden],
+.jse-status-bar > .jse-preview-btn[hidden] {
   display: none;
 }
 

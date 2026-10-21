@@ -36,7 +36,7 @@ for all you can do with it.
 - **Background file operations** with progress and Cancel; folder operations only in Unsafe mode.
 - **Work in JupyterLab**: open storage files in JupyterLab's own editors and viewers, and save them back; view tables
   and files in tabs of their own.
-- **Bookmarks**, remembered queries, transfer rules, and a JupyterLab launcher item.
+- **Bookmarks**, remembered queries, transfer rules, a JupyterLab launcher item and a side panel.
 
 ## Quick start
 
@@ -48,7 +48,7 @@ the launcher's tab (it may take a minute to start).
 ### From the JupyterLab launcher
 
 **[`jupyter-storage-explorer-launcher`](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/launcher/README.md)**
-adds **Storage Explorer** to JupyterLab's launcher, opening the explorer in its own tab:
+adds **Storage Explorer** to JupyterLab's launcher, opening the explorer in its own tab, and to the left side bar:
 
 ```bash
 pip install "jupyter-storage-explorer-launcher[polars]"
@@ -116,7 +116,8 @@ The `notebooks` folder has a demo of each widget on sample data.
 
 Storage Explorer aims to be a **data-aware file explorer for large data lakes**, made for the daily work of data
 scientists and engineers. Rather than adding data lake access to JupyterLab's file browser, a narrow sidebar, it is a
-widget in JupyterLab's main area, in a notebook or a tab of its own, with room for what working with data needs:
+widget in JupyterLab's main area, in a notebook or a tab of its own, with room for what working with data needs (the
+launcher also has a narrow side panel, for picking files beside your notebooks):
 
 - **Built for large folders**: data lakes often hold thousands of items in one folder (partitions, part files, daily
   drops). The list is paged, sorted and filtered as you type, regular expressions included; folders of tens of
