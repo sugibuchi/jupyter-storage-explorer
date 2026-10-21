@@ -8,7 +8,18 @@ from typing import get_args
 
 import polars as pl
 import pytest
+from all_supports import ALL_SUPPORTS, all_supports
 from items import local_item
+from jupyter_storage_explorer_pandas_support import CsvByPandas, PandasOptions
+from jupyter_storage_explorer_polars_support import (
+    CsvByPolars,
+    DeltaLakeByPolars,
+    DeltaLakeByPolarsOptions,
+    ExcelByPolars,
+    ExcelByPolarsOptions,
+    ParquetByPolars,
+    PolarsOptions,
+)
 
 from jupyter_storage_explorer import StorageExplorer
 from jupyter_storage_explorer._explorer.supports import SupportChain
@@ -30,24 +41,11 @@ from jupyter_storage_explorer.formats import (
     SupportOptions,
     Text,
     ViewLimits,
-    default_supports,
     secret_dict_field,
     secret_field,
 )
-from jupyter_storage_explorer.formats.defaults import DEFAULT_SUPPORTS
-from jupyter_storage_explorer.formats.supports import (
-    CsvByPandas,
-    CsvByPolars,
-    DeltaLakeByPolars,
-    DeltaLakeByPolarsOptions,
-    ExcelByPolars,
-    ExcelByPolarsOptions,
-    FsspecOptions,
-    PandasOptions,
-    ParquetByPolars,
-    PolarsOptions,
-    TextByPython,
-)
+from jupyter_storage_explorer.formats.defaults import DEFAULT_FORMATS, DEFAULT_SUPPORTS
+from jupyter_storage_explorer.formats.supports import FsspecOptions, TextByPython
 
 LIMITS = ViewLimits(max_display_rows=2)
 
@@ -80,32 +78,34 @@ ACCOUNT_KEYS = {"a": "key-a", "b": "key-b"}
 def options_by_class(format_options=None, location=ACCOUNT_A):
     """The default supports' options for ``location``, by class, made from
     ``format_options``."""
-    chain = SupportChain(DEFAULT_SUPPORTS, format_options)
+    chain = SupportChain(ALL_SUPPORTS, format_options)
     return {type(s): chain.options_of(s, location) for s in chain.supports}
 
 
 def test_formats_are_the_supports():
     # One of each, in the supports' order: those given first.
     avro = type("Avro", (Csv,), {"name": "avro"})
-    chain = SupportChain([support(avro), *DEFAULT_SUPPORTS])
+    # The supports' formats, then those given (the standard ones, as the
+    # explorer gives them, detected even without a support).
+    chain = SupportChain([support(avro), *DEFAULT_SUPPORTS], formats=DEFAULT_FORMATS)
     assert [type(f) for f in chain.formats] == [
         avro,
+        Json,
+        Markdown,
+        Text,
+        Image,
         DeltaLake,
         Parquet,
         Csv,
         Excel,
-        Json,
         JsonLines,
-        Markdown,
-        Text,
-        Image,
     ]
     # Each chain has its own: formats keep what detection finds.
-    other = SupportChain(DEFAULT_SUPPORTS).formats
+    other = SupportChain(ALL_SUPPORTS).formats
     assert all(f not in other for f in chain.formats)
 
 
-@pytest.mark.parametrize("cls", DEFAULT_SUPPORTS)
+@pytest.mark.parametrize("cls", ALL_SUPPORTS)
 def test_capabilities_are_the_methods_implemented(cls):
     # The rule FormatSupport states for subclasses, kept by the defaults.
     implemented = {
@@ -145,7 +145,7 @@ class TestOptions:
 
     def test_python_is_no_engine(self):
         with pytest.raises(ValueError, match=r"unknown engines \['python'\]"):
-            SupportChain(default_supports(), engine_preference=["python"])
+            SupportChain(all_supports(), engine_preference=["python"])
 
     @pytest.mark.parametrize(
         ("options", "error"),
@@ -168,7 +168,7 @@ class TestOptions:
     )
     def test_unknown(self, options, error):
         with pytest.raises(ValueError, match=error):
-            SupportChain(DEFAULT_SUPPORTS, options)
+            SupportChain(ALL_SUPPORTS, options)
 
     def test_objects_get_options_as_classes(self):
         # Supports carry no options: objects given are used as they are, and
@@ -257,7 +257,7 @@ class TestOptionsByLocation:
 
     def test_unknown_options_returned(self):
         chain = SupportChain(
-            DEFAULT_SUPPORTS, {"polars": {"csv": lambda location: {"use_pyarrow": 1}}}
+            ALL_SUPPORTS, {"polars": {"csv": lambda location: {"use_pyarrow": 1}}}
         )
         [csv] = [s for s in chain.supports if isinstance(s, CsvByPolars)]
         with pytest.raises(ValueError, match=r"\(.*abfs://c@a.*\): unknown options"):
@@ -265,7 +265,7 @@ class TestOptionsByLocation:
 
     def test_format_names_checked_at_once(self):
         with pytest.raises(ValueError, match="unknown format"):
-            SupportChain(DEFAULT_SUPPORTS, {"polars": {"parq": lambda location: {}}})
+            SupportChain(ALL_SUPPORTS, {"polars": {"parq": lambda location: {}}})
 
     def test_the_items_location(self, make_item):
         seen = []
@@ -336,7 +336,7 @@ class TestSecrets:
 
     def test_predefined_storage_options(self, make_item):
         chain = SupportChain(
-            DEFAULT_SUPPORTS,
+            ALL_SUPPORTS,
             {"pandas": {"*": {"storage_options": {"account_key": "k", "anon": True}}}},
         )
         [recipe] = [
@@ -390,8 +390,9 @@ class TestChain:
         assert self.view(chain, make_item("/a.csv", b"")) == "listed"
 
     def test_of_lists_the_installed_only(self, monkeypatch):
-        chain = SupportChain(default_supports())
-        assert [type(s) for s in chain.of(Csv(), "view")] == [CsvByPolars, CsvByPandas]
+        chain = SupportChain(all_supports())
+        # In the supports' order: the plugins', by key.
+        assert [type(s) for s in chain.of(Csv(), "view")] == [CsvByPandas, CsvByPolars]
         monkeypatch.setattr(PythonPackage, "is_installed", lambda self: False)
         assert chain.of(Csv(), "view") == []  # none of the registered supports can
 
@@ -413,7 +414,7 @@ class TestChain:
         tsv = type("Tsv", (Csv,), {"name": "tsv"})
         path = tmp_path / "a.tsv"
         path.write_text("a\tb\n1\t2\n")
-        view = SupportChain(default_supports()).view(
+        view = SupportChain(all_supports()).view(
             tsv(), local_item(path), LIMITS, "polars"
         )
         assert isinstance(view, QueryView)
@@ -421,7 +422,7 @@ class TestChain:
 
     def test_recipes_of_every_support_installed_or_not(self, make_item, monkeypatch):
         monkeypatch.setattr(PythonPackage, "is_installed", lambda self: False)
-        chain = SupportChain(default_supports())
+        chain = SupportChain(all_supports())
         recipes = chain.recipes(Csv(), make_item("/a.csv", b"a\n"))
         assert [(r.requirements[0].package, r.title) for r in recipes] == [
             ("polars", "Load as DataFrame"),
@@ -442,7 +443,7 @@ class TestChain:
 
     def test_recipes_name_their_packages(self, make_item, memfs):
         memfs.pipe_file("/t/_delta_log/00000000000000000000.json", b"{}")
-        chain = SupportChain(default_supports())
+        chain = SupportChain(all_supports())
         recipes = chain.recipes(DeltaLake(), make_item("/t"))
         packages = [[r.package for r in recipe.requirements] for recipe in recipes]
         assert packages == [
@@ -454,7 +455,7 @@ class TestChain:
     def test_query_view(self, tmp_path):
         path = tmp_path / "a.parquet"
         pl.DataFrame({"a": [1, 2]}).write_parquet(path)
-        view = SupportChain(default_supports()).view(
+        view = SupportChain(all_supports()).view(
             Parquet(), local_item(path), LIMITS, "polars"
         )
         assert view.data.collect()["a"].to_list() == [1, 2]
@@ -472,8 +473,9 @@ class TestExplorer:
         )
         explorer = StorageExplorer(fs=mem_explorer._fs, supports=[duck])
         recipes = explorer._supports.recipes(Parquet(), make_item("/a.parquet", b""))
-        assert (recipes[0].title, recipes[0].code) == ("Load as a duck", "duck")
-        # and the defaults': polars (lazily and eagerly), pandas, pyspark.
+        # With the plugins': polars (lazily and eagerly), pandas, pyspark; its
+        # engine, not among engine_preference's, after polars' and pandas', by key.
+        assert ("Load as a duck", "duck") in [(r.title, r.code) for r in recipes[3:]]
         assert len(recipes) == 5
 
     def test_a_library_given_replaces_the_default_code(self, make_item):
@@ -492,5 +494,5 @@ class TestExplorer:
             def default_supports():
                 return [CsvByPolars]
 
-        explorer = Explorer(fs=None)
+        explorer = Explorer(fs=None, plugins=[])
         assert [type(s) for s in explorer._supports.supports] == [CsvByPolars]

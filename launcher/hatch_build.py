@@ -1,4 +1,6 @@
-"""The launcher's dependencies, with jupyter-storage-explorer at its own version.
+"""The launcher's dependencies, with jupyter-storage-explorer at its own version,
+and the explorer's extras (its plugins, e.g. "polars"), so that
+``pip install "jupyter-storage-explorer-launcher[polars]"`` installs them too.
 
 The two packages are released together, with the same version (from the git
 tags), and the launcher uses the explorer's internals (e.g.
@@ -15,6 +17,9 @@ from packaging.version import Version
 
 DEPENDENCIES = ["jupyter-core>=5"]
 
+# The plugins of the repository, as the explorer's hatch_build.py has them.
+PLUGINS = ("abfs", "pandas", "polars", "pyspark")
+
 
 class LauncherMetadataHook(MetadataHookInterface):
     def update(self, metadata: dict[str, Any]) -> None:
@@ -25,3 +30,7 @@ class LauncherMetadataHook(MetadataHookInterface):
             *DEPENDENCIES,
             f"jupyter-storage-explorer=={version}",
         ]
+        extras = [e for name in PLUGINS for e in (name, f"{name}-support")]
+        metadata["optional-dependencies"] = {
+            extra: [f"jupyter-storage-explorer[{extra}]=={version}"] for extra in extras
+        }

@@ -2,14 +2,17 @@
 
 ## Layout
 
-The repository is a [uv workspace](https://docs.astral.sh/uv/concepts/projects/workspaces/) with two packages, released
-together with the same version (from the git tags). The launcher requires the explorer of exactly its version
-(`launcher/hatch_build.py`, which sets its dependencies), as it uses the explorer's internals:
+The repository is a [uv workspace](https://docs.astral.sh/uv/concepts/projects/workspaces/) of packages released
+together with the same version (from the git tags). The launcher and the plugins require the explorer of exactly their
+version (their `hatch_build.py`, which sets their dependencies), as they may use the explorer's internals; the
+explorer's extras (`polars`, `polars-support`, ...) require the plugins of its version (`hatch_build.py`), and the
+launcher has the same extras:
 
-| Package                             | Folder      | Contents                                                                 |
-|-------------------------------------|-------------|--------------------------------------------------------------------------|
-| `jupyter-storage-explorer`          | `.`         | The widgets `StorageExplorer` and `DataExplorer`; pure Python, no build. |
-| `jupyter-storage-explorer-launcher` | `launcher/` | The JupyterLab launcher item, and `launch()` run in the tab it opens.    |
+| Package                                    | Folder                    | Contents                                                                 |
+|--------------------------------------------|---------------------------|--------------------------------------------------------------------------|
+| `jupyter-storage-explorer`                 | `.`                       | The widgets `StorageExplorer` and `DataExplorer`; pure Python, no build. |
+| `jupyter-storage-explorer-launcher`        | `launcher/`               | The JupyterLab launcher item, and `launch()` run in the tab it opens.    |
+| `jupyter-storage-explorer-<name>-support`  | `plugins/<name>-support/` | The plugins: `polars`, `pandas`, `pyspark` (engines) and `abfs` (Azure Data Lake Storage operations). |
 
 | Path                                                           | Contents                                                                     |
 |----------------------------------------------------------------|------------------------------------------------------------------------------|
@@ -36,7 +39,7 @@ installing it.
 ## Setup
 
 ```bash
-uv sync                    # both packages, editable, with the dev dependencies
+uv sync                    # every package, editable, with the dev dependencies
 cd launcher/labextension
 uv run jlpm install        # the extension's build tools, into node_modules
 uv run jlpm build          # builds the extension into launcher/src/jupyter_storage_explorer_launcher/labextension
@@ -56,7 +59,7 @@ IntelliJ's notebook view runs the widgets too, but dragging files in or out of t
 
 ```bash
 uv run pytest                                        # the Python side
-uvx ruff check src launcher/src tests docs/scripts   # lint
+uvx ruff check src launcher/src plugins tests docs/scripts   # lint
 uv run npx --yes prettier@3.3.3 --check .            # formatting: the widgets' JS and CSS, the extension's TS
 uv run tests/browser/check_js.py                     # their JavaScript: syntax, names undefined or unused
 uv run --group docs tests/browser/smoke.py           # the widgets in a real JupyterLab
@@ -136,6 +139,10 @@ git push origin vX.Y.Z
    same tag, checks them (version X.Y.Z, the wheel has the extension and requires `jupyter-storage-explorer==X.Y.Z`),
    adds them to the GitHub release and publishes them to PyPI. To retry it, run it by hand for the tag:
    *Actions ▸ Release launcher ▸ Run workflow*.
+3. **Release plugins** (`.github/workflows/release-plugins.yaml`), run when the first has succeeded too, builds each
+   plugin of `plugins/` for the same tag, checks them (version X.Y.Z, each requires `jupyter-storage-explorer==X.Y.Z` and
+   has its entry point), adds them to the GitHub release and publishes them to PyPI. To retry it: *Actions ▸ Release
+   plugins ▸ Run workflow*.
 
 ### Release notes
 
@@ -159,8 +166,14 @@ The workflows publish with PyPI's [trusted publishing](https://docs.pypi.org/tru
 
    | PyPI project                        | Workflow                  |
    |-------------------------------------|---------------------------|
-   | `jupyter-storage-explorer`          | `release-explorer.yaml`   |
-   | `jupyter-storage-explorer-launcher` | `release-launcher.yaml`   |
+   | `jupyter-storage-explorer`                 | `release-explorer.yaml`   |
+   | `jupyter-storage-explorer-launcher`        | `release-launcher.yaml`   |
+   | `jupyter-storage-explorer-abfs-support`    | `release-plugins.yaml`    |
+   | `jupyter-storage-explorer-pandas-support`  | `release-plugins.yaml`    |
+   | `jupyter-storage-explorer-polars-support`  | `release-plugins.yaml`    |
+   | `jupyter-storage-explorer-pyspark-support` | `release-plugins.yaml`    |
+
+   A new plugin needs its own trusted publisher before its first release.
 
 2. On GitHub, create the environment `pypi` (*Settings ▸ Environments*); optionally require a reviewer there, so that
    publishing waits for approval.
@@ -174,7 +187,7 @@ cd launcher/labextension
 uv run jlpm install        # only if package.json or yarn.lock changed
 uv run jlpm build:prod
 cd ../..
-uv build --all-packages    # sdists and wheels of both packages, in dist/
+uv build --all-packages    # sdists and wheels of every package, in dist/
 uv publish --publish-url <url> dist/*
 ```
 
@@ -200,9 +213,52 @@ uv run --group docs docs/scripts/make_all.py
 
 ## Customizing
 
-Icons are changed with CSS; how storages are named, how files are moved and copied, and how formats' data is handled,
-with Python objects given to `StorageExplorer` (or returned by functions of the launcher's `storage-explorer/launcher.py`, see the
-[launcher's README](launcher/README.md)), each tried before the defaults.
+Icons are changed with CSS. Engines, formats, file operations and storages are added by [plugins](#writing-a-plugin),
+which every explorer uses once installed; for one explorer, the same Python objects are given to `StorageExplorer` (or
+returned by functions of the launcher's `storage-explorer/launcher.py`, see the [launcher's README](launcher/README.md)),
+each tried before the plugins' and the defaults.
+
+### Writing a plugin
+
+A plugin is a package adding an engine (e.g. DuckDB) or a storage (e.g. Azure Data Lake Storage) to every explorer:
+a `StorageExplorerPlugin` subclass listing its components as classes, which explorers create without arguments, and
+registered as an entry point named by its key:
+
+```python
+from jupyter_storage_explorer import StorageExplorerPlugin
+
+
+class DuckDBSupport(StorageExplorerPlugin):
+    key = "duckdb-support"
+    label = "DuckDB support for Storage Explorer"
+    format_supports = (ParquetByDuckDB,)  # FormatSupport classes, see "Another library for a format"
+    filesystem_operations = ()            # FileSystemOperations classes, see "File operations"
+    filesystem_mappers = ()               # FileSystemMapper classes, see "Filesystem mappers"
+```
+
+```toml
+[project.entry-points."jupyter_storage_explorer.plugins"]
+duckdb-support = "jupyter_storage_explorer_duckdb_support:DuckDBSupport"
+```
+
+Explorers load every plugin installed, by key, unless `plugins=[...]` names those to use; a plugin that cannot be
+imported is left out with a warning. What plugins give comes after what an explorer is given, and before the defaults.
+An engine is defined by one plugin: another using it imports its `Engine` class (two classes of one key are an error).
+
+Conventions:
+
+- One plugin per engine or per storage, named `jupyter-storage-explorer-<name>-support`, labelled "<Name> support for
+  Storage Explorer".
+- The libraries it uses are **not** dependencies: shared Jupyter environments install and configure their data
+  libraries with care, and installing a plugin must not change them. Its `full` extra installs them; the plugin imports
+  them only inside methods (as supports do), so that it loads without them.
+- Its development dependencies have them, to test it.
+
+The plugins of `plugins/` follow these conventions, and are released with the explorer: each requires the explorer of
+its own version (its `hatch_build.py`), and the explorer's extras install them (`polars`: with its libraries,
+`polars-support`: alone). To add one, copy one of them, add it to `PLUGINS` in the root's and the launcher's
+`hatch_build.py`, to the root's dev dependencies and `[tool.uv.sources]`, and give its PyPI project a trusted publisher
+(see [One-time setup for PyPI](#one-time-setup-for-pypi)).
 
 ### Icons
 
@@ -367,7 +423,7 @@ StorageExplorer(fs=my_fs, operations=[ServerSideCopy()])
 ```
 
 Operations run in a worker thread: report to `progress` and call `progress.check()` between steps, so that Cancel
-stops them. In `launcher.py`, return them from `operations()`. `AzureDataLakeGen2Operation` (`filesystems/abfs.py`) is
+stops them. In `launcher.py`, return them from `operations()`. `AzureDataLakeGen2Operation` (`plugins/abfs-support`) is
 a complete example.
 
 ### Another library for a format
@@ -376,7 +432,7 @@ A *support* handles a format's data with an engine: a `FormatSupport` subclass, 
 it implements: `"view"`, returning what to show (a `QueryView` of data for the data browser, or e.g. a `TableView` or
 `TextView`), and `"recipe"`, the code of "Python code" by title. Its `engine` is an `Engine` subclass, the library users
 choose in the explorer's status bar (with its `key`, `label` and `requirements`, `PythonPackage` instances): one of
-`formats.supports`' (`PolarsEngine`, `PandasEngine`, `PySparkEngine`, ...) or one of your own. Supports given as `supports` are
+a plugin's (`PolarsEngine` of `jupyter_storage_explorer_polars_support`, `PandasEngine`, `PySparkEngine`, ...) or one of your own. Supports given as `supports` are
 tried before the defaults, e.g. DuckDB for the data browser on Parquet:
 
 ```python

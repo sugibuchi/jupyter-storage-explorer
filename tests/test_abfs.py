@@ -1,4 +1,4 @@
-"""filesystems/abfs.py: Azure Data Lake Storage Gen2, with a fake Data Lake client
+"""abfs-support's operation (plugins/abfs-support): Azure Data Lake Storage Gen2, with a fake Data Lake client
 (no Azure account in tests)."""
 
 from __future__ import annotations
@@ -9,10 +9,9 @@ from typing import Any, Self
 import pytest
 from adlfs import AzureBlobFileSystem
 from azure.core import MatchConditions
+from jupyter_storage_explorer_abfs_support import AzureDataLakeGen2Operation, _azure
 
 from jupyter_storage_explorer._jobs.progress import JobProgress
-from jupyter_storage_explorer.filesystems import abfs
-from jupyter_storage_explorer.filesystems.abfs import AzureDataLakeGen2Operation
 from jupyter_storage_explorer.filesystems.operation import (
     FileSystemOperations,
     OperationCancelled,
@@ -77,7 +76,7 @@ class FakeService:
 @pytest.fixture
 def service(monkeypatch):
     FakeService.made, FakeService.calls, FakeService.folders = [], [], {}
-    monkeypatch.setattr(abfs, "DataLakeServiceClient", FakeService)
+    monkeypatch.setattr(_azure, "DataLakeServiceClient", FakeService)
     return FakeService
 
 
@@ -250,7 +249,7 @@ class FakeBlobs:
 @pytest.fixture
 def blobs(monkeypatch):
     fake = FakeBlobs()
-    monkeypatch.setattr(abfs, "BlobServiceClient", fake)
+    monkeypatch.setattr(_azure, "BlobServiceClient", fake)
     return fake
 
 

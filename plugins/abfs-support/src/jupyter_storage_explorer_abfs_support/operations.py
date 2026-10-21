@@ -1,17 +1,14 @@
 """File operations for Azure Data Lake Storage Gen2, with its own SDK
-(``azure-storage-file-datalake``, installed with the "abfs" extra)."""
+(``azure-storage-file-datalake``, installed with the plugin's "full" extra)."""
 
 from __future__ import annotations
 
 import asyncio
 import contextlib
+import importlib
 import threading
 from typing import TYPE_CHECKING, Any
 
-from adlfs import AzureBlobFileSystem
-from azure.core import MatchConditions
-from azure.storage.blob.aio import BlobServiceClient
-from azure.storage.filedatalake.aio import DataLakeServiceClient
 from fsspec.asyn import sync
 
 from jupyter_storage_explorer import _paths
@@ -22,7 +19,11 @@ from jupyter_storage_explorer.filesystems.operation import (
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Iterator
+    from types import ModuleType
 
+    from adlfs import AzureBlobFileSystem
+    from azure.storage.blob.aio import BlobServiceClient
+    from azure.storage.filedatalake.aio import DataLakeServiceClient
     from fsspec import AbstractFileSystem
 
     from jupyter_storage_explorer.filesystems.operation import Progress
@@ -60,15 +61,9 @@ class AzureDataLakeGen2Operation(FileSystemOperations):
         Most files copied at once.
 
     Needs ``adlfs`` and ``azure-storage-file-datalake``, installed with
-    ``pip install "jupyter-storage-explorer[abfs]"``.
-
-    Examples
-    --------
-    >>> from jupyter_storage_explorer.filesystems.abfs import AzureDataLakeGen2Operation
-    >>> StorageExplorer(
-    ...     "abfs://lake@myaccount.dfs.core.windows.net/raw",
-    ...     operations=[AzureDataLakeGen2Operation()],
-    ... )
+    ``pip install "jupyter-storage-explorer[abfs]"``; without them, it leaves
+    every operation to the next. The plugin ``abfs-support`` gives it to
+    every explorer.
     """
 
     # Seconds between two polls of a copy still pending, growing to the last.
@@ -143,8 +138,13 @@ class AzureDataLakeGen2Operation(FileSystemOperations):
 
     def _gen2(self, fs: AbstractFileSystem) -> AzureBlobFileSystem:
         """``fs``, if an adlfs filesystem of an account with a hierarchical
-        namespace, usable from this thread; else NotSupported."""
-        if not isinstance(fs, AzureBlobFileSystem) or fs.asynchronous:
+        namespace, usable from this thread; else NotSupported (also without
+        adlfs or the Data Lake SDK)."""
+        try:
+            azure = _azure()
+        except ImportError:
+            raise self.NotSupported from None
+        if not isinstance(fs, azure.AzureBlobFileSystem) or fs.asynchronous:
             raise self.NotSupported
         with self._lock:
             known = self._hierarchical.get(fs.account_url)
@@ -174,12 +174,14 @@ class AzureDataLakeGen2Operation(FileSystemOperations):
         key, else its SAS token. Made within the filesystem's event loop, on
         which it is used, then closed."""
         if fs.connection_string:
-            return DataLakeServiceClient.from_connection_string(fs.connection_string)
+            return _azure().DataLakeServiceClient.from_connection_string(
+                fs.connection_string
+            )
         url = fs.account_url.replace(".blob.", ".dfs.", 1)
         credential: Any = fs.credential if fs.credential is not None else fs.account_key
         if credential is None and fs.sas_token:
             url = f"{url}?{fs.sas_token.lstrip('?')}"
-        return DataLakeServiceClient(url, credential=credential)
+        return _azure().DataLakeServiceClient(url, credential=credential)
 
     def _run_with_datalake_service(
         self,
@@ -219,7 +221,7 @@ class AzureDataLakeGen2Operation(FileSystemOperations):
         """Create directory ``key`` in ``container`` (and its parents), failing
         if it exists."""
         await service.get_file_system_client(container).create_directory(
-            key, match_condition=MatchConditions.IfMissing
+            key, match_condition=_azure().MatchConditions.IfMissing
         )
 
     async def _copy(
@@ -339,7 +341,12 @@ def _blob_service_client(service: DataLakeServiceClient) -> BlobServiceClient:
     """A Blob Storage client of ``service``'s account: its URL (the Blob
     endpoint, "blob" for "dfs"; with its SAS token, if any) and credential."""
     url = service.url.replace(".dfs.", ".blob.", 1)
-    return BlobServiceClient(url, credential=service.credential)
+    return _azure().BlobServiceClient(url, credential=service.credential)
+
+
+def _azure() -> ModuleType:
+    """adlfs and the Azure SDK (``_azure.py``), imported on first use."""
+    return importlib.import_module("jupyter_storage_explorer_abfs_support._azure")
 
 
 def _intervals(intervals: tuple[float, ...]) -> Iterator[float]:

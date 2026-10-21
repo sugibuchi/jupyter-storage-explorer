@@ -1,0 +1,114 @@
+# Release, part 3: once release-explorer.yaml has succeeded for a version tag
+# (so jupyter-storage-explorer, which the plugins depend on, is on PyPI),
+# build each plugin of plugins/ for the same tag, add them to the GitHub
+# release, and publish them to PyPI. It can also be run by hand for a tag
+# (Actions > Release plugins > Run workflow), e.g. to retry.
+#
+# PyPI publishing uses trusted publishing (no token): each plugin's PyPI
+# project needs a trusted publisher for this repository, workflow
+# `release-plugins.yaml` and environment `pypi` (see DEVELOPMENT.md).
+name: Release plugins
+
+on:
+  workflow_run:
+    workflows: ["Release explorer"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Version tag to release, e.g. v0.14.0"
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  # The tag the explorer was released for (a tag push's "branch"), or the one given.
+  TAG: ${{ inputs.tag || github.event.workflow_run.head_branch }}
+
+jobs:
+  build:
+    # Only after a successful explorer release.
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ env.TAG }}
+          fetch-depth: 0  # the version comes from the git tags (hatch-vcs)
+
+      - name: Check the tag
+        run: |
+          case "$TAG" in v*) ;; *) echo "not a version tag: $TAG"; exit 1 ;; esac
+          test "$(git describe --tags --exact-match)" = "$TAG"
+
+      - uses: astral-sh/setup-uv@v10.3.0  # no major-version tags (e.g. v10) since v8
+
+      - name: Build the packages
+        run: |
+          for plugin in plugins/*-support; do
+            uv build --package "jupyter-storage-explorer-$(basename "$plugin")" --out-dir dist
+          done
+
+      - name: Check the packages
+        run: |
+          uv run --no-project python - <<'EOF'
+          import glob, os, sys, zipfile
+
+          version = os.environ["TAG"].removeprefix("v")
+          files = sorted(os.path.basename(f) for f in glob.glob("dist/*"))
+          print("\n".join(files))
+          for plugin in sorted(os.listdir("plugins")):
+              name = f"jupyter_storage_explorer_{plugin.replace('-', '_')}"
+              wheel = f"{name}-{version}-py3-none-any.whl"
+              if wheel not in files or f"{name}-{version}.tar.gz" not in files:
+                  sys.exit(f"{plugin}: no wheel or sdist of {version}")
+              # The explorer of the same version (the plugin's hatch_build.py),
+              # and its entry point.
+              archive = zipfile.ZipFile(f"dist/{wheel}")
+              metadata = archive.read(f"{name}-{version}.dist-info/METADATA").decode()
+              if f"Requires-Dist: jupyter-storage-explorer=={version}" not in metadata.splitlines():
+                  sys.exit(f"{plugin}: does not require jupyter-storage-explorer=={version}")
+              points = archive.read(f"{name}-{version}.dist-info/entry_points.txt").decode()
+              if f"{plugin} = " not in points:
+                  sys.exit(f"{plugin}: no entry point {plugin}")
+          EOF
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  github-release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+
+      # The release was created by release-explorer.yaml.
+      - name: Add the files to the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --clobber
+
+  pypi:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+    permissions:
+      id-token: write  # trusted publishing
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

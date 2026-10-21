@@ -8,7 +8,20 @@ import json
 import pandas as pd
 import polars as pl
 import pytest
+from all_supports import all_supports
 from items import local_item
+from jupyter_storage_explorer_pandas_support import (
+    CsvByPandas,
+    ExcelByPandas,
+    JsonLinesByPandas,
+    PandasOptions,
+    ParquetByPandas,
+)
+from jupyter_storage_explorer_polars_support import (
+    DeltaLakeByPolars,
+    DeltaLakeByPolarsOptions,
+)
+from jupyter_storage_explorer_pyspark_support import spark_url
 
 from jupyter_storage_explorer._explorer.supports import SupportChain
 from jupyter_storage_explorer.filesystems import S3Location
@@ -29,21 +42,10 @@ from jupyter_storage_explorer.formats import (
     TextView,
     TreeView,
     ViewLimits,
-    default_supports,
 )
 from jupyter_storage_explorer.formats.packages import Pillow
-from jupyter_storage_explorer.formats.supports import (
-    CsvByPandas,
-    DeltaLakeByPolars,
-    DeltaLakeByPolarsOptions,
-    ExcelByPandas,
-    JsonLinesByPandas,
-    PandasOptions,
-    ParquetByPandas,
-)
-from jupyter_storage_explorer.formats.supports.pyspark import spark_url
 
-CHAIN = SupportChain(default_supports())
+CHAIN = SupportChain(all_supports())
 
 
 def parquet_bytes(df: pl.DataFrame) -> bytes:
@@ -436,7 +438,7 @@ def test_spark_url(tmp_path):
 
 
 def options_chain(options):
-    return SupportChain(default_supports(), options)
+    return SupportChain(all_supports(), options)
 
 
 class TestFormatOptionsInCode:

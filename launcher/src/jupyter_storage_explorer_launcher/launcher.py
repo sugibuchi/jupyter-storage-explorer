@@ -20,6 +20,10 @@ final. Each file may have these functions, all optional:
     ``{name: URL or fsspec filesystem}``, merged by name: a later layer adds
     entries or replaces them, and removes them with ``None``. Without any,
     the tab browses the folder it opens on (``"."``).
+``plugins()``
+    ``["polars-support", ...]``: the keys of the plugins the tab uses (see
+    ``StorageExplorer``'s ``plugins``), replacing an earlier layer's list.
+    Without any, every plugin installed.
 ``supports()``
     ``[FormatSupport, ...]``: how formats' data is handled with libraries
     of your own (classes or objects), tried before the defaults; a later
@@ -103,6 +107,7 @@ LAUNCHER_FILE = pathlib.Path("storage-explorer", "launcher.py")
 # The functions a launcher.py may have, besides final().
 HOOKS = (
     "filesystems",
+    "plugins",
     "supports",
     "format_options",
     "operations",
@@ -129,6 +134,7 @@ _NOT_PARAMETERS = frozenset(
         "path",
         "fs",
         "filesystems",
+        "plugins",
         "supports",
         "format_options",
         "operations",
@@ -152,6 +158,8 @@ class Settings:
     """
 
     filesystems: dict[str, Any] = dataclasses.field(default_factory=dict)
+    # The plugins' keys; None for every plugin installed.
+    plugins: list[str] | None = None
     supports: list[Any] = dataclasses.field(default_factory=list)
     # {library: {format or "*": a dict of options, or a function of the location}}
     format_options: dict[str, dict[str, Any]] = dataclasses.field(default_factory=dict)
@@ -168,6 +176,8 @@ class Settings:
             "states": states_file(),
             **self.parameters,
         }
+        if self.plugins is not None:
+            kwargs["plugins"] = list(self.plugins)
         if self.supports:
             kwargs["supports"] = list(self.supports)
         if self.format_options:
@@ -286,6 +296,8 @@ def _apply(
             getattr(settings, name).update(_mapping(value, path, name))
         elif merge == "by option":
             _merge_format_options(settings.format_options, value, path)
+        elif merge == "replace":
+            setattr(settings, name, _names(value, path, name))
         else:  # "first"
             getattr(settings, name)[:0] = _sequence(value, path, name)
     if values["parameters"] is not None:
@@ -312,6 +324,7 @@ def _allowed(
 # module docstring); parameters() is merged parameter by parameter.
 _MERGES = {
     "filesystems": "by name",
+    "plugins": "replace",
     "supports": "first",
     "format_options": "by option",
     "operations": "first",
@@ -346,6 +359,14 @@ def _call(module: Any, path: pathlib.Path, name: str) -> Any:
         return function()
     except Exception as exc:
         raise LauncherError(f"{path}: {name}(): {type(exc).__name__}: {exc}") from exc
+
+
+def _names(value: Any, path: pathlib.Path, name: str) -> list[str]:
+    if not isinstance(value, (list, tuple)) or not all(
+        isinstance(v, str) for v in value
+    ):
+        raise LauncherError(f"{path}: {name}() must return a list of names")
+    return list(value)
 
 
 def _mapping(value: Any, path: pathlib.Path, name: str) -> dict[str, Any]:

@@ -6,6 +6,12 @@ from __future__ import annotations
 import polars as pl
 import pytest
 from items import local_item
+from jupyter_storage_explorer_pyspark_support import (
+    CsvByPySpark,
+    JsonLinesByPySpark,
+    ParquetByPySpark,
+)
+from jupyter_storage_explorer_pyspark_support import supports as pyspark
 from sqlframe.duckdb import DuckDBSession
 
 from jupyter_storage_explorer.formats import (
@@ -15,12 +21,6 @@ from jupyter_storage_explorer.formats import (
     QueryView,
     SupportOptions,
     ViewLimits,
-)
-from jupyter_storage_explorer.formats.supports import pyspark
-from jupyter_storage_explorer.formats.supports.pyspark import (
-    CsvByPySpark,
-    JsonLinesByPySpark,
-    ParquetByPySpark,
 )
 
 LIMITS = ViewLimits()

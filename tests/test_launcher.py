@@ -144,7 +144,7 @@ class TestMerging:
             "system",
             """
             from jupyter_storage_explorer.filesystems import FsspecOperations
-            from jupyter_storage_explorer.formats.supports import CsvByPandas
+            from jupyter_storage_explorer_pandas_support import CsvByPandas
 
             def supports():
                 return [CsvByPandas]
@@ -162,7 +162,7 @@ class TestMerging:
             "user",
             """
             from jupyter_storage_explorer.filesystems.operation import FileSystemOperations
-            from jupyter_storage_explorer.formats.supports import JsonByPandas
+            from jupyter_storage_explorer_pandas_support import JsonByPandas
 
             def supports():
                 return [JsonByPandas()]
@@ -183,6 +183,32 @@ class TestMerging:
         assert kinds == [FileSystemOperations, FsspecOperations]
         mappers = [type(m).__name__ for m in kwargs["filesystem_mappers"]]
         assert mappers == ["GCSMapper", "S3Mapper"]
+
+    def test_plugins_replaced_by_later_layers(self, tmp_path):
+        system = layer(
+            tmp_path,
+            "system",
+            """
+            def plugins():
+                return ["polars-support", "pandas-support"]
+            """,
+        )
+        user = layer(
+            tmp_path,
+            "user",
+            """
+            def plugins():
+                return ["pandas-support"]
+            """,
+        )
+        assert load_settings([system]).explorer_arguments()[1]["plugins"] == [
+            "polars-support",
+            "pandas-support",
+        ]
+        _, kwargs = load_settings([user, system]).explorer_arguments()
+        assert kwargs["plugins"] == ["pandas-support"]
+        # Without any: every plugin installed (the explorer's default).
+        assert "plugins" not in load_settings([]).explorer_arguments()[1]
 
     def test_transfer_policy_later_layers_first(self, tmp_path):
         system = layer(
@@ -348,6 +374,14 @@ class TestErrors:
                 "filesystems() must return a dict",
             ),
             ("def supports():\n    return 'csv'", "supports() must return a list"),
+            (
+                "def plugins():\n    return 'polars'",
+                "plugins() must return a list of names",
+            ),
+            (
+                "def parameters():\n    return {'plugins': []}",
+                "plugins is set by its own function",
+            ),
             (
                 # The flat options of versions before 0.14.
                 "def format_options():\n"

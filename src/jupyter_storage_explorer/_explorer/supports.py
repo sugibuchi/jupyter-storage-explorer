@@ -77,8 +77,9 @@ class SupportChain:
 
     ``formats`` are the formats files are detected as: one of each
     ``format`` of the supports, in their order (on a tie in priority, the
-    first wins: those of supports given before the defaults), so a format of
-    your own is given by giving a support of it.
+    first wins: those of supports given before the defaults), then of the
+    format classes given as ``formats`` (the standard ones, detected even
+    without a support installed, and plugins' own).
 
     ``engines`` are those users choose from: the supports' engines that are
     installed and view something, those of ``engine_preference`` (keys)
@@ -86,7 +87,9 @@ class SupportChain:
     ``DEFAULT_ENGINE_PREFERENCE``.
 
     ValueError for an engine key no support has (in ``engine_preference``
-    or ``format_options``), a format of no support, or an option no support of the engine (for that format) takes:
+    or ``format_options``), two engine classes of one key (an engine is
+    defined once, e.g. by its plugin, and imported by others), a format of
+    no support, or an option no support of the engine (for that format) takes:
     a typo would otherwise be ignored. A function's options are checked when
     it is called. TypeError for an item that is no FormatSupport.
     """
@@ -96,6 +99,7 @@ class SupportChain:
         supports: Iterable[type[FormatSupport] | FormatSupport],
         format_options: FormatOptions | None = None,
         *,
+        formats: Iterable[type[DataFormat]] = (),
         engine_preference: Sequence[str] | None = None,
     ) -> None:
         self.supports = [_created(s) for s in supports]
@@ -109,7 +113,8 @@ class SupportChain:
         # One object of each format: formats keep what detection finds (e.g.
         # a Parquet dataset's layout) for their supports.
         self.formats: list[DataFormat] = [
-            cls() for cls in dict.fromkeys(s.format for s in self.supports)
+            cls()
+            for cls in dict.fromkeys([*(s.format for s in self.supports), *formats])
         ]
         self._format_names = [f.name for f in self.formats]
         _check_options(self.format_options, self._libraries, self._format_names)
@@ -122,7 +127,9 @@ class SupportChain:
                     f"engine_preference: unknown engines {unknown}; "
                     f"choose from {sorted(engine_keys)}"
                 )
+        _check_engine_keys(self.supports)
         self.engines = _ordered_engines(self.supports, engine_preference)
+        self._engine_preference = list(engine_preference)
 
     def options_of(self, support: FormatSupport, location: Location) -> SupportOptions:
         """The options of ``support`` for the item at ``location``: those of
@@ -213,7 +220,10 @@ class SupportChain:
         """The recipes of the supports with "recipe" for ``fmt``, installed or
         not (the code may run elsewhere): of each engine, those of the first
         support that has code for the item, so a support given before the
-        defaults replaces the default one of its engine."""
+        defaults replaces the default one of its engine. Those without an
+        engine first, then by engine: those of ``engine_preference``, in its
+        order, then the others by key (installed or not), whichever plugin
+        they come from."""
         recipes: list[Recipe] = []
         libraries: set[str] = set()
         for support in self._registered(fmt, "recipe"):
@@ -234,7 +244,14 @@ class SupportChain:
                 )
                 for title, code in codes.items()
             ]
-        return recipes
+        order = {key: i for i, key in enumerate(self._engine_preference)}
+
+        def rank(recipe: Recipe) -> tuple[int, int, str]:
+            if recipe.engine is None:
+                return (0, 0, "")
+            return (1, order.get(recipe.engine.key, len(order)), recipe.engine.key)
+
+        return sorted(recipes, key=rank)
 
 
 def _created(support: type[FormatSupport] | FormatSupport) -> FormatSupport:
@@ -299,6 +316,23 @@ def _check_format_options(
         raise ValueError(
             f"{where}: unknown options {sorted(unknown)}; choose from {sorted(taken)}"
         )
+
+
+def _check_engine_keys(supports: Sequence[FormatSupport]) -> None:
+    """ValueError for two engine classes of one key: supports of an engine
+    share its class, so that the explorer offers it once, with one label."""
+    engines: dict[str, type[Engine]] = {}
+    for support in supports:
+        engine = support.engine
+        if engine is None:
+            continue
+        known = engines.setdefault(engine.key, engine)
+        if known is not engine:
+            raise ValueError(
+                f"engine {engine.key!r} is defined twice: by "
+                f"{known.__module__}.{known.__qualname__} and "
+                f"{engine.__module__}.{engine.__qualname__}; import one"
+            )
 
 
 def _ordered_engines(

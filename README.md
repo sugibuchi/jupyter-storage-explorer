@@ -35,8 +35,18 @@ result back in code. See [Using the data browser](https://github.com/sugibuchi/j
 ## Installation
 
 ```bash
-pip install jupyter-storage-explorer
+pip install "jupyter-storage-explorer[polars]"
 ```
+
+`[polars]` adds the plugin previewing and querying data with Polars, and Polars itself. Plugins for other engines and
+storages are extras too; `<name>-support` installs a plugin alone, using the libraries you have:
+
+| Extra                  | Plugin                                                       |
+|------------------------|--------------------------------------------------------------|
+| `polars`               | Polars (with deltalake and fastexcel): Delta Lake, Parquet, CSV, JSON Lines, Excel |
+| `pandas`               | pandas (with PyArrow and openpyxl): Parquet, CSV, JSON Lines, Excel |
+| `pyspark`              | PySpark or Databricks Connect (with delta-spark): Delta Lake, Parquet, CSV, JSON Lines |
+| `abfs`                 | Azure Data Lake Storage Gen2: folders moved in one step, copies on the server (with adlfs) |
 
 Install the package for your storage too:
 
@@ -47,8 +57,7 @@ Install the package for your storage too:
 | Google Cloud Storage           | `gcsfs`    | `gs://bucket/path`                                   |
 | Local disk, in-memory          | (included) | `/path`, `memory://`                                 |
 
-Previewing and querying data files needs a data library, e.g. `pip install polars deltalake`; the preview tells you
-which.
+Without an engine plugin, the explorer still browses, moves and previews text, Markdown, JSON and images.
 
 ## Quick start
 
@@ -62,7 +71,7 @@ the launcher's tab (it may take a minute to start).
 adds **Storage Explorer** to JupyterLab's launcher, opening the explorer in its own tab:
 
 ```bash
-pip install jupyter-storage-explorer-launcher
+pip install "jupyter-storage-explorer-launcher[polars]"
 ```
 
 ![The Storage Explorer item in JupyterLab's launcher](https://raw.githubusercontent.com/sugibuchi/jupyter-storage-explorer/main/launcher/figs/launcher.png)

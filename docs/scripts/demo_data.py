@@ -30,9 +30,8 @@ import openpyxl
 import polars as pl
 import pyarrow.dataset as ds
 from deltalake import write_deltalake
+from jupyter_storage_explorer_polars_support import PolarsSupport
 from PIL import Image, ImageDraw
-
-from jupyter_storage_explorer.formats import default_supports
 
 # The local copy, set by _lab.py for the kernels of the server it starts.
 DATA_ENV = "JSE_DEMO_DATA"
@@ -408,9 +407,9 @@ def filesystems() -> dict[str, str]:
 
 
 def supports() -> list[Any]:
-    """The default supports, polars' viewing the local copy (it reads by URL,
+    """polars-support's supports viewing the local copy (polars reads by URL,
     for the data browser), for an explorer's ``supports``: tried before its
-    own defaults, they are those used."""
+    plugins', they are those used."""
 
     from jupyter_storage_explorer.filesystems import (  # noqa: PLC0415
         LocalLocation,
@@ -441,12 +440,11 @@ def supports() -> list[Any]:
             children=local_fs.ls(copy, detail=True) if ctx.is_dir else None,
         )
 
-    result = default_supports()
+    # Only polars reads by URL; the other plugins read the demo's own files,
+    # so that files saved from JupyterLab show as saved.
+    result = [cls() for cls in PolarsSupport.format_supports]
     for support in result:
-        # Only polars reads by URL; the others read the demo's own files,
-        # so that files saved from JupyterLab show as saved.
-        uses_polars = support.engine is not None and support.engine.key == "polars"
-        if uses_polars and "view" in support.capabilities:
+        if "view" in support.capabilities:
             view = support.view
             support.view = lambda fmt, ctx, options, limits, view=view: view(
                 fmt, local(ctx), options, limits

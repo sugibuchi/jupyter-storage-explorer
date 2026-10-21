@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import uuid
+import warnings
 from typing import TYPE_CHECKING, Any
 
 import anywidget
@@ -30,6 +31,7 @@ from jupyter_storage_explorer._jobs.incoming import IncomingFiles
 from jupyter_storage_explorer._jobs.operation_chain import OperationChain
 from jupyter_storage_explorer._jobs.runner import JobRunner
 from jupyter_storage_explorer._jobs.transfer_policy import TransferPolicy
+from jupyter_storage_explorer._plugins import PluginComponents, load_plugins
 from jupyter_storage_explorer.filesystems import (
     LocalLocation,
     MapperChain,
@@ -44,7 +46,7 @@ from jupyter_storage_explorer.formats import (
     Text,
     ViewLimits,
 )
-from jupyter_storage_explorer.formats.defaults import DEFAULT_SUPPORTS
+from jupyter_storage_explorer.formats.defaults import DEFAULT_FORMATS, DEFAULT_SUPPORTS
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
@@ -122,16 +124,24 @@ class StorageExplorer(
         while it is open, clicking a file previews it (tables open in the
         data browser, see ``query_result``). False: closed until the user
         previews something.
+    plugins : sequence of str, optional
+        The keys of the plugins to use (``StorageExplorerPlugin.key``, e.g.
+        ``["polars-support"]``), in this order; only they are imported.
+        Default: every plugin installed, by key. A plugin that cannot be
+        loaded is left out with a warning; a key no plugin installed has is a
+        ValueError. What plugins give is used after the ``supports``,
+        ``operations`` and ``filesystem_mappers`` given, and before the
+        defaults.
     supports : sequence of FormatSupport classes or objects, optional
         Libraries of your own handling formats' data (previews, the data
         browser, "Python code"), e.g. ``[ParquetByDuckDB]``, tried before
-        ``default_supports()``: for each job, the first support for the
-        format that is installed does it (see
+        the plugins' and ``default_supports()``: for each job, the first
+        support for the format that is installed does it (see
         ``jupyter_storage_explorer.formats.FormatSupport``). Classes are
         created without arguments. The formats files are detected as are
-        those of the supports (their ``format``, one object of each), so a
-        format of your own comes with a support of it. To change the
-        defaults themselves, override ``default_supports`` in a subclass.
+        those of the supports (their ``format``, one object of each), and
+        the standard ones. To change the defaults themselves, override
+        ``default_supports`` in a subclass.
     format_options : mapping, optional
         The supports' options, by engine key (``"python"`` for the supports
         without an engine), then format name or ``"*"`` for all formats,
@@ -177,13 +187,14 @@ class StorageExplorer(
         default, ``jupyter_storage_explorer.fetch_rows``, which has an
         example.
     operations : sequence of FileSystemOperations, optional
-        File operations of your own, tried before ``default_operations()``,
+        File operations of your own, tried before the plugins' and
+        ``default_operations()``,
         e.g. ``[MyOps()]`` for server-side copies: for each operation (move,
         copy, delete, ...), the first object that supports it does it (see
         ``jupyter_storage_explorer.filesystems``). To change the defaults themselves, override
         ``default_operations`` in a subclass.
     filesystem_mappers : sequence of FileSystemMapper, optional
-        Mappers of your own, tried before
+        Mappers of your own, tried before the plugins' and
         ``jupyter_storage_explorer.filesystems.default_mappers()``: for each
         filesystem, the first that maps it gives the locations of its paths
         (``jupyter_storage_explorer.Location``: "Copy URL",
@@ -328,6 +339,7 @@ class StorageExplorer(
         filesystems: Mapping[str, AbstractFileSystem | str] | None = None,
         height: str = "400px",
         open_preview: bool = False,
+        plugins: Sequence[str] | None = None,
         supports: Sequence[type[FormatSupport] | FormatSupport] | None = None,
         format_options: FormatOptions | None = None,
         engine_preference: Sequence[str] | None = None,
@@ -360,12 +372,20 @@ class StorageExplorer(
         except (OSError, ValueError) as exc:
             states_error = f"Bookmarks and queries not read again: {exc}"
         self._max_browser_items = max_browser_items
+        # The plugins' components come after those given and before the
+        # defaults (see plugin.py); a plugin that cannot be loaded is left out.
+        self._plugins, problems = load_plugins(plugins)
+        for problem in problems:
+            warnings.warn(problem, RuntimeWarning, stacklevel=2)
+        components = PluginComponents(self._plugins)
         # How files are moved, copied, deleted and downloaded (see filesystems/),
         # and the jobs doing it in the background (see _jobs/runner.py).
         # What filesystems reach, their URLs and back (see filesystems/).
-        self._mappers = MapperChain([*(filesystem_mappers or ()), *default_mappers()])
+        self._mappers = MapperChain(
+            [*(filesystem_mappers or ()), *components.mappers, *default_mappers()]
+        )
         self._operations = OperationChain(
-            [*(operations or ()), *self.default_operations()]
+            [*(operations or ()), *components.operations, *self.default_operations()]
         )
         self._jobs = JobRunner(self._send_job)
         # "Properties" counts files with jobs of its own: it changes nothing,
@@ -387,10 +407,11 @@ class StorageExplorer(
         self._settings_file: tuple[str, Callable[[], Any]] | None = None
         # How the formats' data is handled: each job by the first support
         # installed, with its options (see formats/support.py); the formats
-        # files are detected as are the supports'.
+        # files are detected as are the supports', and the standard ones.
         self._supports = SupportChain(
-            [*(supports or ()), *self.default_supports()],
+            [*(supports or ()), *components.supports, *self.default_supports()],
             format_options,
+            formats=[*components.formats, *DEFAULT_FORMATS],
             engine_preference=engine_preference,
         )
         self._formats = self._supports.formats
@@ -475,10 +496,10 @@ class StorageExplorer(
         -------
         list of FormatSupport classes or objects
             By default the classes of
-            ``jupyter_storage_explorer.formats.default_supports()``: polars,
-            pandas, Spark, fsspec and Pillow for the default formats,
-            and the previews needing no package (text, JSON, images). Each
-            gets its options from ``format_options``.
+            ``jupyter_storage_explorer.formats.default_supports()``: those
+            needing no engine (text, Markdown, JSON and images, and code
+            reading them); the engines' come with their plugins. Each gets its
+            options from ``format_options``.
         """
         return list(DEFAULT_SUPPORTS)
 

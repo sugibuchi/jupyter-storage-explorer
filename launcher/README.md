@@ -18,8 +18,12 @@ It also integrates every Storage Explorer, in its tab or in a notebook, with Jup
 ## Installation
 
 ```bash
-pip install jupyter-storage-explorer-launcher
+pip install "jupyter-storage-explorer-launcher[polars]"
 ```
+
+`[polars]` adds the plugin previewing and querying data with Polars, and Polars itself. The launcher has the same
+extras as `jupyter-storage-explorer` ([Installation](https://github.com/sugibuchi/jupyter-storage-explorer#installation)):
+`pandas`, `pyspark`, `abfs`, and `<name>-support` for a plugin alone, using the libraries you have.
 
 Install it in the environment of JupyterLab and of the default kernel (on JupyterHub, usually the single-user image),
 then restart JupyterLab. Requires JupyterLab 4.0 or later.
@@ -27,7 +31,7 @@ then restart JupyterLab. Requires JupyterLab 4.0 or later.
 Or from JupyterLab itself, without a terminal: run this in a notebook, then reload the page (no restart needed):
 
 ```python
-%pip install jupyter-storage-explorer-launcher
+%pip install "jupyter-storage-explorer-launcher[polars]"
 ```
 
 This works when the notebook's kernel runs in JupyterLab's own environment, as the default kernel usually does.
@@ -67,6 +71,7 @@ The file has some of these functions, all optional:
 | Function               | Returns                                                                                   |
 |------------------------|-------------------------------------------------------------------------------------------|
 | `filesystems()`        | `{name: URL or fsspec filesystem}`                                                        |
+| `plugins()`            | The keys of the plugins the tab uses, e.g. `["polars-support"]`; without it, every plugin installed |
 | `format_options()`     | The libraries' options, by library and format ([Format options](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#format-options)) |
 | `transfer_policy()`    | Rules of a [transfer policy](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#transfer-policy) |
 | `parameters()`         | Other `StorageExplorer` arguments ([StorageExplorer options](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#storageexplorer-options)), e.g. `{"engine_preference": ["pandas"]}` |
@@ -103,6 +108,7 @@ A later layer changes an earlier one's settings this way:
 | Function                                        | Merged with earlier layers                     |
 |-------------------------------------------------|------------------------------------------------|
 | `filesystems()`                                 | By name: added or replaced; `None` removes one |
+| `plugins()`                                     | Replaced                                       |
 | `parameters()`                                  | By name                                        |
 | `format_options()`                              | By library, format, then option                |
 | `supports()`, `operations()`, `filesystem_mappers()` | Later layers' first, all before the defaults |
