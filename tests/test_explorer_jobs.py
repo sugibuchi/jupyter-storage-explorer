@@ -5,7 +5,9 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from all_supports import NO_PLUGINS
 from explorers import Explorer, entries, make, storage, without_ids
+from jupyter_storage_explorer_abfs_support import AzureDataLakeGen2Operation
 
 from jupyter_storage_explorer import _paths
 from jupyter_storage_explorer._explorer import jobs as following
@@ -176,12 +178,14 @@ class TestJobs:
         assert reply["deleted"] == []
 
     def test_default_operations(self, memfs):
-        kinds = [type(o) for o in make("/", fs=memfs)._operations.operations]
+        explorer = make("/", fs=memfs, plugin_options=NO_PLUGINS)
+        kinds = [type(o) for o in explorer._operations.operations]
         assert kinds == [AtomicMoveOperation, AsyncFsspecOperations, FsspecOperations]
-        # Those given come first, then the defaults.
+        # Those given come first, then the plugins', then the defaults.
         explorer = make("/", fs=memfs, operations=[FileSystemOperations()])
         assert [type(o) for o in explorer._operations.operations] == [
             FileSystemOperations,
+            AzureDataLakeGen2Operation,  # abfs-support's
             *kinds,
         ]
 

@@ -270,7 +270,7 @@ class FormatSupport:
     format : type of DataFormat
         The format handled, e.g. ``Parquet``; its subclasses too.
     engine : type of Engine or None
-        The library handling it, e.g. ``PolarsEngine``: what users choose to
+        The library handling it, e.g. polars-support's ``PolarsEngine``: what users choose to
         view with, what "Python code" names, and the key of its options in
         ``format_options`` (its ``key``, e.g. "polars"). None for the
         built-in views needing no package (text, JSON, images), used for the

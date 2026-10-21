@@ -20,6 +20,11 @@ final. Each file may have these functions, all optional:
     ``{name: URL or fsspec filesystem}``, merged by name: a later layer adds
     entries or replaces them, and removes them with ``None``. Without any,
     the tab browses the folder it opens on (``"."``).
+``plugin_options()``
+    ``{plugin key: {option: value}}`` (see ``StorageExplorer``'s
+    ``plugin_options``), e.g. ``{"pandas-support": {"enabled": False}}``,
+    merged by plugin, then option. Every plugin installed is used unless
+    disabled.
 ``supports()``
     ``[FormatSupport, ...]``: how formats' data is handled with libraries
     of your own (classes or objects), tried before the defaults; a later
@@ -103,6 +108,7 @@ LAUNCHER_FILE = pathlib.Path("storage-explorer", "launcher.py")
 # The functions a launcher.py may have, besides final().
 HOOKS = (
     "filesystems",
+    "plugin_options",
     "supports",
     "format_options",
     "operations",
@@ -129,6 +135,7 @@ _NOT_PARAMETERS = frozenset(
         "path",
         "fs",
         "filesystems",
+        "plugin_options",
         "supports",
         "format_options",
         "operations",
@@ -152,6 +159,8 @@ class Settings:
     """
 
     filesystems: dict[str, Any] = dataclasses.field(default_factory=dict)
+    # {plugin key: {option: value}}
+    plugin_options: dict[str, dict[str, Any]] = dataclasses.field(default_factory=dict)
     supports: list[Any] = dataclasses.field(default_factory=list)
     # {library: {format or "*": a dict of options, or a function of the location}}
     format_options: dict[str, dict[str, Any]] = dataclasses.field(default_factory=dict)
@@ -168,6 +177,8 @@ class Settings:
             "states": states_file(),
             **self.parameters,
         }
+        if self.plugin_options:
+            kwargs["plugin_options"] = self.plugin_options
         if self.supports:
             kwargs["supports"] = list(self.supports)
         if self.format_options:
@@ -286,6 +297,8 @@ def _apply(
             getattr(settings, name).update(_mapping(value, path, name))
         elif merge == "by option":
             _merge_format_options(settings.format_options, value, path)
+        elif merge == "by plugin":
+            _merge_plugin_options(settings.plugin_options, value, path)
         else:  # "first"
             getattr(settings, name)[:0] = _sequence(value, path, name)
     if values["parameters"] is not None:
@@ -312,6 +325,7 @@ def _allowed(
 # module docstring); parameters() is merged parameter by parameter.
 _MERGES = {
     "filesystems": "by name",
+    "plugin_options": "by plugin",
     "supports": "first",
     "format_options": "by option",
     "operations": "first",
@@ -346,6 +360,21 @@ def _call(module: Any, path: pathlib.Path, name: str) -> Any:
         return function()
     except Exception as exc:
         raise LauncherError(f"{path}: {name}(): {type(exc).__name__}: {exc}") from exc
+
+
+def _merge_plugin_options(
+    merged: dict[str, dict[str, Any]], value: Any, path: pathlib.Path
+) -> None:
+    """Merge one layer's ``plugin_options()`` into ``merged``: by plugin, then
+    option, so a layer disables a plugin, or changes one option of it,
+    without restating the others. Whether they exist is checked by the
+    explorer."""
+    for key, options in _mapping(value, path, "plugin_options").items():
+        if not isinstance(options, dict):
+            raise LauncherError(
+                f"{path}: plugin_options(): {key!r} must map option names to values"
+            )
+        merged.setdefault(key, {}).update(options)
 
 
 def _mapping(value: Any, path: pathlib.Path, name: str) -> dict[str, Any]:

@@ -25,10 +25,10 @@ jobs:
       - uses: astral-sh/setup-uv@v10.3.0  # no major-version tags (e.g. v10) since v8
 
       - name: Ruff check
-        run: uvx ruff check src launcher/src tests docs/scripts
+        run: uvx ruff check src launcher/src plugins tests docs/scripts
 
       - name: Ruff format check
-        run: uvx ruff format --check src launcher/src tests docs/scripts
+        run: uvx ruff format --check src launcher/src plugins tests docs/scripts
 
       # The widgets' frontend (src/jupyter_storage_explorer/static/, see .prettierrc.json).
       - name: Prettier check
@@ -62,6 +62,7 @@ jobs:
 
       # The launcher is left out: its JupyterLab extension is not built here.
       # Its tests import its Python code from launcher/src (pytest's pythonpath).
+      # The plugins (plugins/) are installed, with their entry points.
       - name: Install the project
         run: uv sync --no-install-package jupyter-storage-explorer-launcher
 

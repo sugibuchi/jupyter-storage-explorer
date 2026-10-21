@@ -29,17 +29,24 @@ def make(lab: Lab) -> None:
         tab.locator(".jse-tree .jse-node").first.wait_for(timeout=90000)
         page.wait_for_timeout(1500)
         _lab.calm(page)
-        # From the Unsafe mode switch to the settings button.
-        _, y0, _, y1 = box(tab.locator(".jse-toolbar"))
+        # From the Unsafe mode switch to the settings button, its menu open.
+        tab.locator(".jse-settings-btn").click()
+        menu = tab.locator(".jse-menu:not(.jse-submenu)").first
+        menu.wait_for(state="visible")
+        page.wait_for_timeout(500)
+        _, y0, _, _ = box(tab.locator(".jse-toolbar"))
         left = box(tab.locator(".jse-unsafe"))[0]
-        right = box(tab.locator(".jse-settings-btn"))[2]
-        # The toolbar's height, without its bottom border.
-        area = (left - 6, y0, right + 6, y1 - 1)
+        mx0, _, mx1, my1 = box(menu)
+        right = max(box(tab.locator(".jse-settings-btn"))[2], mx1)
+        area = (min(left, mx0) - 6, y0, right + 6, my1 + 6)
         shot(page, _lab.LAUNCHER_FIGS / "settings-button.png", area, pad=0)
 
         # A user without settings yet: the file is created from the template.
         path.unlink()  # read when the tab started
-        tab.locator(".jse-settings-btn").click()
+        tab.locator(
+            ".jse-menu:not(.jse-submenu) > .jse-menu-item:visible",
+            has_text="Edit configuration",
+        ).click()
         tab.locator(".jse-dialog:visible").get_by_role("button", name="Create").click()
         page.locator(".jp-FileEditor .cm-content").first.wait_for(timeout=30000)
         page.wait_for_timeout(1500)

@@ -1,0 +1,91 @@
+# Release, part 3 (one plugin): build the plugin plugins/<plugin> for a version
+# tag, check it, and add it to the GitHub release. Called by each plugin's
+# release-<plugin>.yaml, which publishes the build to PyPI itself: PyPI's
+# trusted publishing names the workflow publishing, one per project, and it
+# must be the calling workflow, not this reusable one.
+name: Release one plugin
+
+on:
+  workflow_call:
+    inputs:
+      plugin:
+        description: "The plugin's folder in plugins/, e.g. polars-support"
+        required: true
+        type: string
+      tag:
+        description: "The version tag, e.g. v0.14.0"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ inputs.tag }}
+      PLUGIN: ${{ inputs.plugin }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+          fetch-depth: 0  # the version comes from the git tags (hatch-vcs)
+
+      - name: Check the tag
+        run: |
+          case "$TAG" in v*) ;; *) echo "not a version tag: $TAG"; exit 1 ;; esac
+          test "$(git describe --tags --exact-match)" = "$TAG"
+
+      - uses: astral-sh/setup-uv@v10.3.0  # no major-version tags (e.g. v10) since v8
+
+      - name: Build the package
+        run: uv build --package "jupyter-storage-explorer-$PLUGIN" --out-dir dist
+
+      - name: Check the package
+        run: |
+          uv run --no-project python - <<'EOF'
+          import glob, os, sys, zipfile
+
+          version = os.environ["TAG"].removeprefix("v")
+          plugin = os.environ["PLUGIN"]
+          name = f"jupyter_storage_explorer_{plugin.replace('-', '_')}"
+          files = sorted(os.path.basename(f) for f in glob.glob("dist/*"))
+          print("\n".join(files))
+          expected = [f"{name}-{version}-py3-none-any.whl", f"{name}-{version}.tar.gz"]
+          if files != expected:
+              sys.exit(f"expected {expected} for tag {version}")
+          # The explorer of the same version (the plugin's hatch_build.py),
+          # and its entry point.
+          wheel = zipfile.ZipFile(f"dist/{expected[0]}")
+          metadata = wheel.read(f"{name}-{version}.dist-info/METADATA").decode()
+          if f"Requires-Dist: jupyter-storage-explorer=={version}" not in metadata.splitlines():
+              sys.exit(f"{plugin} does not require jupyter-storage-explorer=={version}")
+          points = wheel.read(f"{name}-{version}.dist-info/entry_points.txt").decode()
+          if f"{plugin} = " not in points:
+              sys.exit(f"{plugin} has no entry point {plugin}")
+          EOF
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist-${{ inputs.plugin }}
+          path: dist/
+          if-no-files-found: error
+
+  github-release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist-${{ inputs.plugin }}
+          path: dist/
+
+      # The release was created by release-explorer.yaml.
+      - name: Add the files to the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: gh release upload "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --clobber

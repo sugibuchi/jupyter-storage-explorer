@@ -18,8 +18,13 @@ It also integrates every Storage Explorer, in its tab or in a notebook, with Jup
 ## Installation
 
 ```bash
-pip install jupyter-storage-explorer-launcher
+pip install "jupyter-storage-explorer-launcher[polars]"
 ```
+
+`[polars]` adds the plugin previewing and querying data with Polars, and Polars itself. The launcher has the same
+extras as `jupyter-storage-explorer`
+([Installation](https://github.com/sugibuchi/jupyter-storage-explorer#installation)):
+`pandas`, `pyspark`, `abfs`, and `<name>-support` for a plugin alone, using the libraries you have.
 
 Install it in the environment of JupyterLab and of the default kernel (on JupyterHub, usually the single-user image),
 then restart JupyterLab. Requires JupyterLab 4.0 or later.
@@ -27,7 +32,7 @@ then restart JupyterLab. Requires JupyterLab 4.0 or later.
 Or from JupyterLab itself, without a terminal: run this in a notebook, then reload the page (no restart needed):
 
 ```python
-%pip install jupyter-storage-explorer-launcher
+%pip install "jupyter-storage-explorer-launcher[polars]"
 ```
 
 This works when the notebook's kernel runs in JupyterLab's own environment, as the default kernel usually does.
@@ -36,9 +41,9 @@ Then see [Using the explorer](https://github.com/sugibuchi/jupyter-storage-explo
 
 ## Configuration
 
-Click the ⚙ button at the right of the tab's toolbar.
+Click the ⚙ button at the right of the tab's toolbar, then **Edit configuration**.
 
-<img src="https://raw.githubusercontent.com/sugibuchi/jupyter-storage-explorer/main/launcher/figs/settings-button.png" width="152" alt="The settings button (a gear) after Unsafe mode in the tab's toolbar">
+<img src="https://raw.githubusercontent.com/sugibuchi/jupyter-storage-explorer/main/launcher/figs/settings-button.png" width="164" alt="The settings menu (a gear) after Unsafe mode in the tab's toolbar: Edit configuration and About">
 
 It opens your settings, a Python file (`launcher.py`), in JupyterLab's editor; if you have none, it offers to create
 one from a template with an example of each setting.
@@ -64,14 +69,16 @@ def parameters():
 
 The file has some of these functions, all optional:
 
-| Function               | Returns                                                                                   |
-|------------------------|-------------------------------------------------------------------------------------------|
-| `filesystems()`        | `{name: URL or fsspec filesystem}`                                                        |
-| `format_options()`     | The libraries' options, by library and format ([Format options](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#format-options)) |
-| `transfer_policy()`    | Rules of a [transfer policy](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#transfer-policy) |
-| `parameters()`         | Other `StorageExplorer` arguments ([StorageExplorer options](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#storageexplorer-options)), e.g. `{"engine_preference": ["pandas"]}` |
+| Function            | Returns                                                                                                                                                                                                                   |
+|---------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `filesystems()`     | `{name: URL or fsspec filesystem}`                                                                                                                                                                                        |
+| `plugin_options()`  | The plugins' options, by key, e.g. `{"pandas-support": {"enabled": False}}` ([Plugins](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#plugins))                                 |
+| `format_options()`  | The libraries' options, by library and format ([Format options](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#format-options))                                                 |
+| `transfer_policy()` | Rules of a [transfer policy](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#transfer-policy)                                                                                    |
+| `parameters()`      | Other `StorageExplorer` arguments ([StorageExplorer options](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#storageexplorer-options)), e.g. `{"engine_preference": ["pandas"]}` |
 
-For extending the explorer in Python ([Customizing](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/DEVELOPMENT.md#customizing)),
+For extending the explorer in Python
+([Developing plugins](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/DEVELOPMENT_PLUGIN.md)),
 tried before the defaults: `supports()` (`FormatSupport`: formats and the libraries handling them), `operations()`
 (`FileSystemOperations`) and `filesystem_mappers()` (`FileSystemMapper`).
 
@@ -100,13 +107,14 @@ whole system or `<environment>/etc/jupyter/storage-explorer/launcher.py` for one
 JupyterHub image). Each file is a layer, applied from the system's to the user's, so users' files usually come last.
 A later layer changes an earlier one's settings this way:
 
-| Function                                        | Merged with earlier layers                     |
-|-------------------------------------------------|------------------------------------------------|
-| `filesystems()`                                 | By name: added or replaced; `None` removes one |
-| `parameters()`                                  | By name                                        |
-| `format_options()`                              | By library, format, then option                |
-| `supports()`, `operations()`, `filesystem_mappers()` | Later layers' first, all before the defaults |
-| `transfer_policy()`                             | Later layers' rules first, so they decide first |
+| Function                                             | Merged with earlier layers                      |
+|------------------------------------------------------|-------------------------------------------------|
+| `filesystems()`                                      | By name: added or replaced; `None` removes one  |
+| `plugin_options()`                                   | By plugin, then option                          |
+| `parameters()`                                       | By name                                         |
+| `format_options()`                                   | By library, format, then option                 |
+| `supports()`, `operations()`, `filesystem_mappers()` | Later layers' first, all before the defaults    |
+| `transfer_policy()`                                  | Later layers' rules first, so they decide first |
 
 `final()` returns the settings later layers cannot change: function names (except `parameters`) and parameter names.
 For example, `/etc/jupyter/storage-explorer/launcher.py`:

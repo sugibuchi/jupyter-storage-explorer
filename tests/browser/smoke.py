@@ -197,10 +197,27 @@ def browse(x: Explorer) -> None:
     expect(x.el.locator(".jse-crumb").last).to_have_text("curated")
     x.el.locator(".jse-crumb", has_text="/sales-lake").click()
     expect(x.names.first).to_have_text("curated")
-    # The settings button is in the launcher's tabs only (launcher_settings);
-    # the engine, in the status bar, in every explorer.
-    expect(x.el.locator(".jse-settings-btn")).to_be_hidden()
+    # The engine, in the status bar, in every explorer.
     expect(x.el.locator(".jse-engine-btn")).to_have_text("Polars")
+
+
+@check
+def about(x: Explorer) -> None:
+    # The settings menu: "About" in every explorer; "Edit configuration" in
+    # the launcher's tabs only (launcher_settings).
+    x.el.locator(".jse-settings-btn").click()
+    expect(x.menu_item("About")).to_be_visible()
+    expect(x.menu_item("Edit configuration")).to_have_count(0)
+    x.menu_item("About").click()
+    dialog = x.el.locator(".jse-dialog:visible")
+    expect(dialog.locator(".jse-about-name")).to_have_text("Jupyter Storage Explorer")
+    expect(dialog.locator(".jse-about-icon")).to_be_visible()
+    polars = dialog.locator(".jse-about-plugin", has_text="polars-support")
+    expect(polars).not_to_have_class(re.compile("jse-disabled"))
+    info = polars.locator(".jse-about-info")
+    expect(info).to_have_attribute("title", "Polars support for Storage Explorer")
+    dialog.press("Escape")
+    expect(dialog).to_be_hidden()
 
 
 @check
@@ -1063,20 +1080,26 @@ def launcher_tab(lab: Lab, page: Page) -> None:
 
 @lab_check
 def launcher_settings(lab: Lab, page: Page) -> None:
-    # The settings button opens the user's launcher.py in JupyterLab's editor,
-    # created from the template if missing (once the user agrees); saved, it
-    # applies to new tabs.
+    # The settings menu's "Edit configuration" opens the user's launcher.py in
+    # JupyterLab's editor, created from the template if missing (once the user
+    # agrees); saved, it applies to new tabs.
     path = lab.folder / "config" / "storage-explorer" / "launcher.py"
     with lab.launcher_settings(_lab.LAUNCHER_PY):
         tab = open_launcher_tab(lab, page)
         path.unlink()  # read when the tab started
         dialog = tab.locator(".jse-dialog:visible")
+        edit = tab.locator(
+            ".jse-menu:not(.jse-submenu) > .jse-menu-item:visible",
+            has_text="Edit configuration",
+        )
         tab.locator(".jse-settings-btn").click()
+        edit.click()
         expect(dialog).to_contain_text("Create your launcher settings")
         dialog.get_by_role("button", name="Cancel").click()
         expect(dialog).to_be_hidden()
         assert not path.exists()
         tab.locator(".jse-settings-btn").click()
+        edit.click()
         dialog.get_by_role("button", name="Create").click()
         editor = page.locator(".jp-FileEditor .cm-content").first
         expect(editor).to_contain_text("def filesystems():")

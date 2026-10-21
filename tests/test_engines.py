@@ -5,7 +5,10 @@ from __future__ import annotations
 
 import pytest
 import traitlets
+from all_supports import all_supports
 from explorers import make, path_of
+from jupyter_storage_explorer_polars_support import DeltaLakeByPolars
+from jupyter_storage_explorer_pyspark_support import PySparkEngine
 
 from jupyter_storage_explorer._explorer.states import ExplorerStates
 from jupyter_storage_explorer._explorer.supports import SupportChain
@@ -17,10 +20,8 @@ from jupyter_storage_explorer.formats import (
     Markdown,
     Parquet,
     PythonPackage,
-    default_supports,
 )
 from jupyter_storage_explorer.formats.packages import DatabricksConnect, PySpark
-from jupyter_storage_explorer.formats.supports import DeltaLakeByPolars, PySparkEngine
 
 
 class Installed(PythonPackage):
@@ -84,7 +85,7 @@ class TestOrder:
         ]
 
     def test_default_polars_then_pandas(self):
-        assert self.keys(default_supports()) == ["polars", "pandas"]
+        assert self.keys(all_supports()) == ["polars", "pandas"]
 
     def test_preference_then_the_others_by_key(self):
         supports = [support(Csv, engine(k)) for k in ("zeta", "alpha", "mid")]
@@ -102,11 +103,11 @@ class TestOrder:
 
     def test_unknown_engine_key(self):
         with pytest.raises(ValueError, match=r"unknown engines \['polar'\]"):
-            SupportChain(default_supports(), engine_preference=["polar"])
+            SupportChain(all_supports(), engine_preference=["polar"])
 
 
 class TestWhichEngineViews:
-    chain = SupportChain(default_supports())
+    chain = SupportChain(all_supports())
 
     def test_the_engine_chosen(self):
         assert self.chain.engine_for(Parquet(), "pandas") == "pandas"

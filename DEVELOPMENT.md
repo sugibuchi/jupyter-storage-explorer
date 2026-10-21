@@ -2,32 +2,35 @@
 
 ## Layout
 
-The repository is a [uv workspace](https://docs.astral.sh/uv/concepts/projects/workspaces/) with two packages, released
-together with the same version (from the git tags). The launcher requires the explorer of exactly its version
-(`launcher/hatch_build.py`, which sets its dependencies), as it uses the explorer's internals:
+The repository is a [uv workspace](https://docs.astral.sh/uv/concepts/projects/workspaces/) of packages released
+together with the same version (from the git tags). The launcher and the plugins require the explorer of exactly their
+version (their `hatch_build.py`, which sets their dependencies), as they may use the explorer's internals; the
+explorer's extras (`polars`, `polars-support`, ...) require the plugins of its version (`hatch_build.py`), and the
+launcher has the same extras:
 
-| Package                             | Folder      | Contents                                                                 |
-|-------------------------------------|-------------|--------------------------------------------------------------------------|
-| `jupyter-storage-explorer`          | `.`         | The widgets `StorageExplorer` and `DataExplorer`; pure Python, no build. |
-| `jupyter-storage-explorer-launcher` | `launcher/` | The JupyterLab launcher item, and `launch()` run in the tab it opens.    |
+| Package                                   | Folder                    | Contents                                                                                              |
+|-------------------------------------------|---------------------------|-------------------------------------------------------------------------------------------------------|
+| `jupyter-storage-explorer`                | `.`                       | The widgets `StorageExplorer` and `DataExplorer`; pure Python, no build.                              |
+| `jupyter-storage-explorer-launcher`       | `launcher/`               | The JupyterLab launcher item, and `launch()` run in the tab it opens.                                 |
+| `jupyter-storage-explorer-<name>-support` | `plugins/<name>-support/` | The plugins: `polars`, `pandas`, `pyspark` (engines) and `abfs` (Azure Data Lake Storage operations). |
 
-| Path                                                           | Contents                                                                     |
-|----------------------------------------------------------------|------------------------------------------------------------------------------|
-| `src/jupyter_storage_explorer/`                                | The widgets: `storage_explorer.py`, `data_explorer.py`.                      |
-| `src/jupyter_storage_explorer/filesystems/`                    | Filesystems' locations (mappers) and file operations: interfaces users extend, and the default ones.           |
-| `src/jupyter_storage_explorer/formats/`                        | The formats files are previewed, queried and loaded as.                      |
-| `src/jupyter_storage_explorer/_explorer/`                      | `StorageExplorer`'s features, as mixins of the class.                        |
-| `src/jupyter_storage_explorer/_jobs/`                          | File operations planned and run as jobs, without the widget.                 |
-| `src/jupyter_storage_explorer/_query/`                         | The data browser: filters, settings, and a dataset open in it.               |
-| `src/jupyter_storage_explorer/static/`                         | The widgets' JavaScript and CSS, loaded at run time (no build step).         |
-| `src/jupyter_storage_explorer/static/storage_explorer/`        | The storage explorer's JavaScript, a file per feature, joined at run time.   |
-| `launcher/src/jupyter_storage_explorer_launcher/`              | `launch()`, which merges the `storage-explorer/launcher.py` files (layers).  |
-| `launcher/labextension/`                                       | The JupyterLab extension (TypeScript).                                       |
-| `launcher/src/jupyter_storage_explorer_launcher/labextension/` | The extension built from `launcher/labextension/` (git-ignored).             |
-| `notebooks/`                                                   | Demo notebooks and `make_samples.py`, which writes the sample data they use. |
-| `tests/browser/`                                               | Checks of the widgets' JavaScript, and their smoke test in a browser.        |
-| `docs/scripts/`                                                | Scripts making the docs' screenshots and the demo GIFs.                      |
-| `binder/`                                                      | The demo on mybinder.org (the README's "Try it" link): released packages, demo data. |
+| Path                                                           | Contents                                                                                             |
+|----------------------------------------------------------------|------------------------------------------------------------------------------------------------------|
+| `src/jupyter_storage_explorer/`                                | The widgets: `storage_explorer.py`, `data_explorer.py`.                                              |
+| `src/jupyter_storage_explorer/filesystems/`                    | Filesystems' locations (mappers) and file operations: interfaces users extend, and the default ones. |
+| `src/jupyter_storage_explorer/formats/`                        | The formats files are previewed, queried and loaded as.                                              |
+| `src/jupyter_storage_explorer/_explorer/`                      | `StorageExplorer`'s features, as mixins of the class.                                                |
+| `src/jupyter_storage_explorer/_jobs/`                          | File operations planned and run as jobs, without the widget.                                         |
+| `src/jupyter_storage_explorer/_query/`                         | The data browser: filters, settings, and a dataset open in it.                                       |
+| `src/jupyter_storage_explorer/static/`                         | The widgets' JavaScript and CSS, loaded at run time (no build step).                                 |
+| `src/jupyter_storage_explorer/static/storage_explorer/`        | The storage explorer's JavaScript, a file per feature, joined at run time.                           |
+| `launcher/src/jupyter_storage_explorer_launcher/`              | `launch()`, which merges the `storage-explorer/launcher.py` files (layers).                          |
+| `launcher/labextension/`                                       | The JupyterLab extension (TypeScript).                                                               |
+| `launcher/src/jupyter_storage_explorer_launcher/labextension/` | The extension built from `launcher/labextension/` (git-ignored).                                     |
+| `notebooks/`                                                   | Demo notebooks and `make_samples.py`, which writes the sample data they use.                         |
+| `tests/browser/`                                               | Checks of the widgets' JavaScript, and their smoke test in a browser.                                |
+| `docs/scripts/`                                                | Scripts making the docs' screenshots and the demo GIFs.                                              |
+| `binder/`                                                      | The demo on mybinder.org (the README's "Try it" link): released packages, demo data.                 |
 
 All Python commands go through [uv](https://docs.astral.sh/uv/). Node.js, for the extension and the JavaScript's checks,
 comes with the dev dependencies (`nodejs-wheel`), so `uv run node`, `uv run npx` and `uv run jlpm` work without
@@ -36,7 +39,7 @@ installing it.
 ## Setup
 
 ```bash
-uv sync                    # both packages, editable, with the dev dependencies
+uv sync                    # every package, editable, with the dev dependencies
 cd launcher/labextension
 uv run jlpm install        # the extension's build tools, into node_modules
 uv run jlpm build          # builds the extension into launcher/src/jupyter_storage_explorer_launcher/labextension
@@ -56,7 +59,7 @@ IntelliJ's notebook view runs the widgets too, but dragging files in or out of t
 
 ```bash
 uv run pytest                                        # the Python side
-uvx ruff check src launcher/src tests docs/scripts   # lint
+uvx ruff check src launcher/src plugins tests docs/scripts   # lint
 uv run npx --yes prettier@3.3.3 --check .            # formatting: the widgets' JS and CSS, the extension's TS
 uv run tests/browser/check_js.py                     # their JavaScript: syntax, names undefined or unused
 uv run --group docs tests/browser/smoke.py           # the widgets in a real JupyterLab
@@ -136,6 +139,11 @@ git push origin vX.Y.Z
    same tag, checks them (version X.Y.Z, the wheel has the extension and requires `jupyter-storage-explorer==X.Y.Z`),
    adds them to the GitHub release and publishes them to PyPI. To retry it, run it by hand for the tag:
    *Actions ▸ Release launcher ▸ Run workflow*.
+3. **Release <plugin>** (`.github/workflows/release-<plugin>.yaml`, one per plugin of `plugins/`: PyPI's trusted
+   publishing takes one workflow per project), run when the first has succeeded too, builds the plugin for the same
+   tag, checks it (version X.Y.Z, it requires `jupyter-storage-explorer==X.Y.Z` and has its entry point) and adds it to
+   the GitHub release, with the reusable `_release-plugin.yaml`, then publishes it to PyPI. To retry one: *Actions ▸
+   Release <plugin> ▸ Run workflow*.
 
 ### Release notes
 
@@ -158,9 +166,16 @@ The workflows publish with PyPI's [trusted publishing](https://docs.pypi.org/tru
    *Your account ▸ Publishing*), with the owner and repository of this GitHub repository and environment `pypi`:
 
    | PyPI project                        | Workflow                  |
-   |-------------------------------------|---------------------------|
-   | `jupyter-storage-explorer`          | `release-explorer.yaml`   |
-   | `jupyter-storage-explorer-launcher` | `release-launcher.yaml`   |
+      |-------------------------------------|---------------------------|
+   | `jupyter-storage-explorer`                 | `release-explorer.yaml`   |
+   | `jupyter-storage-explorer-launcher`        | `release-launcher.yaml`   |
+   | `jupyter-storage-explorer-abfs-support`    | `release-abfs-support.yaml`    |
+   | `jupyter-storage-explorer-pandas-support`  | `release-pandas-support.yaml`  |
+   | `jupyter-storage-explorer-polars-support`  | `release-polars-support.yaml`  |
+   | `jupyter-storage-explorer-pyspark-support` | `release-pyspark-support.yaml` |
+
+   A new plugin needs a workflow of its own (copy one of `release-<plugin>.yaml`) and its trusted publisher before its
+   first release.
 
 2. On GitHub, create the environment `pypi` (*Settings ▸ Environments*); optionally require a reviewer there, so that
    publishing waits for approval.
@@ -174,7 +189,7 @@ cd launcher/labextension
 uv run jlpm install        # only if package.json or yarn.lock changed
 uv run jlpm build:prod
 cd ../..
-uv build --all-packages    # sdists and wheels of both packages, in dist/
+uv build --all-packages    # sdists and wheels of every package, in dist/
 uv publish --publish-url <url> dist/*
 ```
 
@@ -200,42 +215,67 @@ uv run --group docs docs/scripts/make_all.py
 
 ## Customizing
 
-Icons are changed with CSS; how storages are named, how files are moved and copied, and how formats' data is handled,
-with Python objects given to `StorageExplorer` (or returned by functions of the launcher's `storage-explorer/launcher.py`, see the
-[launcher's README](launcher/README.md)), each tried before the defaults.
+Icons are changed with CSS (below). Formats, engines, file operations and storages are added in Python, and packaged
+as plugins that every explorer uses once installed: see [DEVELOPMENT_PLUGIN.md](DEVELOPMENT_PLUGIN.md), which also
+covers this repository's plugins (`plugins/`).
 
 ### Icons
 
 The icons are JupyterLab's file browser's, as SVG images (`.jse-icon svg`), chosen by the file's format (its
-`file_icon`, one of `FILE_ICONS` in `formats/format.py`), else by its extension. A format of your own can also bring
+`file_icon`, one of `FILE_ICONS` in `formats/base.py`), else by its extension. A format of your own can also bring
 its own icon, `file_icon = ("avro", "<svg ...>...</svg>")`, shown as an image (`.jse-icon img`). Rows in the explorer
 carry attributes to select them by:
 
-| Selector                                 | Rows                                                                                     |
-|------------------------------------------|------------------------------------------------------------------------------------------|
-| `.jse-browser`                           | The explorer (every selector starts with it, so nothing else on the page changes)        |
-| `[data-depth="0"]`, `[data-depth="1"]`, … | Folders in the tree and the list, by their level: `0` the top folder, `1` the folders in it, … |
-| `[data-file-format]`                     | Files of a known format (not those of no known format, or without a URL)                 |
-| `[data-file-format="parquet"]`           | Files of one format: `parquet`, `csv`, `json`, `json-lines`, `excel`, `markdown`, `text`, `image` |
-| `.jse-icon svg`, `.jse-icon::before`     | In a row, the icon's image, and where to show something else instead                     |
+| Selector                                  | Rows                                                                                              |
+|-------------------------------------------|---------------------------------------------------------------------------------------------------|
+| `.jse-browser`                            | The explorer (every selector starts with it, so nothing else on the page changes)                 |
+| `[data-depth="0"]`, `[data-depth="1"]`, … | Folders in the tree and the list, by their level: `0` the top folder, `1` the folders in it, …    |
+| `[data-file-format]`                      | Files of a known format (not those of no known format, or without a URL)                          |
+| `[data-file-format="parquet"]`            | Files of one format: `parquet`, `csv`, `json`, `json-lines`, `excel`, `markdown`, `text`, `image` |
+| `.jse-icon svg`, `.jse-icon::before`      | In a row, the icon's image, and where to show something else instead                              |
 
 To change an icon, hide its image and show something else in its `::before`, e.g. an emoji. This CSS shows the top
 folder as 🗄️, the folders in it as 🗃️ (deeper ones keep the folder icon), and gives data files their own icons:
 
 ```css
 /* Folders: an emoji per depth */
-.jse-browser :is([data-depth="0"], [data-depth="1"]) .jse-icon svg { display: none; }
-.jse-browser [data-depth="0"] .jse-icon::before { content: "🗄️"; }
-.jse-browser [data-depth="1"] .jse-icon::before { content: "🗃️"; }
+.jse-browser :is([data-depth="0"], [data-depth="1"]) .jse-icon svg {
+    display: none;
+}
+
+.jse-browser [data-depth="0"] .jse-icon::before {
+    content: "🗄️";
+}
+
+.jse-browser [data-depth="1"] .jse-icon::before {
+    content: "🗃️";
+}
 
 /* Files: an emoji per format */
-.jse-browser [data-file-format] .jse-icon svg { display: none; }
-.jse-browser [data-file-format] .jse-icon::before { content: "📄"; }
+.jse-browser [data-file-format] .jse-icon svg {
+    display: none;
+}
+
+.jse-browser [data-file-format] .jse-icon::before {
+    content: "📄";
+}
+
 .jse-browser [data-file-format="csv"] .jse-icon::before,
-.jse-browser [data-file-format="excel"] .jse-icon::before { content: "📊"; }
-.jse-browser [data-file-format="parquet"] .jse-icon::before { content: "🧱"; }
-.jse-browser [data-file-format="image"] .jse-icon::before { content: "🖼️"; }
-.jse-browser [data-file-format="markdown"] .jse-icon::before { content: "📝"; }
+.jse-browser [data-file-format="excel"] .jse-icon::before {
+    content: "📊";
+}
+
+.jse-browser [data-file-format="parquet"] .jse-icon::before {
+    content: "🧱";
+}
+
+.jse-browser [data-file-format="image"] .jse-icon::before {
+    content: "🖼️";
+}
+
+.jse-browser [data-file-format="markdown"] .jse-icon::before {
+    content: "📝";
+}
 ```
 
 #### Test in notebooks
@@ -283,147 +323,3 @@ JupyterLab's custom CSS applies to every page: notebooks, consoles and the launc
 
    or start JupyterLab with `jupyter lab --custom-css`.
 3. Restart JupyterLab, then reload the page.
-
-### Filesystem mappers
-
-A `FileSystemMapper` (`filesystems/mapper.py`) turns the paths of one fsspec implementation's filesystems into
-locations (`Location`, `location.py`) and back:
-
-- `to_location(fs, path)`: where a path is, independently of the implementation: e.g. an `AbfsLocation` (account,
-  container, path) or an `SftpLocation` (host, port, user, path). Its `url` is shown by "Copy URL" and used in
-  "Python code", previews and the transfer policy.
-- `path_of(fs, location)`: the reverse, or None if the instance does not reach that location. What one instance
-  reaches depends on the implementation (adlfs reaches all the containers of an account, though Azure has a file
-  system per container), so the mapper decides it from the location's fields and the instance's settings. Two
-  instances each reaching the other's top folder are one storage: the explorer moves files between them within the
-  storage, and finds files copied or dragged from another kernel on it.
-
-The predefined mappers (`filesystems/mappers.py`) and locations (`filesystems/locations.py`) cover Azure, S3, Google
-Cloud Storage, SFTP, local disks and memory; others get fsspec's URLs (`FsspecLocation`) and are told apart as fsspec
-compares them. A location of your own is a frozen, keyword-only dataclass of strings, integers and None, with a
-`kind` and a `url` (its `protocol` comes from the URL):
-
-```python
-import dataclasses
-
-from jupyter_storage_explorer import Location, StorageExplorer
-from jupyter_storage_explorer.filesystems import FileSystemMapper
-
-
-@dataclasses.dataclass(frozen=True, kw_only=True)
-class MyLocation(Location):
-    kind = "myfs"  # its name in JSON, unique
-    server: str  # never credentials: locations are sent to the browser
-    path: str
-
-    @property
-    def url(self):
-        return f"myfs://{self.server}/{self.path.lstrip('/')}"
-
-
-class MyMapper(FileSystemMapper):
-    classes = ("mypackage.MyFileSystem",)  # matched by name, subclasses too
-
-    def to_location(self, fs, path):
-        return MyLocation(server=fs.server.lower(), path=path)
-
-    def path_of(self, fs, location):
-        # An instance reaches its server's files.
-        if isinstance(location, MyLocation) and location.server == fs.server.lower():
-            return location.path
-        return None
-
-
-StorageExplorer(fs=my_fs, filesystem_mappers=[MyMapper()])
-```
-
-In `launcher.py`, return them from `filesystem_mappers()`. `tests/test_mappers.py` shows how to test one with a stand-in
-class, without the storage's package.
-
-### File operations
-
-A `FileSystemOperations` (`filesystems/operation.py`) moves, copies, deletes, uploads, downloads, measures files and
-creates folders, a method each. The explorer calls each operation on the first object that does not raise
-`FileSystemOperations.NotSupported`, so an object can do some operations for some storages and leave the rest to the
-defaults (`filesystems/operations.py`, with fsspec). `move` and `copy` are told with `same` whether the source and
-target are one filesystem, as the mappers tell; `_copy_file` and `_move_file` copy or move single files between
-filesystems and can be overridden alone.
-
-```python
-from jupyter_storage_explorer.filesystems import FileSystemOperations
-
-
-class ServerSideCopy(FileSystemOperations):
-    """Copies within one storage with its own API; everything else as by default."""
-
-    def copy(self, source_fs, source, target_fs, target, progress, *, same):
-        if not same or not isinstance(source_fs, MyFileSystem):
-            raise self.NotSupported
-        progress.working_on(source.rsplit("/", 1)[-1])
-        source_fs.server_copy(source, target)
-
-
-StorageExplorer(fs=my_fs, operations=[ServerSideCopy()])
-```
-
-Operations run in a worker thread: report to `progress` and call `progress.check()` between steps, so that Cancel
-stops them. In `launcher.py`, return them from `operations()`. `AzureDataLakeGen2Operation` (`filesystems/abfs.py`) is
-a complete example.
-
-### Another library for a format
-
-A *support* handles a format's data with an engine: a `FormatSupport` subclass, listing in `capabilities` the methods
-it implements: `"view"`, returning what to show (a `QueryView` of data for the data browser, or e.g. a `TableView` or
-`TextView`), and `"recipe"`, the code of "Python code" by title. Its `engine` is an `Engine` subclass, the library users
-choose in the explorer's status bar (with its `key`, `label` and `requirements`, `PythonPackage` instances): one of
-`formats.supports`' (`PolarsEngine`, `PandasEngine`, `PySparkEngine`, ...) or one of your own. Supports given as `supports` are
-tried before the defaults, e.g. DuckDB for the data browser on Parquet:
-
-```python
-from jupyter_storage_explorer import StorageExplorer
-from jupyter_storage_explorer.formats import Engine, FormatSupport, Parquet, PythonPackage, QueryView
-
-
-class DuckDB(PythonPackage):
-    package = "duckdb"
-    import_name = "duckdb"
-
-
-class DuckDBEngine(Engine):
-    key = "duckdb"
-    label = "DuckDB"
-    requirements = (DuckDB(),)  # or alternatives: ((A(),), (B(),))
-
-
-class ParquetByDuckDB(FormatSupport):
-    format = Parquet
-    engine = DuckDBEngine
-    capabilities = ("view",)
-
-    def view(self, fmt, ctx, options, limits):
-        # A folder's data files, as detection found them.
-        partitioned = ctx.is_dir and bool(fmt.layout(ctx).keys)
-        url = fmt.data_url(ctx)
-        return QueryView(data=DuckDB().load().read_parquet(url, hive_partitioning=partitioned))
-
-
-StorageExplorer("data", supports=[ParquetByDuckDB])
-```
-
-Each method gets the format detected and the item, an `ItemContext` (`ctx`): where it is (`ctx.location`; libraries
-doing their own I/O read `ctx.library_url`, a local file's plain path), the explorer's fsspec filesystem and the item's
-path in it (`ctx.fs`, `ctx.path`; `ctx.head_text(n)`, `ctx.head(n)` and `ctx.read_whole(limits)` read it through the
-explorer, e.g. for a text view), its info (`ctx.size`), its listing if it is a folder (`ctx.children`,
-`ctx.child_names`, `ctx.is_dir`); then its options, and `view` also `limits` (`ViewLimits`: bytes and rows to read).
-Formats' `matches(ctx)` gets the same context. A format of your own (a `DataFormat` subclass) is the `format` of
-your supports: explorers detect the formats of their supports. A support's options are the fields of a frozen dataclass, its
-`options_model` (a `SupportOptions` subclass, each field with a default), made from [`format_options`](docs/storage-explorer.md#format-options)
-under its engine's key (`engine.key`, e.g. `"duckdb"`; `"python"` for a support without an engine). Mark credentials so that "Python code" never shows them:
-`secret_field(default=None)` for a whole value, `secret_dict_field(default=None, secret_keys=["connection_string"])` for
-keys of a mapping such as storage options; the code gets options through `options.code_value(name)`, which leaves them
-out. A view holding something to release, e.g. a database connection, releases it in a function given to its
-`on_close` (`view.on_close(lambda view: con.close())`), as `StorageExplorer.on_change` takes one: the explorer calls it
-once it no longer shows the view, also when the kernel exits. `recipe` returns code by title, e.g. `{"Load as DataFrame": "import duckdb\n..."}`,
-the title saying what the code does, not the library. `FormatSupport`'s docstring has the rules for writing one. In
-`launcher.py`, return supports from `supports()`, and their options from `format_options()`; `engine_preference`
-(in `parameters()`) puts DuckDB first.

@@ -12,13 +12,16 @@ spirit of Azure Storage Explorer.
 Browse Amazon S3, Azure Data Lake / Blob Storage, Google Cloud Storage, local disks and more; preview Parquet files,
 Delta Lake tables, CSV, Excel, JSON and other formats; page through, sort and filter tables; get ready-to-run code that
 loads the data into your notebook; and upload, download, move and edit files without leaving JupyterLab. See
-[Using the explorer](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#using-the-explorer) for all you can do with it.
+[Using the explorer](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#using-the-explorer)
+for all you can do with it.
 
 ![Storage Explorer in JupyterLab: a Delta Lake table queried, files filtered, and a Markdown file edited in JupyterLab's editor and previewed](https://raw.githubusercontent.com/sugibuchi/jupyter-storage-explorer/main/docs/figs/storage-explorer.gif)
 
 This package also provides the **`DataExplorer`** widget, which lets you browse tabular data in your notebook: any
 dataframe of pandas, polars, Spark, DuckDB and more. Page through, sort and filter it in the widget, then get the
-result back in code. See [Using the data browser](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/data-explorer.md#using-the-data-browser) for all you can do with it.
+result back in code.
+See [Using the data browser](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/data-explorer.md#using-the-data-browser)
+for all you can do with it.
 
 ![DataExplorer in a notebook: a Parquet file paged through, columns hidden, filtered and sorted](https://raw.githubusercontent.com/sugibuchi/jupyter-storage-explorer/main/docs/figs/data-explorer.gif)
 
@@ -28,15 +31,25 @@ result back in code. See [Using the data browser](https://github.com/sugibuchi/j
 - **`DataExplorer`**: page, sort and filter any dataframe; get the result back in code.
 - **Previews** of Delta Lake, Parquet, CSV, JSON, Excel, text and images, with code to load them.
 - **Background file operations** with progress and Cancel; folder operations only in Unsafe mode.
-- **Work in JupyterLab**: open storage files in JupyterLab's own editors and viewers, and save them back; view tables and
-  files in tabs of their own.
+- **Work in JupyterLab**: open storage files in JupyterLab's own editors and viewers, and save them back; view tables
+  and files in tabs of their own.
 - **Bookmarks**, remembered queries, transfer rules, and a JupyterLab launcher item.
 
 ## Installation
 
 ```bash
-pip install jupyter-storage-explorer
+pip install "jupyter-storage-explorer[polars]"
 ```
+
+`[polars]` adds the plugin previewing and querying data with Polars, and Polars itself. Plugins for other engines and
+storages are extras too; `<name>-support` installs a plugin alone, using the libraries you have:
+
+| Extra     | Plugin                                                                                     |
+|-----------|--------------------------------------------------------------------------------------------|
+| `polars`  | Polars (with deltalake and fastexcel): Delta Lake, Parquet, CSV, JSON Lines, Excel         |
+| `pandas`  | pandas (with PyArrow and openpyxl): Parquet, CSV, JSON Lines, Excel                        |
+| `pyspark` | PySpark or Databricks Connect (with delta-spark): Delta Lake, Parquet, CSV, JSON Lines     |
+| `abfs`    | Azure Data Lake Storage Gen2: folders moved in one step, copies on the server (with adlfs) |
 
 Install the package for your storage too:
 
@@ -47,14 +60,14 @@ Install the package for your storage too:
 | Google Cloud Storage           | `gcsfs`    | `gs://bucket/path`                                   |
 | Local disk, in-memory          | (included) | `/path`, `memory://`                                 |
 
-Previewing and querying data files needs a data library, e.g. `pip install polars deltalake`; the preview tells you
-which.
+Without an engine plugin, the explorer still browses, moves and previews text, Markdown, JSON and images.
 
 ## Quick start
 
-**Try it without installing anything**: [open the demo on Binder](https://mybinder.org/v2/gh/sugibuchi/jupyter-storage-explorer/main?urlpath=lab/tree/binder/demo.ipynb), a made-up data lake in a notebook and in
+**Try it without installing anything**:
+[open the demo on Binder](https://mybinder.org/v2/gh/sugibuchi/jupyter-storage-explorer/main?urlpath=lab/tree/binder/demo.ipynb),
+a made-up data lake in a notebook and in
 the launcher's tab (it may take a minute to start).
-
 
 ### From the JupyterLab launcher
 
@@ -62,7 +75,7 @@ the launcher's tab (it may take a minute to start).
 adds **Storage Explorer** to JupyterLab's launcher, opening the explorer in its own tab:
 
 ```bash
-pip install jupyter-storage-explorer-launcher
+pip install "jupyter-storage-explorer-launcher[polars]"
 ```
 
 ![The Storage Explorer item in JupyterLab's launcher](https://raw.githubusercontent.com/sugibuchi/jupyter-storage-explorer/main/launcher/figs/launcher.png)
@@ -104,11 +117,14 @@ The `notebooks` folder has a demo of each widget on sample data.
   its tab with `launcher.py` files.
 - **[Development](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/DEVELOPMENT.md)**: building,
   releasing, and custom icons.
+- **[Developing plugins](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/DEVELOPMENT_PLUGIN.md)**:
+  formats, engines, file operations and storages of your own, packaged as plugins.
 
 ## Requirements
 
 - Python 3.11 or later
-- JupyterLab 4.0 or later (other Jupyter frontends show the widgets, without drag and drop from JupyterLab's file browser)
+- JupyterLab 4.0 or later (other Jupyter frontends show the widgets, without drag and drop from JupyterLab's file
+  browser)
 - For querying data: polars (tested with 2.0)
 
 ## Why Storage Explorer?

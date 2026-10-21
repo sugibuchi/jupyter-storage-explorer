@@ -469,13 +469,9 @@
   user-select: none;
 }
 
-/* After Unsafe mode, in the launcher's tabs only. */
+/* After Unsafe mode: the settings menu. */
 .jse-settings-btn {
   margin-right: 2px;
-}
-
-.jse-settings-btn[hidden] {
-  display: none;
 }
 
 /* The checkbox, hidden but focusable; the slider below shows its state. */
@@ -707,4 +703,50 @@
 
 .jse-props-title {
   margin-top: 12px;
+}
+
+/* "About": the explorer, then its plugins, those not used greyed out. */
+.jse-about-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.jse-about-icon {
+  width: 48px;
+  height: 48px;
+}
+
+.jse-about-name {
+  font-size: 1.2em;
+  font-weight: 600;
+}
+
+.jse-about-version {
+  color: var(--jse-fg-muted);
+}
+
+.jse-about-plugins {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.jse-about-plugin {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+}
+
+.jse-about-plugin.jse-disabled,
+.jse-about-plugin.jse-disabled .jse-about-version {
+  color: var(--jse-fg-faint);
+}
+
+.jse-about-info {
+  display: inline-flex;
+  color: var(--jse-fg-muted);
+  cursor: help;
 }

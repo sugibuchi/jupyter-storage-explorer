@@ -7,6 +7,8 @@ import itertools
 
 import pytest
 from explorers import make, path_of
+from jupyter_storage_explorer_pandas_support import CsvByPandas
+from jupyter_storage_explorer_polars_support import CsvByPolars
 
 from jupyter_storage_explorer._explorer import previews
 from jupyter_storage_explorer._explorer.supports import SupportChain
@@ -19,7 +21,6 @@ from jupyter_storage_explorer.formats import (
     TextView,
     ViewLimits,
 )
-from jupyter_storage_explorer.formats.supports import CsvByPandas, CsvByPolars
 
 
 class TestPreview:
@@ -86,8 +87,10 @@ class TestPreview:
         mem_explorer = make("/", fs=memfs)
         assert mem_explorer._engines == []
         mem_explorer._open_preview("/data/a.csv")
+        # The engines come with plugins: which to install.
         assert mem_explorer._preview["error"] == (
-            "a.csv cannot be viewed as CSV: no library viewing it is installed"
+            "a.csv cannot be viewed as CSV: no library viewing it is installed, "
+            'e.g. pip install "jupyter-storage-explorer[polars]"'
         )
         reply = mem_explorer.request(
             {"type": "view_tab", "rid": 1, "path": "/data/a.csv"}

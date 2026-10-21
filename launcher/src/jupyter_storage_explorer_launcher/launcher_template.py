@@ -21,6 +21,16 @@ def filesystems():
     }
 
 
+# The plugins' options, by plugin key: every plugin installed is used unless
+# "enabled" is False; "priority" puts one before the others.
+#
+# def plugin_options():
+#     return {
+#         "pandas-support": {"enabled": False},
+#         "abfs-support": {"concurrency": 16},
+#     }
+
+
 # Options of the libraries reading the data for previews, the data browser
 # and code, by library, then format ("*": all formats). See "Format options"
 # in docs/storage-explorer.md.
@@ -57,7 +67,7 @@ def filesystems():
 
 
 # --- For development: extending the explorer in Python, tried before the
-# defaults (see "Customizing" in the project's DEVELOPMENT.md). ---
+# defaults (see the project's DEVELOPMENT_PLUGIN.md). ---
 
 # Formats and the libraries handling their data (FormatSupport subclasses).
 #
@@ -67,13 +77,13 @@ def filesystems():
 #     return [ParquetByDuckDB]
 
 
-# File operations, e.g. renames and copies on the server for Azure Data Lake
-# Storage Gen2 accounts (needs `pip install "jupyter-storage-explorer[abfs]"`).
+# File operations (FileSystemOperations subclasses), e.g. server-side copies
+# for a storage of your own.
 #
 # def operations():
-#     from jupyter_storage_explorer.filesystems.abfs import AzureDataLakeGen2Operation
+#     from my_operations import MyStorageOperations
 #
-#     return [AzureDataLakeGen2Operation()]
+#     return [MyStorageOperations()]
 
 
 # How filesystems the defaults do not know are told apart, and their URLs

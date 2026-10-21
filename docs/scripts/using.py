@@ -1,6 +1,7 @@
 """The pictures of "Using the explorer" in docs/storage-explorer.md:
 using-browse.png, using-filter.png, using-preview.png, using-engine.png,
-using-right-click.png, using-properties.png and using-bookmarks.png.
+using-right-click.png, using-properties.png, using-bookmarks.png and
+using-about.png.
 
 uv run --group docs docs/scripts/using.py
 """
@@ -135,6 +136,21 @@ def make(lab: Lab) -> None:
         page.wait_for_timeout(1200)
         _, _, mx1, my1 = box(menu)
         shot(page, FIGS / "using-bookmarks.png", (wx0, wy0, mx1, my1))
+        page.keyboard.press("Escape")
+
+        # About, from the settings menu: the explorer and its plugins.
+        page.locator(".jse-settings-btn").first.click()
+        page.wait_for_timeout(500)
+        menu_item("About").click()
+        page.wait_for_selector(".jse-about-plugins", timeout=30000)
+        page.wait_for_timeout(1000)
+        calm(page)
+        shot(
+            page,
+            FIGS / "using-about.png",
+            box(page.locator(".jse-modal:visible").first),
+            pad=0,
+        )
 
 
 if __name__ == "__main__":

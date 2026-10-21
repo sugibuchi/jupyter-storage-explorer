@@ -144,7 +144,7 @@ class TestMerging:
             "system",
             """
             from jupyter_storage_explorer.filesystems import FsspecOperations
-            from jupyter_storage_explorer.formats.supports import CsvByPandas
+            from jupyter_storage_explorer_pandas_support import CsvByPandas
 
             def supports():
                 return [CsvByPandas]
@@ -162,7 +162,7 @@ class TestMerging:
             "user",
             """
             from jupyter_storage_explorer.filesystems.operation import FileSystemOperations
-            from jupyter_storage_explorer.formats.supports import JsonByPandas
+            from jupyter_storage_explorer_pandas_support import JsonByPandas
 
             def supports():
                 return [JsonByPandas()]
@@ -183,6 +183,34 @@ class TestMerging:
         assert kinds == [FileSystemOperations, FsspecOperations]
         mappers = [type(m).__name__ for m in kwargs["filesystem_mappers"]]
         assert mappers == ["GCSMapper", "S3Mapper"]
+
+    def test_plugin_options_by_plugin_then_option(self, tmp_path):
+        system = layer(
+            tmp_path,
+            "system",
+            """
+            def plugin_options():
+                return {
+                    "pandas-support": {"enabled": False},
+                    "abfs-support": {"concurrency": 16, "priority": 1},
+                }
+            """,
+        )
+        user = layer(
+            tmp_path,
+            "user",
+            """
+            def plugin_options():
+                return {"abfs-support": {"concurrency": 8}}
+            """,
+        )
+        _, kwargs = load_settings([user, system]).explorer_arguments()
+        assert kwargs["plugin_options"] == {
+            "pandas-support": {"enabled": False},
+            "abfs-support": {"concurrency": 8, "priority": 1},
+        }
+        # Without any: every plugin installed, with its defaults.
+        assert "plugin_options" not in load_settings([]).explorer_arguments()[1]
 
     def test_transfer_policy_later_layers_first(self, tmp_path):
         system = layer(
@@ -348,6 +376,14 @@ class TestErrors:
                 "filesystems() must return a dict",
             ),
             ("def supports():\n    return 'csv'", "supports() must return a list"),
+            (
+                "def plugin_options():\n    return {'pandas-support': False}",
+                "'pandas-support' must map option names to values",
+            ),
+            (
+                "def parameters():\n    return {'plugin_options': {}}",
+                "plugin_options is set by its own function",
+            ),
             (
                 # The flat options of versions before 0.14.
                 "def format_options():\n"

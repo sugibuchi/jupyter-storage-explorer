@@ -1,14 +1,12 @@
 // The toolbar: bookmarks, Up, Refresh, the folder's path, Unsafe mode, and
-// in the launcher's tabs, their settings.
+// the settings menu: "Edit configuration" in the launcher's tabs, "About".
 
 function createToolbar(x) {
   const { model } = x;
   const upBtn = iconButton("up", "Parent directory");
   const refreshBtn = iconButton("refresh", "Refresh");
   const pathEl = h("div", { className: "jse-path" });
-  // Opens the launcher's settings file in JupyterLab's editor: only in its
-  // tabs (the kernel sets _settings_path), with the launcher's extension.
-  const settingsBtn = iconButton("settings", "Edit launcher settings", "jse-settings-btn");
+  const settingsBtn = iconButton("settings", "Settings", "jse-settings-btn");
   const el = h("div", { className: "jse-toolbar" }, x.bookmarks.button, upBtn, refreshBtn, pathEl, x.unsafe.el, settingsBtn);
 
   // The current folder's path, a crumb per folder from the root.
@@ -33,15 +31,30 @@ function createToolbar(x) {
     if (chain.length > 1) x.navigate(chain[chain.length - 2]);
   });
   refreshBtn.addEventListener("click", () => model.send({ type: "refresh" }));
-  settingsBtn.addEventListener("click", () => void x.jupyterlab.openSettings());
-
-  function renderSettings() {
+  // "Edit configuration" opens the launcher's settings file in JupyterLab's
+  // editor: only in its tabs (the kernel sets _settings_path), with the
+  // launcher's extension.
+  function showSettingsMenu() {
+    const items = [];
     const path = model.get("_settings_path");
-    settingsBtn.hidden = !path || !x.jupyterlab.canOpenSettings();
-    settingsBtn.title = `Edit launcher settings (${visible(path)})\nReload the web browser, then open the explorer tab again to apply the changes.`;
+    if (path && x.jupyterlab.canOpenSettings()) {
+      items.push({
+        label: "Edit configuration",
+        icon: "edit",
+        title: `${visible(path)}\nReload the web browser, then open the explorer tab again to apply the changes.`,
+        action: () => void x.jupyterlab.openSettings(),
+      });
+    }
+    items.push({ label: "About", icon: "info", action: () => void x.about.show() });
+    x.menu.showBelow(settingsBtn, items);
   }
 
-  return { el, renderPath, renderSettings };
+  settingsBtn.addEventListener("click", () => {
+    if (x.menu.isOpenFrom(settingsBtn)) x.menu.hide();
+    else showSettingsMenu();
+  });
+
+  return { el, renderPath };
 }
 
 // "Unsafe mode": while on, risky operations are offered (today: moving,

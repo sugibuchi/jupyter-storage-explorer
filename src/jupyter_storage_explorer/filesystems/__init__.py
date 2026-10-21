@@ -6,9 +6,9 @@ they move, copy, delete, upload and download files (operations).
 locations (``Location`` subclasses), and mappers.py and operations.py the
 predefined ones, tried after an explorer's own (its ``filesystem_mappers``
 and ``operations`` arguments): ``default_mappers()`` and
-``default_operations()``. ``AzureDataLakeGen2Operation`` (abfs.py) is
-opt-in, as it needs the "abfs" extra: import it from
-``jupyter_storage_explorer.filesystems.abfs``.
+``default_operations()``. Operations and mappers for particular storages
+come with plugins, e.g. ``AzureDataLakeGen2Operation`` with abfs-support
+(``pip install "jupyter-storage-explorer[abfs]"``).
 """
 
 from jupyter_storage_explorer.filesystems.locations import (

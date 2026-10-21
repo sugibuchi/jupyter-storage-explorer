@@ -12,8 +12,8 @@ uv sync                                             # both workspace packages, e
 uv run pytest                                       # the Python tests (tests/)
 uv run pytest tests/test_query.py -k range          # one file / matching tests
 uv run pytest --cov                                 # with coverage of src/jupyter_storage_explorer
-uvx ruff check src launcher/src tests docs/scripts  # lint (ruff is not a dev dependency; config in pyproject.toml)
-uvx ruff format src launcher/src tests docs/scripts # format
+uvx ruff check src launcher/src plugins tests docs/scripts  # lint (ruff is not a dev dependency; config in pyproject.toml)
+uvx ruff format src launcher/src plugins tests docs/scripts # format
 uv run npx --yes prettier@3.3.3 --write .           # format static/ and the extension's src/ (.prettierignore)
 uv run tests/browser/check_js.py                    # the joined JS modules: syntax, names undefined or unused
 uv run --group docs tests/browser/smoke.py          # the widgets in a real JupyterLab (see below)
@@ -56,33 +56,37 @@ its process).
 
 ## Layout
 
-A uv workspace of two packages released together (version from git tags via hatch-vcs); the launcher requires the
-explorer of exactly its own version (`launcher/hatch_build.py` sets its dependencies; add new ones there):
+A uv workspace of packages released together (version from git tags via hatch-vcs): the explorer, the launcher and
+the plugins (`plugins/<name>-support`). The launcher and the plugins require the explorer of exactly their own version
+(their `hatch_build.py` sets their dependencies; add new ones there); the explorer's extras, set by the root's
+`hatch_build.py` (`PLUGINS`), require the plugins of its version: `<name>` with the plugin's `full` extra (its
+libraries), `<name>-support` the plugin alone; the launcher's `hatch_build.py` offers the same extras:
 
 - `jupyter-storage-explorer` (root, `src/jupyter_storage_explorer/`): the anywidget widgets `StorageExplorer` (files)
   and `DataExplorer` (a dataframe given by the user, any library narwhals supports, with `QuerySettings`). Runtime
   dependencies are only anywidget, fsspec, narwhals, pygments, traitlets; polars, pandas, pyarrow, deltalake, fastexcel,
-  openpyxl, Pillow, PySpark are all optional and probed at run time. The "abfs" extra adds adlfs and the Data Lake SDK,
-  for `filesystems/abfs.py`. Its top level has the widgets (`storage_explorer.py`, `data_explorer.py`), the
-  `Location` interface (`location.py`) and small
+  openpyxl, Pillow, PySpark are all optional and probed at run time; the engines' supports come with plugins. Its top
+  level has the widgets (`storage_explorer.py`, `data_explorer.py`), the
+  `Location` interface (`location.py`), the `StorageExplorerPlugin` class (`plugin.py`; loaded by `_plugins.py`) and small
   private helpers (`_paths`, `_infos`, `_json`, `_static`, `_callbacks`); the rest is in packages: public, `filesystems/`
   (`locations.py`: the predefined locations; `mapper.py`: the `FileSystemMapper` interface and `MapperChain`; `mappers.py`: the predefined mappers;
-  `operation.py`: the `FileSystemOperations` interface; `operations.py`: the predefined operations; `abfs.py`: the
-  opt-in Data Lake operation) and `formats/`; private, `_explorer/`
+  `operation.py`: the `FileSystemOperations` interface; `operations.py`: the predefined operations) and `formats/`; private, `_explorer/`
   (`StorageExplorer`'s mixins, with `states.py`, `listing.py` and `jupyterlab_files.py`), `_jobs/` (`tasks.py`:
   `FileTasks`; `runner.py`: `JobRunner`; `operation_chain.py`: `OperationChain`; `incoming.py`, `properties.py`,
   `transfer_policy.py`) and `_query/`
   (`filters.py`, `settings.py`: `QuerySettings`, `QueryState`; `data_query.py`: `DataQuery`, `fetch_rows`). Users import
-  from the top level, `filesystems`, `formats` and `formats.supports` only, whose `__all__` are the public API:
+  from the top level, `filesystems`, `formats` and `formats.supports` only (and the plugins' packages), whose `__all__` are the public API:
   what users construct, subclass, call or annotate with. The explorer's machinery (`SupportChain` and `Recipe`,
   in `_explorer/supports.py`; `OperationChain`, in `_jobs/operation_chain.py`; `detect`, `matching_formats`, the `DEFAULT_*` tuples) stays out of
   them, imported from its modules by the package and the tests.
 - `jupyter-storage-explorer-launcher` (`launcher/`): a JupyterLab launcher item opening a tab whose kernel runs
   `launch()`. It merges every `storage-explorer/launcher.py` in Jupyter's config paths as layers, system to user
-  (their `filesystems()`, `supports()`, `format_options()` (merged by library, format, then option), `operations()`, `filesystem_mappers()`, `transfer_policy()`, `parameters()`;
+  (their `filesystems()`, `plugin_options()` (merged by plugin, then option), `supports()`, `format_options()` (merged by library, format, then option), `operations()`, `filesystem_mappers()`, `transfer_policy()`, `parameters()`;
   `final()` names what later layers cannot change; retired `style()` and `formats()` are ignored with a warning, `RETIRED`; see `load_settings`, tested in
-  `tests/test_launcher.py`). The tab's explorer gets a settings button (`_offer_settings`, trait `_settings_path`;
-  never in notebooks) opening the user's `launcher.py` through the `files.ts` drive, created from
+  `tests/test_launcher.py`). The settings menu (toolbar.js: ⚙, on every explorer: "About", about.js and `_explorer/about.py`, the
+  explorer's version and icon, `static/storage-explorer.svg`, a copy of the launcher's kept the same by
+  `tests/test_explorer_about.py`, and the plugins installed from their entry points' metadata, those not loaded greyed
+  out with why; and in the tab, "Edit configuration": `_offer_settings`, trait `_settings_path`, never in notebooks) opens the user's `launcher.py` through the `files.ts` drive, created from
   `launcher_template.py` if missing, once the user confirms (`"settings_open"`: `{"missing"}`, then with `"create"`; `"jupyterlab_get"`/`"jupyterlab_save"` with `"settings"` read
   and write that file only): `~/.jupyter` is hidden, so JupyterLab's own contents API would refuse it. Its JupyterLab extension has four plugins:
   - `index.ts`: the tab, a console (`ExplorerTab`). ipywidgets binds a console's widgets to its first kernel, so a tab
@@ -135,7 +139,7 @@ view tabs) + the widget's parts (`static/<widget>/*.js`, if any) + `<widget>.js`
 functions and constants; the widget's file has `render` and the `export`), and likewise for CSS (`sections.css`;
 without parts). The storage explorer's parts are a feature each (`tree.js`,
 `list.js`, `preview.js`, `item_menu.js`, `operations.js` with the clipboard, `transfers.js` (drag and drop, uploads,
-downloads), `jupyterlab.js`, `properties.js`, `toolbar.js` with unsafe mode and bookmarks, `engine.js` (the engine chosen, in the status bar), `jobs.js`, `overlays.js`
+downloads), `jupyterlab.js`, `properties.js`, `toolbar.js` with unsafe mode and bookmarks, `engine.js` (the engine chosen, in the status bar), `about.js` (the settings menu's About), `jobs.js`, `overlays.js`
 (busy screen, modal, menus), `util.js`): a `createX(x)` returning its elements and
 functions. `x` is the explorer, made in `render()`: what the features share (`model`, `el`, `request`, `ask`,
 `flash`, `navigate`, ...) and the features themselves (`x.list`, `x.preview`, ...), used when needed, not when made,
@@ -188,12 +192,13 @@ filesystem whose `mv` renames a folder in one step: local, memory, or a `DirFile
 `AsyncFsspecOperations` (async filesystems such as s3fs, their coroutines, many files at a time), then
 `FsspecOperations`. Both of the latter walk folders themselves, moves included, to report progress
 file by file (helpers in `filesystems/_common.py`). `prepare_folder_copy` refuses a folder whose files' paths in it have `.` or `..` parts (object stores keep
-such keys; written to a local disk they would leave the target folder), before writing anything. Opt-in, not a default: `AzureDataLakeGen2Operation` (`abfs.py`,
-the "abfs" extra), which moves (renames) and creates folders on accounts with a hierarchical namespace with the async
+such keys; written to a local disk they would leave the target folder), before writing anything. A plugin's, not a default: `AzureDataLakeGen2Operation` (abfs-support,
+`plugins/abfs-support`), which moves (renames) and creates folders on accounts with a hierarchical namespace with the async
 Data Lake SDK, and copies within an account on the server (Copy Blob, `start_copy_from_url`, with a Blob client made from
 the Data Lake client's `url` and `credential`, polled until it ends; a folder's files at once, in a `TaskGroup`, at most `concurrency` at a time;
 a failed or cancelled copy aborted and deleted), connected from the adlfs filesystem's settings and run on its loop with `fsspec.asyn.sync`; tested with
-a fake client (`tests/test_abfs.py`); `filesystems/__init__.py` does not import it. `move` and `copy` take a source
+a fake client (`tests/test_abfs.py`, faking `_azure.py`'s names: the SDK and adlfs, imported on first use, so that the plugin
+loads without them; an operation without them raises `NotSupported`). `move` and `copy` take a source
 and a target filesystem, the same one or not (keyword `same`, see Storage).
 Between filesystems, single files go through `FileSystemOperations._copy_file` and `_move_file`
 (`_copy_file_async`/`_move_file_async` in the async class), overridable: by default through a temporary file, so a
@@ -300,14 +305,15 @@ and the explorer's `detect` and `matching_formats`, not exported), `FormatSuppor
 `SupportOptions`, `Capability`, `FormatOptions`, and the generated code's helpers: `format_kwargs`, the secret
 fields, `_shown_options`; only what plugin authors use) and `PythonPackage`
 (`package.py`); a module per predefined format (`delta.py`, `parquet.py`, `excel.py`, `text.py`, `images.py`) and
-per library of the predefined supports, each with its `Engine`, in `supports/` (`polars.py`, `pandas.py`,
-`pyspark.py`; `python.py` for the supports without an engine (library "python"): the built-in views, `TextByPython`
-and `JsonByPython` also with fsspec's code, and `ImageByPillow`'s code (apart, so that Pillow is not needed to view
-images); named after the libraries, which they import only inside methods, through
-`PythonPackage.load()`; exported by `formats.supports`, not `formats`); the predefined packages in `packages.py`, the
+the core's supports, those without an engine (library "python"), in `supports/python.py`: the built-in views,
+`TextByPython` and `JsonByPython` also with fsspec's code, and `ImageByPillow`'s code (apart, so that Pillow is not
+needed to view images), exported by `formats.supports`, not `formats`; the engines' supports, each plugin's with its
+`Engine`, in `plugins/<engine>-support/src/jupyter_storage_explorer_<engine>_support/supports.py` (polars, pandas,
+pyspark; exported by the plugin's package, with its plugin class), importing their libraries only inside methods,
+through `PythonPackage.load()`; the predefined packages in `packages.py` (shared by the plugins), the
 views in `view.py` (`View`s, `ViewLimits`; `TableView`s, for plugins (the defaults give none), give their counts, `TableView.more`, `total` and `unit`, and the explorer words them in the note, `section()`'s
-`_rows_note`: presentation stays out of `formats`, which never imports `_explorer`), and the defaults in `defaults.py` (`DEFAULT_SUPPORTS`;
-the formats are the supports'). A format only detects; a support handles one format's data with one library,
+`_rows_note`: presentation stays out of `formats`, which never imports `_explorer`), and the defaults in `defaults.py` (`DEFAULT_FORMATS`,
+the standard formats, detected even without a plugin; `DEFAULT_SUPPORTS`, the core's). A format only detects; a support handles one format's data with one library,
 so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
 - `DataFormat` subclasses declare `name`, `label`, `priority`, `extensions`, `file_icon` (its files' icon in the list:
   one of `FILE_ICONS`, or `(name, svg)` for one of its own, shown as an `<img>` so its scripts never run; sent as
@@ -324,8 +330,8 @@ so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
   `data_url(ctx)`, `first_files(ctx, n)`). The highest
   `priority` wins (Delta 20 > Parquet 10 > default 0 > Text -10). What supports share about a format is on it
   (`Csv.separator`, `Text.language`, `Image.mime_type`, `Parquet.data_url`, ...).
-- `Engine` (`engine.py`; the predefined ones with their supports, exported by `formats.supports`: `PolarsEngine`,
-  `PandasEngine`, `PySparkEngine` (pyspark or databricks-connect)): a library users choose, with `key`
+- `Engine` (`engine.py`; the predefined ones with their plugins' supports: `PolarsEngine`, `PandasEngine`,
+  `PySparkEngine` (pyspark or databricks-connect); one class per key, a second is a ValueError, `_check_engine_keys`): a library users choose, with `key`
   (`engine_preference`, `format_options`), `label` and `requirements`, `PythonPackage` instances: a tuple, all needed,
   or a tuple of tuples, alternatives (`alternatives()`, `packages()`: the first installed, `is_installed()`).
 - `FormatSupport` subclasses declare `format` (matched with `isinstance`, so subclasses too: `MarkdownByPython` comes
@@ -336,19 +342,19 @@ so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
   generate supports with AI from the written rules in `FormatSupport`'s docstring, kept by
   `test_capabilities_are_the_methods_implemented` for the defaults). Each method gets the detected format object first, then the item's `ItemContext`
   (`ctx`): its location (for libraries doing their own I/O and for the code: `ctx.library_url`; Spark's
-  `spark_url(ctx.location.url)`, in `supports/pyspark.py`), the explorer's fsspec filesystem and the item's path in it
+  `spark_url(ctx.location.url)`, in pyspark-support), the explorer's fsspec filesystem and the item's path in it
   (to read it through the explorer, with its credentials); then its options, and for `view` the `limits`
   (`ViewLimits`), all positional, never in the context. Any may raise `FormatSupport.NotSupported` for an item, and
   the next support is tried. Options are the fields of the class's `options_model` (`SupportOptions`, the default,
   has none): a frozen, keyword-only dataclass, each field with a default, its helpers as methods (e.g.
   `PolarsOptions.storage()`); a library's supports share a base model (`PolarsOptions`, `PandasOptions`,
-  `FsspecOptions`; exported by `formats.supports`). Supports take no `__init__` arguments: the chain creates those
+  `FsspecOptions`; exported by the plugins' packages and `formats.supports`). Supports take no `__init__` arguments: the chain creates those
   given as classes. Class names are `<Format>By<Library>`, options `<Library>Options` or `<Format>By<Library>Options`.
-- `SupportChain(supports, format_options)` (`_explorer/supports.py`, with `Recipe` and the
-  `format_options` checks; the explorer's `_supports`: `supports=` then `StorageExplorer.default_supports()`, i.e.
-  `DEFAULT_SUPPORTS`, ordered format by format, most preferred first) has the explorer's `formats` (`_formats`: one
-  object of each support's `format`, in their order; there is no `formats=` argument) and calls the supports, with
-  their options:
+- `SupportChain(supports, format_options, formats=)` (`_explorer/supports.py`, with `Recipe` and the
+  `format_options` checks; the explorer's `_supports`: `supports=`, the plugins', then
+  `StorageExplorer.default_supports()`, i.e. `DEFAULT_SUPPORTS`) has the explorer's `formats` (`_formats`: one object of
+  each support's `format`, in their order, then of `formats=`, `DEFAULT_FORMATS` and the plugins' own; there is no
+  `formats=` argument of the explorer) and calls the supports, with their options:
   `of(fmt, capability)` lists the supports for the format with the capability whose packages are installed (empty:
   none of the registered ones can); `engines`: the installed engines with a view support, `engine_preference` (keys;
   default `DEFAULT_ENGINE_PREFERENCE`, polars then pandas) first, then by key; `viewers(fmt)`: the engine keys that can view it,
@@ -392,6 +398,28 @@ so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
   configuring access to the storage (credentials, Spark's setup for Delta Lake) depend on the environment, so they are
   left to the user. `PythonPackage`s (`packages.py`) only say what a support needs (`package`, `import_name`,
   `is_installed()`, `load()`).
+
+**Plugins** (`plugin.py`, `_plugins.py`). A `StorageExplorerPlugin` subclass, registered as an entry point of
+`jupyter_storage_explorer.plugins` named by its `key`, is created by each explorer with its options (`options_model`, a
+frozen dataclass subclassing `StorageExplorerPluginOptions`: `enabled`, `priority`, default `LOWEST_PRIORITY`, and its
+own; `self.options`); its properties give its components, made with them (`format_supports`: classes or objects;
+`formats`: classes; `filesystem_operations`, `filesystem_mappers`: objects, classes created without arguments).
+`load_plugins(plugin_options)` (the explorer's `plugin_options`: `{key: {option: value}}`) loads every plugin installed
+but those disabled (`"enabled": False`: not imported; a model may default to False, opt-in), highest priority first, then
+by key; an option the model lacks is a ValueError; it leaves out, with a reason the explorer warns of
+(`RuntimeWarning`), a plugin that fails to import or be created, is no plugin class, has another key, or a name two
+packages register, and options of plugins not installed. `PluginComponents` gathers the components. The explorer uses
+each kind as given (`supports=`, `operations=`, `filesystem_mappers=`), then the plugins', then its defaults. The
+launcher's `plugin_options()` (merged by plugin, then option) sets `plugin_options`. `name`, `description` and `version`
+(properties) are the plugin's package's metadata (`[project]` of its pyproject.toml): its entry point's distribution (set
+by `load_plugins`), else the one registering the class (`_distribution_of`; editable installs list no packages), else
+the one of its top-level package; None for none. abfs-support's `concurrency` is
+its operation's. Tests:
+`tests/test_plugins.py` (fake entry points to `tests/plugin_samples.py`); `tests/all_supports.py` has the supports of the
+repository's plugins, as installed for development, which the other tests chain (`ALL_SUPPORTS`, `all_supports()`),
+and `NO_PLUGINS`, the `plugin_options` disabling them all.
+Plugins never depend on their libraries (their `full` extra installs them): see DEVELOPMENT_PLUGIN.md (developing each kind of component and packaging a plugin, with the conventions; written for
+developers and for AI generating plugins: keep its rules, templates and checklist in step with the code).
 
 **Engines in the explorer.** `StorageExplorer(engine_preference=)` orders the chain's `engines`, synced as
 `_engines` (`[{"key", "label"}]`); `_engine` is the one chosen: the user's last (`ExplorerStates.engine`, its JSON
@@ -442,9 +470,9 @@ snippets never get storage options (`spark_url()` rewrites `abfs`/`s3` to `abfss
   ("Using the explorer", "Unsafe operations", "Transfer policy", "Supported formats", "Format options",
   "StorageExplorer options", grouped by use, and last "Extensions" with "File operation extensions" (a table: add new
   ones there)) and `docs/data-explorer.md` (the data
-  browser, `result()`, `on_change()`, `QuerySettings`, "DataExplorer options"). Extending the explorer in Python
-  (icons, filesystem mappers, file operations, "Another library for a format": supports, their options and secrets) is
-  in DEVELOPMENT.md's "Customizing". Update them when operations, formats or options change, and the README's
+  browser, `result()`, `on_change()`, `QuerySettings`, "DataExplorer options"). Custom icons (CSS) are in
+  DEVELOPMENT.md's "Customizing"; extending the explorer in Python (formats, engines, supports with their options and
+  secrets, file operations, filesystem mappers) and packaging plugins, with the conventions, in DEVELOPMENT_PLUGIN.md. Update them when operations, formats or options change, and the README's
   highlights for new features. Keep them short: what users do, not how it works. `supports`, `operations` and
   `filesystem_mappers` are for development: last in the docs, the options tables and the launcher's template.
 - Images and links to other files in the READMEs are absolute URLs (`raw.githubusercontent.com/.../main/...` for

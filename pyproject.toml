@@ -1,6 +1,6 @@
 [project]
 name = "jupyter-storage-explorer"
-dynamic = ["version"]
+dynamic = ["version", "optional-dependencies"]
 description = "Explore your data lake without leaving Jupyter: built for data professionals"
 readme = "README.md"
 license = "MIT"
@@ -51,12 +51,6 @@ Source = "https://github.com/sugibuchi/jupyter-storage-explorer"
 Issues = "https://github.com/sugibuchi/jupyter-storage-explorer/issues"
 Changelog = "https://github.com/sugibuchi/jupyter-storage-explorer/releases"
 
-[project.optional-dependencies]
-abfs = [
-    "adlfs>=2022.2.0",
-    "azure-storage-file-datalake>=12.0.0",
-]
-
 [build-system]
 requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
@@ -65,11 +59,16 @@ build-backend = "hatchling.build"
 source = "vcs"
 raw-options = { 'version_scheme' = 'post-release' }
 
+# The extras, set by hatch_build.py: for each plugin (plugins/), "<name>"
+# installs it with its libraries, "<name>-support" alone; both at the
+# explorer's own version.
+[tool.hatch.metadata.hooks.custom]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/jupyter_storage_explorer"]
 
 [tool.hatch.build.targets.sdist]
-exclude = ["launcher", ".github"]
+exclude = ["launcher", "plugins", ".github"]
 
 [dependency-groups]
 dev = [
@@ -78,7 +77,11 @@ dev = [
     "deltalake>=1.6.6",
     "duckdb>=1.5.6",
     "fastexcel>=0.21.0",
+    "jupyter-storage-explorer-abfs-support",
     "jupyter-storage-explorer-launcher",
+    "jupyter-storage-explorer-pandas-support",
+    "jupyter-storage-explorer-polars-support",
+    "jupyter-storage-explorer-pyspark-support",
     "jupyterlab>=4.6.4",
     "matplotlib>=3.11.2",
     "nodejs-wheel>=24.19.0",
@@ -95,19 +98,28 @@ docs = [
     "playwright>=1.64.0",
 ]
 
-# Two packages, released together: jupyter-storage-explorer (this folder: the
-# widgets) and jupyter-storage-explorer-launcher (launcher/: the JupyterLab
-# launcher item). Both are installed for development.
+# Packages released together: jupyter-storage-explorer (this folder: the
+# widgets), jupyter-storage-explorer-launcher (launcher/: the JupyterLab
+# launcher item) and the plugins (plugins/<name>-support). All are installed
+# for development.
 [tool.uv.workspace]
-members = ["launcher"]
+members = ["launcher", "plugins/*"]
 
 [tool.uv.sources]
 jupyter-storage-explorer-launcher = { workspace = true }
+jupyter-storage-explorer-abfs-support = { workspace = true }
+jupyter-storage-explorer-pandas-support = { workspace = true }
+jupyter-storage-explorer-polars-support = { workspace = true }
+jupyter-storage-explorer-pyspark-support = { workspace = true }
 
 [tool.uv]
 # Rebuild the project when its git commit or tags change, as its version
 # comes from git (hatch-vcs), not only when pyproject.toml changes.
-cache-keys = [{ file = "pyproject.toml" }, { git = { commit = true, tags = true } }]
+cache-keys = [
+    { file = "pyproject.toml" },
+    { file = "hatch_build.py" },
+    { git = { commit = true, tags = true } },
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -119,9 +131,11 @@ filterwarnings = [
     "ignore:fetch_arrow_table\\(\\) is deprecated:DeprecationWarning:sqlframe",
 ]
 
-# Coverage of the widgets' package (the launcher has no tests), for Codecov.
+# Coverage of the widgets' package and the plugins (the launcher's tests run
+# its code from launcher/src), for Codecov.
 [tool.coverage.run]
-source = ["src/jupyter_storage_explorer"]
+source = ["src/jupyter_storage_explorer", "plugins"]
+omit = ["plugins/*/hatch_build.py"]
 
 [tool.ruff]
 exclude = [

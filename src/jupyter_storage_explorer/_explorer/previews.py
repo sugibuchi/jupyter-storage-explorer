@@ -123,10 +123,12 @@ class PreviewsMixin:
         try:
             return self._supports.engine_for(fmt, self._engine or None)
         except LookupError:
-            if not self._engine:
+            if not self._supports.viewers(fmt):
+                # Nothing installed views it: the engines come with plugins.
                 raise ValueError(
-                    f"{name} cannot be viewed as {fmt.label}: "
-                    f"no library viewing it is installed"
+                    f"{name} cannot be viewed as {fmt.label}: no library viewing "
+                    f"it is installed, e.g. pip install "
+                    f'"jupyter-storage-explorer[polars]"'
                 ) from None
             raise ValueError(
                 f"{name} cannot be viewed as {fmt.label} with "

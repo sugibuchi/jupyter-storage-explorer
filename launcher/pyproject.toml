@@ -1,6 +1,6 @@
 [project]
 name = "jupyter-storage-explorer-launcher"
-dynamic = ["version", "dependencies"]
+dynamic = ["version", "dependencies", "optional-dependencies"]
 description = "Adds Jupyter Storage Explorer to the JupyterLab launcher, opening it in a tab"
 readme = "README.md"
 license = "MIT"
@@ -55,7 +55,8 @@ source = "vcs"
 raw-options = { root = "..", version_scheme = "post-release" }
 
 # The dependencies, set by hatch_build.py: jupyter-core, and
-# jupyter-storage-explorer at the launcher's own version.
+# jupyter-storage-explorer at the launcher's own version; and the explorer's
+# extras (the plugins), e.g. "polars", the same.
 [tool.hatch.metadata.hooks.custom]
 
 [tool.hatch.build.targets.wheel]

@@ -206,7 +206,8 @@ tables side by side.
 
 ### Engines
 
-The engine is the library previews read data with, when installed: **Polars**, **pandas** or **PySpark**. Engines read storage with their
+The engine is the library previews read data with: **Polars**, **pandas** or **PySpark**, each with its
+[plugin](#plugins). Engines read storage with their
 own settings, e.g. credentials in the environment, not the explorer's: see [Format options](#format-options). Text,
 Markdown, JSON and images are shown by the explorer itself. When the engine chosen cannot view an item, use **Preview
 as**.
@@ -269,7 +270,7 @@ may work, but are not guaranteed to.
 Each format's view (the preview, the data browser) is the [engine](#engines) chosen's, and its code is shown for
 every engine in **Python code**, each recipe with its engine (a support given for an engine replaces the default one's).
 The name identifies the format in CSS (see [Icons](../DEVELOPMENT.md#icons)) and in [Format options](#format-options).
-To handle a format with another library, see [Another library for a format](../DEVELOPMENT.md#another-library-for-a-format).
+To handle a format with another library, see [Format supports](../DEVELOPMENT_PLUGIN.md#format-supports).
 
 ## Format options
 
@@ -407,6 +408,7 @@ Storages and data:
 | Option                    | Meaning                                                                                                    |
 |---------------------------|------------------------------------------------------------------------------------------------------------|
 | `filesystems={...}`       | Several named storages; see [Several storages in one explorer](#several-storages-in-one-explorer).         |
+| `plugin_options={...}`    | The plugins' options, by key, e.g. `{"pandas-support": {"enabled": False}}`; see [Plugins](#plugins). |
 | `format_options={...}`    | The engines' options; see [Format options](#format-options).                                               |
 | `engine_preference=[...]` | The engines in the order they are offered, the first chosen until the user chooses; see [Engines](#engines). |
 
@@ -438,33 +440,41 @@ For extending the explorer (see [Extensions](#extensions)), tried before the def
 
 | Option                     | Meaning                                                                                                               |
 |----------------------------|-----------------------------------------------------------------------------------------------------------------------|
-| `operations=[...]`         | File operations; see [File operation extensions](#file-operation-extensions).                                         |
-| `supports=[...]`           | Formats and the libraries handling them; see [Another library for a format](../DEVELOPMENT.md#another-library-for-a-format). |
-| `filesystem_mappers=[...]` | How storages are told apart; see [Filesystem mappers](../DEVELOPMENT.md#filesystem-mappers).                          |
+| `operations=[...]`         | File operations; see [File operations](../DEVELOPMENT_PLUGIN.md#file-operations).                                     |
+| `supports=[...]`           | Formats and the libraries handling them; see [Format supports](../DEVELOPMENT_PLUGIN.md#format-supports).            |
+| `filesystem_mappers=[...]` | How storages are told apart; see [Filesystem mappers](../DEVELOPMENT_PLUGIN.md#filesystem-mappers).                   |
 
 ## Extensions
 
-The explorer can be extended in Python: file operations for a storage, formats and the libraries handling them, and
-storages of other kinds (see [Customizing](../DEVELOPMENT.md#customizing)).
+### Plugins
 
-### File operation extensions
-
-The explorer moves, copies, deletes and downloads files with fsspec's standard API, which works on any storage but not
-always efficiently: e.g. moving a folder copies and deletes each file in it. Extensions add implementations of some
-operations optimized for a particular storage. Pass them as `operations=[...]`.
-
-| Extension                    | Storage                                               | Operations                                         | Install                                      |
-|------------------------------|-------------------------------------------------------|----------------------------------------------------|----------------------------------------------|
-| `AzureDataLakeGen2Operation` | Azure Data Lake Storage Gen2 (hierarchical namespace) | Move folders in one step; copy within an account on the server, many files at once; create empty folders | `pip install "jupyter-storage-explorer[abfs]"` |
+Plugins add engines and storages. Explorers use every plugin installed; `plugin_options` gives their options by key:
+`enabled` (False: not used), `priority` (higher first) and the plugin's own (in the launcher's tabs,
+`plugin_options()` in [its configuration](../launcher/README.md#configuration)):
 
 ```python
-from jupyter_storage_explorer import StorageExplorer
-from jupyter_storage_explorer.filesystems.abfs import AzureDataLakeGen2Operation
-
 StorageExplorer(
     "abfs://lake@myaccount.dfs.core.windows.net/raw",
-    operations=[AzureDataLakeGen2Operation()],
+    plugin_options={"pandas-support": {"enabled": False}, "abfs-support": {"concurrency": 16}},
 )
 ```
 
-To write your own, see [File operations](../DEVELOPMENT.md#file-operations).
+| Plugin            | Adds                                                                                          | Install                                          |
+|-------------------|-----------------------------------------------------------------------------------------------|--------------------------------------------------|
+| `polars-support`  | Polars: Delta Lake, Parquet, CSV, JSON Lines, Excel                                           | `pip install "jupyter-storage-explorer[polars]"`  |
+| `pandas-support`  | pandas: Parquet, CSV, JSON Lines, Excel                                                       | `pip install "jupyter-storage-explorer[pandas]"`  |
+| `pyspark-support` | PySpark or Databricks Connect: Delta Lake, Parquet, CSV, JSON Lines                           | `pip install "jupyter-storage-explorer[pyspark]"` |
+| `abfs-support`    | Azure Data Lake Storage Gen2: folders moved in one step, copies within an account on the server (`concurrency`, default 64, at once), empty folders | `pip install "jupyter-storage-explorer[abfs]"`    |
+
+`[<name>-support]` installs a plugin alone, using the libraries already installed: plugins never install or upgrade
+them otherwise, so that a shared environment's stay as its administrators set them up.
+
+⚙ at the right of the toolbar → **About** shows the explorer's version and the plugins installed, those not used greyed
+out; hover over ⓘ for a plugin's description.
+
+<img src="figs/using-about.png" width="642" alt="The About dialog: Storage Explorer's version and its plugins">
+
+### Writing your own
+
+Plugins, and formats, file operations or storages given to one explorer (`supports`, `operations`,
+`filesystem_mappers`): see [DEVELOPMENT_PLUGIN.md](../DEVELOPMENT_PLUGIN.md).
