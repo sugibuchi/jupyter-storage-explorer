@@ -310,8 +310,8 @@ unfiltered.
 `ItemContext`, which reads the item for formats and supports (`head`, `head_text`, `read_whole`; `name`, `size`,
 `child_names`, `library_url`: the location as most libraries read it, a local file's plain path), `FILE_ICONS`,
 and the explorer's `detect` and `matching_formats`, not exported), `FormatSupport` (`support.py`, with
-`SupportOptions`, `Capability`, `FormatOptions`, and the generated code's helpers: `format_kwargs`, the secret
-fields, `_shown_options`; only what plugin authors use) and `PythonPackage`
+`SupportOptions`, `Capability`, `FormatOptions`, `LIBRARY_DEFAULT`, and the generated code's helpers: `format_kwargs`,
+`format_arguments`, the secret fields, `_shown_options`; only what plugin authors use) and `PythonPackage`
 (`package.py`); a module per predefined format (`delta.py`, `parquet.py`, `excel.py`, `text.py`, `images.py`) and
 the core's supports, those without an engine (library "python"), in `supports/python.py`: the built-in views,
 `TextByPython` and `JsonByPython` also with fsspec's code, and `ImageByPillow`'s code (apart, so that Pillow is not
@@ -355,7 +355,13 @@ so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
   (`ViewLimits`), all positional, never in the context. Any may raise `FormatSupport.NotSupported` for an item, and
   the next support is tried. Options are the fields of the class's `options_model` (`SupportOptions`, the default,
   has none): a frozen, keyword-only dataclass, each field with a default, its helpers as methods (e.g.
-  `PolarsOptions.storage()`); a library's supports share a base model (`PolarsOptions`, `PandasOptions`,
+  `PolarsOptions.storage()`); each format's model of an engine (`CsvByPolarsOptions`, `CsvByPandasOptions`, ...) has
+  its reader's arguments as fields of the same names (from the library's API documentation; not the source, callables
+  or what changes the result's type), default `LIBRARY_DEFAULT` (`support.py`: not passed; None is a value), passed
+  with `options.arguments()` after the support's own defaults (a separator detected, polars' `try_parse_dates` in the
+  data browser, pandas' `nrows` at most `max_memory_rows`), in the code `format_arguments(options.code_arguments())`
+  (no secrets or Python objects, None kept); their tables, the docstrings' descriptions, are in each plugin's README
+  only (docs link to them), with the plugin's options; a library's supports share a base model (`PolarsOptions`, `PandasOptions`,
   `FsspecOptions`; exported by the plugins' packages and `formats.supports`). Supports take no `__init__` arguments: the chain creates those
   given as classes. Class names are `<Format>By<Library>`, options `<Library>Options` or `<Format>By<Library>Options`.
 - `SupportChain(supports, format_options, formats=)` (`_explorer/supports.py`, with `Recipe` and the

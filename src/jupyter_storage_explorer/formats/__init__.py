@@ -23,10 +23,13 @@ from jupyter_storage_explorer.formats.images import Image
 from jupyter_storage_explorer.formats.package import PythonPackage
 from jupyter_storage_explorer.formats.parquet import Parquet, ParquetLayout
 from jupyter_storage_explorer.formats.support import (
+    LIBRARY_DEFAULT,
     Capability,
     FormatOptions,
     FormatSupport,
+    LibraryDefault,
     SupportOptions,
+    format_arguments,
     format_kwargs,
     secret_dict_field,
     secret_field,
@@ -45,6 +48,7 @@ from jupyter_storage_explorer.formats.view import (
 
 __all__ = [
     "FILE_ICONS",
+    "LIBRARY_DEFAULT",
     "Capability",
     "Csv",
     "DataFormat",
@@ -57,6 +61,7 @@ __all__ = [
     "ItemContext",
     "Json",
     "JsonLines",
+    "LibraryDefault",
     "Markdown",
     "MarkdownView",
     "MediaView",
@@ -72,6 +77,7 @@ __all__ = [
     "View",
     "ViewLimits",
     "default_supports",
+    "format_arguments",
     "format_kwargs",
     "secret_dict_field",
     "secret_field",

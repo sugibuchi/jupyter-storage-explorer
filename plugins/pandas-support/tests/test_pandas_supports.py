@@ -9,18 +9,26 @@ import json
 from importlib.metadata import entry_points
 
 import pandas as pd
+import pytest
 from jupyter_storage_explorer_pandas_support import (
     CsvByPandas,
+    CsvByPandasOptions,
     ExcelByPandas,
+    ExcelByPandasOptions,
+    JsonByPandas,
+    JsonByPandasOptions,
     JsonLinesByPandas,
+    JsonLinesByPandasOptions,
     PandasOptions,
     PandasSupport,
     ParquetByPandas,
+    ParquetByPandasOptions,
 )
 
 from jupyter_storage_explorer.formats import (
     Csv,
     Excel,
+    Json,
     JsonLines,
     Parquet,
     QueryView,
@@ -35,6 +43,15 @@ PANDAS_LIMITS = ViewLimits(max_memory_rows=2)
 def parquet_bytes(columns: dict) -> bytes:
     buffer = io.BytesIO()
     pd.DataFrame(columns).to_parquet(buffer, index=False)
+    return buffer.getvalue()
+
+
+def workbook() -> bytes:
+    """Two sheets: "one", a column "a" of 1, 2, 3; "two", a column "b"."""
+    buffer = io.BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        pd.DataFrame({"a": [1, 2, 3]}).to_excel(writer, sheet_name="one", index=False)
+        pd.DataFrame({"b": [1]}).to_excel(writer, sheet_name="two", index=False)
     return buffer.getvalue()
 
 
@@ -92,13 +109,7 @@ class TestViews:
         assert query.data["year"].astype(int).tolist() == [2025, 2025, 2026, 2026]
 
     def test_excel(self, make_item):
-        buffer = io.BytesIO()
-        with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-            pd.DataFrame({"a": [1, 2, 3]}).to_excel(
-                writer, sheet_name="one", index=False
-            )
-            pd.DataFrame({"b": [1]}).to_excel(writer, sheet_name="two", index=False)
-        item = make_item("/a.xlsx", buffer.getvalue())
+        item = make_item("/a.xlsx", workbook())
         # The first sheet.
         query = ExcelByPandas().view(Excel(), item, PandasOptions(), PANDAS_LIMITS)
         assert (query.data["a"].tolist(), query.more) == ([1, 2], True)
@@ -131,4 +142,69 @@ class TestRecipes:
         )
         assert last_line(code) == (
             "df = pd.read_csv('memory:///a.csv', storage_options={'anon': True})"
+        )
+
+
+class TestReaderOptions:
+    """Each format's options are its reader's arguments, given or left to
+    pandas."""
+
+    def test_csv_arguments_in_the_data_browser(self, make_item):
+        item = make_item("/a.csv", b"x;y\n1;NA\n2;3\n4;5\n")
+        options = CsvByPandasOptions(usecols=["y"], na_values=["NA"], nrows=10)
+        query = CsvByPandas().view(Csv(), item, options, PANDAS_LIMITS)
+        # The separator still detected; nrows at most the data browser's.
+        assert list(query.data.columns) == ["y"]
+        assert query.data["y"].isna().tolist() == [True, False]
+        assert query.more
+
+    def test_csv_arguments_in_the_code(self, make_item):
+        options = CsvByPandasOptions(sep="|", header=None, dtype={"a": "string"})
+        [code] = (
+            CsvByPandas().recipe(Csv(), make_item("/a.csv", b"x;y\n"), options).values()
+        )
+        # The separator given, not the one detected; None, a value given, shown.
+        assert last_line(code) == (
+            "df = pd.read_csv('memory:///a.csv', sep='|', header=None,"
+            " dtype={'a': 'string'})"
+        )
+
+    def test_json_lines_encoding(self, make_item):
+        item = make_item("/a.jsonl", '{"s": "é"}\n'.encode("latin-1"))
+        options = JsonLinesByPandasOptions(encoding="latin-1")
+        query = JsonLinesByPandas().view(JsonLines(), item, options, PANDAS_LIMITS)
+        assert query.data["s"].tolist() == ["é"]
+
+    def test_json_code(self, make_item):
+        options = JsonByPandasOptions(orient="records")
+        [code] = (
+            JsonByPandas().recipe(Json(), make_item("/a.json", b"[]"), options).values()
+        )
+        assert (
+            last_line(code) == "df = pd.read_json('memory:///a.json', orient='records')"
+        )
+
+    def test_excel_sheet(self, make_item):
+        item = make_item("/a.xlsx", workbook())
+        options = ExcelByPandasOptions(sheet_name="two")
+        query = ExcelByPandas().view(Excel(), item, options, PANDAS_LIMITS)
+        assert list(query.data.columns) == ["b"]
+        with pytest.raises(ValueError, match="several sheets"):
+            ExcelByPandas().view(
+                Excel(), item, ExcelByPandasOptions(sheet_name=None), PANDAS_LIMITS
+            )
+
+    def test_parquet_arguments_in_the_data_browser(self, make_item):
+        item = make_item("/a.parquet", parquet_bytes({"a": [1, 2, 3], "b": [4, 5, 6]}))
+        options = ParquetByPandasOptions(
+            columns=["a"], filters=[("a", ">", 1)], dtype_backend="pyarrow"
+        )
+        query = ParquetByPandas().view(Parquet(), item, options, LIMITS)
+        assert query.data["a"].tolist() == [2, 3]
+        assert list(query.data.columns) == ["a"]
+        assert str(query.data["a"].dtype) == "int64[pyarrow]"
+        [code] = ParquetByPandas().recipe(Parquet(), item, options).values()
+        assert last_line(code) == (
+            "df = pd.read_parquet('memory:///a.parquet', columns=['a'],"
+            " dtype_backend='pyarrow', filters=[('a', '>', 1)])"
         )

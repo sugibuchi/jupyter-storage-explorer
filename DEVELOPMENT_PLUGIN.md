@@ -232,6 +232,31 @@ StorageExplorer(format_options={"duckdb": {"*": {"memory_limit": "2GB"}, "parque
 Recipes read options with `options.code_value(name)`: `None` for a secret field, and a mapping without its secret keys.
 An option that no support of the engine has is an error, so typos are caught.
 
+**A reader's arguments.** Give each format its own model (`<Format>By<Library>Options`, subclassing the library's) whose
+fields are its reader's arguments, of the same names, from the library's API documentation (e.g. `read_parquet`'s),
+each defaulting to `LIBRARY_DEFAULT`: not passed, so the library's own default applies (unlike `None`, which some
+arguments take as a value). Leave out the source, functions (callables) and arguments that change what the reader
+returns (iterators, chunks). Pass `options.arguments()` (those given) to the reader, after the support's own defaults
+(e.g. a separator detected), so that the user's win; the code gets `format_arguments(options.code_arguments())`, which
+leaves out secrets and Python objects (e.g. data types) but keeps `None`. List them in the plugin's README, a table per
+format, their descriptions from the library's documentation.
+
+```python
+from jupyter_storage_explorer.formats import LIBRARY_DEFAULT, LibraryDefault, format_arguments
+
+
+@dataclass(frozen=True, kw_only=True)
+class ParquetByDuckDBOptions(DuckDBOptions):
+    """DuckDB's read_parquet arguments: unset ones are left to DuckDB."""
+
+    binary_as_string: bool | LibraryDefault = LIBRARY_DEFAULT
+    hive_partitioning: bool | LibraryDefault = LIBRARY_DEFAULT
+
+
+relation = con.read_parquet(url, **options.arguments())      # in view()
+code = f"con.read_parquet({url!r}{format_arguments(options.code_arguments())})"  # in recipe()
+```
+
 ### Reading the item
 
 | `ctx`                      | What                                                                                       |
@@ -530,6 +555,9 @@ lists the plugin with its version.
 - [ ] No backend import at module level; packages through `PythonPackage.load()` inside methods.
 - [ ] Supports: `format`, `engine`, `capabilities` matching the methods, `options_model`; no `__init__` arguments.
 - [ ] Secrets declared with `secret_field` / `secret_dict_field`; code options through `options.code_value`.
+- [ ] A model per format whose fields are its reader's arguments (default `LIBRARY_DEFAULT`), passed with `arguments()`
+      and `code_arguments()`, and tabled in the README with the library's descriptions.
+- [ ] README: the plugin's options (`enabled`, `priority`, its own) and its components' parameters.
 - [ ] Views holding resources release them with `on_close`.
 - [ ] Operations raise `NotSupported` for what they do not do, report progress and call `progress.check()`.
 - [ ] Locations: frozen keyword-only dataclasses, normalized, without credentials.

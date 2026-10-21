@@ -290,17 +290,12 @@ StorageExplorer(
 )
 ```
 
-| Library  | Option                   | Formats                                         | Meaning                                                                                                       |
-|----------|--------------------------|-------------------------------------------------|---------------------------------------------------------------------------------------------------------------|
-| `polars` | `storage_options`        | `delta`, `parquet`, `csv`, `json-lines`         | polars' `storage_options` (object_store's names, not fsspec's), in the preview, the data browser and the code. |
-| `polars` | `credential_provider`    | `delta`, `parquet`, `csv`, `json-lines`         | polars' `credential_provider`, in the preview and the data browser (not in the code).                          |
-| `polars` | `fsspec_storage_options` | `excel`                                         | `fsspec.open`'s keyword arguments, in the code (which reads the file with fsspec).                             |
-| `polars` | `delta_table_options`    | `delta`                                         | `scan_delta`'s `delta_table_options`.                                                                          |
-| `polars` | `use_pyarrow`            | `delta`                                         | `scan_delta`'s `use_pyarrow`.                                                                                  |
-| `polars` | `pyarrow_options`        | `delta`                                         | `scan_delta`'s `pyarrow_options`.                                                                              |
-| `pandas` | `storage_options`        | `parquet`, `csv`, `json-lines`, `json`, `excel` | pandas' `storage_options` (fsspec's), in the code.                                                             |
-| `python` | `storage_options`        | `json`, `text` (also Markdown's code), `image`  | `fsspec.open`'s keyword arguments, in the code.                                                                |
-| `pyspark` | the session's and each format's reader options | `delta`, `parquet`, `csv`, `json-lines` | See pyspark-support's [Format options](../plugins/pyspark-support/README.md#format-options). |
+| Library   | Options                                                                     | Formats                                                  | Meaning                                                                                      |
+|-----------|-----------------------------------------------------------------------------|----------------------------------------------------------|----------------------------------------------------------------------------------------------|
+| `polars`  | each format's reader's arguments (e.g. `scan_csv`'s), and `storage_options`  | `delta`, `parquet`, `csv`, `json-lines`, `json`, `excel` | See polars-support's [Format options](../plugins/polars-support/README.md#format-options).   |
+| `pandas`  | each format's reader's arguments (e.g. `read_csv`'s), and `storage_options`  | `parquet`, `csv`, `json-lines`, `json`, `excel`          | See pandas-support's [Format options](../plugins/pandas-support/README.md#format-options).   |
+| `pyspark` | the session's and each format's reader options                             | `delta`, `parquet`, `csv`, `json-lines`                  | See pyspark-support's [Format options](../plugins/pyspark-support/README.md#format-options). |
+| `python`  | `storage_options`                                                           | `json`, `text` (also Markdown's code), `image`           | `fsspec.open`'s keyword arguments, in the code.                                              |
 
 Options that look like credentials are left out of the code. A library, format or option name that no support takes is
 an error.
@@ -462,10 +457,12 @@ StorageExplorer(
 
 | Plugin            | Adds                                                                                          | Install                                          |
 |-------------------|-----------------------------------------------------------------------------------------------|--------------------------------------------------|
-| `polars-support`  | Polars: Delta Lake, Parquet, CSV, JSON Lines, Excel                                           | `pip install "jupyter-storage-explorer[polars]"`  |
-| `pandas-support`  | pandas: Parquet, CSV, JSON Lines, Excel                                                       | `pip install "jupyter-storage-explorer[pandas]"`  |
-| `pyspark-support` | PySpark or Databricks Connect: Delta Lake, Parquet, CSV, JSON Lines                           | `pip install "jupyter-storage-explorer[pyspark]"` |
-| `abfs-support`    | Azure Data Lake Storage Gen2: folders moved in one step, copies within an account on the server (`concurrency`, default 64, at once), empty folders | `pip install "jupyter-storage-explorer[abfs]"`    |
+| [`polars-support`](../plugins/polars-support/README.md)  | Polars: Delta Lake, Parquet, CSV, JSON Lines, Excel                                           | `pip install "jupyter-storage-explorer[polars]"`  |
+| [`pandas-support`](../plugins/pandas-support/README.md)  | pandas: Parquet, CSV, JSON Lines, Excel                                                       | `pip install "jupyter-storage-explorer[pandas]"`  |
+| [`pyspark-support`](../plugins/pyspark-support/README.md) | PySpark or Databricks Connect: Delta Lake, Parquet, CSV, JSON Lines                           | `pip install "jupyter-storage-explorer[pyspark]"` |
+| [`abfs-support`](../plugins/abfs-support/README.md)    | Azure Data Lake Storage Gen2: folders moved in one step, copies within an account on the server (`concurrency`, default 64, at once), empty folders | `pip install "jupyter-storage-explorer[abfs]"`    |
+
+Each plugin's README has its options (`plugin_options`, and `format_options` for its engine).
 
 `[<name>-support]` installs a plugin alone, using the libraries already installed: plugins never install or upgrade
 them otherwise, so that a shared environment's stay as its administrators set them up.

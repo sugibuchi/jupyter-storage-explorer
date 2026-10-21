@@ -11,13 +11,16 @@ import polars as pl
 import pytest
 from jupyter_storage_explorer_polars_support import (
     CsvByPolars,
+    CsvByPolarsOptions,
     DeltaLakeByPolars,
     DeltaLakeByPolarsOptions,
     ExcelByPolars,
     ExcelByPolarsOptions,
     JsonByPolars,
+    JsonByPolarsOptions,
     JsonLinesByPolars,
     ParquetByPolars,
+    ParquetByPolarsOptions,
     PolarsOptions,
     PolarsSupport,
 )
@@ -41,6 +44,18 @@ LIMITS = ViewLimits(max_display_rows=2)
 def parquet_bytes(df: pl.DataFrame) -> bytes:
     buffer = io.BytesIO()
     df.write_parquet(buffer)
+    return buffer.getvalue()
+
+
+def workbook() -> bytes:
+    """Two sheets: "one", a column "a" of 1, 2, 3; "two", a column "b"."""
+    book = openpyxl.Workbook()
+    book.active.title = "one"
+    for row in (["a"], [1], [2], [3]):
+        book.active.append(row)
+    book.create_sheet("two").append(["b"])
+    buffer = io.BytesIO()
+    book.save(buffer)
     return buffer.getvalue()
 
 
@@ -104,14 +119,7 @@ class TestViews:
     def test_excel(self, make_item):
         # polars reads the workbook through the explorer's filesystem: read
         # whole (a DataFrame), queried in memory; the first sheet.
-        workbook = openpyxl.Workbook()
-        workbook.active.title = "one"
-        for row in (["a"], [1], [2], [3]):
-            workbook.active.append(row)
-        workbook.create_sheet("two").append(["b"])
-        buffer = io.BytesIO()
-        workbook.save(buffer)
-        item = make_item("/a.xlsx", buffer.getvalue())
+        item = make_item("/a.xlsx", workbook())
         frame = data(ExcelByPolars(), Excel(), item, ExcelByPolarsOptions())
         assert frame["a"].to_list() == [1, 2, 3]
 
@@ -261,8 +269,8 @@ class TestOptions:
         item = make_item("/t", location=S3Location(bucket="b", key="t"))
         code = DeltaLakeByPolars().recipe(DeltaLake(), item, options)
         expected = (
-            "'s3://b/t', storage_options={'region': 'eu'}, "
-            "delta_table_options={'version': 1}, use_pyarrow=True)"
+            "'s3://b/t', delta_table_options={'version': 1}, use_pyarrow=True, "
+            "storage_options={'region': 'eu'})"
         )
         assert last_line(code["Load as LazyFrame"]) == f"df = pl.scan_delta({expected}"
         assert last_line(code["Load as DataFrame"]) == f"df = pl.read_delta({expected}"
@@ -276,3 +284,80 @@ class TestOptions:
             "use_pyarrow",
             "storage_options",
         }
+
+
+class TestReaderOptions:
+    """Each format's options are its reader's arguments, given or left to
+    polars."""
+
+    def test_csv_arguments_in_the_data_browser(self, tmp_path):
+        path = tmp_path / "a.csv"
+        path.write_text("1;x\n2;y\n")
+        options = CsvByPolarsOptions(
+            has_header=False, new_columns=["n", "s"], schema_overrides={"n": pl.String}
+        )
+        df = data(CsvByPolars(), Csv(), local_item(path), options).collect()
+        # The separator still detected; a data type, an object, used.
+        assert df.rows() == [("1", "x"), ("2", "y")]
+        assert df.columns == ["n", "s"]
+
+    def test_csv_arguments_in_the_code(self, make_item):
+        options = CsvByPolarsOptions(
+            separator="|", quote_char=None, schema_overrides={"n": pl.String}
+        )
+        [code] = (
+            CsvByPolars().recipe(Csv(), make_item("/a.csv", b"x;y\n"), options).values()
+        )
+        # The separator given, not the one detected; None, a value given,
+        # shown; data types (objects) not.
+        assert last_line(code) == (
+            "df = pl.read_csv('memory:///a.csv', separator='|', quote_char=None)"
+        )
+
+    def test_unset_arguments_are_not_passed(self):
+        assert CsvByPolarsOptions().arguments() == {}
+        assert CsvByPolarsOptions(n_rows=None).arguments() == {"n_rows": None}
+
+    def test_parquet_arguments(self, tmp_path, make_item):
+        path = tmp_path / "a.parquet"
+        pl.DataFrame({"a": [1, 2, 3]}).write_parquet(path)
+        options = ParquetByPolarsOptions(n_rows=2, row_index_name="i")
+        df = data(ParquetByPolars(), Parquet(), local_item(path), options).collect()
+        assert df.rows() == [(0, 1), (1, 2)]
+        # cache is scan_parquet's only: the DataFrame is scanned, then read.
+        code = ParquetByPolars().recipe(
+            Parquet(), make_item("/a.parquet", b""), ParquetByPolarsOptions(cache=False)
+        )
+        assert last_line(code["Load as DataFrame"]) == (
+            "df = pl.scan_parquet('memory:///a.parquet', cache=False).collect()"
+        )
+
+    def test_excel_sheet(self, make_item):
+        item = make_item("/a.xlsx", workbook())
+        options = ExcelByPolarsOptions(sheet_name="two")
+        assert data(ExcelByPolars(), Excel(), item, options).columns == ["b"]
+        [code] = ExcelByPolars().recipe(Excel(), item, options).values()
+        assert "df = pl.read_excel(f.read(), sheet_name='two')" in code
+
+    def test_excel_several_sheets_refused(self, make_item):
+        item = make_item("/a.xlsx", workbook())
+        options = ExcelByPolarsOptions(sheet_id=0)  # all sheets
+        with pytest.raises(ValueError, match="several sheets"):
+            ExcelByPolars().view(Excel(), item, options, LIMITS)
+
+    def test_json_code(self, make_item):
+        options = JsonByPolarsOptions(infer_schema_length=None)
+        [code] = (
+            JsonByPolars().recipe(Json(), make_item("/a.json", b"[]"), options).values()
+        )
+        assert last_line(code) == (
+            "df = pl.read_json('memory:///a.json', infer_schema_length=None)"
+        )
+
+    def test_delta_version(self, tmp_path):
+        table = tmp_path / "t"
+        pl.DataFrame({"a": [1]}).write_delta(table)
+        pl.DataFrame({"a": [2]}).write_delta(table, mode="append")
+        options = DeltaLakeByPolarsOptions(version=0)
+        frame = data(DeltaLakeByPolars(), DeltaLake(), local_item(table), options)
+        assert frame.collect()["a"].to_list() == [1]

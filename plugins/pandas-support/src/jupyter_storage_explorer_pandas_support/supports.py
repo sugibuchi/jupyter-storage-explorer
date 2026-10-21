@@ -13,8 +13,11 @@ from jupyter_storage_explorer.formats.excel import Excel
 from jupyter_storage_explorer.formats.packages import Openpyxl, Pandas, PyArrow
 from jupyter_storage_explorer.formats.parquet import Parquet
 from jupyter_storage_explorer.formats.support import (
+    LIBRARY_DEFAULT,
     FormatSupport,
+    LibraryDefault,
     SupportOptions,
+    format_arguments,
     format_kwargs,
     secret_dict_field,
 )
@@ -22,7 +25,7 @@ from jupyter_storage_explorer.formats.text import Csv, Json, JsonLines
 from jupyter_storage_explorer.formats.view import QueryView
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Mapping, Sequence
 
     from jupyter_storage_explorer.formats.base import ItemContext
     from jupyter_storage_explorer.formats.view import View, ViewLimits
@@ -76,6 +79,172 @@ class PandasOptions(SupportOptions):
     )
 
 
+# Each format's options below are its pandas reader's arguments, of the same
+# names (pandas' API documentation: read_csv, read_json, read_excel,
+# read_parquet), but the source, storage_options (above), functions and
+# those changing what is returned (iterator, chunksize; lines and orient for
+# JSON Lines); LIBRARY_DEFAULT leaves one to pandas. The plugin's README has
+# their tables: keep them in step.
+_Default = LibraryDefault
+
+
+@dataclass(frozen=True, kw_only=True)
+class CsvByPandasOptions(PandasOptions):
+    """pandas' ``read_csv`` arguments, besides ``storage_options``: unset
+    ones are left to pandas, but ``sep`` (detected from the file's
+    beginning). The data browser reads at most ``max_memory_rows`` rows
+    (fewer with ``nrows``). The plugin's README lists them."""
+
+    sep: str | _Default | None = LIBRARY_DEFAULT
+    header: int | Sequence[int] | str | _Default | None = LIBRARY_DEFAULT
+    names: Sequence[str] | _Default = LIBRARY_DEFAULT
+    index_col: int | str | Sequence[int | str] | bool | _Default | None = (
+        LIBRARY_DEFAULT
+    )
+    usecols: Sequence[int | str] | _Default | None = LIBRARY_DEFAULT
+    dtype: Any = LIBRARY_DEFAULT
+    engine: str | _Default | None = LIBRARY_DEFAULT
+    true_values: Sequence[Any] | _Default | None = LIBRARY_DEFAULT
+    false_values: Sequence[Any] | _Default | None = LIBRARY_DEFAULT
+    skipinitialspace: bool | _Default = LIBRARY_DEFAULT
+    skiprows: int | Sequence[int] | _Default | None = LIBRARY_DEFAULT
+    skipfooter: int | _Default = LIBRARY_DEFAULT
+    nrows: int | _Default | None = LIBRARY_DEFAULT
+    na_values: Any = LIBRARY_DEFAULT
+    keep_default_na: bool | _Default = LIBRARY_DEFAULT
+    na_filter: bool | _Default = LIBRARY_DEFAULT
+    skip_blank_lines: bool | _Default = LIBRARY_DEFAULT
+    parse_dates: bool | Sequence[int | str] | _Default | None = LIBRARY_DEFAULT
+    date_format: str | Mapping[str, str] | _Default | None = LIBRARY_DEFAULT
+    dayfirst: bool | _Default = LIBRARY_DEFAULT
+    cache_dates: bool | _Default = LIBRARY_DEFAULT
+    compression: str | Mapping[str, Any] | _Default | None = LIBRARY_DEFAULT
+    thousands: str | _Default | None = LIBRARY_DEFAULT
+    decimal: str | _Default = LIBRARY_DEFAULT
+    lineterminator: str | _Default | None = LIBRARY_DEFAULT
+    quotechar: str | _Default = LIBRARY_DEFAULT
+    quoting: int | _Default = LIBRARY_DEFAULT
+    doublequote: bool | _Default = LIBRARY_DEFAULT
+    escapechar: str | _Default | None = LIBRARY_DEFAULT
+    comment: str | _Default | None = LIBRARY_DEFAULT
+    encoding: str | _Default | None = LIBRARY_DEFAULT
+    encoding_errors: str | _Default | None = LIBRARY_DEFAULT
+    on_bad_lines: str | _Default = LIBRARY_DEFAULT
+    low_memory: bool | _Default = LIBRARY_DEFAULT
+    memory_map: bool | _Default = LIBRARY_DEFAULT
+    float_precision: str | _Default | None = LIBRARY_DEFAULT
+    dtype_backend: str | _Default = LIBRARY_DEFAULT
+
+
+@dataclass(frozen=True, kw_only=True)
+class JsonLinesByPandasOptions(PandasOptions):
+    """pandas' ``read_json`` arguments for JSON Lines (``lines=True``),
+    besides ``storage_options``: unset ones are left to pandas. The data
+    browser reads at most ``max_memory_rows`` rows (fewer with ``nrows``).
+    The plugin's README lists them."""
+
+    dtype: Any = LIBRARY_DEFAULT
+    convert_axes: bool | _Default | None = LIBRARY_DEFAULT
+    convert_dates: bool | Sequence[str] | _Default = LIBRARY_DEFAULT
+    keep_default_dates: bool | _Default = LIBRARY_DEFAULT
+    precise_float: bool | _Default = LIBRARY_DEFAULT
+    date_unit: str | _Default | None = LIBRARY_DEFAULT
+    encoding: str | _Default | None = LIBRARY_DEFAULT
+    encoding_errors: str | _Default | None = LIBRARY_DEFAULT
+    compression: str | Mapping[str, Any] | _Default | None = LIBRARY_DEFAULT
+    nrows: int | _Default | None = LIBRARY_DEFAULT
+    dtype_backend: str | _Default = LIBRARY_DEFAULT
+    engine: str | _Default = LIBRARY_DEFAULT
+
+
+@dataclass(frozen=True, kw_only=True)
+class JsonByPandasOptions(PandasOptions):
+    """pandas' ``read_json`` arguments, besides ``storage_options``, in the
+    code (JSON is viewed as a tree): unset ones are left to pandas. The
+    plugin's README lists them."""
+
+    orient: str | _Default | None = LIBRARY_DEFAULT
+    typ: str | _Default = LIBRARY_DEFAULT
+    dtype: Any = LIBRARY_DEFAULT
+    convert_axes: bool | _Default | None = LIBRARY_DEFAULT
+    convert_dates: bool | Sequence[str] | _Default = LIBRARY_DEFAULT
+    keep_default_dates: bool | _Default = LIBRARY_DEFAULT
+    precise_float: bool | _Default = LIBRARY_DEFAULT
+    date_unit: str | _Default | None = LIBRARY_DEFAULT
+    encoding: str | _Default | None = LIBRARY_DEFAULT
+    encoding_errors: str | _Default | None = LIBRARY_DEFAULT
+    compression: str | Mapping[str, Any] | _Default | None = LIBRARY_DEFAULT
+    dtype_backend: str | _Default = LIBRARY_DEFAULT
+    engine: str | _Default = LIBRARY_DEFAULT
+
+
+@dataclass(frozen=True, kw_only=True)
+class ExcelByPandasOptions(PandasOptions):
+    """pandas' ``read_excel`` arguments, besides ``storage_options``: unset
+    ones are left to pandas, but ``engine`` in the data browser
+    (``"openpyxl"``). The data browser shows one sheet, reading at most
+    ``max_memory_rows`` rows (fewer with ``nrows``). The plugin's README lists
+    them."""
+
+    sheet_name: str | int | Sequence[str | int] | _Default | None = LIBRARY_DEFAULT
+    header: int | Sequence[int] | _Default | None = LIBRARY_DEFAULT
+    names: Sequence[str] | _Default | None = LIBRARY_DEFAULT
+    index_col: int | str | Sequence[int] | _Default | None = LIBRARY_DEFAULT
+    usecols: int | str | Sequence[int | str] | _Default | None = LIBRARY_DEFAULT
+    dtype: Any = LIBRARY_DEFAULT
+    engine: str | _Default | None = LIBRARY_DEFAULT
+    true_values: Sequence[Any] | _Default | None = LIBRARY_DEFAULT
+    false_values: Sequence[Any] | _Default | None = LIBRARY_DEFAULT
+    skiprows: int | Sequence[int] | _Default | None = LIBRARY_DEFAULT
+    nrows: int | _Default | None = LIBRARY_DEFAULT
+    na_values: Any = LIBRARY_DEFAULT
+    keep_default_na: bool | _Default = LIBRARY_DEFAULT
+    na_filter: bool | _Default = LIBRARY_DEFAULT
+    parse_dates: Any = LIBRARY_DEFAULT
+    date_format: str | Mapping[str, str] | _Default | None = LIBRARY_DEFAULT
+    thousands: str | _Default | None = LIBRARY_DEFAULT
+    decimal: str | _Default = LIBRARY_DEFAULT
+    comment: str | _Default | None = LIBRARY_DEFAULT
+    skipfooter: int | _Default = LIBRARY_DEFAULT
+    dtype_backend: str | _Default = LIBRARY_DEFAULT
+    engine_kwargs: Mapping[str, Any] | _Default | None = LIBRARY_DEFAULT
+
+
+@dataclass(frozen=True, kw_only=True)
+class ParquetByPandasOptions(PandasOptions):
+    """pandas' ``read_parquet`` arguments, besides ``storage_options``:
+    unset ones are left to pandas. The data browser reads with pyarrow
+    (``engine`` is the code's) at most ``max_memory_rows`` rows. The plugin's
+    README lists them."""
+
+    engine: str | _Default = LIBRARY_DEFAULT
+    columns: Sequence[str] | _Default | None = LIBRARY_DEFAULT
+    dtype_backend: str | _Default = LIBRARY_DEFAULT
+    filters: Sequence[Any] | _Default | None = LIBRARY_DEFAULT
+    to_pandas_kwargs: Mapping[str, Any] | _Default | None = LIBRARY_DEFAULT
+
+
+def _code_kwargs(
+    options: PandasOptions, defaults: Mapping[str, Any] | None = None
+) -> str:
+    """The code's keyword arguments: the support's ``defaults`` (those not
+    None), then the options' arguments given, then ``storage_options``."""
+    arguments = {k: v for k, v in (defaults or {}).items() if v is not None}
+    arguments.update(options.code_arguments())
+    return format_arguments(arguments) + format_kwargs(
+        storage_options=options.code_value("storage_options")
+    )
+
+
+def _view_arguments(options: SupportOptions, limits: ViewLimits) -> dict[str, Any]:
+    """The options' arguments for the data browser's rows: ``nrows`` at most
+    ``_rows(limits)``."""
+    arguments = options.arguments()
+    nrows = arguments.get("nrows")
+    arguments["nrows"] = _rows(limits) if nrows is None else min(nrows, _rows(limits))
+    return arguments
+
+
 class _PandasByUrl(FormatSupport):
     """A format whose code pandas reads by URL, with storage options."""
 
@@ -85,17 +254,25 @@ class _PandasByUrl(FormatSupport):
 
 class CsvByPandas(_PandasByUrl):
     format = Csv
+    options_model = CsvByPandasOptions
     capabilities = ("view", "recipe")
 
     def view(
-        self, fmt: Csv, ctx: ItemContext, options: PandasOptions, limits: ViewLimits
+        self,
+        fmt: Csv,
+        ctx: ItemContext,
+        options: CsvByPandasOptions,
+        limits: ViewLimits,
     ) -> View:
         pd = Pandas().load()
         # The separator, from the beginning; the rows, read through the
         # explorer's filesystem, so any storage works.
-        text, _ = ctx.head_text(limits.max_bytes)
+        arguments = _view_arguments(options, limits)
+        if "sep" not in arguments:
+            text, _ = ctx.head_text(limits.max_bytes)
+            arguments["sep"] = fmt.separator(ctx.name, text)
         with ctx.fs.open(ctx.path, "rb") as f:
-            df = pd.read_csv(f, sep=fmt.separator(ctx.name, text), nrows=_rows(limits))
+            df = pd.read_csv(f, **arguments)
         return _query_view(df, limits)
 
     data_frame_template = cleandoc("""
@@ -105,33 +282,28 @@ class CsvByPandas(_PandasByUrl):
         """)
 
     def recipe(
-        self, fmt: Csv, ctx: ItemContext, options: PandasOptions
+        self, fmt: Csv, ctx: ItemContext, options: CsvByPandasOptions
     ) -> dict[str, str]:
-        return {
-            AS_DATA_FRAME: self.data_frame_template.format(
-                url=repr(ctx.library_url),
-                kwargs=format_kwargs(
-                    sep=fmt.code_separator(ctx),
-                    storage_options=options.code_value("storage_options"),
-                ),
-            )
-        }
+        kwargs = _code_kwargs(options, {"sep": fmt.code_separator(ctx)})
+        code = self.data_frame_template.format(url=repr(ctx.library_url), kwargs=kwargs)
+        return {AS_DATA_FRAME: code}
 
 
 class JsonLinesByPandas(_PandasByUrl):
     format = JsonLines
+    options_model = JsonLinesByPandasOptions
     capabilities = ("view", "recipe")
 
     def view(
         self,
         fmt: JsonLines,
         ctx: ItemContext,
-        options: PandasOptions,
+        options: JsonLinesByPandasOptions,
         limits: ViewLimits,
     ) -> View:
         pd = Pandas().load()
-        with ctx.fs.open(ctx.path, "rt", encoding="utf-8") as f:
-            df = pd.read_json(f, lines=True, nrows=_rows(limits))
+        with ctx.fs.open(ctx.path, "rb") as f:
+            df = pd.read_json(f, lines=True, **_view_arguments(options, limits))
         return _query_view(df, limits)
 
     data_frame_template = cleandoc("""
@@ -141,22 +313,19 @@ class JsonLinesByPandas(_PandasByUrl):
         """)
 
     def recipe(
-        self, fmt: JsonLines, ctx: ItemContext, options: PandasOptions
+        self, fmt: JsonLines, ctx: ItemContext, options: JsonLinesByPandasOptions
     ) -> dict[str, str]:
-        return {
-            AS_DATA_FRAME: self.data_frame_template.format(
-                url=repr(ctx.library_url),
-                kwargs=format_kwargs(
-                    storage_options=options.code_value("storage_options")
-                ),
-            )
-        }
+        code = self.data_frame_template.format(
+            url=repr(ctx.library_url), kwargs=_code_kwargs(options)
+        )
+        return {AS_DATA_FRAME: code}
 
 
 class JsonByPandas(_PandasByUrl):
     """Load code only: JSON is viewed as a tree (``JsonByPython``)."""
 
     format = Json
+    options_model = JsonByPandasOptions
     capabilities = ("recipe",)
 
     data_frame_template = cleandoc("""
@@ -166,31 +335,34 @@ class JsonByPandas(_PandasByUrl):
         """)
 
     def recipe(
-        self, fmt: Json, ctx: ItemContext, options: PandasOptions
+        self, fmt: Json, ctx: ItemContext, options: JsonByPandasOptions
     ) -> dict[str, str]:
-        return {
-            AS_DATA_FRAME: self.data_frame_template.format(
-                url=repr(ctx.library_url),
-                kwargs=format_kwargs(
-                    storage_options=options.code_value("storage_options")
-                ),
-            )
-        }
+        code = self.data_frame_template.format(
+            url=repr(ctx.library_url), kwargs=_code_kwargs(options)
+        )
+        return {AS_DATA_FRAME: code}
 
 
 class ExcelByPandas(_PandasByUrl):
     format = Excel
+    options_model = ExcelByPandasOptions
     additional_requirements = (Openpyxl(),)  # pandas' Excel engine
     capabilities = ("view", "recipe")
 
     def view(
-        self, fmt: Excel, ctx: ItemContext, options: PandasOptions, limits: ViewLimits
+        self,
+        fmt: Excel,
+        ctx: ItemContext,
+        options: ExcelByPandasOptions,
+        limits: ViewLimits,
     ) -> View:
-        # The first sheet, as polars reads it (ExcelByPolars).
+        # The first sheet, as polars reads it (ExcelByPolars), unless the
+        # options name another.
         pd = Pandas().load()
-        df = pd.read_excel(
-            io.BytesIO(ctx.read_whole(limits)), engine="openpyxl", nrows=_rows(limits)
-        )
+        arguments = {"engine": "openpyxl", **_view_arguments(options, limits)}
+        df = pd.read_excel(io.BytesIO(ctx.read_whole(limits)), **arguments)
+        if isinstance(df, dict):
+            raise ValueError("several sheets: choose one with sheet_name")
         return _query_view(df, limits)
 
     data_frame_template = cleandoc("""
@@ -200,32 +372,33 @@ class ExcelByPandas(_PandasByUrl):
         """)
 
     def recipe(
-        self, fmt: Excel, ctx: ItemContext, options: PandasOptions
+        self, fmt: Excel, ctx: ItemContext, options: ExcelByPandasOptions
     ) -> dict[str, str]:
-        return {
-            AS_DATA_FRAME: self.data_frame_template.format(
-                url=repr(ctx.library_url),
-                kwargs=format_kwargs(
-                    storage_options=options.code_value("storage_options")
-                ),
-            )
-        }
+        code = self.data_frame_template.format(
+            url=repr(ctx.library_url), kwargs=_code_kwargs(options)
+        )
+        return {AS_DATA_FRAME: code}
 
 
 class ParquetByPandas(_PandasByUrl):
     format = Parquet
+    options_model = ParquetByPandasOptions
     additional_requirements = (PyArrow(),)  # pandas' Parquet engine
     capabilities = ("view", "recipe")
 
     def view(
-        self, fmt: Parquet, ctx: ItemContext, options: PandasOptions, limits: ViewLimits
+        self,
+        fmt: Parquet,
+        ctx: ItemContext,
+        options: ParquetByPandasOptions,
+        limits: ViewLimits,
     ) -> View:
         pa_dataset = PyArrow().load("dataset")
         # pyarrow reads through the explorer's fsspec filesystem, so any
         # storage works. A directory's data files are those polars reads
         # (Parquet.data_url): its partition folders' (their columns from the
         # folders' names), not its other folders' (e.g. Spark's "_temporary").
-        options: dict[str, Any] = {}
+        partitioning: dict[str, Any] = {}
         if not ctx.is_dir:
             source: Any = ctx.path
         else:
@@ -235,13 +408,26 @@ class ParquetByPandas(_PandasByUrl):
                 if not path.rstrip("/").rsplit("/", 1)[-1].startswith((".", "_"))
             )
             if fmt.layout(ctx).keys:
-                options = {"partitioning": "hive", "partition_base_dir": ctx.path}
+                partitioning = {"partitioning": "hive", "partition_base_dir": ctx.path}
         if not source:
             raise ValueError("no Parquet files found")
         dataset = pa_dataset.dataset(
-            source, filesystem=ctx.fs, format="parquet", **options
+            source, filesystem=ctx.fs, format="parquet", **partitioning
         )
-        return _query_view(dataset.head(_rows(limits)).to_pandas(), limits)
+        # read_parquet's arguments, as pandas applies them with pyarrow.
+        arguments = options.arguments()
+        filters = arguments.get("filters")
+        table = dataset.head(
+            _rows(limits),
+            columns=arguments.get("columns"),
+            filter=None
+            if filters is None
+            else PyArrow().load("parquet").filters_to_expression(filters),
+        )
+        df = table.to_pandas(**(arguments.get("to_pandas_kwargs") or {}))
+        if arguments.get("dtype_backend") is not None:
+            df = df.convert_dtypes(dtype_backend=arguments["dtype_backend"])
+        return _query_view(df, limits)
 
     data_frame_template = cleandoc("""
         import pandas as pd
@@ -250,13 +436,9 @@ class ParquetByPandas(_PandasByUrl):
         """)
 
     def recipe(
-        self, fmt: Parquet, ctx: ItemContext, options: PandasOptions
+        self, fmt: Parquet, ctx: ItemContext, options: ParquetByPandasOptions
     ) -> dict[str, str]:
-        return {
-            AS_DATA_FRAME: self.data_frame_template.format(
-                url=repr(ctx.library_url),
-                kwargs=format_kwargs(
-                    storage_options=options.code_value("storage_options")
-                ),
-            )
-        }
+        code = self.data_frame_template.format(
+            url=repr(ctx.library_url), kwargs=_code_kwargs(options)
+        )
+        return {AS_DATA_FRAME: code}

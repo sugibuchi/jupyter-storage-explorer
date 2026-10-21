@@ -13,6 +13,15 @@ changes those of a shared environment: the first command (or `jupyter-storage-ex
 Explorers use every plugin installed, unless their `plugin_options` disable it: `{"pyspark-support": {"enabled": False}}`
 (see [Plugins](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#plugins)).
 
+## Plugin options
+
+`plugin_options={"pyspark-support": {...}}` (in the launcher's tabs, `plugin_options()` in `launcher.py`):
+
+| Option     | Default | Meaning                                                                                                   |
+|------------|---------|-----------------------------------------------------------------------------------------------------------|
+| `enabled`  | `True`  | Whether explorers use the plugin. `False`: not even imported.                                             |
+| `priority` | lowest  | Plugins of a higher priority come first: their supports are tried before the others'. Equal ones by key. |
+
 ## Format options
 
 The supports' options, in `format_options["pyspark"]` (by format, or `"*"` for all), configure the Spark session and

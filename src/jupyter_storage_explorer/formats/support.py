@@ -1,9 +1,10 @@
 """How to handle data in a format with a library: the ``FormatSupport``
 interface, with ``SupportOptions``, the base of its options, and the helpers
-of the code supports generate (``format_kwargs``, the secret fields). The
-predefined supports are in supports/, a module per library: polars.py,
-pandas.py, ...; explorers choose and call them with their own chain
-(``_explorer/supports.py``)."""
+of the code supports generate (``format_kwargs``, ``format_arguments``, the
+secret fields), and ``LIBRARY_DEFAULT``, the default of options that are a
+library's arguments. The core's supports are in supports/python.py, the
+engines' in their plugins; explorers choose and call them with their own
+chain (``_explorer/supports.py``)."""
 
 from __future__ import annotations
 
@@ -146,6 +147,37 @@ def secret_dict_field(*, secret_keys: Iterable[str], **kwargs: Any) -> Any:
     return dataclasses.field(**kwargs, metadata=metadata)
 
 
+class LibraryDefault:
+    """The type of ``LIBRARY_DEFAULT``, the default of options that are a
+    library's arguments: one object, never equal to a value given."""
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:
+        return "LIBRARY_DEFAULT"
+
+    def __reduce__(self) -> str:
+        # Pickled (e.g. copied) as the module's object itself.
+        return "LIBRARY_DEFAULT"
+
+
+LIBRARY_DEFAULT = LibraryDefault()
+"""The default of an option that is one of the library's arguments: not
+passed, so the library's own default applies (``SupportOptions.arguments``).
+Not None, which some arguments take as a value (e.g. polars'
+``quote_char=None``: no quoting)."""
+
+
+def format_arguments(arguments: Mapping[str, Any]) -> str:
+    """Python source for keyword arguments following others in a call, each
+    after ", ", None included: for ``SupportOptions.code_arguments``.
+
+    >>> format_arguments({"has_header": False, "quote_char": None})
+    ", has_header=False, quote_char=None"
+    """
+    return "".join(f", {k}={v!r}" for k, v in arguments.items())
+
+
 @dataclass(frozen=True, kw_only=True)
 class SupportOptions:
     """The options of a support: none. The base of supports' options.
@@ -216,6 +248,51 @@ class SupportOptions:
         shown = _shown_options({name: getattr(self, name)}, frozenset(secret_keys))
         value = shown.get(name)
         return None if isinstance(value, dict) and not value else value
+
+    def arguments(self) -> dict[str, Any]:
+        """The library's arguments the options give: the fields whose default
+        is ``LIBRARY_DEFAULT`` (each an argument of its name), those given,
+        in the fields' order. Pass them to the library's reader as they are.
+
+        Returns
+        -------
+        dict
+            E.g. ``{"has_header": False}`` for
+            ``CsvByPolarsOptions(has_header=False)``.
+
+        Examples
+        --------
+        >>> @dataclass(frozen=True, kw_only=True)
+        ... class CsvByDuckDBOptions(SupportOptions):
+        ...     header: bool | LibraryDefault = LIBRARY_DEFAULT
+        ...     delim: str | LibraryDefault = LIBRARY_DEFAULT
+        >>> CsvByDuckDBOptions(header=True).arguments()
+        {'header': True}
+        """
+        return {
+            f.name: value
+            for f in dataclasses.fields(self)
+            if f.default is LIBRARY_DEFAULT
+            and (value := getattr(self, f.name)) is not LIBRARY_DEFAULT
+        }
+
+    def code_arguments(self) -> dict[str, Any]:
+        """``arguments()`` as generated code may show them (``code_value``):
+        without secrets and values that are objects rather than plain data
+        (e.g. polars' data types); None, a value given, is kept. For
+        ``format_arguments``.
+
+        Returns
+        -------
+        dict
+        """
+        shown = {}
+        for name, value in self.arguments().items():
+            if value is None:
+                shown[name] = None
+            elif (code := self.code_value(name)) is not None:
+                shown[name] = code
+        return shown
 
 
 class FormatSupport:
