@@ -1,12 +1,13 @@
 """Formats handled with Spark (PySpark): the data browser, on a Spark
 DataFrame (lazy: each page a Spark job), and load code. Spark reads with its
-own storage configuration, so neither gets storage options, and reads the
+own storage configuration (``PySparkOptions.session_options``), and reads the
 item's URL, rewritten as Spark reads it (``spark_url``): the explorer's
 filesystem is not used, and storages Spark cannot reach (e.g. fsspec's
 memory filesystem) cannot be viewed."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field, fields
 from inspect import cleandoc
 from typing import TYPE_CHECKING, Any
 
@@ -18,13 +19,19 @@ from jupyter_storage_explorer.formats.packages import (
     PySpark,
 )
 from jupyter_storage_explorer.formats.parquet import Parquet
-from jupyter_storage_explorer.formats.support import FormatSupport, format_kwargs
+from jupyter_storage_explorer.formats.support import (
+    FormatSupport,
+    SupportOptions,
+    format_kwargs,
+)
 from jupyter_storage_explorer.formats.text import Csv, JsonLines
 from jupyter_storage_explorer.formats.view import QueryView
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+    from dataclasses import Field
+
     from jupyter_storage_explorer.formats.base import ItemContext
-    from jupyter_storage_explorer.formats.support import SupportOptions
     from jupyter_storage_explorer.formats.view import View, ViewLimits
 
 # Spark (Hadoop) names for storage URLs: TLS "abfss" for Azure, as Spark
@@ -47,25 +54,38 @@ def spark_url(url: str) -> str:
     )
 
 
-def spark_session() -> Any:
+def spark_session(session_options: Mapping[str, Any] | None = None) -> Any:
     """The Spark session views read with: the active one (e.g. the
     notebook's on Databricks, or one the user created in the kernel), else
-    one created with the default configuration, by Databricks Connect if it
-    is installed (its own pyspark needs it), else by pyspark."""
+    one created, by Databricks Connect if it is installed (its own pyspark
+    needs it), else by pyspark.
+
+    ``session_options`` are given to the session's builder (``config(key,
+    value)``); with a session already running, ``getOrCreate`` returns it,
+    applying those Spark can still change (runtime configuration). A builder
+    without ``config`` (some Databricks Connect versions) gets them as the
+    session's runtime configuration (``spark.conf.set``) instead."""
     spark_session_class = PySpark().load("sql").SparkSession
     active = spark_session_class.getActiveSession()
-    if active is not None:
+    if active is not None and not session_options:
         return active
-    if DatabricksConnect().is_installed():
-        return DatabricksConnect().load().DatabricksSession.builder.getOrCreate()
-    return spark_session_class.builder.getOrCreate()
+    if active is None and DatabricksConnect().is_installed():
+        builder = DatabricksConnect().load().DatabricksSession.builder
+    else:
+        builder = spark_session_class.builder
+    config = dict(session_options or {})
+    if not hasattr(builder, "config"):
+        session = builder.getOrCreate()
+        for key, value in config.items():
+            session.conf.set(key, value)
+        return session
+    for key, value in config.items():
+        builder = builder.config(key, value)
+    return builder.getOrCreate()
 
 
 def _url(ctx: ItemContext) -> str:
     return spark_url(ctx.location.url)
-
-
-AS_DATA_FRAME = "Load as DataFrame"
 
 
 class PySparkEngine(Engine):
@@ -76,102 +96,372 @@ class PySparkEngine(Engine):
     requirements = ((PySpark(),), (DatabricksConnect(),))
 
 
-class CsvByPySpark(FormatSupport):
-    format = Csv
+# The fields of PySparkOptions that are not one reader option each.
+_NOT_READER_OPTIONS = frozenset({"session_options", "reader_options"})
+# Field metadata: the reader option's name in Spark, when it is not the
+# field's name in camel case (e.g. "timestampNTZFormat").
+SPARK_NAME = "spark_name"
+
+
+def _spark_name(field: Field[Any]) -> str:
+    """The reader option a field of the options sets: ``infer_schema`` is
+    ``inferSchema``."""
+    first, *rest = field.name.split("_")
+    return field.metadata.get(SPARK_NAME, first + "".join(w.title() for w in rest))
+
+
+def _merged(*options: Mapping[str, Any]) -> dict[str, Any]:
+    """``options`` merged, later ones winning. Spark's option names ignore
+    case, so a later key replaces an earlier one in another case."""
+    by_lower: dict[str, tuple[str, Any]] = {}
+    for given in options:
+        for key, value in given.items():
+            by_lower[key.lower()] = (key, value)
+    return dict(by_lower.values())
+
+
+@dataclass(frozen=True, kw_only=True)
+class PySparkOptions(SupportOptions):
+    """The options of the formats Spark reads, for the data browser and the
+    code. Each format's subclass adds its reader options as fields
+    (``CsvByPySparkOptions``, ...): None, their default, leaves the option to
+    Spark.
+
+    Attributes
+    ----------
+    session_options : mapping or None, default None
+        Spark configuration given to ``SparkSession.builder.config(key,
+        value)``, e.g. Delta Lake's ``{"spark.sql.extensions":
+        "io.delta.sql.DeltaSparkSessionExtension", ...}`` or storage access
+        (``"spark.hadoop.fs.azure.account.key.<account>.dfs.core.windows.net"``).
+        With a session already running, only what Spark can change at run time
+        applies. In the code, those that look like credentials are left out.
+    reader_options : mapping or None, default None
+        Options given to the reader, ``spark.read.option(key, value)``, e.g.
+        Spark's generic file source options (``{"recursiveFileLookup":
+        True}``) or those of a newer Spark; they override the fields and the
+        defaults (for CSV, the separator detected).
+    """
+
+    session_options: Mapping[str, Any] | None = None
+    reader_options: Mapping[str, Any] | None = None
+
+    def spark_options(self) -> dict[str, Any]:
+        """The reader options the fields set (those not None), by Spark's
+        names, e.g. ``{"header": True, "inferSchema": True}``."""
+        return {
+            _spark_name(f): value
+            for f in fields(self)
+            if f.name not in _NOT_READER_OPTIONS
+            and (value := getattr(self, f.name)) is not None
+        }
+
+    def reader(self, spark: Any, defaults: Mapping[str, Any] | None = None) -> Any:
+        """``spark.read`` with ``defaults``, then the fields' options, then
+        ``reader_options``, each overriding the previous ones."""
+        reader = spark.read
+        settings = _merged(
+            defaults or {}, self.spark_options(), self.reader_options or {}
+        )
+        for key, value in settings.items():
+            reader = reader.option(key, value)
+        return reader
+
+    def session_code(self) -> str:
+        """The code's line creating the session, with ``session_options``
+        (those fit to show)."""
+        config = self.code_value("session_options") or {}
+        if not config:
+            return "spark = SparkSession.builder.getOrCreate()"
+        lines = [f"    .config({key!r}, {value!r})" for key, value in config.items()]
+        return "\n".join(
+            ["spark = (", "    SparkSession.builder", *lines, "    .getOrCreate()", ")"]
+        )
+
+    def reader_code(self, defaults: Mapping[str, Any] | None = None) -> str:
+        """What follows ``spark.read`` in the code: ``.options(...)`` with
+        ``defaults`` and the fields' options but those ``reader_options``
+        override, then an ``.option(key, value)`` per reader option (those fit
+        to show)."""
+        overridden = {key.lower() for key in self.reader_options or {}}
+        shown = {
+            _spark_name(f): value
+            for f in fields(self)
+            if f.name not in _NOT_READER_OPTIONS
+            and (value := self.code_value(f.name)) is not None
+        }
+        settings = {
+            key: value
+            for key, value in _merged(defaults or {}, shown).items()
+            if value is not None and key.lower() not in overridden
+        }
+        options = format_kwargs(**settings).removeprefix(", ")
+        reader = self.code_value("reader_options") or {}
+        return (f".options({options})" if options else "") + "".join(
+            f".option({key!r}, {value!r})" for key, value in reader.items()
+        )
+
+
+# The formats' reader options, from Spark's documentation of its data sources
+# (https://spark.apache.org/docs/latest/sql-data-sources.html, "Data Source
+# Option", those read; generic file source options go in reader_options) and
+# Delta Lake's (https://docs.delta.io/delta-batch/, time travel). Each field
+# is the option of its name in camel case unless SPARK_NAME says otherwise;
+# the plugin's README has their tables: keep them in step.
+
+
+@dataclass(frozen=True, kw_only=True)
+class CsvByPySparkOptions(PySparkOptions):
+    """Spark's CSV reader options (``spark.read.csv``), besides the session's
+    and ``reader_options``.
+
+    Each field is the option of its name in camel case (``null_value`` is
+    ``nullValue``; ``timestamp_ntz_format``, ``timestampNTZFormat``),
+    documented in Spark's "CSV Files"; None leaves it to Spark. The plugin's
+    README lists them.
+
+    Attributes
+    ----------
+    sep : str or None, default None
+        The separator; None for the one detected from the file's beginning
+        (and its extension, e.g. tabs for ".tsv").
+    header : bool, default True
+        Whether the first line names the columns (Spark's default is False).
+    infer_schema : bool, default True
+        Whether the columns' types are inferred, an extra pass over the data
+        (Spark's default is False: strings).
+    """
+
+    sep: str | None = None
+    encoding: str | None = None
+    quote: str | None = None
+    escape: str | None = None
+    comment: str | None = None
+    header: bool | None = True
+    infer_schema: bool | None = True
+    prefer_date: bool | None = None
+    enforce_schema: bool | None = None
+    ignore_leading_white_space: bool | None = None
+    ignore_trailing_white_space: bool | None = None
+    null_value: str | None = None
+    nan_value: str | None = None
+    positive_inf: str | None = None
+    negative_inf: str | None = None
+    date_format: str | None = None
+    timestamp_format: str | None = None
+    timestamp_ntz_format: str | None = field(
+        default=None, metadata={SPARK_NAME: "timestampNTZFormat"}
+    )
+    enable_date_time_parsing_fallback: bool | None = None
+    max_columns: int | None = None
+    max_chars_per_column: int | None = None
+    mode: str | None = None
+    column_name_of_corrupt_record: str | None = None
+    multi_line: bool | None = None
+    char_to_escape_quote_escaping: str | None = None
+    sampling_ratio: float | None = None
+    empty_value: str | None = None
+    locale: str | None = None
+    line_sep: str | None = None
+    unescaped_quote_handling: str | None = None
+    time_zone: str | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class JsonLinesByPySparkOptions(PySparkOptions):
+    """Spark's JSON reader options (``spark.read.json``), besides the
+    session's and ``reader_options``.
+
+    Each field is the option of its name in camel case
+    (``primitives_as_string`` is ``primitivesAsString``;
+    ``timestamp_ntz_format``, ``timestampNTZFormat``), documented in Spark's
+    "JSON Files"; None leaves it to Spark. The plugin's README lists them.
+    """
+
+    time_zone: str | None = None
+    primitives_as_string: bool | None = None
+    prefers_decimal: bool | None = None
+    allow_comments: bool | None = None
+    allow_unquoted_field_names: bool | None = None
+    allow_single_quotes: bool | None = None
+    allow_numeric_leading_zeros: bool | None = None
+    allow_backslash_escaping_any_character: bool | None = None
+    mode: str | None = None
+    column_name_of_corrupt_record: str | None = None
+    date_format: str | None = None
+    timestamp_format: str | None = None
+    timestamp_ntz_format: str | None = field(
+        default=None, metadata={SPARK_NAME: "timestampNTZFormat"}
+    )
+    enable_date_time_parsing_fallback: bool | None = None
+    multi_line: bool | None = None
+    allow_unquoted_control_chars: bool | None = None
+    encoding: str | None = None
+    line_sep: str | None = None
+    sampling_ratio: float | None = None
+    drop_field_if_all_null: bool | None = None
+    locale: str | None = None
+    allow_non_numeric_numbers: bool | None = None
+    use_unsafe_row: bool | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class ParquetByPySparkOptions(PySparkOptions):
+    """Spark's Parquet reader options (``spark.read.parquet``), besides the
+    session's and ``reader_options``.
+
+    Each field is the option of its name in camel case (``merge_schema`` is
+    ``mergeSchema``), documented in Spark's "Parquet Files"; None leaves it
+    to Spark (its session's configuration). The plugin's README lists them.
+    """
+
+    datetime_rebase_mode: str | None = None
+    int96_rebase_mode: str | None = None
+    merge_schema: bool | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class DeltaLakeByPySparkOptions(PySparkOptions):
+    """Delta Lake's reader options for time travel, besides the session's and
+    ``reader_options``: a table's earlier version.
+
+    Attributes
+    ----------
+    timestamp_as_of : str or None, default None
+        ``timestampAsOf``: the table as of a date or a timestamp, e.g.
+        "2019-01-01" or "2019-01-01T00:00:00.000Z".
+    version_as_of : int or None, default None
+        ``versionAsOf``: the table's version of that number (``DESCRIBE
+        HISTORY`` lists them).
+    """
+
+    timestamp_as_of: str | None = None
+    version_as_of: int | None = None
+
+
+class _BySpark(FormatSupport):
+    """A format Spark reads, with its session and reader options."""
+
     engine = PySparkEngine
+    options_model = PySparkOptions
+
+
+AS_DATA_FRAME = "Load as DataFrame"
+
+
+class CsvByPySpark(_BySpark):
+    format = Csv
+    options_model = CsvByPySparkOptions
     capabilities = ("view", "recipe")
 
     def view(
-        self, fmt: Csv, ctx: ItemContext, options: SupportOptions, limits: ViewLimits
+        self,
+        fmt: Csv,
+        ctx: ItemContext,
+        options: CsvByPySparkOptions,
+        limits: ViewLimits,
     ) -> View:
-        # The separator from the beginning, read through the explorer.
-        text, _ = ctx.head_text(limits.max_bytes)
-        data = spark_session().read.csv(
-            _url(ctx),
-            header=True,
-            inferSchema=True,
-            sep=fmt.separator(ctx.name, text),
-        )
-        return QueryView(data=data)
+        # The separator from the beginning, read through the explorer, unless
+        # the options give one.
+        defaults = {}
+        if options.sep is None:
+            text, _ = ctx.head_text(limits.max_bytes)
+            defaults["sep"] = fmt.separator(ctx.name, text)
+        spark = spark_session(options.session_options)
+        return QueryView(data=options.reader(spark, defaults).csv(_url(ctx)))
 
     data_frame_template = cleandoc("""
         from pyspark.sql import SparkSession
 
-        spark = SparkSession.builder.getOrCreate()
-        df = spark.read.csv({url}, header=True, inferSchema=True{kwargs})
+        {session}
+        df = spark.read{reader}.csv({url})
         """)
 
     def recipe(
-        self, fmt: Csv, ctx: ItemContext, options: SupportOptions
+        self, fmt: Csv, ctx: ItemContext, options: CsvByPySparkOptions
     ) -> dict[str, str]:
+        defaults = {} if options.sep is not None else {"sep": fmt.code_separator(ctx)}
         return {
             AS_DATA_FRAME: self.data_frame_template.format(
+                session=options.session_code(),
+                reader=options.reader_code(defaults),
                 url=repr(_url(ctx)),
-                kwargs=format_kwargs(sep=fmt.code_separator(ctx)),
             )
         }
 
 
-class JsonLinesByPySpark(FormatSupport):
+class JsonLinesByPySpark(_BySpark):
     format = JsonLines
-    engine = PySparkEngine
+    options_model = JsonLinesByPySparkOptions
     capabilities = ("view", "recipe")
 
     def view(
         self,
         fmt: JsonLines,
         ctx: ItemContext,
-        options: SupportOptions,
+        options: JsonLinesByPySparkOptions,
         limits: ViewLimits,
     ) -> View:
-        return QueryView(data=spark_session().read.json(_url(ctx)))
+        spark = spark_session(options.session_options)
+        return QueryView(data=options.reader(spark).json(_url(ctx)))
 
     # Spark reads JSON Lines (one record per line) by default.
     data_frame_template = cleandoc("""
         from pyspark.sql import SparkSession
 
-        spark = SparkSession.builder.getOrCreate()
-        df = spark.read.json({url})
+        {session}
+        df = spark.read{reader}.json({url})
         """)
 
     def recipe(
-        self, fmt: JsonLines, ctx: ItemContext, options: SupportOptions
+        self, fmt: JsonLines, ctx: ItemContext, options: JsonLinesByPySparkOptions
     ) -> dict[str, str]:
-        return {AS_DATA_FRAME: self.data_frame_template.format(url=repr(_url(ctx)))}
+        code = self.data_frame_template.format(
+            session=options.session_code(),
+            reader=options.reader_code(),
+            url=repr(_url(ctx)),
+        )
+        return {AS_DATA_FRAME: code}
 
 
-class ParquetByPySpark(FormatSupport):
+class ParquetByPySpark(_BySpark):
     format = Parquet
-    engine = PySparkEngine
+    options_model = ParquetByPySparkOptions
     capabilities = ("view", "recipe")
 
     def view(
         self,
         fmt: Parquet,
         ctx: ItemContext,
-        options: SupportOptions,
+        options: ParquetByPySparkOptions,
         limits: ViewLimits,
     ) -> View:
         # A file or a folder of them; Spark finds partitions itself.
-        return QueryView(data=spark_session().read.parquet(_url(ctx)))
+        spark = spark_session(options.session_options)
+        return QueryView(data=options.reader(spark).parquet(_url(ctx)))
 
     # A file or a folder of them; Spark finds partitions itself.
     data_frame_template = cleandoc("""
         from pyspark.sql import SparkSession
 
-        spark = SparkSession.builder.getOrCreate()
-        df = spark.read.parquet({url})
+        {session}
+        df = spark.read{reader}.parquet({url})
         """)
 
     def recipe(
-        self, fmt: Parquet, ctx: ItemContext, options: SupportOptions
+        self, fmt: Parquet, ctx: ItemContext, options: ParquetByPySparkOptions
     ) -> dict[str, str]:
-        return {AS_DATA_FRAME: self.data_frame_template.format(url=repr(_url(ctx)))}
+        code = self.data_frame_template.format(
+            session=options.session_code(),
+            reader=options.reader_code(),
+            url=repr(_url(ctx)),
+        )
+        return {AS_DATA_FRAME: code}
 
 
-class DeltaLakeByPySpark(FormatSupport):
+class DeltaLakeByPySpark(_BySpark):
     format = DeltaLake
-    engine = PySparkEngine
+    options_model = DeltaLakeByPySparkOptions
     # Delta Lake set up in the Spark session (on Databricks, it is).
     additional_requirements = (DeltaSpark(),)
     capabilities = ("view", "recipe")
@@ -180,21 +470,27 @@ class DeltaLakeByPySpark(FormatSupport):
         self,
         fmt: DeltaLake,
         ctx: ItemContext,
-        options: SupportOptions,
+        options: DeltaLakeByPySparkOptions,
         limits: ViewLimits,
     ) -> View:
-        data = spark_session().read.format("delta").load(_url(ctx))
+        spark = spark_session(options.session_options)
+        data = options.reader(spark).format("delta").load(_url(ctx))
         return QueryView(data=data)
 
     data_frame_template = cleandoc("""
         from pyspark.sql import SparkSession
 
         # Needs Delta Lake in the Spark session (Databricks has it)
-        spark = SparkSession.builder.getOrCreate()
-        df = spark.read.format("delta").load({url})
+        {session}
+        df = spark.read{reader}.format("delta").load({url})
         """)
 
     def recipe(
-        self, fmt: DeltaLake, ctx: ItemContext, options: SupportOptions
+        self, fmt: DeltaLake, ctx: ItemContext, options: DeltaLakeByPySparkOptions
     ) -> dict[str, str]:
-        return {AS_DATA_FRAME: self.data_frame_template.format(url=repr(_url(ctx)))}
+        code = self.data_frame_template.format(
+            session=options.session_code(),
+            reader=options.reader_code(),
+            url=repr(_url(ctx)),
+        )
+        return {AS_DATA_FRAME: code}

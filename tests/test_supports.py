@@ -3,28 +3,31 @@
 
 from __future__ import annotations
 
+import copy
 import dataclasses
+import pickle
 from typing import get_args
 
 import polars as pl
 import pytest
 from all_supports import ALL_SUPPORTS, NO_PLUGINS, all_supports
 from items import local_item
-from jupyter_storage_explorer_pandas_support import CsvByPandas, PandasOptions
+from jupyter_storage_explorer_pandas_support import CsvByPandas, CsvByPandasOptions
 from jupyter_storage_explorer_polars_support import (
     CsvByPolars,
+    CsvByPolarsOptions,
     DeltaLakeByPolars,
     DeltaLakeByPolarsOptions,
     ExcelByPolars,
     ExcelByPolarsOptions,
     ParquetByPolars,
-    PolarsOptions,
 )
 
 from jupyter_storage_explorer import StorageExplorer
 from jupyter_storage_explorer._explorer.supports import SupportChain
 from jupyter_storage_explorer.filesystems import AbfsLocation
 from jupyter_storage_explorer.formats import (
+    LIBRARY_DEFAULT,
     Capability,
     Csv,
     DeltaLake,
@@ -34,6 +37,7 @@ from jupyter_storage_explorer.formats import (
     Image,
     Json,
     JsonLines,
+    LibraryDefault,
     Markdown,
     Parquet,
     PythonPackage,
@@ -41,6 +45,7 @@ from jupyter_storage_explorer.formats import (
     SupportOptions,
     Text,
     ViewLimits,
+    format_arguments,
     secret_dict_field,
     secret_field,
 )
@@ -126,14 +131,14 @@ class TestOptions:
                 }
             }
         )
-        assert options[CsvByPolars] == PolarsOptions(storage_options={"a": 1})
+        assert options[CsvByPolars] == CsvByPolarsOptions(storage_options={"a": 1})
         assert options[ParquetByPolars].storage_options == {"a": 1}
         delta = options[DeltaLakeByPolars]
         assert isinstance(delta, DeltaLakeByPolarsOptions)
         assert (delta.storage_options, delta.use_pyarrow) == ({"b": 2}, True)
         # Only the options a support's model has: Excel's code reads with fsspec.
         assert options[ExcelByPolars] == ExcelByPolarsOptions()
-        assert options[CsvByPandas] == PandasOptions()  # pandas' own
+        assert options[CsvByPandas] == CsvByPandasOptions()  # pandas' own
         assert options[TextByPython] == FsspecOptions()  # "python"'s
 
     def test_by_library(self):
@@ -178,7 +183,7 @@ class TestOptions:
             [given, CsvByPolars], {"polars": {"*": {"storage_options": {"y": 2}}}}
         )
         assert chain.supports[0] is given
-        expected = PolarsOptions(storage_options={"y": 2})
+        expected = CsvByPolarsOptions(storage_options={"y": 2})
         assert [chain.options_of(s, ACCOUNT_A) for s in chain.supports] == [
             expected,
             expected,
@@ -203,13 +208,11 @@ class TestOptions:
 
     def test_option_names(self):
         assert SupportOptions.option_names() == frozenset()
-        assert PolarsOptions.option_names() == {
+        assert SecretOptions.option_names() == {
+            "password",
             "storage_options",
-            "credential_provider",
-        }
-        assert DeltaLakeByPolarsOptions.option_names() >= {
-            "use_pyarrow",
-            "storage_options",
+            "version",
+            "engine",
         }
 
     def test_not_a_support(self):
@@ -496,3 +499,34 @@ class TestExplorer:
 
         explorer = Explorer(fs=None, plugin_options=NO_PLUGINS)
         assert [type(s) for s in explorer._supports.supports] == [CsvByPolars]
+
+
+@dataclasses.dataclass(frozen=True, kw_only=True)
+class ReaderOptions(SupportOptions):
+    storage_options: dict | None = None  # not an argument: no LIBRARY_DEFAULT
+    header: bool | LibraryDefault = LIBRARY_DEFAULT
+    quote: str | LibraryDefault | None = LIBRARY_DEFAULT
+    dtype: object = LIBRARY_DEFAULT
+    token: str | LibraryDefault | None = secret_field(default=LIBRARY_DEFAULT)
+
+
+class TestArguments:
+    """Options that are a library's arguments (``LIBRARY_DEFAULT``)."""
+
+    def test_only_those_given(self):
+        assert ReaderOptions(storage_options={"a": 1}).arguments() == {}
+        assert ReaderOptions(header=False, quote=None).arguments() == {
+            "header": False,
+            "quote": None,  # a value given, unlike LIBRARY_DEFAULT
+        }
+
+    def test_in_the_code(self):
+        options = ReaderOptions(quote=None, dtype=object(), token="t")
+        # None kept; objects and secrets left out.
+        assert options.code_arguments() == {"quote": None}
+        assert format_arguments(options.code_arguments()) == ", quote=None"
+
+    def test_one_object(self):
+        assert copy.deepcopy(LIBRARY_DEFAULT) is LIBRARY_DEFAULT
+        assert pickle.loads(pickle.dumps(LIBRARY_DEFAULT)) is LIBRARY_DEFAULT
+        assert repr(LIBRARY_DEFAULT) == "LIBRARY_DEFAULT"

@@ -67,7 +67,7 @@ def filesystems():
 
 
 # --- For development: extending the explorer in Python, tried before the
-# defaults (see the project's DEVELOPMENT_PLUGIN.md). ---
+# defaults (see the project's docs/development-plugin.md). ---
 
 # Formats and the libraries handling their data (FormatSupport subclasses).
 #

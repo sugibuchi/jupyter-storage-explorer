@@ -232,6 +232,31 @@ StorageExplorer(format_options={"duckdb": {"*": {"memory_limit": "2GB"}, "parque
 Recipes read options with `options.code_value(name)`: `None` for a secret field, and a mapping without its secret keys.
 An option that no support of the engine has is an error, so typos are caught.
 
+**A reader's arguments.** Give each format its own model (`<Format>By<Library>Options`, subclassing the library's) whose
+fields are its reader's arguments, of the same names, from the library's API documentation (e.g. `read_parquet`'s),
+each defaulting to `LIBRARY_DEFAULT`: not passed, so the library's own default applies (unlike `None`, which some
+arguments take as a value). Leave out the source, functions (callables) and arguments that change what the reader
+returns (iterators, chunks). Pass `options.arguments()` (those given) to the reader, after the support's own defaults
+(e.g. a separator detected), so that the user's win; the code gets `format_arguments(options.code_arguments())`, which
+leaves out secrets and Python objects (e.g. data types) but keeps `None`. List them in the plugin's README, a table per
+format, their descriptions from the library's documentation.
+
+```python
+from jupyter_storage_explorer.formats import LIBRARY_DEFAULT, LibraryDefault, format_arguments
+
+
+@dataclass(frozen=True, kw_only=True)
+class ParquetByDuckDBOptions(DuckDBOptions):
+    """DuckDB's read_parquet arguments: unset ones are left to DuckDB."""
+
+    binary_as_string: bool | LibraryDefault = LIBRARY_DEFAULT
+    hive_partitioning: bool | LibraryDefault = LIBRARY_DEFAULT
+
+
+relation = con.read_parquet(url, **options.arguments())      # in view()
+code = f"con.read_parquet({url!r}{format_arguments(options.code_arguments())})"  # in recipe()
+```
+
 ### Reading the item
 
 | `ctx`                      | What                                                                                       |
@@ -285,7 +310,7 @@ class ServerSideCopy(FileSystemOperations):
 Operations run in a worker thread: report to `progress` (`advance`, `working_on`) and call `progress.check()` between
 steps, which raises `OperationCancelled` when the user cancels. Import the storage's SDK lazily, and raise
 `NotSupported` when it is missing, so that the defaults take over. `AzureDataLakeGen2Operation`
-([plugins/abfs-support](plugins/abfs-support)) is a complete example.
+([plugins/abfs-support](../plugins/abfs-support)) is a complete example.
 
 ## Filesystem mappers
 
@@ -345,7 +370,8 @@ jupyter-storage-explorer-duckdb-support/
 │       ├── __init__.py      # the plugin class and its options; exports
 │       └── supports.py      # engine, packages, formats, supports, their options
 └── tests/
-    └── test_supports.py
+    ├── conftest.py          # the explorer's test fixtures (see Testing)
+    └── test_duckdb_supports.py
 ```
 
 ### `pyproject.toml`
@@ -371,7 +397,10 @@ full = ["duckdb>=1.0"]
 duckdb-support = "jupyter_storage_explorer_duckdb_support:DuckDBSupport"
 
 [dependency-groups]
-dev = ["duckdb>=1.0", "pytest>=8"]
+dev = ["duckdb>=1.0", "pytest>=8"]  # the libraries, and what the tests need
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 [build-system]
 requires = ["hatchling"]
@@ -463,30 +492,41 @@ changing `pyproject.toml` (the description, the entry point), run `uv sync` agai
 
 ## Testing
 
-Test components without a browser, on items of fsspec's memory filesystem (or local files, for libraries reading by
-URL):
+A plugin's tests are in its own `tests/` and test its own code: its supports' views and code, their options, its
+engine, operations and mappers, and its entry point. They need no browser: components get items as the explorer gives
+them (`ItemContext`), made by `jupyter_storage_explorer.testing` on fsspec's memory filesystem, or local files for
+libraries reading by URL. Its fixtures come through `tests/conftest.py`:
 
 ```python
-import fsspec
+"""Items as the explorer gives them to the plugin's supports."""
 
-from jupyter_storage_explorer.filesystems import MapperChain, default_mappers
-from jupyter_storage_explorer.formats import ItemContext, Parquet, QueryView, ViewLimits
+from jupyter_storage_explorer.testing import make_item, memfs  # noqa: F401
+```
 
+- `memfs`: fsspec's memory filesystem, emptied.
+- `make_item(path, data=None, location=None)`: writes `data` there (or lists the folder) and returns the item;
+  `location` gives it another, e.g. an `S3Location` for the code of an S3 file.
+- `item_of(fs, path, location=None)` and `local_item(path)`: an item of any filesystem, or a local file (e.g. in
+  `tmp_path`).
 
-def item_of(fs, path):
-    info = fs.info(path)
-    children = fs.ls(path, detail=True) if info["type"] == "directory" else None
-    location = MapperChain(default_mappers()).location_of(fs, path)
-    return ItemContext(location=location, fs=fs, path=path, info=info, children=children)
+The tests' libraries go in the `dev` group, so that `uv run pytest` runs them with the plugin's dependencies only:
+
+```python
+from jupyter_storage_explorer.formats import FormatSupport, Parquet, QueryView, ViewLimits
+from jupyter_storage_explorer.testing import local_item
 
 
 def test_view(tmp_path):
     path = tmp_path / "a.parquet"
     ...  # write a Parquet file
-    ctx = item_of(fsspec.filesystem("file"), path.as_posix())
-    view = ParquetByDuckDB().view(Parquet(), ctx, DuckDBOptions(), ViewLimits())
+    view = ParquetByDuckDB().view(Parquet(), local_item(path), DuckDBOptions(), ViewLimits())
     assert isinstance(view, QueryView)
     view.close()
+
+
+def test_code(make_item):
+    code = ParquetByDuckDB().recipe(Parquet(), make_item("/a.parquet", b""), DuckDBOptions())
+    assert "read_parquet('memory:///a.parquet')" in code["Load as a relation"]
 
 
 def test_capabilities_are_implemented():
@@ -515,21 +555,27 @@ lists the plugin with its version.
 - [ ] No backend import at module level; packages through `PythonPackage.load()` inside methods.
 - [ ] Supports: `format`, `engine`, `capabilities` matching the methods, `options_model`; no `__init__` arguments.
 - [ ] Secrets declared with `secret_field` / `secret_dict_field`; code options through `options.code_value`.
+- [ ] A model per format whose fields are its reader's arguments (default `LIBRARY_DEFAULT`), passed with `arguments()`
+      and `code_arguments()`, and tabled in the README with the library's descriptions.
+- [ ] README: the plugin's options (`enabled`, `priority`, its own) and its components' parameters.
 - [ ] Views holding resources release them with `on_close`.
 - [ ] Operations raise `NotSupported` for what they do not do, report progress and call `progress.check()`.
 - [ ] Locations: frozen keyword-only dataclasses, normalized, without credentials.
-- [ ] Tests run with `uv run pytest`; the plugin loads from its entry point.
+- [ ] Tests in the plugin's `tests/`, of its own code, run with `uv run pytest`; the plugin loads from its entry point.
 - [ ] README: what it adds, `pip install "<package>[full]"`, its options.
 
 ## Plugins of this repository
 
-The plugins in [`plugins/`](plugins) (polars, pandas, pyspark, abfs) follow these conventions and are released with the
-explorer, at its version: each requires the explorer of exactly its own version (its `hatch_build.py`), and the
+The plugins in [`plugins/`](../plugins) (polars, pandas, pyspark, abfs) follow these conventions and are released with the
+explorer, at its version: each requires the explorer of exactly its own version (its `hatch_build.py`: the version comes from git), and the
 explorer's extras install them (`polars`: with its libraries; `polars-support`: alone). To add one:
 
-1. Copy one of them (e.g. `plugins/polars-support`), renaming the package, module, plugin class and entry point.
-2. Add its name to `PLUGINS` in the root's and the launcher's `hatch_build.py` (the extras), and the package to the
-   root's dev dependencies and `[tool.uv.sources]`.
+1. Copy one of them (e.g. `plugins/polars-support`), renaming the package, module, plugin class and entry point. Its
+   tests are in its `tests/`, named `test_<name>_*.py` (pytest at the root runs every plugin's, and imports test files
+   by name).
+2. Add its extras, `<name>` (the plugin's `full`) and `<name>-support` (the plugin alone), to
+   `[project.optional-dependencies]` in the root's and the launcher's `pyproject.toml` (and to their `all` and `all-supports`), without versions (the plugin
+   requires the explorer of exactly its own), and the package to the root's dev dependencies and `[tool.uv.sources]`.
 3. Give it a release workflow, `.github/workflows/release-<plugin>.yaml` (a copy of another's), and its PyPI project a
-   trusted publisher for it (see [One-time setup for PyPI](DEVELOPMENT.md#one-time-setup-for-pypi)).
-4. List it in [docs/storage-explorer.md](docs/storage-explorer.md#plugins)'s table and the README's extras.
+   trusted publisher for it (see [One-time setup for PyPI](../DEVELOPMENT.md#one-time-setup-for-pypi)).
+4. List it in [docs/storage-explorer.md](storage-explorer.md#plugins)'s table and the README's extras.

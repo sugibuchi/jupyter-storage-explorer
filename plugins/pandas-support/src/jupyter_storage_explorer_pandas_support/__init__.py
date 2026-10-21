@@ -8,12 +8,17 @@ The plugin, ``PandasSupport``, is found by explorers through its entry point
 from jupyter_storage_explorer import StorageExplorerPlugin
 from jupyter_storage_explorer_pandas_support.supports import (
     CsvByPandas,
+    CsvByPandasOptions,
     ExcelByPandas,
+    ExcelByPandasOptions,
     JsonByPandas,
+    JsonByPandasOptions,
     JsonLinesByPandas,
+    JsonLinesByPandasOptions,
     PandasEngine,
     PandasOptions,
     ParquetByPandas,
+    ParquetByPandasOptions,
 )
 
 
@@ -33,11 +38,16 @@ class PandasSupport(StorageExplorerPlugin):
 
 __all__ = [
     "CsvByPandas",
+    "CsvByPandasOptions",
     "ExcelByPandas",
+    "ExcelByPandasOptions",
     "JsonByPandas",
+    "JsonByPandasOptions",
     "JsonLinesByPandas",
+    "JsonLinesByPandasOptions",
     "PandasEngine",
     "PandasOptions",
     "PandasSupport",
     "ParquetByPandas",
+    "ParquetByPandasOptions",
 ]

@@ -54,6 +54,10 @@ packages = ["src/jupyter_storage_explorer_pyspark_support"]
 dev = [
     "pyspark>=3.5",
     "delta-spark>=3.0",
+    # The tests' (tests/), besides the libraries.
+    "duckdb>=1.5.6",
+    "pytest>=9.1.1",
+    "sqlframe>=4.4.0",
 ]
 
 [tool.uv]
@@ -61,3 +65,8 @@ cache-keys = [{ file = "pyproject.toml" }, { file = "hatch_build.py" }, { git = 
 
 [tool.uv.sources]
 jupyter-storage-explorer = { workspace = true }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Inside sqlframe (the stand-in for Spark in tests), from its DuckDB calls.
+filterwarnings = ["ignore:fetch_arrow_table\\(\\) is deprecated:DeprecationWarning:sqlframe"]

@@ -38,33 +38,6 @@ for all you can do with it.
   and files in tabs of their own.
 - **Bookmarks**, remembered queries, transfer rules, and a JupyterLab launcher item.
 
-## Installation
-
-```bash
-pip install "jupyter-storage-explorer[polars]"
-```
-
-`[polars]` adds the plugin previewing and querying data with Polars, and Polars itself. Plugins for other engines and
-storages are extras too; `<name>-support` installs a plugin alone, using the libraries you have:
-
-| Extra     | Plugin                                                                                     |
-|-----------|--------------------------------------------------------------------------------------------|
-| `polars`  | Polars (with deltalake and fastexcel): Delta Lake, Parquet, CSV, JSON Lines, Excel         |
-| `pandas`  | pandas (with PyArrow and openpyxl): Parquet, CSV, JSON Lines, Excel                        |
-| `pyspark` | PySpark or Databricks Connect (with delta-spark): Delta Lake, Parquet, CSV, JSON Lines     |
-| `abfs`    | Azure Data Lake Storage Gen2: folders moved in one step, copies on the server (with adlfs) |
-
-Install the package for your storage too:
-
-| Storage                        | Package    | Address                                              |
-|--------------------------------|------------|------------------------------------------------------|
-| Amazon S3                      | `s3fs`     | `s3://bucket/path`                                   |
-| Azure Data Lake / Blob Storage | `adlfs`    | `abfs://container@account.dfs.core.windows.net/path` |
-| Google Cloud Storage           | `gcsfs`    | `gs://bucket/path`                                   |
-| Local disk, in-memory          | (included) | `/path`, `memory://`                                 |
-
-Without an engine plugin, the explorer still browses, moves and previews text, Markdown, JSON and images.
-
 ## Quick start
 
 **Try it without installing anything**:
@@ -84,6 +57,15 @@ pip install "jupyter-storage-explorer-launcher[polars]"
 ![The Storage Explorer item in JupyterLab's launcher](https://raw.githubusercontent.com/sugibuchi/jupyter-storage-explorer/main/launcher/figs/launcher.png)
 
 ### From Python code
+
+```bash
+pip install "jupyter-storage-explorer[polars]"
+```
+
+`[polars]` adds the Polars plugin with Polars itself; other engines and storages are extras too, e.g.
+`[polars-support]` for the plugin alone, using the libraries you have (recommended in carefully set up kernels). See
+[Installation](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#installation)
+for all of them and the storage packages.
 
 ```python
 from jupyter_storage_explorer import StorageExplorer
@@ -120,7 +102,7 @@ The `notebooks` folder has a demo of each widget on sample data.
   its tab with `launcher.py` files.
 - **[Development](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/DEVELOPMENT.md)**: building,
   releasing, and custom icons.
-- **[Developing plugins](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/DEVELOPMENT_PLUGIN.md)**:
+- **[Developing plugins](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/development-plugin.md)**:
   formats, engines, file operations and storages of your own, packaged as plugins.
 
 ## Requirements

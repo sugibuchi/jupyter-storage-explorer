@@ -1,10 +1,11 @@
 # StorageExplorer
 
 `StorageExplorer` is the file explorer: browse storage, preview files, query tables, and upload, download, move and
-edit files. For installation, see the [README](../README.md).
+edit files.
 
 <img src="figs/storage-explorer.png" width="954" alt="StorageExplorer with a JSON Lines file open in the data browser">
 
+- [Installation](#installation)
 - [Storages](#storages)
 - [Using the explorer](#using-the-explorer)
 - [Unsafe operations](#unsafe-operations)
@@ -16,6 +17,38 @@ edit files. For installation, see the [README](../README.md).
 - [Working with the explorer from Python](#working-with-the-explorer-from-python)
 - [StorageExplorer options](#storageexplorer-options)
 - [Extensions](#extensions)
+
+## Installation
+
+```bash
+pip install "jupyter-storage-explorer[polars]"
+```
+
+Engines and storages come as plugins, installed with extras of two kinds:
+
+- **Full extras**, e.g. `[polars]`: the plugin and the libraries it uses (Polars, deltalake, fastexcel).
+- **Support-only extras**, e.g. `[polars-support]`: the plugin alone, using the libraries already installed. Nothing
+  else is installed or upgraded.
+
+| Full extra | Support-only extra | Plugin                                                                        | Libraries of the full extra        |
+|------------|--------------------|-------------------------------------------------------------------------------|------------------------------------|
+| `polars`   | `polars-support`   | Polars: Delta Lake, Parquet, CSV, JSON Lines, Excel                           | polars, deltalake, fastexcel       |
+| `pandas`   | `pandas-support`   | pandas: Parquet, CSV, JSON Lines, Excel                                       | pandas, pyarrow, openpyxl          |
+| `pyspark`  | `pyspark-support`  | PySpark or Databricks Connect: Delta Lake, Parquet, CSV, JSON Lines           | pyspark, delta-spark               |
+| `abfs`     | `abfs-support`     | Azure Data Lake Storage Gen2: folders moved in one step, copies on the server | adlfs, azure-storage-file-datalake |
+| `all`      | `all-supports`     | All of the above                                                              | All of the above                   |
+
+Full extras are handy for a quick try. **Support-only extras are highly recommended for an IPython kernel whose data
+access packages are carefully installed and configured** (e.g. a shared JupyterHub image, or Spark and Databricks
+Connect set up for a cluster): the plugins use what is there and never change it.
+
+```bash
+pip install "jupyter-storage-explorer[all-supports]"  # every plugin, with the libraries you have
+```
+
+Install the package for your storage too, e.g. `s3fs` for Amazon S3 (see [Storages](#storages)). Without an engine
+plugin, the explorer still browses, moves and previews text, Markdown, JSON and images. For the JupyterLab launcher
+item, install [`jupyter-storage-explorer-launcher`](../launcher/README.md#installation), which has the same extras.
 
 ## Storages
 
@@ -270,7 +303,7 @@ may work, but are not guaranteed to.
 Each format's view (the preview, the data browser) is the [engine](#engines) chosen's, and its code is shown for
 every engine in **Python code**, each recipe with its engine (a support given for an engine replaces the default one's).
 The name identifies the format in CSS (see [Icons](../DEVELOPMENT.md#icons)) and in [Format options](#format-options).
-To handle a format with another library, see [Format supports](../DEVELOPMENT_PLUGIN.md#format-supports).
+To handle a format with another library, see [Format supports](development-plugin.md#format-supports).
 
 ## Format options
 
@@ -290,16 +323,12 @@ StorageExplorer(
 )
 ```
 
-| Library  | Option                   | Formats                                         | Meaning                                                                                                       |
-|----------|--------------------------|-------------------------------------------------|---------------------------------------------------------------------------------------------------------------|
-| `polars` | `storage_options`        | `delta`, `parquet`, `csv`, `json-lines`         | polars' `storage_options` (object_store's names, not fsspec's), in the preview, the data browser and the code. |
-| `polars` | `credential_provider`    | `delta`, `parquet`, `csv`, `json-lines`         | polars' `credential_provider`, in the preview and the data browser (not in the code).                          |
-| `polars` | `fsspec_storage_options` | `excel`                                         | `fsspec.open`'s keyword arguments, in the code (which reads the file with fsspec).                             |
-| `polars` | `delta_table_options`    | `delta`                                         | `scan_delta`'s `delta_table_options`.                                                                          |
-| `polars` | `use_pyarrow`            | `delta`                                         | `scan_delta`'s `use_pyarrow`.                                                                                  |
-| `polars` | `pyarrow_options`        | `delta`                                         | `scan_delta`'s `pyarrow_options`.                                                                              |
-| `pandas` | `storage_options`        | `parquet`, `csv`, `json-lines`, `json`, `excel` | pandas' `storage_options` (fsspec's), in the code.                                                             |
-| `python` | `storage_options`        | `json`, `text` (also Markdown's code), `image`  | `fsspec.open`'s keyword arguments, in the code.                                                                |
+| Library   | Options                                                                     | Formats                                                  | Meaning                                                                                      |
+|-----------|-----------------------------------------------------------------------------|----------------------------------------------------------|----------------------------------------------------------------------------------------------|
+| `polars`  | each format's reader's arguments (e.g. `scan_csv`'s), and `storage_options`  | `delta`, `parquet`, `csv`, `json-lines`, `json`, `excel` | See polars-support's [Format options](../plugins/polars-support/README.md#format-options).   |
+| `pandas`  | each format's reader's arguments (e.g. `read_csv`'s), and `storage_options`  | `parquet`, `csv`, `json-lines`, `json`, `excel`          | See pandas-support's [Format options](../plugins/pandas-support/README.md#format-options).   |
+| `pyspark` | the session's and each format's reader options                             | `delta`, `parquet`, `csv`, `json-lines`                  | See pyspark-support's [Format options](../plugins/pyspark-support/README.md#format-options). |
+| `python`  | `storage_options`                                                           | `json`, `text` (also Markdown's code), `image`           | `fsspec.open`'s keyword arguments, in the code.                                              |
 
 Options that look like credentials are left out of the code. A library, format or option name that no support takes is
 an error.
@@ -440,9 +469,9 @@ For extending the explorer (see [Extensions](#extensions)), tried before the def
 
 | Option                     | Meaning                                                                                                               |
 |----------------------------|-----------------------------------------------------------------------------------------------------------------------|
-| `operations=[...]`         | File operations; see [File operations](../DEVELOPMENT_PLUGIN.md#file-operations).                                     |
-| `supports=[...]`           | Formats and the libraries handling them; see [Format supports](../DEVELOPMENT_PLUGIN.md#format-supports).            |
-| `filesystem_mappers=[...]` | How storages are told apart; see [Filesystem mappers](../DEVELOPMENT_PLUGIN.md#filesystem-mappers).                   |
+| `operations=[...]`         | File operations; see [File operations](development-plugin.md#file-operations).                                     |
+| `supports=[...]`           | Formats and the libraries handling them; see [Format supports](development-plugin.md#format-supports).            |
+| `filesystem_mappers=[...]` | How storages are told apart; see [Filesystem mappers](development-plugin.md#filesystem-mappers).                   |
 
 ## Extensions
 
@@ -461,12 +490,14 @@ StorageExplorer(
 
 | Plugin            | Adds                                                                                          | Install                                          |
 |-------------------|-----------------------------------------------------------------------------------------------|--------------------------------------------------|
-| `polars-support`  | Polars: Delta Lake, Parquet, CSV, JSON Lines, Excel                                           | `pip install "jupyter-storage-explorer[polars]"`  |
-| `pandas-support`  | pandas: Parquet, CSV, JSON Lines, Excel                                                       | `pip install "jupyter-storage-explorer[pandas]"`  |
-| `pyspark-support` | PySpark or Databricks Connect: Delta Lake, Parquet, CSV, JSON Lines                           | `pip install "jupyter-storage-explorer[pyspark]"` |
-| `abfs-support`    | Azure Data Lake Storage Gen2: folders moved in one step, copies within an account on the server (`concurrency`, default 64, at once), empty folders | `pip install "jupyter-storage-explorer[abfs]"`    |
+| [`polars-support`](../plugins/polars-support/README.md)  | Polars: Delta Lake, Parquet, CSV, JSON Lines, Excel                                           | `pip install "jupyter-storage-explorer[polars]"`  |
+| [`pandas-support`](../plugins/pandas-support/README.md)  | pandas: Parquet, CSV, JSON Lines, Excel                                                       | `pip install "jupyter-storage-explorer[pandas]"`  |
+| [`pyspark-support`](../plugins/pyspark-support/README.md) | PySpark or Databricks Connect: Delta Lake, Parquet, CSV, JSON Lines                           | `pip install "jupyter-storage-explorer[pyspark]"` |
+| [`abfs-support`](../plugins/abfs-support/README.md)    | Azure Data Lake Storage Gen2: folders moved in one step, copies within an account on the server (`concurrency`, default 64, at once), empty folders | `pip install "jupyter-storage-explorer[abfs]"`    |
 
-`[<name>-support]` installs a plugin alone, using the libraries already installed: plugins never install or upgrade
+Each plugin's README has its options (`plugin_options`, and `format_options` for its engine).
+
+`[all]` installs every plugin with its libraries. `[<name>-support]` (`[all-supports]` for every plugin) installs a plugin alone, using the libraries already installed: plugins never install or upgrade
 them otherwise, so that a shared environment's stay as its administrators set them up.
 
 ⚙ at the right of the toolbar → **About** shows the explorer's version and the plugins installed, those not used greyed
@@ -477,4 +508,4 @@ out; hover over ⓘ for a plugin's description.
 ### Writing your own
 
 Plugins, and formats, file operations or storages given to one explorer (`supports`, `operations`,
-`filesystem_mappers`): see [DEVELOPMENT_PLUGIN.md](../DEVELOPMENT_PLUGIN.md).
+`filesystem_mappers`): see [development-plugin.md](development-plugin.md).

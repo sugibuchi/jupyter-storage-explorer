@@ -1,6 +1,6 @@
 [project]
 name = "jupyter-storage-explorer"
-dynamic = ["version", "optional-dependencies"]
+dynamic = ["version"]
 description = "Explore your data lake without leaving Jupyter: built for data professionals"
 readme = "README.md"
 license = "MIT"
@@ -45,6 +45,25 @@ dependencies = [
     "traitlets>=5.4",
 ]
 
+# The plugins of this repository (plugins/<name>-support), released with the
+# explorer at its version: "<name>" installs one with its libraries (its "full"
+# extra), "<name>-support" alone, using the libraries already installed; "all"
+# and "all-supports" every plugin so. No version here: each plugin requires
+# the explorer of exactly its own version, so only the plugins of this one's
+# can be installed with it. The launcher offers the same extras.
+[project.optional-dependencies]
+abfs = ["jupyter-storage-explorer-abfs-support[full]"]
+abfs-support = ["jupyter-storage-explorer-abfs-support"]
+pandas = ["jupyter-storage-explorer-pandas-support[full]"]
+pandas-support = ["jupyter-storage-explorer-pandas-support"]
+polars = ["jupyter-storage-explorer-polars-support[full]"]
+polars-support = ["jupyter-storage-explorer-polars-support"]
+pyspark = ["jupyter-storage-explorer-pyspark-support[full]"]
+pyspark-support = ["jupyter-storage-explorer-pyspark-support"]
+# Every plugin: with their libraries, or alone.
+all = ["jupyter-storage-explorer[abfs,pandas,polars,pyspark]"]
+all-supports = ["jupyter-storage-explorer[abfs-support,pandas-support,polars-support,pyspark-support]"]
+
 [project.urls]
 Homepage = "https://github.com/sugibuchi/jupyter-storage-explorer"
 Source = "https://github.com/sugibuchi/jupyter-storage-explorer"
@@ -58,11 +77,6 @@ build-backend = "hatchling.build"
 [tool.hatch.version]
 source = "vcs"
 raw-options = { 'version_scheme' = 'post-release' }
-
-# The extras, set by hatch_build.py: for each plugin (plugins/), "<name>"
-# installs it with its libraries, "<name>-support" alone; both at the
-# explorer's own version.
-[tool.hatch.metadata.hooks.custom]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/jupyter_storage_explorer"]
@@ -117,12 +131,12 @@ jupyter-storage-explorer-pyspark-support = { workspace = true }
 # comes from git (hatch-vcs), not only when pyproject.toml changes.
 cache-keys = [
     { file = "pyproject.toml" },
-    { file = "hatch_build.py" },
     { git = { commit = true, tags = true } },
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+# The explorer's and the launcher's tests, and each plugin's (in its folder).
+testpaths = ["tests", "plugins"]
 # The launcher's Python code, for tests/test_launcher.py: CI does not install
 # the launcher (its JupyterLab extension is not built there).
 pythonpath = ["launcher/src"]
@@ -135,7 +149,7 @@ filterwarnings = [
 # its code from launcher/src), for Codecov.
 [tool.coverage.run]
 source = ["src/jupyter_storage_explorer", "plugins"]
-omit = ["plugins/*/hatch_build.py"]
+omit = ["plugins/*/hatch_build.py", "plugins/*/tests/*"]
 
 [tool.ruff]
 exclude = [

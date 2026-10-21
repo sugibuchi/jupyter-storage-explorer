@@ -2,20 +2,12 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-import fsspec
 import polars as pl
 import pytest
 from explorers import Explorer, make
-from fsspec.implementations.memory import MemoryFileSystem
-from items import item_of
 
-if TYPE_CHECKING:
-    from collections.abc import Callable
-
-    from jupyter_storage_explorer.formats import ItemContext
-    from jupyter_storage_explorer.location import Location
+# memfs and make_item, as plugins test with.
+pytest_plugins = ["jupyter_storage_explorer.testing"]
 
 
 @pytest.fixture(autouse=True)
@@ -26,31 +18,6 @@ def jupyter_data_dir(tmp_path_factory, monkeypatch):
     folder = tmp_path_factory.mktemp("jupyter-data")
     monkeypatch.setenv("JUPYTER_DATA_DIR", str(folder))
     return folder
-
-
-@pytest.fixture
-def memfs() -> MemoryFileSystem:
-    """An empty in-memory filesystem (fsspec keeps one store per process, so it is cleared)."""
-    fs = fsspec.filesystem("memory")
-    MemoryFileSystem.store.clear()
-    MemoryFileSystem.pseudo_dirs.clear()
-    MemoryFileSystem.pseudo_dirs.append("")
-    return fs
-
-
-@pytest.fixture
-def make_item(memfs: MemoryFileSystem) -> Callable[..., ItemContext]:
-    """Write a file (``data``) or list a directory on ``memfs`` and return it
-    as an ``ItemContext``; ``location`` instead of its own, e.g. an S3 one."""
-
-    def make(
-        path: str, data: bytes | None = None, location: Location | None = None
-    ) -> ItemContext:
-        if data is not None:
-            memfs.pipe_file(path, data)
-        return item_of(memfs, path, location)
-
-    return make
 
 
 @pytest.fixture

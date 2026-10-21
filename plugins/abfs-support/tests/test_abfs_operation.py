@@ -1,21 +1,39 @@
-"""abfs-support's operation (plugins/abfs-support): Azure Data Lake Storage Gen2, with a fake Data Lake client
-(no Azure account in tests)."""
+"""abfs-support's operation: Azure Data Lake Storage Gen2, with a fake Data Lake client
+(no Azure account in tests); and its entry point."""
 
 from __future__ import annotations
 
 import asyncio
+from importlib.metadata import entry_points
 from typing import Any, Self
 
 import pytest
 from adlfs import AzureBlobFileSystem
 from azure.core import MatchConditions
-from jupyter_storage_explorer_abfs_support import AzureDataLakeGen2Operation, _azure
+from jupyter_storage_explorer_abfs_support import (
+    AbfsSupport,
+    AbfsSupportOptions,
+    AzureDataLakeGen2Operation,
+    _azure,
+)
 
 from jupyter_storage_explorer._jobs.progress import JobProgress
 from jupyter_storage_explorer.filesystems.operation import (
     FileSystemOperations,
     OperationCancelled,
 )
+
+
+def test_plugin_registered():
+    [entry_point] = entry_points(
+        group="jupyter_storage_explorer.plugins", name="abfs-support"
+    )
+    plugin = entry_point.load()(AbfsSupportOptions(concurrency=8))
+    assert isinstance(plugin, AbfsSupport)
+    assert plugin.description == "Azure Data Lake Storage support for Storage Explorer"
+    [operation] = plugin.filesystem_operations
+    assert isinstance(operation, AzureDataLakeGen2Operation)
+    assert operation.concurrency == 8  # the plugin's option
 
 
 class FakeService:
