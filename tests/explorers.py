@@ -62,6 +62,7 @@ def entries(explorer: Explorer) -> list[dict[str, Any]]:
             "size": listing["sizes"][i],
             "mtime": listing["mtimes"][i],
             "format": listing["formats"][listing["format"][i]],
+            "level": listing["levels"][listing["level"][i]] or None,
             "no_url": i in no_url,
         }
         for i, name in enumerate(listing["names"])

@@ -226,17 +226,18 @@ The icons are JupyterLab's file browser's, as SVG images (`.jse-icon svg`), chos
 `file_icon`, one of `FILE_ICONS` in `formats/base.py`), else by its extension. A format of your own can also bring
 its own icon, `file_icon = ("avro", "<svg ...>...</svg>")`, shown as an image (`.jse-icon img`). Folders that are
 more than folders get an icon of their own: Azure accounts and containers, S3 and GCS buckets (and the top, holding
-them), an SFTP server's top folder, a local drive's, and the memory filesystem's; as their filesystem's mapper tells
-(`FileSystemMapper.levels`, see [development-plugin.md](docs/development-plugin.md)), counted from its top folder, so
-not in a `DirFileSystem`. Those of Azure, S3 and GCS are in a colour of their cloud, `--jse-storage-color` (e.g.
+them), an SFTP server's top folder, a local drive's, the memory filesystem's, and Databricks' (Unity Catalog's
+catalogs, schemas and volumes; workspace files' Repos, users, repositories and Shared; legacy DBFS's top folders); as
+their filesystem's mapper tells (`FileSystemMapper.level`, see [development-plugin.md](docs/development-plugin.md)).
+Those of Azure, S3, GCS and Databricks are in a colour of their cloud, `--jse-storage-color` (e.g.
 `.jse-browser[data-fs-protocol="s3"] { --jse-storage-color: green; }`; `initial` for JupyterLab's grey). The explorer
 and its rows carry attributes to select them by:
 
 | Selector                                  | Rows                                                                                              |
 |-------------------------------------------|---------------------------------------------------------------------------------------------------|
 | `.jse-browser`                            | The explorer (every selector starts with it, so nothing else on the page changes)                 |
-| `.jse-browser[data-fs-protocol="s3"]`     | The explorer while it shows a storage of that protocol: `abfs`, `s3`, `gs`, `sftp`, `file`, …     |
-| `[data-fs-level="container"]`             | Folders in the tree and the list by what the storage makes of them: `account`, `container`, `endpoint`, `bucket`, `host`, `drive`, `memory` |
+| `.jse-browser[data-fs-protocol="s3"]`     | The explorer while it shows a storage of that protocol: `abfs`, `s3`, `gs`, `dbfs`, `sftp`, `file`, … |
+| `[data-fs-level="container"]`             | Folders in the tree and the list by what the storage makes of them: `account`, `container`, `endpoint`, `bucket`, `host`, `drive`, `memory`; Databricks' `workspace`, `volumes`, `catalog`, `schema`, `volume`, `workspace-files`, `repos`, `users`, `shared`, `user`, `repository`, `legacy` |
 | `[data-depth="0"]`, `[data-depth="1"]`, … | Folders in the tree and the list, by their level: `0` the top folder, `1` the folders in it, …    |
 | `[data-file-format]`                      | Files of a known format (not those of no known format, or without a URL)                          |
 | `[data-file-format="parquet"]`            | Files of one format: `parquet`, `csv`, `json`, `json-lines`, `excel`, `markdown`, `text`, `image` |

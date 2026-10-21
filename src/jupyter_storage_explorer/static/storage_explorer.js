@@ -37,9 +37,6 @@ function render({ model, el }) {
       }
       return out;
     },
-    // The storage's level of folders at `depth` from the root (0: the root),
-    // e.g. "container" (FileSystemMapper.levels), or null for plain folders.
-    levelAt: (depth) => model.get("_fs_levels")[depth] || null,
     // The storage shown, as files copied or dragged name it: {name}. An
     // explorer of another kernel finds them by their locations instead.
     storage: () => ({ name: model.get("_filesystem") }),
@@ -208,9 +205,8 @@ function render({ model, el }) {
     },
     "change:_filesystem_names": x.tree.renderStorages,
     "change:_fs_protocol": renderProtocol,
-    // Sent with the storage's _root, which draws the tree again; the list
-    // follows with the storage's listing.
-    "change:_fs_levels": x.tree.render,
+    // Sent with the storage's _root, which draws the tree again.
+    "change:_root_level": x.tree.render,
     "change:_listing": x.list.render,
     "change:_selected": x.list.render,
     "change:_columns": x.list.render,

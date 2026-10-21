@@ -65,7 +65,7 @@ function createTree(x) {
 
     function node(dir, depth) {
       const children = tree[dir.path];
-      const level = x.levelAt(depth);
+      const level = dir.level || null; // e.g. "container": _tree's entries, _root_level
       const isOpen = expanded.has(dir.path);
       if (isOpen) requestChildren(dir.path);
 
@@ -125,7 +125,7 @@ function createTree(x) {
     }
 
     // The root's menu offers no previews, code or copying (no_url).
-    el.replaceChildren(node({ name: rootName(root), path: root, no_url: true }, 0));
+    el.replaceChildren(node({ name: rootName(root), path: root, no_url: true, level: model.get("_root_level") }, 0));
     el.querySelector(".jse-active")?.scrollIntoView({ block: "nearest" });
   }
 

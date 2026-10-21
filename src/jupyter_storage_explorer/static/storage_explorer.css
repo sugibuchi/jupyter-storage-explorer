@@ -304,7 +304,7 @@
   color: inherit;
 }
 
-/* Accounts, containers and buckets (levelIcon in icons.js) in their cloud's
+/* Accounts, containers, buckets, volumes... (levelIcon in icons.js) in their cloud's
    colour, a hint of which storage it is; other storages' in JupyterLab's
    grey. Not their brands' icons, only a colour. White in selected rows (below:
    those rules are more specific). */
@@ -318,6 +318,10 @@
 
 .jse-browser[data-fs-protocol="gs"] {
   --jse-storage-color: #4285f4;
+}
+
+.jse-browser[data-fs-protocol="dbfs"] {
+  --jse-storage-color: #03a9f4;
 }
 
 .jse-browser .jse-level-svg .jp-icon-selectable[fill] {

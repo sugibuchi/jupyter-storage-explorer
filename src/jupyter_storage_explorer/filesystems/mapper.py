@@ -60,10 +60,9 @@ class FileSystemMapper:
         What the storage makes of the folders at each depth from the
         filesystem's top folder (its root, ""), when more than folders: e.g.
         ``("account", "container")`` for adlfs, whose top is an Azure account
-        and its folders the containers. The explorer gives such folders an
-        icon of their own, and CSS selects them by it (``[data-fs-level]``);
-        "" for a depth of plain folders, as are those below the last. Empty
-        by default. Not applied to a ``DirFileSystem``'s folders.
+        and its folders the containers; "" for a depth of plain folders, as
+        are those below the last. Empty by default. What ``level`` gives,
+        unless a subclass overrides it.
 
     Examples
     --------
@@ -130,6 +129,33 @@ class FileSystemMapper:
             kernel.
         """
         return FsspecLocation(url=fs.unstrip_protocol(path))
+
+    def level(self, fs: AbstractFileSystem, path: str) -> str | None:
+        """What the storage makes of the folder at ``path``, if more than a
+        folder: e.g. "container" for an Azure container, "catalog" for a
+        Unity Catalog's folder of Databricks volumes. The explorer gives such
+        folders an icon of their own (for the predefined levels), and CSS
+        selects them by it (``[data-fs-level]``).
+
+        Called for every folder listed, so it must be quick: from the path
+        and the instance's settings, never by reading the storage.
+
+        Parameters
+        ----------
+        fs : AbstractFileSystem
+            A filesystem this mapper ``matches``.
+        path : str
+            A folder of ``fs``, as fsspec lists it; "" or "/" for its top folder.
+
+        Returns
+        -------
+        str or None
+            By default ``levels`` by the folder's depth from the top folder;
+            None for a plain folder. Override it when the level depends on
+            the path, not only on its depth.
+        """
+        depth = len([part for part in path.split("/") if part])
+        return (self.levels[depth] if depth < len(self.levels) else "") or None
 
     def path_of(self, fs: AbstractFileSystem, location: Location) -> str | None:
         """The reverse of ``to_location``: the path of ``location`` in ``fs``,
@@ -211,6 +237,14 @@ class MapperChain:
             path, fs = fs._join(path), fs.fs
         return self.mapper_of(fs).to_location(fs, path)
 
+    def level_of(self, fs: AbstractFileSystem, path: str) -> str | None:
+        """The level of folder ``path`` of ``fs`` (``FileSystemMapper.level``),
+        from the mapper of the filesystem it is in: a ``DirFileSystem``'s
+        folders are those of the filesystem it wraps."""
+        while isinstance(fs, DirFileSystem):
+            path, fs = fs._join(path), fs.fs
+        return self.mapper_of(fs).level(fs, path)
+
     def path_in(self, fs: AbstractFileSystem, location: Location) -> str | None:
         """The path of ``location`` in ``fs``; None if ``fs`` does not reach it."""
         inner, folders = _unwrap(fs)
@@ -270,7 +304,12 @@ class MapperChain:
             mapper_a.to_location(inner_a, ""),
             mapper_b.to_location(inner_b, ""),
         )
-        if _FALLBACK in (mapper_a, mapper_b) or top_a is None or top_b is None:
+        # Mappers of fsspec's URLs (FsspecMapper and its subclasses) know
+        # nothing of what instances reach.
+        unknown = isinstance(mapper_a, FsspecMapper) or isinstance(
+            mapper_b, FsspecMapper
+        )
+        if unknown or top_a is None or top_b is None:
             return inner_a == inner_b
         # Each reaches the other's top folder, as its own mapper tells.
         return (

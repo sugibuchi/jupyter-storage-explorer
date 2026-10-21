@@ -20,6 +20,8 @@ def columns(items: list[tuple[str, bool, int | None, int | None]]) -> dict[str, 
         "ctimes": [None for _ in items],
         "formats": ["", "csv"],
         "format": [int(n.endswith(".csv")) for n, *_ in items],
+        "levels": ["", "bucket"],
+        "level": [int(d) for _, d, *_ in items],
         "paths": None,
         "no_url": [],
     }
@@ -168,6 +170,8 @@ class TestQuery:
         assert page["names"] == ["file1.txt", "File2.csv", "file10.csv"]
         assert page["sizes"] == [20, 10, 30]
         assert [page["formats"][i] for i in page["format"]] == ["", "csv", "csv"]
+        folders = listing.query(text="b")["listing"]
+        assert [folders["levels"][i] for i in folders["level"]] == ["bucket"]
         assert page["no_url"] == [0]
         assert page["paths"] is None
 

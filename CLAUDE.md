@@ -193,9 +193,11 @@ reaches it, else, for kinds other than `FsspecLocation` (never those: the kernel
 URL points), `url_to_fs(location.url)` if it reaches it, else refused (so another kernel's memory or another
 machine's disk is never read). `DirFileSystem`s are not mapped: the chain unwraps them, so
 their locations are those of the filesystem they wrap, and `same_filesystem` also compares their folders. A mapper's
-`levels` (e.g. adlfs's `("account", "container")`, by depth from the filesystem's top folder) give folders their icons
-(`LEVEL_ICONS` in `icons.js`) and rows `data-fs-level`, the explorer `data-fs-protocol` (traits `_fs_levels`, from the
-storage's top folder, `_levels_below`, none in a `DirFileSystem`; `_fs_protocol`). File operations
+`level(fs, path)` (by default its `levels` by depth from the filesystem's top folder, e.g. adlfs's `("account",
+"container")`; `DatabricksMapper`'s by path) gives folders their icons (`LEVEL_ICONS` in `icons.js`) and rows
+`data-fs-level`: `MapperChain.level_of` (through `DirFileSystem`s), the explorer's `_level_of`, sent with the tree's
+entries ("level"), the listing ("levels", "level", as "formats" and "format") and `_root_level`; the explorer gets
+`data-fs-protocol` (`_fs_protocol`). File operations
 are told by `FileTasks` with `move`'s and `copy`'s required keyword `same` (the explorer's chain); outside an
 explorer, callers pass it themselves (e.g. the module-level `same_filesystem`, of the default mappers).
 

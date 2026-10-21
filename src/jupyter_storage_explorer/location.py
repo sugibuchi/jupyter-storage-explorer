@@ -57,8 +57,9 @@ class Location:
 
     @property
     def protocol(self) -> str:
-        """The URL's protocol, e.g. "abfs", "s3", "file"."""
-        return self.url.partition("://")[0]
+        """The URL's protocol, e.g. "abfs", "s3", "file"; also of URLs with
+        one "/" after it, as Databricks' ("dbfs:/Volumes/...")."""
+        return self.url.partition(":")[0]
 
     # --- JSON ---
 

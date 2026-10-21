@@ -1112,6 +1112,9 @@ def storage_levels(lab: Lab, page: Page) -> None:
     expect(x.row("raw")).to_have_attribute("data-fs-level", "container")
     expect(x.row("raw").locator(icon)).to_have_attribute("data-icon", "box")
     x.row("raw").dblclick()
+    # The path: "/ raw", no separator after a root of "/".
+    expect(x.el.locator(".jse-crumb")).to_have_text(["/", "raw"])
+    expect(x.el.locator(".jse-crumbs .jse-sep")).to_have_count(0)
     expect(x.row("sales")).not_to_have_attribute("data-fs-level", re.compile("."))
     expect(x.row("sales").locator(icon)).to_have_attribute("data-icon", "folder")
     x.el.locator(".jse-fs-select").select_option("S3")

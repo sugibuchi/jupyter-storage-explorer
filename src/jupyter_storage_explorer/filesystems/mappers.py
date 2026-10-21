@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any
 
 from jupyter_storage_explorer.filesystems.locations import (
     AbfsLocation,
+    FsspecLocation,
     GcsLocation,
     LocalLocation,
     MemoryLocation,
@@ -26,6 +27,7 @@ from jupyter_storage_explorer.filesystems.locations import (
 )
 from jupyter_storage_explorer.filesystems.mapper import (
     FileSystemMapper,
+    FsspecMapper,
     MapperChain,
 )
 
@@ -279,6 +281,75 @@ class SSHFSMapper(SFTPMapper):
         }
 
 
+class DatabricksMapper(FsspecMapper):
+    """fsspec's ``DatabricksFileSystem``: a Databricks workspace's files
+    (https://docs.databricks.com/aws/en/files/).
+
+    Its locations are Databricks' URLs, ``dbfs:/Volumes/...`` (fsspec's
+    class names no protocol of its own). Nothing in them tells the workspace,
+    so, as fsspec's URLs, they are looked for among the explorer's storages
+    only, and two instances are one filesystem only if fsspec says so.
+    """
+
+    classes = ("fsspec.implementations.dbfs.DatabricksFileSystem",)
+
+    def matches(self, fs: AbstractFileSystem) -> bool:
+        return FileSystemMapper.matches(self, fs)
+
+    def to_location(self, fs: AbstractFileSystem, path: str) -> FsspecLocation:
+        return FsspecLocation(url=f"dbfs:/{path.lstrip('/')}")
+
+    def path_of(self, fs: AbstractFileSystem, location: Location) -> str | None:
+        if not isinstance(location, FsspecLocation) or location.protocol != "dbfs":
+            return None
+        return "/" + location.url.removeprefix("dbfs:").lstrip("/")
+
+    def level(self, fs: AbstractFileSystem, path: str) -> str | None:
+        """What the folder at ``path`` is in the workspace's file systems:
+
+        - Unity Catalog volumes: /Volumes/<catalog>/<schema>/<volume>/...
+        - workspace files: /Workspace/Repos/<user>/<repository>/...,
+          /Workspace/Users/<user>/..., /Workspace/Shared/...
+        - legacy DBFS: every other top folder (/FileStore, ...)
+
+        The folders inside a volume, a repository, a user's folder, Shared or
+        a legacy folder are plain folders.
+        """
+        match [part for part in path.split("/") if part]:
+            case []:
+                return "workspace"
+            case ["Volumes", *rest]:
+                # /Volumes, then a catalog, a schema and a volume.
+                levels = ("volumes", "catalog", "schema", "volume")
+                return levels[len(rest)] if len(rest) < len(levels) else None
+            case ["Workspace", *rest]:
+                return self._workspace_level(rest)
+            # Legacy DBFS: its top folders, so that CSS can mark them.
+            case [_]:
+                return "legacy"
+            case _:
+                return None
+
+    @staticmethod
+    def _workspace_level(parts: list[str]) -> str | None:
+        """The level of /Workspace's folder of these ``parts`` (after it)."""
+        match parts:
+            case []:
+                return "workspace-files"
+            case ["Repos"]:
+                return "repos"
+            case ["Users"]:
+                return "users"
+            case ["Shared"]:
+                return "shared"
+            case ["Repos", _] | ["Users", _]:
+                return "user"
+            case ["Repos", _, _]:
+                return "repository"
+            case _:
+                return None
+
+
 def default_mappers() -> list[FileSystemMapper]:
     """The mappers tried after an explorer's ``filesystem_mappers``.
 
@@ -286,8 +357,8 @@ def default_mappers() -> list[FileSystemMapper]:
     -------
     list of FileSystemMapper
         New objects each time: ``AzureBlobMapper``, ``S3Mapper``,
-        ``GCSMapper``, ``LocalMapper``, ``MemoryMapper``, ``SFTPMapper`` and
-        ``SSHFSMapper``.
+        ``GCSMapper``, ``LocalMapper``, ``MemoryMapper``, ``SFTPMapper``,
+        ``SSHFSMapper`` and ``DatabricksMapper``.
         Filesystems none of them maps get ``FsspecMapper``.
     """
     return [
@@ -298,6 +369,7 @@ def default_mappers() -> list[FileSystemMapper]:
         MemoryMapper(),
         SFTPMapper(),
         SSHFSMapper(),
+        DatabricksMapper(),
     ]
 
 

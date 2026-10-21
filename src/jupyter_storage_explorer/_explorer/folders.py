@@ -72,6 +72,8 @@ class FoldersMixin:
                 dirs.append({"name": _paths.basename(child), "path": child})
                 if self._location_of(child) is None:
                     dirs[-1]["no_url"] = True
+                if level := self._level_of(child):
+                    dirs[-1]["level"] = level
         dirs.sort(key=lambda d: d["name"].lower())
         self._tree = {**self._tree, path: dirs}
 
@@ -82,7 +84,8 @@ class FoldersMixin:
         "sizes" (None for folders), "mtimes" and "ctimes" (modification and
         creation times, for the columns and tooltips: whole seconds, or None), and
         "format", an index into "formats", whose first name is "" (none; all
-        folders). Paths are not sent: an entry's is "dir" joined with its name,
+        folders), and likewise "level" into "levels" (see _level_of; "" for
+        files and plain folders). Paths are not sent: an entry's is "dir" joined with its name,
         unless "paths" (otherwise None) gives them all, for a filesystem that
         names them differently. Locations are not sent either, as most are never
         used: the frontend asks for them ("locations") when copying; "no_url"
@@ -97,10 +100,12 @@ class FoldersMixin:
             "ctimes": [],
             "formats": [""],
             "format": [],
+            "levels": [""],
+            "level": [],
             "paths": None,
             "no_url": [],
         }
-        format_index = {"": 0}
+        format_index, level_index = {"": 0}, {"": 0}
         paths = []
         for i, info in enumerate(infos):
             entry = _entry(info)
@@ -116,6 +121,12 @@ class FoldersMixin:
             ctime = _infos.ctime(info)
             listing["ctimes"].append(None if ctime is None else int(ctime))
             listing["format"].append(format_index[fmt])
+            is_dir = entry["type"] == "directory"
+            level = (self._level_of(entry["path"]) if is_dir else None) or ""
+            if level not in level_index:
+                level_index[level] = len(listing["levels"])
+                listing["levels"].append(level)
+            listing["level"].append(level_index[level])
             paths.append(entry["path"])
             if self._location_of(entry["path"]) is None:
                 listing["no_url"].append(i)

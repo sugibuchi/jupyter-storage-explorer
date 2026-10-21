@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING, Any
 
 import anywidget
 import traitlets
-from fsspec.implementations.dirfs import DirFileSystem
 
 from jupyter_storage_explorer import _paths, _static
 from jupyter_storage_explorer._callbacks import Callbacks
@@ -305,7 +304,8 @@ class StorageExplorer(
 
     _root = traitlets.Unicode().tag(sync=True)
     # Directory path -> list of {"name", "path"} of its subdirectories, with
-    # "no_url": true for those without a URL (see _url). A directory that has
+    # "no_url": true for those without a URL (see _url), and "level" for those
+    # with one (see _level_of). A directory that has
     # not been listed yet has no key.
     _tree = traitlets.Dict().tag(sync=True)
     _current_dir = traitlets.Unicode().tag(sync=True)
@@ -369,13 +369,12 @@ class StorageExplorer(
     # path besides their URL ("Copy path", and what "Copy" puts on the
     # system clipboard: LocalLocation.os_path).
     _local_paths = traitlets.Bool(False).tag(sync=True)
-    # The filesystem shown, for its folders' icons (and CSS: data-fs-protocol
-    # and data-fs-level): its protocol (its locations', e.g. "abfs"), and the
-    # levels of its top folder and of the folders below it, by depth, from
-    # its mapper's (FileSystemMapper.levels), e.g. ["account", "container"]
-    # for adlfs; "" for plain folders. The folders at a depth share theirs.
+    # The filesystem shown's protocol (its locations', e.g. "abfs"), for CSS
+    # (data-fs-protocol); and the level of its top folder (_level_of, e.g.
+    # "account"; "" for a plain folder), the tree's root. Other folders'
+    # come with the tree's entries and the listing.
     _fs_protocol = traitlets.Unicode().tag(sync=True)
-    _fs_levels = traitlets.List(traitlets.Unicode()).tag(sync=True)
+    _root_level = traitlets.Unicode().tag(sync=True)
     # The "Unsafe mode" switch in the toolbar: while on, risky operations
     # are offered (today: moving, copying, pasting, renaming and deleting folders). The
     # frontend turns it off when any operation starts, and sends with each
@@ -627,7 +626,7 @@ class StorageExplorer(
             top = self._mappers.location_of(self._fs, root)
             self._local_paths = isinstance(top, LocalLocation)
             self._fs_protocol = top.protocol if top else protocols(self._fs)[0]
-            self._fs_levels = self._levels_below(root)
+            self._root_level = self._level_of(root) or ""
             self._root = root
             if self._current_dir == path:
                 # Same path string as before (e.g. "/" on both), so no change event lists it.
@@ -636,15 +635,13 @@ class StorageExplorer(
                 self._current_dir = path
         self._changed()
 
-    def _levels_below(self, root: str) -> list[str]:
-        """The levels of the folder ``root`` and of the folders below it, by
-        depth from ``root``: its mapper's ``levels``, which count from the
-        filesystem's top folder. None for a ``DirFileSystem``, whose top
-        folder may be anywhere in the filesystem it wraps."""
-        if isinstance(self._fs, DirFileSystem):
-            return []
-        depth = len([part for part in root.split("/") if part])
-        return list(self._mappers.mapper_of(self._fs).levels[depth:])
+    def _level_of(self, path: str) -> str | None:
+        """What the storage makes of folder ``path`` (e.g. "container"), for
+        its icon: ``FileSystemMapper.level``; None for a plain folder."""
+        try:
+            return self._mappers.level_of(self._fs, path)
+        except Exception:
+            return None  # a mapper's error only costs an icon
 
     def _restore_view(self, filesystem: Any, folders: Any) -> None:
         """Show storage ``filesystem`` at its folder in ``folders`` ({storage
