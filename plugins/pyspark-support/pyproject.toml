@@ -54,12 +54,9 @@ packages = ["src/jupyter_storage_explorer_pyspark_support"]
 dev = [
     "pyspark>=3.5",
     "delta-spark>=3.0",
-    # The tests' (tests/), besides the libraries.
-    # Below 2 until sqlframe stops calling fetch_arrow_table(), which DuckDB
-    # 2.0 removed (sqlframe 4.5.0 still does).
-    "duckdb>=1.5.6,<2",
+    # The tests' (tests/), besides the libraries: they run on a local Spark
+    # session, which needs Java (skipped without it).
     "pytest>=9.1.1",
-    "sqlframe>=4.4.0",
 ]
 
 [tool.uv]
@@ -70,5 +67,3 @@ jupyter-storage-explorer = { workspace = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# Inside sqlframe (the stand-in for Spark in tests), from its DuckDB calls.
-filterwarnings = ["ignore:fetch_arrow_table\\(\\) is deprecated:DeprecationWarning:sqlframe"]

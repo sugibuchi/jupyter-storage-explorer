@@ -21,8 +21,8 @@ uv run jupyter lab                                  # try the widgets in a brows
 uv run notebooks/make_samples.py                    # regenerate the sample data the notebooks use
 ```
 
-CI (`.github/workflows/ci.yaml`) runs ruff, Prettier, `check_js.py`, pytest with coverage (uploaded to Codecov) and
-compiles the launcher's extension (`jlpm build:lib`: tsc; `yarn.lock` must be up to date) on pull requests and pushes
+CI (`.github/workflows/ci.yaml`) runs ruff, Prettier, `check_js.py`, pytest with coverage (uploaded to Codecov),
+pyspark-support's tests alone on a local Spark with Java (the `spark` job) and compiles the launcher's extension (`jlpm build:lib`: tsc; `yarn.lock` must be up to date) on pull requests and pushes
 to `main`. Releases are tag-driven GitHub Actions (see DEVELOPMENT.md, also for the annotated
 tag and the release notes' sections); the maintainer pushes the version tag. In the workflows, `astral-sh/setup-uv`
 must be pinned to a full version (e.g. `@v10.3.0`): since v8 it publishes no major-version tags.
@@ -46,7 +46,9 @@ it, an `ItemContext`, made by `item_of`; `local_item` for a local file); in `tes
 them by name. Anything polars
 reads by URL (`query`, polars previews, the data browser) needs real local files (`tmp_path`), as polars cannot read
 `memory://`. The data browser's tests run each filter on polars, pandas, PyArrow, DuckDB and sqlframe (the PySpark API
-on DuckDB, which narwhals queries as it does Spark; real Spark needs Java, so it is not tested). The widget tests
+on DuckDB, which narwhals queries as it does Spark: the core's tests have no Spark). pyspark-support's view tests run
+on a real local Spark session (`local_spark`), skipped without Java or pyspark (the shared `.venv` has none): CI's
+`spark` job runs them alone, with Java. The widget tests
 subclass the widget to capture `send()` and drive it through `_on_custom_msg`, as the frontend would; for
 `StorageExplorer`, in `tests/test_explorer_*.py` (a file per feature, as its mixins) on the harness of
 `tests/explorers.py` (`Explorer`, `make`, `entries`, ...).
@@ -410,7 +412,7 @@ so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
 - `view(fmt, ctx, options, limits)`: one `View` dataclass of `view.py`. A `QueryView` (`data`: any
   dataframe narwhals supports, best lazy; `more`: eager data of the first rows only, e.g. pandas' `max_memory_rows`,
   which the browser notes as rows cut in memory, `DataQuery(cut=)`; PySpark's read the URL in the kernel's Spark
-  session, `spark_session()`, faked with sqlframe in `plugins/pyspark-support/tests/test_pyspark_supports.py`) opens the data browser (`_new_query`: the first view's data, then the view
+  session, `spark_session()`, a local Spark session in `plugins/pyspark-support/tests/test_pyspark_supports.py`) opens the data browser (`_new_query`: the first view's data, then the view
   again on reload, with a context read again: `_viewer`'s later calls, `_refreshed`, the item's info and listing on its
   own filesystem without fsspec's cache, its format checked again, else an error; a table set's reload views it again
   too, `TableSet._load`, the new view replacing the old); whether an item opens in the data browser is known only

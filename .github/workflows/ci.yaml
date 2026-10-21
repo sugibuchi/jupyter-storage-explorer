@@ -80,3 +80,26 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.xml
+
+  # pyspark-support's tests on a real local Spark session: pyspark is left out
+  # of the shared environment (the explorer's tests expect it missing), and
+  # Spark needs Java. Run alone, with the plugin's dev group.
+  spark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0  # the version comes from the git tags (hatch-vcs)
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: astral-sh/setup-uv@v10.3.0  # no major-version tags (e.g. v10) since v8
+        with:
+          python-version: "3.12"
+
+      - name: Test pyspark-support on Spark
+        working-directory: plugins/pyspark-support
+        run: uv run --isolated --package jupyter-storage-explorer-pyspark-support pytest
