@@ -37,6 +37,9 @@ function render({ model, el }) {
       }
       return out;
     },
+    // The storage's level of folders at `depth` from the root (0: the root),
+    // e.g. "container" (FileSystemMapper.levels), or null for plain folders.
+    levelAt: (depth) => model.get("_fs_levels")[depth] || null,
     // The storage shown, as files copied or dragged name it: {name}. An
     // explorer of another kernel finds them by their locations instead.
     storage: () => ({ name: model.get("_filesystem") }),
@@ -90,8 +93,10 @@ function render({ model, el }) {
   x.transfers.attach(panesEl);
   // Bottom edge of the widget: resizes the last area (preview panel or tree and list).
   const grip = h("div", { className: "jse-grip", title: "Drag to resize" });
-  // "jse-browser" is for user styles too, e.g. icons by [data-depth] (DEVELOPMENT.md).
+  // "jse-browser" is for user styles too, e.g. icons by [data-depth] (DEVELOPMENT.md),
+  // with the storage shown's protocol, e.g. .jse-browser[data-fs-protocol="s3"].
   el.classList.add("jse-widget", "jse-browser");
+  const renderProtocol = () => (el.dataset.fsProtocol = model.get("_fs_protocol"));
   // The narrow layout of JupyterLab's side bar (the launcher's side panel):
   // two bars (toolbar.js), the pager below the list (list.js) and fewer
   // columns (the CSS).
@@ -202,6 +207,10 @@ function render({ model, el }) {
       x.bookmarks.render(); // the folder's path may be the same as on the storage left
     },
     "change:_filesystem_names": x.tree.renderStorages,
+    "change:_fs_protocol": renderProtocol,
+    // Sent with the storage's _root, which draws the tree again; the list
+    // follows with the storage's listing.
+    "change:_fs_levels": x.tree.render,
     "change:_listing": x.list.render,
     "change:_selected": x.list.render,
     "change:_columns": x.list.render,
@@ -225,6 +234,7 @@ function render({ model, el }) {
   for (const [event, handler] of Object.entries(handlers)) model.on(event, handler);
 
   applyHeight();
+  renderProtocol();
   x.toolbar.renderTreeButton();
   placeStorages();
   x.tree.renderStorages();

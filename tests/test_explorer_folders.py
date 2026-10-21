@@ -5,9 +5,63 @@ from __future__ import annotations
 import fsspec
 import pytest
 from explorers import Explorer, entries, make, path_of
+from fsspec.implementations.dirfs import DirFileSystem
 
 from jupyter_storage_explorer import Location
 from jupyter_storage_explorer._explorer.states import ExplorerStates
+from jupyter_storage_explorer.filesystems import AbfsLocation, FileSystemMapper
+
+
+class AzureLike(FileSystemMapper):
+    """The memory filesystem as an Azure account: containers at its top."""
+
+    classes = ("fsspec.implementations.memory.MemoryFileSystem",)
+    levels = ("account", "container")
+
+    def to_location(self, fs, path):
+        container, _, key = path.strip("/").partition("/")
+        return AbfsLocation(account_name="a", container_name=container, path=key)
+
+
+class NoLocations(FileSystemMapper):
+    classes = AzureLike.classes
+
+    def to_location(self, fs, path):
+        return None
+
+
+class TestStorageLevels:
+    """_fs_protocol and _fs_levels (FileSystemMapper.levels), for the
+    folders' icons."""
+
+    def test_memory(self, mem_explorer):
+        assert mem_explorer._fs_protocol == "memory"
+        assert mem_explorer._fs_levels == ["memory"]
+
+    @pytest.mark.parametrize(
+        ("folder", "levels"),
+        [("/", ["account", "container"]), ("/c", ["container"]), ("/c/d", [])],
+    )
+    def test_from_the_top_folder(self, memfs, folder, levels):
+        memfs.mkdir("/c/d")
+        explorer = make(folder, fs=memfs, filesystem_mappers=[AzureLike()])
+        assert explorer._fs_protocol == "abfs"
+        assert explorer._fs_levels == levels
+
+    def test_none_in_a_dir_filesystem(self, memfs):
+        memfs.mkdir("/c/d")
+        within = make(fs=DirFileSystem("/c", memfs), filesystem_mappers=[AzureLike()])
+        assert (within._fs_protocol, within._fs_levels) == ("abfs", [])
+
+    def test_without_locations(self, memfs):
+        explorer = make("/", fs=memfs, filesystem_mappers=[NoLocations()])
+        assert (explorer._fs_protocol, explorer._fs_levels) == ("memory", [])
+
+    def test_with_the_storage_shown(self, memfs, tmp_path):
+        explorer = make(filesystems={"mem": memfs, "local": str(tmp_path)})
+        explorer._filesystem = "local"
+        assert explorer._fs_protocol == "file"
+        assert explorer._fs_levels == []  # not a drive's top folder
 
 
 class TestListing:

@@ -350,3 +350,14 @@ def test_mappers_given_first(memfs):
     assert mine.location_of(memfs, "/x").url == "memory://tests/x"
     assert mine.locate(TestsLocation(path="/x"), [memfs]) == (memfs, "/x")
     assert location_of(memfs, "/x").url == "memory:///x"
+
+
+def test_levels():
+    """What each storage makes of the folders at its top, for their icons."""
+    levels = {type(m).__name__: m.levels for m in default_mappers()}
+    assert levels["AzureBlobMapper"] == ("account", "container")
+    assert levels["S3Mapper"] == levels["GCSMapper"] == ("endpoint", "bucket")
+    assert levels["SFTPMapper"] == levels["SSHFSMapper"] == ("host",)
+    assert levels["MemoryMapper"] == ("memory",)
+    assert levels["LocalMapper"][-1] == "drive"
+    assert FileSystemMapper.levels == ()

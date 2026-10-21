@@ -51,6 +51,7 @@ class AzureBlobMapper(FileSystemMapper):
     """
 
     classes = ("adlfs.spec.AzureBlobFileSystem",)
+    levels = ("account", "container")
 
     def to_location(self, fs: AbstractFileSystem, path: str) -> AbfsLocation:
         host = _blob_host(fs) or ""
@@ -94,6 +95,8 @@ class S3Mapper(FileSystemMapper):
     """
 
     classes = ("s3fs.core.S3FileSystem",)
+    # The top: the buckets of an endpoint or partition.
+    levels = ("endpoint", "bucket")
 
     def to_location(self, fs: AbstractFileSystem, path: str) -> S3Location:
         bucket, _, key = path.strip("/").partition("/")
@@ -128,6 +131,7 @@ class GCSMapper(FileSystemMapper):
     with another one (an emulator)."""
 
     classes = ("gcsfs.core.GCSFileSystem",)
+    levels = ("endpoint", "bucket")
 
     def to_location(self, fs: AbstractFileSystem, path: str) -> GcsLocation:
         bucket, _, key = path.strip("/").partition("/")
@@ -155,6 +159,9 @@ class LocalMapper(FileSystemMapper):
     """
 
     classes = ("fsspec.implementations.local.LocalFileSystem",)
+    # A drive's top folder: "/", or on Windows "C:/" (one folder deep, as
+    # the explorer counts: "C:" is its name).
+    levels = ("", "drive") if sys.platform == "win32" else ("drive",)
 
     def to_location(self, fs: AbstractFileSystem, path: str) -> LocalLocation:
         return LocalLocation(path=path, **_machine())
@@ -208,6 +215,7 @@ class MemoryMapper(FileSystemMapper):
     files copied in another kernel are never looked for in this one's memory."""
 
     classes = ("fsspec.implementations.memory.MemoryFileSystem",)
+    levels = ("memory",)
 
     def to_location(self, fs: AbstractFileSystem, path: str) -> MemoryLocation:
         return MemoryLocation(path=path, process=_PROCESS)
@@ -225,6 +233,7 @@ class SFTPMapper(FileSystemMapper):
     tree of their own (a chroot)."""
 
     classes = ("fsspec.implementations.sftp.SFTPFileSystem",)
+    levels = ("host",)
 
     def server(self, fs: AbstractFileSystem) -> dict[str, Any]:
         """{"host", "port", "user"} of ``fs``."""

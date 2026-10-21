@@ -304,6 +304,26 @@
   color: inherit;
 }
 
+/* Accounts, containers and buckets (levelIcon in icons.js) in their cloud's
+   colour, a hint of which storage it is; other storages' in JupyterLab's
+   grey. Not their brands' icons, only a colour. White in selected rows (below:
+   those rules are more specific). */
+.jse-browser[data-fs-protocol="abfs"] {
+  --jse-storage-color: #0078d4;
+}
+
+.jse-browser[data-fs-protocol="s3"] {
+  --jse-storage-color: #ec7211;
+}
+
+.jse-browser[data-fs-protocol="gs"] {
+  --jse-storage-color: #4285f4;
+}
+
+.jse-browser .jse-level-svg .jp-icon-selectable[fill] {
+  fill: var(--jse-storage-color, var(--jp-inverse-layout-color3, #616161));
+}
+
 /* File icons (fileIcon in icons.js) in selected rows, as JupyterLab's file
    browser shows them: white, their light parts in the selection's colour. */
 .jse-list tbody tr.jse-selected .jse-file-svg .jp-icon-selectable[fill],

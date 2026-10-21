@@ -338,6 +338,7 @@ class MyLocation(Location):
 
 class MyMapper(FileSystemMapper):
     classes = ("mypackage.MyFileSystem",)  # matched by qualified name, subclasses too: no import
+    levels = ("server",)  # optional: what the folders at each depth from the top are, for icons and CSS
 
     def to_location(self, fs, path):
         return MyLocation(server=fs.server.lower(), path=path)
@@ -348,6 +349,11 @@ class MyMapper(FileSystemMapper):
             return location.path
         return None
 ```
+
+`levels` names, by depth from the filesystem's top folder, folders that are more than folders (e.g. adlfs's
+`("account", "container")`; "" for a depth of plain folders): the rows get `data-fs-level`, and the predefined
+levels (`account`, `container`, `endpoint`, `bucket`, `host`, `drive`, `memory`) their icons; others keep the folder
+icon unless CSS gives them one (DEVELOPMENT.md's "Icons").
 
 Normalize locations when made (lower-case hosts, no trailing "/"): equal locations must name the same item. The
 predefined mappers cover Azure, S3, Google Cloud Storage, SFTP, local disks and memory; other filesystems get fsspec's

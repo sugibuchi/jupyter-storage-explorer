@@ -97,6 +97,60 @@ const FILE_ICON_SVGS = {
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="#000" d="M108.4 0h23v22.8h21.2V0h23v69h-23V46h-21v23h-23.2M206 23h-20.3V0h63.7v23H229v46h-23m53.5-69h24.1l14.8 24.3L313.2 0h24.1v69h-23V34.8l-16.1 24.8-16.1-24.8V69h-22.6m89.2-69h23v46.2h32.6V69h-55.6" class="jp-icon0 jp-icon-selectable"/><path fill="#e44d26" d="m107.6 471-33-370.4h362.8l-33 370.2L255.7 512" class="jp-icon-selectable"/><path fill="#f16529" d="M256 480.5V131h148.3L376 447" class="jp-icon-selectable"/><path fill="#ebebeb" d="M142 176.3h114v45.4h-64.2l4.2 46.5h60v45.3H154.4m2 22.8H202l3.2 36.3 50.8 13.6v47.4l-93.2-26" class="jp-icon-selectable-inverse"/><path fill="#fff" d="M369.6 176.3H255.8v45.4h109.6m-4.1 46.5H255.8v45.4h56l-5.3 59-50.7 13.6v47.2l93-25.8" class="jp-icon-selectable-inverse"/></svg>',
 };
 
+// The icons of folders a storage's structure makes more than folders (their
+// level: FileSystemMapper.levels, the explorer's _fs_levels), drawn as the folder icon above,
+// in JupyterLab's grey: from Material Design Icons (filled; Apache License
+// 2.0), the bucket and the hard disk from Pictogrammers' Material Design Icons
+// (Apache License 2.0), see vendor/README.md. Not the clouds' own pictograms,
+// whose licences cover diagrams and documents only.
+const LEVEL_ICON_PATHS = {
+  // An Azure account; the top of S3 or GCS, holding the buckets.
+  cloud:
+    "M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z",
+  // Material's inventory_2: a box, for an Azure container.
+  box: "M20 2H4c-1 0-2 .9-2 2v3.01c0 .72.43 1.34 1 1.69V20c0 1.1 1.1 2 2 2h14c.9 0 2-.9 2-2V8.7c.57-.35 1-.97 1-1.69V4c0-1.1-1-2-2-2zm-5 12H9v-2h6v2zm5-7H4V4h16v3z",
+  bucket: "M3 4H21V7H20L17.5 21H6.5L4 7H3V4Z",
+  // Material's dns: a server, for an SFTP host.
+  server:
+    "M20 13H4c-.55 0-1 .45-1 1v6c0 .55.45 1 1 1h16c.55 0 1-.45 1-1v-6c0-.55-.45-1-1-1zM7 19c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zM20 3H4c-.55 0-1 .45-1 1v6c0 .55.45 1 1 1h16c.55 0 1-.45 1-1V4c0-.55-.45-1-1-1zM7 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z",
+  harddisk:
+    "M6,2H18A2,2 0 0,1 20,4V20A2,2 0 0,1 18,22H6A2,2 0 0,1 4,20V4A2,2 0 0,1 6,2M12,4A6,6 0 0,0 6,10C6,13.31 8.69,16 12.1,16L11.22,13.77C10.95,13.29 11.11,12.68 11.59,12.4L12.45,11.9C12.93,11.63 13.54,11.79 13.82,12.27L15.74,14.69C17.12,13.59 18,11.9 18,10A6,6 0 0,0 12,4M12,9A1,1 0 0,1 13,10A1,1 0 0,1 12,11A1,1 0 0,1 11,10A1,1 0 0,1 12,9M7,18A1,1 0 0,0 6,19A1,1 0 0,0 7,20A1,1 0 0,0 8,19A1,1 0 0,0 7,18M12.09,13.27L14.58,19.58L17.17,18.08L12.95,12.77L12.09,13.27Z",
+  // Material's memory: a chip, for fsspec's memory filesystem.
+  chip: "M15 9H9v6h6V9zm-2 4h-2v-2h2v2zm8-2V9h-2V7c0-1.1-.9-2-2-2h-2V3h-2v2h-2V3H9v2H7c-1.1 0-2 .9-2 2v2H3v2h2v2H3v2h2v2c0 1.1.9 2 2 2h2v2h2v-2h2v2h2v-2h2c1.1 0 2-.9 2-2v-2h2v-2h-2v-2h2zm-4 6H7V7h10v10z",
+};
+
+// A level of the predefined mappers -> its icon. Other levels (a mapper's own) keep
+// the folder icon; CSS can give them one ([data-fs-level], DEVELOPMENT.md).
+const LEVEL_ICONS = {
+  account: "cloud",
+  endpoint: "cloud",
+  container: "box",
+  bucket: "bucket",
+  host: "server",
+  drive: "harddisk",
+  memory: "chip",
+};
+
+// A folder's icon by its level, or null for the folder icon.
+function levelIcon(level) {
+  const name = level && Object.hasOwn(LEVEL_ICONS, level) ? LEVEL_ICONS[level] : null;
+  if (!name) return null;
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  // jse-level-svg: in its storage's colour (--jse-storage-color, the CSS).
+  svg.setAttribute("class", "jse-svg jse-file-svg jse-level-svg");
+  svg.setAttribute("aria-hidden", "true");
+  svg.dataset.icon = name;
+  const path = document.createElementNS(ns, "path");
+  path.setAttribute("fill", "#616161");
+  // JupyterLab's classes, as the folder icon's: its theme recolours them.
+  path.setAttribute("class", "jp-icon3 jp-icon-selectable");
+  path.setAttribute("d", LEVEL_ICON_PATHS[name]);
+  svg.append(path);
+  return svg;
+}
+
 // The icons of files no format of the explorer sets one for (their
 // DataFormat.file_icon, e.g. CSV and Parquet files' "spreadsheet"): by
 // extension, JupyterLab's default file types (@jupyterlab/docregistry, and
@@ -134,8 +188,13 @@ const FILE_ICON_EXTENSIONS = {
 // The icon of an item, as an SVG element: `formatIcon`, the file_icon of the
 // file's format if it has one, else the one JupyterLab's file browser shows.
 // An icon of the format's own comes with its SVG `markup`: shown as an
-// image, in which its scripts, if any, never run.
-function fileIcon(name, isDir, formatIcon = null, markup = null) {
+// image, in which its scripts, if any, never run. A folder of a `level`
+// (FileSystemMapper.levels, e.g. "bucket") gets that level's icon.
+function fileIcon(name, isDir, formatIcon = null, markup = null, level = null) {
+  if (isDir && level) {
+    const svg = levelIcon(level);
+    if (svg) return svg;
+  }
   if (!isDir && formatIcon && markup) {
     const img = h("img", { className: "jse-svg jse-file-svg", alt: "", src: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(markup)}` });
     img.setAttribute("aria-hidden", "true");

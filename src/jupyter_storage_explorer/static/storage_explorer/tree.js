@@ -65,6 +65,7 @@ function createTree(x) {
 
     function node(dir, depth) {
       const children = tree[dir.path];
+      const level = x.levelAt(depth);
       const isOpen = expanded.has(dir.path);
       if (isOpen) requestChildren(dir.path);
 
@@ -80,13 +81,15 @@ function createTree(x) {
         "div",
         { className: "jse-node" + (dir.path === current ? " jse-active" : ""), title: dir.path },
         twisty,
-        h("span", { className: "jse-icon" }, fileIcon(dir.name, true)),
+        h("span", { className: "jse-icon" }, fileIcon(dir.name, true, null, null, level)),
         h("span", { className: "jse-label", textContent: visible(dir.name) }),
       );
       row.style.paddingLeft = `${depth * 14 + 4}px`;
       row.dataset.dropDir = dir.path; // files dropped here are uploaded into this folder
       // For styling by depth, e.g. [data-depth="1"]: 0 is the root, 1 a top-level folder.
       row.dataset.depth = depth;
+      // And by the storage's level, e.g. [data-fs-level="container"].
+      if (level) row.dataset.fsLevel = level;
       // A click selects the folder (shows it in the list); a double-click, or
       // the twisty, opens or closes it in the tree, as in tree views elsewhere.
       row.addEventListener("click", () => x.navigate(dir.path));

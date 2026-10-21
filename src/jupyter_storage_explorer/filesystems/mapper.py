@@ -56,6 +56,14 @@ class FileSystemMapper:
         ``("adlfs.spec.AzureBlobFileSystem",)``, matched against the
         filesystem's classes and their bases, so that subclasses are mapped
         too and optional packages need not be imported.
+    levels : tuple of str
+        What the storage makes of the folders at each depth from the
+        filesystem's top folder (its root, ""), when more than folders: e.g.
+        ``("account", "container")`` for adlfs, whose top is an Azure account
+        and its folders the containers. The explorer gives such folders an
+        icon of their own, and CSS selects them by it (``[data-fs-level]``);
+        "" for a depth of plain folders, as are those below the last. Empty
+        by default. Not applied to a ``DirFileSystem``'s folders.
 
     Examples
     --------
@@ -80,6 +88,7 @@ class FileSystemMapper:
     """
 
     classes: tuple[str, ...] = ()
+    levels: tuple[str, ...] = ()
 
     def matches(self, fs: AbstractFileSystem) -> bool:
         """Whether this mapper maps ``fs``.
