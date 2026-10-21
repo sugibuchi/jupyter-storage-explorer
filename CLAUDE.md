@@ -154,7 +154,8 @@ view tabs) + the widget's parts (`static/<widget>/*.js`, if any) + `<widget>.js`
 functions and constants; the widget's file has `render` and the `export`), and likewise for CSS (`sections.css`;
 without parts). The storage explorer's parts are a feature each (`tree.js`,
 `list.js`, `preview.js`, `item_menu.js`, `operations.js` with the clipboard, `transfers.js` (drag and drop, uploads,
-downloads), `jupyterlab.js`, `properties.js`, `toolbar.js` with unsafe mode and bookmarks, `engine.js` (the engine chosen, in the status bar), `about.js` (the settings menu's About), `jobs.js`, `overlays.js`
+downloads), `jupyterlab.js`, `properties.js`, `toolbar.js` with unsafe mode and bookmarks, `engine.js` (the engine chosen, in the status bar), `about.js` (the settings menu's About), `shortcuts.js` (the list's keys, on its pane, focusable: Ctrl/⌘+C, X, V,
+F2, Delete, Enter, calling what the menu's rows do, whose `shortcut` shows the key), `jobs.js`, `overlays.js`
 (busy screen, modal, menus), `util.js`): a `createX(x)` returning its elements and
 functions. `x` is the explorer, made in `render()`: what the features share (`model`, `el`, `request`, `ask`,
 `flash`, `navigate`, ...) and the features themselves (`x.list`, `x.preview`, ...), used when needed, not when made,

@@ -122,7 +122,8 @@ function createMenu(widgetEl) {
   // element, possibly later.
   // `hidden` rows can be shown later through the element passed to `ref(row)`.
   // `title`: the row's tooltip. `menu()`: the items of the menu right-clicking
-  // the row opens in place of this one.
+  // the row opens in place of this one. `shortcut`: its key in the file list
+  // (a key of shortcuts.js'), shown at the right.
   function rows(items) {
     return items.map((item) => {
       if (item === "-") return h("div", { className: "jse-menu-sep" });
@@ -131,6 +132,7 @@ function createMenu(widgetEl) {
         { className: "jse-menu-item" + (item.disabled ? " jse-disabled" : ""), hidden: Boolean(item.hidden), title: item.title ?? "" },
         h("span", { className: "jse-menu-icon" }, ...(item.icon ? [icon(item.icon)] : [])),
         h("span", { className: "jse-menu-label", textContent: item.label }),
+        ...(item.shortcut ? [h("span", { className: "jse-menu-shortcut", textContent: keyLabel(item.shortcut) })] : []),
       );
       item.ref?.(row);
       if (item.menu) row.addEventListener("contextmenu", (ev) => show(ev, item.menu()));

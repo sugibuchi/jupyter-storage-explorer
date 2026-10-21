@@ -542,6 +542,57 @@ def delete(x: Explorer) -> None:
 
 
 @check
+def keyboard_shortcuts(x: Explorer) -> None:
+    # The list's keys, as its menu's rows (which show them): Ctrl+C, Ctrl+V,
+    # F2, Enter, Ctrl+X, Delete; on the selection, while the list has the focus.
+    keys = x.page.keyboard
+    empty_space = x.el.locator(".jse-list")
+
+    def focus_list() -> None:
+        box = empty_space.bounding_box()
+        assert box is not None
+        empty_space.click(position={"x": 40, "y": box["height"] - 12})
+
+    x.go("landing")
+    x.row("products.tsv").click(button="right")
+    expect(x.menu_item("Copy").locator(".jse-menu-shortcut")).to_have_text("Ctrl+C")
+    keys.press("Escape")
+    x.row("products.tsv").click()
+    keys.press("Control+c")
+    expect(x.status).to_contain_text("Copied products.tsv")
+    x.top("Scratch")
+    new_folder(x, "keys")
+    x.row("keys").click()
+    keys.press("Enter")  # opens the folder
+    expect(x.el.locator(".jse-crumb").last).to_have_text("keys")
+    focus_list()
+    keys.press("Control+v")
+    x.button("Paste").click()
+    expect(x.row("products.tsv")).to_be_visible()
+    x.row("products.tsv").click()
+    keys.press("F2")
+    x.el.locator(".jse-confirm:visible .jse-name-input").fill("keyed.tsv")
+    x.button("Rename").click()
+    expect(x.row("keyed.tsv")).to_be_visible()
+    # Typed in the filter, keys are the filter's.
+    x.el.locator(".jse-list-pane .jse-filter input").fill("keyed")
+    keys.press("Delete")
+    expect(x.el.locator(".jse-confirm:visible")).to_have_count(0)
+    x.el.locator(".jse-list-pane .jse-filter input").fill("")
+    x.row("keyed.tsv").click()
+    keys.press("Control+x")
+    x.top("Scratch")
+    focus_list()
+    keys.press("Control+v")
+    x.button("Move").click()
+    expect(x.row("keyed.tsv")).to_be_visible()
+    x.row("keyed.tsv").click()
+    keys.press("Delete")
+    x.button("Delete").click()
+    expect(x.row("keyed.tsv")).to_have_count(0)
+
+
+@check
 def unsafe_mode(x: Explorer) -> None:
     x.top("Scratch")
     new_folder(x, "old")

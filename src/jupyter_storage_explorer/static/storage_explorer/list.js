@@ -212,6 +212,15 @@ function createList(x) {
     }
   }
 
+  // A double-click or Enter (shortcuts.js), as in JupyterLab's file browser:
+  // a folder opens, a file opens in JupyterLab's editor or viewer when it can
+  // show it, else in the preview (in a new tab without a preview panel).
+  function open(entry) {
+    if (isFolder(entry)) x.navigate(entry.path);
+    else if (x.jupyterlab.canOpen(entry)) x.jupyterlab.open(entry.path);
+    else if (hasUrl(entry)) x.preview.view(entry.path); // no URL: no preview
+  }
+
   // --- Tooltips, as JupyterLab's file browser's: name, size, times, format
   // and URL. The listing does not carry locations, so those of the rows shown
   // are asked for in one request as they are drawn, before any hover (a
@@ -307,14 +316,7 @@ function createList(x) {
     tr.draggable = true;
     tr.addEventListener("dragstart", (ev) => x.transfers.startDrag(ev, entry));
     tr.addEventListener("click", (ev) => select(entry.path, ev.ctrlKey || ev.metaKey));
-    // As in JupyterLab's file browser: a folder opens, a file opens in
-    // JupyterLab's editor or viewer when it can show it, else in the preview
-    // (in a new tab without a preview panel).
-    tr.addEventListener("dblclick", () => {
-      if (isDir) x.navigate(entry.path);
-      else if (x.jupyterlab.canOpen(entry)) x.jupyterlab.open(entry.path);
-      else if (hasUrl(entry)) x.preview.view(entry.path); // no URL: no preview
-    });
+    tr.addEventListener("dblclick", () => open(entry));
     tr.addEventListener("contextmenu", (ev) => {
       // Like file managers: right-clicking outside the selection selects that item.
       let paths = model.get("_selected");
@@ -406,7 +408,7 @@ function createList(x) {
     const dest = model.get("_current_dir");
     x.menu.show(ev, [
       // Folders on the clipboard while locked: a greyed-out "Paste".
-      x.clipboard.pasteItem(dest) ?? { label: "Paste", icon: "paste", disabled: true },
+      { ...(x.clipboard.pasteItem(dest) ?? { label: "Paste", icon: "paste", disabled: true }), shortcut: "mod+v" },
       { label: "Create a folder", icon: "new-folder", action: () => x.operations.createFolder(dest) },
     ]);
   });
@@ -473,6 +475,7 @@ function createList(x) {
     renderStatus,
     flash,
     entriesAt,
+    open,
     locationOf,
     dispose: () => clearTimeout(flashTimer),
   };
