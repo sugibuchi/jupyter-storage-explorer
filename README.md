@@ -30,6 +30,9 @@ for all you can do with it.
 - **`StorageExplorer`**: any fsspec storage, several in one explorer; copy and paste between storages and notebooks.
 - **`DataExplorer`**: page, sort and filter any dataframe; get the result back in code.
 - **Previews** of Delta Lake, Parquet, CSV, JSON, Excel, text and images, with code to load them.
+- **Your engine**: query data with Polars, pandas or PySpark (also Databricks Connect), chosen from the status bar.
+- **Plugins** for engines and storages: install one, and every explorer uses it; they never change the data libraries
+  of a shared environment.
 - **Background file operations** with progress and Cancel; folder operations only in Unsafe mode.
 - **Work in JupyterLab**: open storage files in JupyterLab's own editors and viewers, and save them back; view tables
   and files in tabs of their own.
@@ -125,7 +128,7 @@ The `notebooks` folder has a demo of each widget on sample data.
 - Python 3.11 or later
 - JupyterLab 4.0 or later (other Jupyter frontends show the widgets, without drag and drop from JupyterLab's file
   browser)
-- For querying data: polars (tested with 2.0)
+- For querying data: an engine plugin, e.g. `jupyter-storage-explorer[polars]` (Polars, tested with 2.0)
 
 ## Why Storage Explorer?
 
