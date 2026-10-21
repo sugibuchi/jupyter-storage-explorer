@@ -253,10 +253,22 @@ def about(x: Explorer) -> None:
     dialog = x.el.locator(".jse-dialog:visible")
     expect(dialog.locator(".jse-about-name")).to_have_text("Jupyter Storage Explorer")
     expect(dialog.locator(".jse-about-icon")).to_be_visible()
+    # Names link to their packages' home pages, in a new browser tab.
+    github = "https://github.com/sugibuchi/jupyter-storage-explorer"
+    expect(dialog.locator("a.jse-about-name")).to_have_attribute(
+        "href", re.compile(f"^{re.escape(github)}")
+    )
+    expect(dialog.locator(".jse-about-head")).to_contain_text("License: MIT")
     polars = dialog.locator(".jse-about-plugin", has_text="polars-support")
     expect(polars).not_to_have_class(re.compile("jse-disabled"))
+    link = polars.locator("a.jse-about-plugin-name")
+    expect(link).to_have_attribute("href", f"{github}/tree/main/plugins/polars-support")
+    expect(link).to_have_attribute("target", "_blank")
     info = polars.locator(".jse-about-info")
-    expect(info).to_have_attribute("title", "Polars support for Storage Explorer")
+    expect(info).to_have_attribute(
+        "title",
+        "Polars support for Storage Explorer\nBy Tsuyoshi SUGIBUCHI\nLicense: MIT",
+    )
     dialog.press("Escape")
     expect(dialog).to_be_hidden()
 

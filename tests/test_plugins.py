@@ -3,6 +3,7 @@ what they give the explorer, and in which order."""
 
 from __future__ import annotations
 
+import email.message
 from importlib.metadata import EntryPoint, version
 
 import pytest
@@ -26,6 +27,10 @@ from jupyter_storage_explorer.plugin import (
     ENTRY_POINT_GROUP,
     LOWEST_PRIORITY,
     StorageExplorerPluginOptions,
+    homepage,
+    package_authors,
+    package_license,
+    package_urls,
 )
 
 
@@ -74,11 +79,81 @@ class TestMetadata:
         assert plugin.name == "jupyter-storage-explorer-polars-support"
         assert plugin.version == version("jupyter-storage-explorer-polars-support")
 
+    def test_authors_license_and_links(self):
+        for plugin in PLUGINS:
+            assert plugin.authors == ["Tsuyoshi SUGIBUCHI"]
+            assert plugin.license == "MIT"
+            assert plugin.urls["Homepage"].endswith(f"/plugins/{plugin.key}")
+            assert "Issues" in plugin.urls
+
     def test_of_no_package(self, installed):
         # A class of no installed package, e.g. defined in a notebook.
         installed(**{"sample-support": "SampleSupport"})
         [plugin], _ = load_plugins()
         assert (plugin.name, plugin.description, plugin.version) == (None, None, None)
+        assert (plugin.authors, plugin.license, plugin.urls) == ([], None, {})
+
+
+class FakeDistribution:
+    """A package's metadata, as importlib.metadata gives it."""
+
+    def __init__(self, **fields):
+        self.metadata = email.message.Message()
+        for name, values in fields.items():
+            for value in values if isinstance(values, list) else [values]:
+                self.metadata[name.replace("_", "-")] = value
+
+
+class TestPackageMetadata:
+    """How authors, licenses and links are read from any package's metadata."""
+
+    def test_authors_by_name_once(self):
+        dist = FakeDistribution(
+            Author="Ann, Bob",
+            Author_email='Bob <bob@x.org>, "Carl C" <carl@x.org>, only@x.org',
+            Maintainer_email="Dee <dee@x.org>",
+        )
+        assert package_authors(dist) == ["Ann", "Bob", "Carl C", "Dee"]
+        assert package_authors(FakeDistribution()) == []
+
+    @pytest.mark.parametrize(
+        ("fields", "license"),
+        [
+            ({"License_Expression": "MIT OR Apache-2.0"}, "MIT OR Apache-2.0"),
+            ({"License": "BSD-3-Clause"}, "BSD-3-Clause"),
+            ({"License": "Copyright (c) 2026\n\nPermission is hereby..."}, None),
+            ({}, None),
+        ],
+    )
+    def test_license(self, fields, license):
+        assert package_license(FakeDistribution(**fields)) == license
+
+    def test_links_http_only(self):
+        dist = FakeDistribution(
+            Home_page="https://old.example.org",
+            Project_URL=[
+                "Homepage, https://example.org",
+                "Source, http://git.example.org/x",
+                "Evil, javascript:alert(1)",
+                "Docs, file:///etc/passwd",
+            ],
+        )
+        urls = package_urls(dist)
+        assert urls == {
+            "Homepage": "https://old.example.org",  # the legacy field first
+            "Source": "http://git.example.org/x",
+        }
+
+    @pytest.mark.parametrize(
+        ("urls", "home"),
+        [
+            ({"Issues": "https://i", "Repository": "https://r"}, "https://r"),
+            ({"homepage": "https://h", "Source": "https://s"}, "https://h"),
+            ({"Issues": "https://i"}, None),
+        ],
+    )
+    def test_homepage(self, urls, home):
+        assert homepage(urls) == home
 
 
 class TestLoading:

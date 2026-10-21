@@ -7,8 +7,10 @@ from __future__ import annotations
 import dataclasses
 import functools
 from dataclasses import dataclass
+from email.utils import getaddresses
 from importlib.metadata import distribution, entry_points, packages_distributions
 from typing import TYPE_CHECKING, ClassVar
+from urllib.parse import urlsplit
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -97,6 +99,12 @@ class StorageExplorerPlugin:
         metadata, installed with it (also by ``uv sync``, editable), not set
         in the class. None for a plugin of no installed package, e.g. a class
         defined in a notebook.
+    authors, license, urls : list of str, str or None, dict of str to str
+        Its package's authors and maintainers by name, license (e.g. "MIT")
+        and links by label (http and https only), from ``[project]``'s
+        ``authors``, ``maintainers``, ``license`` and ``[project.urls]``,
+        read as ``name`` is; shown in the explorer's About, with the name
+        linking to the home page. Empty or None without them.
     format_supports : sequence of FormatSupport classes or objects
         How formats' data is handled with the plugin's engine (previews, the
         data browser, "Python code"); their formats are detected too.
@@ -174,6 +182,28 @@ class StorageExplorerPlugin:
         return dist.version if dist is not None else None
 
     @property
+    def authors(self) -> list[str]:
+        """The package's authors and maintainers, by name (``[project]``'s
+        ``authors`` and ``maintainers``, without their emails); empty if it
+        names none, or there is no package."""
+        dist = self.distribution
+        return package_authors(dist) if dist is not None else []
+
+    @property
+    def license(self) -> str | None:
+        """The package's license, as ``[project]``'s ``license`` gives it
+        (an SPDX expression, e.g. "MIT"), or None."""
+        dist = self.distribution
+        return package_license(dist) if dist is not None else None
+
+    @property
+    def urls(self) -> dict[str, str]:
+        """The package's links by label, e.g. {"Homepage": "https://..."}
+        (``[project.urls]``): http and https ones only."""
+        dist = self.distribution
+        return package_urls(dist) if dist is not None else {}
+
+    @property
     def format_supports(self) -> Sequence[type[FormatSupport] | FormatSupport]:
         return ()
 
@@ -188,6 +218,58 @@ class StorageExplorerPlugin:
     @property
     def filesystem_mappers(self) -> Sequence[FileSystemMapper]:
         return ()
+
+
+# What the package's metadata calls its home page, in order of preference.
+_HOMEPAGE_LABELS = ("homepage", "home", "repository", "source", "documentation")
+
+
+def package_authors(dist: Distribution) -> list[str]:
+    """The names in a package's ``Author``, ``Author-email``, ``Maintainer``
+    and ``Maintainer-email`` metadata, each once, emails left out (an author
+    given by email only is too)."""
+    names: list[str] = []
+    metadata = dist.metadata
+    for field in ("Author", "Maintainer"):
+        names.extend(n.strip() for n in (metadata.get(field) or "").split(","))
+        emails = metadata.get(f"{field}-email") or ""
+        names.extend(name for name, _ in getaddresses([emails]))
+    return list(dict.fromkeys(n for n in names if n))
+
+
+def package_license(dist: Distribution) -> str | None:
+    """A package's ``License-Expression`` (e.g. "MIT"); else its legacy
+    ``License``, when it is a name rather than the license's text."""
+    metadata = dist.metadata
+    if expression := (metadata.get("License-Expression") or "").strip():
+        return expression
+    legacy = (metadata.get("License") or "").strip()
+    return legacy if legacy and "\n" not in legacy and len(legacy) <= 80 else None
+
+
+def package_urls(dist: Distribution) -> dict[str, str]:
+    """A package's ``Project-URL`` links by label (and the legacy
+    ``Home-page``, as "Homepage"), http and https ones only: they are shown as
+    links, and come from whatever package is installed."""
+    metadata = dist.metadata
+    pairs = [
+        tuple(part.strip() for part in entry.partition(",")[::2])
+        for entry in metadata.get_all("Project-URL") or ()
+    ]
+    if home := metadata.get("Home-page"):
+        pairs.insert(0, ("Homepage", home.strip()))
+    urls: dict[str, str] = {}
+    for label, url in pairs:
+        if label and urlsplit(url).scheme in ("http", "https"):
+            urls.setdefault(label, url)
+    return urls
+
+
+def homepage(urls: dict[str, str]) -> str | None:
+    """The link of ``urls`` (``package_urls``) to show as a package's home
+    page: its Homepage, else its repository or documentation."""
+    by_label = {label.lower(): url for label, url in urls.items()}
+    return next((by_label[k] for k in _HOMEPAGE_LABELS if k in by_label), None)
 
 
 @functools.cache

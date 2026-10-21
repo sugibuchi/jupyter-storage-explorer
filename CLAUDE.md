@@ -95,7 +95,7 @@ plugin alone (`all` and `all-supports`: every plugin so); the launcher's `pyproj
   `tests/test_launcher.py`). The settings menu (toolbar.js: ⚙, on every explorer: "About", about.js and `_explorer/about.py`, the
   explorer's version and icon, `static/storage-explorer.svg`, a copy of the launcher's kept the same by
   `tests/test_explorer_about.py`, and the plugins installed from their entry points' metadata, those not loaded greyed
-  out with why; and in the tab, "Edit configuration": `_offer_settings`, trait `_settings_path`, never in notebooks) opens the user's `launcher.py` through the `files.ts` drive, created from
+  out with why; names link to their packages' home pages, the tooltips add authors and license; and in the tab, "Edit configuration": `_offer_settings`, trait `_settings_path`, never in notebooks) opens the user's `launcher.py` through the `files.ts` drive, created from
   `launcher_template.py` if missing, once the user confirms (`"settings_open"`: `{"missing"}`, then with `"create"`; `"jupyterlab_get"`/`"jupyterlab_save"` with `"settings"` read
   and write that file only): `~/.jupyter` is hidden, so JupyterLab's own contents API would refuse it. Its JupyterLab extension has four plugins:
   - `index.ts`: the tab, a console (`ExplorerTab`). ipywidgets binds a console's widgets to its first kernel, so a tab
@@ -466,7 +466,10 @@ each kind as given (`supports=`, `operations=`, `filesystem_mappers=`), then the
 launcher's `plugin_options()` (merged by plugin, then option) sets `plugin_options`. `name`, `description` and `version`
 (properties) are the plugin's package's metadata (`[project]` of its pyproject.toml): its entry point's distribution (set
 by `load_plugins`), else the one registering the class (`_distribution_of`; editable installs list no packages), else
-the one of its top-level package; None for none. abfs-support's `concurrency` is
+the one of its top-level package; None for none. So are `authors` (names, from `Author`/`Author-email`/`Maintainer`,
+emails left out), `license` (`License-Expression`, else a one-line `License`) and `urls` (`Project-URL` and the legacy
+`Home-page`, http(s) only: shown as links), by plugin.py's `package_authors`, `package_license`, `package_urls` and
+`homepage` (also for About's plugins not loaded, and the explorer itself). abfs-support's `concurrency` is
 its operation's. Tests:
 `tests/test_plugins.py` (fake entry points to `tests/plugin_samples.py`); `tests/all_supports.py` has the supports of the
 repository's plugins, as installed for development, which the other tests chain (`ALL_SUPPORTS`, `all_supports()`),

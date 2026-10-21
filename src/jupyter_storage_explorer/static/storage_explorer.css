@@ -843,8 +843,21 @@
 }
 
 .jse-about-name {
+  display: block;
   font-size: 1.2em;
   font-weight: 600;
+}
+
+/* A package's name linking to its home page: the text's colour, underlined
+   on hover. */
+.jse-about-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.jse-about-link:hover {
+  color: var(--jse-accent);
+  text-decoration: underline;
 }
 
 .jse-about-version {

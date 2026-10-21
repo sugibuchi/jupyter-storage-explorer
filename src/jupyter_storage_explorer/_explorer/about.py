@@ -4,13 +4,21 @@ version and icon, and the plugins installed."""
 from __future__ import annotations
 
 import base64
-from importlib.metadata import PackageNotFoundError, version
+from importlib.metadata import PackageNotFoundError, distribution, version
 from typing import TYPE_CHECKING, Any
 
 from jupyter_storage_explorer._plugins import installed_plugins
 from jupyter_storage_explorer._static import STATIC
+from jupyter_storage_explorer.plugin import (
+    homepage,
+    package_authors,
+    package_license,
+    package_urls,
+)
 
 if TYPE_CHECKING:
+    from importlib.metadata import Distribution
+
     from jupyter_storage_explorer.plugin import StorageExplorerPlugin
 
 # The explorer's own icon, the launcher's (launcher/labextension/style/):
@@ -23,6 +31,25 @@ def _explorer_version() -> str:
         return version("jupyter-storage-explorer")
     except PackageNotFoundError:  # run from a source tree not installed
         return ""
+
+
+def _explorer_distribution() -> Distribution | None:
+    try:
+        return distribution("jupyter-storage-explorer")
+    except PackageNotFoundError:
+        return None
+
+
+def _package_details(dist: Distribution | None) -> dict[str, Any]:
+    """{"authors", "license", "homepage"} of a package, from its metadata
+    (see plugin.py's ``package_*``); empty ones without it."""
+    if dist is None:
+        return {"authors": [], "license": "", "homepage": ""}
+    return {
+        "authors": package_authors(dist),
+        "license": package_license(dist) or "",
+        "homepage": homepage(package_urls(dist)) or "",
+    }
 
 
 def _icon_url() -> str:
@@ -38,11 +65,12 @@ class AboutMixin:
     _plugin_problems: list[str]
 
     def _about(self) -> dict[str, Any]:
-        """{"name", "version", "icon", "plugins"}: the plugins installed, by
-        package name, each {"key", "name", "version", "description",
-        "enabled", "note"}; "note" says why one is not used (disabled, or
-        could not be loaded). Read from the packages' metadata, so plugins
-        not loaded are listed without being imported."""
+        """{"name", "version", "icon", "authors", "license", "homepage",
+        "plugins"}: the explorer's, and the plugins installed, by package
+        name, each {"key", "name", "version", "description", "authors",
+        "license", "homepage", "enabled", "note"}; "note" says why one is not
+        used (disabled, or could not be loaded). Read from the packages'
+        metadata, so plugins not loaded are listed without being imported."""
         loaded = {p.key: p for p in self._plugins}
         plugins = []
         for key, registered in installed_plugins().items():
@@ -56,6 +84,7 @@ class AboutMixin:
                     "description": dist.metadata["Summary"] or ""
                     if dist is not None
                     else "",
+                    **_package_details(dist),
                     "enabled": plugin is not None,
                     "note": "" if plugin is not None else self._plugin_note(key),
                 }
@@ -65,6 +94,7 @@ class AboutMixin:
             "name": "Jupyter Storage Explorer",
             "version": _explorer_version(),
             "icon": _icon_url(),
+            **_package_details(_explorer_distribution()),
             "plugins": plugins,
         }
 

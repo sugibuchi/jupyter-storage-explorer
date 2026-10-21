@@ -414,7 +414,8 @@ name = "jupyter-storage-explorer-duckdb-support"
 version = "0.1.0"
 description = "DuckDB support for Storage Explorer"  # shown to users, in "About"
 readme = "README.md"
-license = "MIT"
+license = "MIT"  # shown in "About", with the authors
+authors = [{ name = "Your Name" }]
 requires-python = ">=3.11"
 # The explorer only: never the backend library (see "full").
 dependencies = ["jupyter-storage-explorer>=0.14,<0.15"]
@@ -423,6 +424,10 @@ dependencies = ["jupyter-storage-explorer>=0.14,<0.15"]
 # plugin never changes those of a shared environment.
 [project.optional-dependencies]
 full = ["duckdb>=1.0"]
+
+# "About" links the plugin's name to its home page (http or https only).
+[project.urls]
+Homepage = "https://github.com/you/jupyter-storage-explorer-duckdb-support"
 
 # Explorers find the plugin by this entry point, named by its key.
 [project.entry-points."jupyter_storage_explorer.plugins"]
@@ -581,7 +586,8 @@ lists the plugin with its version.
 ## Checklist
 
 - [ ] Package `jupyter-storage-explorer-<name>-support`, module `jupyter_storage_explorer_<name>_support`.
-- [ ] `description = "<Name> support for Storage Explorer"`.
+- [ ] `description = "<Name> support for Storage Explorer"`; `license`, `authors` and `[project.urls]`'s `Homepage`,
+  shown in "About" (`StorageExplorerPlugin.authors`, `license`, `urls`).
 - [ ] `dependencies`: the explorer only; the backend libraries in the `full` extra and the `dev` group.
 - [ ] Entry point in `jupyter_storage_explorer.plugins`, named by the plugin's `key`.
 - [ ] No backend import at module level; packages through `PythonPackage.load()` inside methods.
