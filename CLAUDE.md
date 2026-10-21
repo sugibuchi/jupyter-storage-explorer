@@ -408,7 +408,10 @@ by key; an option the model lacks is a ValueError; it leaves out, with a reason 
 (`RuntimeWarning`), a plugin that fails to import or be created, is no plugin class, has another key, or a name two
 packages register, and options of plugins not installed. `PluginComponents` gathers the components. The explorer uses
 each kind as given (`supports=`, `operations=`, `filesystem_mappers=`), then the plugins', then its defaults. The
-launcher's `plugin_options()` (merged by plugin, then option) sets `plugin_options`. abfs-support's `concurrency` is
+launcher's `plugin_options()` (merged by plugin, then option) sets `plugin_options`. `name`, `description` and `version`
+(properties) are the plugin's package's metadata (`[project]` of its pyproject.toml): its entry point's distribution (set
+by `load_plugins`), else the one registering the class (`_distribution_of`; editable installs list no packages), else
+the one of its top-level package; None for none. abfs-support's `concurrency` is
 its operation's. Tests:
 `tests/test_plugins.py` (fake entry points to `tests/plugin_samples.py`); `tests/all_supports.py` has the supports of the
 repository's plugins, as installed for development, which the other tests chain (`ALL_SUPPORTS`, `all_supports()`),

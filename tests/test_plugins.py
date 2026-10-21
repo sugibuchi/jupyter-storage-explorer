@@ -3,11 +3,12 @@ what they give the explorer, and in which order."""
 
 from __future__ import annotations
 
-from importlib.metadata import EntryPoint
+from importlib.metadata import EntryPoint, version
 
 import pytest
 from all_supports import NO_PLUGINS, PLUGINS
 from explorers import make
+from jupyter_storage_explorer_polars_support import PolarsSupport
 from plugin_samples import (
     AvroBySample,
     SampleMapper,
@@ -55,6 +56,29 @@ def test_the_repository_plugins():
         "polars-support",
         "pyspark-support",
     ]
+
+
+class TestMetadata:
+    """A plugin's name, description and version: its package's metadata,
+    from its pyproject.toml's [project]."""
+
+    def test_of_the_repository_plugins(self):
+        explorer_version = version("jupyter-storage-explorer")
+        for plugin in PLUGINS:
+            assert plugin.name == f"jupyter-storage-explorer-{plugin.key}"
+            assert plugin.version == explorer_version  # released together
+            assert plugin.description.startswith(plugin.label)
+
+    def test_of_a_plugin_created_directly(self):
+        plugin = PolarsSupport()
+        assert plugin.name == "jupyter-storage-explorer-polars-support"
+        assert plugin.version == version("jupyter-storage-explorer-polars-support")
+
+    def test_of_no_package(self, installed):
+        # A class of no installed package, e.g. defined in a notebook.
+        installed(**{"sample-support": "SampleSupport"})
+        [plugin], _ = load_plugins()
+        assert (plugin.name, plugin.description, plugin.version) == (None, None, None)
 
 
 class TestLoading:

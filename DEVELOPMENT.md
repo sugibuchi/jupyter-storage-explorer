@@ -262,7 +262,9 @@ Explorers load every plugin installed, unless `plugin_options` disables it (`{"d
 it is not imported then), highest `priority` first, then by key; a plugin that cannot be imported or created is left
 out with a warning. `plugin_options` gives its options too, by key (`{"duckdb-support": {"threads": 8}}`; in the
 launcher's tabs, `plugin_options()`); an option its `options_model` lacks is an error. What plugins give comes after
-what an explorer is given, and before the defaults.
+what an explorer is given, and before the defaults. A plugin's `name`, `description` and `version` are its package's,
+as `[project]` of its `pyproject.toml` gives them: read from the metadata uv builds and installs with it (editable
+installs by `uv sync` too), so the class does not repeat them.
 An engine is defined by one plugin: another using it imports its `Engine` class (two classes of one key are an error).
 
 Conventions:

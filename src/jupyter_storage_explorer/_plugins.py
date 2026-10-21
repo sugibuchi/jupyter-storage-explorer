@@ -97,10 +97,13 @@ def _create(
             f"choose from {sorted(model.option_names())}"
         )
     try:
-        return cls(model(**values))
+        plugin = cls(model(**values))
     except Exception as exc:
         problems.append(f"plugin {name!r} not loaded: {type(exc).__name__}: {exc}")
         return None
+    # Its package's metadata (name, description, version): the entry point's.
+    plugin._distribution = registered[0].dist
+    return plugin
 
 
 class PluginComponents:

@@ -5,11 +5,14 @@ options (``StorageExplorerPluginOptions``)."""
 from __future__ import annotations
 
 import dataclasses
+import functools
 from dataclasses import dataclass
+from importlib.metadata import distribution, entry_points, packages_distributions
 from typing import TYPE_CHECKING, ClassVar
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+    from importlib.metadata import Distribution
 
     from jupyter_storage_explorer.filesystems.mapper import FileSystemMapper
     from jupyter_storage_explorer.filesystems.operation import FileSystemOperations
@@ -87,6 +90,13 @@ class StorageExplorerPlugin:
         default.
     options : StorageExplorerPluginOptions
         Its options, for the properties to make its components with.
+    name, description, version : str or None
+        Its package's name, description and version, as its
+        ``pyproject.toml`` gives them (``[project]``'s ``name``,
+        ``description`` and the version uv builds): read from the package's
+        metadata, installed with it (also by ``uv sync``, editable), not set
+        in the class. None for a plugin of no installed package, e.g. a class
+        defined in a notebook.
     format_supports : sequence of FormatSupport classes or objects
         How formats' data is handled with the plugin's engine (previews, the
         data browser, "Python code"); their formats are detected too.
@@ -136,8 +146,34 @@ class StorageExplorerPlugin:
         StorageExplorerPluginOptions
     )
 
+    # The installed package the plugin comes from: its entry point's (set by
+    # the explorer), else found by the class's top-level package.
+    _distribution: Distribution | None = None
+
     def __init__(self, options: StorageExplorerPluginOptions | None = None) -> None:
         self.options = options if options is not None else self.options_model()
+
+    @property
+    def distribution(self) -> Distribution | None:
+        """The installed package the plugin comes from, or None."""
+        if self._distribution is None:
+            self._distribution = _distribution_of(type(self))
+        return self._distribution
+
+    @property
+    def name(self) -> str | None:
+        dist = self.distribution
+        return dist.metadata["Name"] if dist is not None else None
+
+    @property
+    def description(self) -> str | None:
+        dist = self.distribution
+        return dist.metadata["Summary"] if dist is not None else None
+
+    @property
+    def version(self) -> str | None:
+        dist = self.distribution
+        return dist.version if dist is not None else None
 
     @property
     def format_supports(self) -> Sequence[type[FormatSupport] | FormatSupport]:
@@ -154,3 +190,19 @@ class StorageExplorerPlugin:
     @property
     def filesystem_mappers(self) -> Sequence[FileSystemMapper]:
         return ()
+
+
+@functools.cache
+def _distribution_of(cls: type[StorageExplorerPlugin]) -> Distribution | None:
+    """The installed package of ``cls``: the one registering it as a plugin,
+    else the one holding its top-level package, if one does (editable
+    installs, e.g. uv's, list no packages; a namespace package several fill
+    names none)."""
+    for entry_point in entry_points(group=ENTRY_POINT_GROUP):
+        if entry_point.attr == cls.__qualname__ and (
+            cls.__module__ == entry_point.module
+            or cls.__module__.startswith(f"{entry_point.module}.")
+        ):
+            return entry_point.dist
+    names = set(packages_distributions().get(cls.__module__.partition(".")[0], ()))
+    return distribution(names.pop()) if len(names) == 1 else None
