@@ -1,14 +1,16 @@
-"""pyspark-support: its supports' views and options, on sqlframe: Spark's API
-on DuckDB (real Spark needs Java), as their Spark session; their code; the
+"""pyspark-support: its supports' views and options, on a local Spark session
+(skipped without Java, or without pyspark, which the repository's shared
+environment leaves out: CI runs them alone, with Java); their code; the
 session's builder, faked; its engine and entry point."""
 
 from __future__ import annotations
 
+import os
+import shutil
 from dataclasses import fields
 from importlib.metadata import entry_points
 from types import SimpleNamespace
 
-import duckdb
 import pytest
 from jupyter_storage_explorer_pyspark_support import (
     CsvByPySpark,
@@ -27,7 +29,6 @@ from jupyter_storage_explorer_pyspark_support import (
     spark_url,
 )
 from jupyter_storage_explorer_pyspark_support import supports as pyspark
-from sqlframe.duckdb import DuckDBSession
 
 from jupyter_storage_explorer.filesystems import S3Location
 from jupyter_storage_explorer.formats import (
@@ -41,9 +42,8 @@ from jupyter_storage_explorer.formats import (
 from jupyter_storage_explorer.testing import local_item
 
 LIMITS = ViewLimits()
-# The real ones: the autouse fixture below replaces them for the views.
+# The real one: the session fixture below replaces it for the views.
 SPARK_SESSION = pyspark.spark_session
-SPARK_URL = pyspark._url
 FORMAT_OPTIONS = (
     CsvByPySparkOptions,
     JsonLinesByPySparkOptions,
@@ -52,20 +52,48 @@ FORMAT_OPTIONS = (
 )
 
 
-@pytest.fixture(autouse=True)
-def session(monkeypatch):
-    spark = DuckDBSession()
-    sessions = []
+@pytest.fixture(scope="module")
+def local_spark():
+    """A local Spark session, for the views; skipped without pyspark or Java."""
+    pytest.importorskip("pyspark")
+    if shutil.which("java") is None and not os.environ.get("JAVA_HOME"):
+        pytest.skip("Spark needs Java")
+    from pyspark.sql import SparkSession  # noqa: PLC0415
+
+    spark = (
+        SparkSession.builder.master("local[1]")
+        .appName("pyspark-support tests")
+        .config("spark.ui.enabled", "false")
+        .config("spark.sql.shuffle.partitions", "1")
+        .getOrCreate()
+    )
+    yield spark
+    spark.stop()
+
+
+@pytest.fixture
+def session(local_spark, monkeypatch):
+    """The views' Spark session (``spark_session``): the local one, and the
+    session options each view asked it with (``asked``)."""
+    asked = []
 
     def spark_session(session_options=None):
-        sessions.append(session_options)
-        return spark
+        asked.append(session_options)
+        return local_spark
 
     monkeypatch.setattr(pyspark, "spark_session", spark_session)
-    # DuckDB reads local paths, not file:// URLs, as Spark does.
-    monkeypatch.setattr(pyspark, "_url", lambda ctx: ctx.library_url)
-    spark.asked = sessions  # the session options each view asked with
-    return spark
+    return SimpleNamespace(spark=local_spark, asked=asked)
+
+
+def parquet_file(session, path, rows, column):
+    """A Parquet file of ``rows`` (one value each) at ``path``, written by
+    Spark: it writes a folder, whose one part file is moved there."""
+    folder = path.with_name(f"{path.name}.spark")
+    df = session.spark.createDataFrame([(v,) for v in rows], [column])
+    df.coalesce(1).write.parquet(str(folder))
+    next(folder.glob("part-*.parquet")).rename(path)
+    shutil.rmtree(folder)
+    return path
 
 
 def rows(view):
@@ -105,16 +133,15 @@ def test_spark_url(tmp_path):
     assert spark_url(local_item(tmp_path).location.url).startswith("file:///")
 
 
-def test_parquet(tmp_path):
-    path = tmp_path / "a.parquet"
-    duckdb.sql("select * from range(1, 4) t(a)").write_parquet(str(path))
+def test_parquet(tmp_path, session):
+    path = parquet_file(session, tmp_path / "a.parquet", [1, 2, 3], "a")
     view = ParquetByPySpark().view(
         Parquet(), local_item(path), ParquetByPySparkOptions(), LIMITS
     )
     assert rows(view) == [(1,), (2,), (3,)]
 
 
-def test_csv_with_its_separator(tmp_path):
+def test_csv_with_its_separator(tmp_path, session):
     path = tmp_path / "a.csv"
     path.write_text("x;y\n1;2\n3;4\n")
     view = CsvByPySpark().view(Csv(), local_item(path), CsvByPySparkOptions(), LIMITS)
@@ -122,7 +149,7 @@ def test_csv_with_its_separator(tmp_path):
     assert rows(view) == [(1, 2), (3, 4)]
 
 
-def test_json_lines(tmp_path):
+def test_json_lines(tmp_path, session):
     path = tmp_path / "a.jsonl"
     path.write_text('{"i": 1}\n{"i": 2}\n')
     view = JsonLinesByPySpark().view(
@@ -132,7 +159,7 @@ def test_json_lines(tmp_path):
 
 
 class TestOptions:
-    def test_reader_options_override_the_defaults(self, tmp_path):
+    def test_reader_options_override_the_defaults(self, tmp_path, session):
         # No header: the reader option wins over the field's header=True.
         path = tmp_path / "a.csv"
         path.write_text("1;2\n3;4\n")
@@ -141,8 +168,7 @@ class TestOptions:
         assert rows(view) == [(1, 2), (3, 4)]
 
     def test_fields_reach_the_reader(self):
-        # A reader recording its options: DuckDB's (sqlframe) takes few of
-        # Spark's.
+        # A reader recording its options, in the order given.
         given = []
 
         class Reader:
@@ -164,8 +190,7 @@ class TestOptions:
         ]
 
     def test_session_options_reach_the_session(self, tmp_path, session):
-        path = tmp_path / "a.parquet"
-        duckdb.sql("select 1 as a").write_parquet(str(path))
+        path = parquet_file(session, tmp_path / "a.parquet", [1], "a")
         options = ParquetByPySparkOptions(
             session_options={"spark.sql.shuffle.partitions": "4"}
         )
@@ -297,8 +322,7 @@ class TestRecipes:
         )
         assert code.splitlines()[-1] == "df = spark.read.parquet('memory:///t')"
 
-    def test_delta(self, make_item, memfs, monkeypatch):
-        monkeypatch.setattr(pyspark, "_url", SPARK_URL)
+    def test_delta(self, make_item, memfs):
         memfs.pipe_file("/t/_delta_log/0.json", b"{}")
         item = make_item("/t", location=S3Location(bucket="b", key="t"))
         [code] = (
