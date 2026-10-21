@@ -83,8 +83,10 @@ libraries), `<name>-support` the plugin alone; the launcher's `hatch_build.py` o
   `launch()`. It merges every `storage-explorer/launcher.py` in Jupyter's config paths as layers, system to user
   (their `filesystems()`, `plugin_options()` (merged by plugin, then option), `supports()`, `format_options()` (merged by library, format, then option), `operations()`, `filesystem_mappers()`, `transfer_policy()`, `parameters()`;
   `final()` names what later layers cannot change; retired `style()` and `formats()` are ignored with a warning, `RETIRED`; see `load_settings`, tested in
-  `tests/test_launcher.py`). The tab's explorer gets a settings button (`_offer_settings`, trait `_settings_path`;
-  never in notebooks) opening the user's `launcher.py` through the `files.ts` drive, created from
+  `tests/test_launcher.py`). The settings menu (toolbar.js: ⚙, on every explorer: "About", about.js and `_explorer/about.py`, the
+  explorer's version and icon, `static/storage-explorer.svg`, a copy of the launcher's kept the same by
+  `tests/test_explorer_about.py`, and the plugins installed from their entry points' metadata, those not loaded greyed
+  out with why; and in the tab, "Edit configuration": `_offer_settings`, trait `_settings_path`, never in notebooks) opens the user's `launcher.py` through the `files.ts` drive, created from
   `launcher_template.py` if missing, once the user confirms (`"settings_open"`: `{"missing"}`, then with `"create"`; `"jupyterlab_get"`/`"jupyterlab_save"` with `"settings"` read
   and write that file only): `~/.jupyter` is hidden, so JupyterLab's own contents API would refuse it. Its JupyterLab extension has four plugins:
   - `index.ts`: the tab, a console (`ExplorerTab`). ipywidgets binds a console's widgets to its first kernel, so a tab
@@ -137,7 +139,7 @@ view tabs) + the widget's parts (`static/<widget>/*.js`, if any) + `<widget>.js`
 functions and constants; the widget's file has `render` and the `export`), and likewise for CSS (`sections.css`;
 without parts). The storage explorer's parts are a feature each (`tree.js`,
 `list.js`, `preview.js`, `item_menu.js`, `operations.js` with the clipboard, `transfers.js` (drag and drop, uploads,
-downloads), `jupyterlab.js`, `properties.js`, `toolbar.js` with unsafe mode and bookmarks, `engine.js` (the engine chosen, in the status bar), `jobs.js`, `overlays.js`
+downloads), `jupyterlab.js`, `properties.js`, `toolbar.js` with unsafe mode and bookmarks, `engine.js` (the engine chosen, in the status bar), `about.js` (the settings menu's About), `jobs.js`, `overlays.js`
 (busy screen, modal, menus), `util.js`): a `createX(x)` returning its elements and
 functions. `x` is the explorer, made in `render()`: what the features share (`model`, `el`, `request`, `ask`,
 `flash`, `navigate`, ...) and the features themselves (`x.list`, `x.preview`, ...), used when needed, not when made,

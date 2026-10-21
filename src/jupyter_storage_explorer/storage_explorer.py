@@ -12,6 +12,7 @@ import traitlets
 
 from jupyter_storage_explorer import _paths, _static
 from jupyter_storage_explorer._callbacks import Callbacks
+from jupyter_storage_explorer._explorer.about import AboutMixin
 from jupyter_storage_explorer._explorer.bookmarks import BookmarksMixin
 from jupyter_storage_explorer._explorer.common import (
     explorers,
@@ -75,6 +76,7 @@ _QUERY_REQUESTS = frozenset(
 # working on the state the class sets up; what the class keeps is that state,
 # the messages' routing, the URLs (_url) and the fsspec calls.
 class StorageExplorer(
+    AboutMixin,
     FoldersMixin,
     PreviewsMixin,
     BookmarksMixin,
@@ -378,6 +380,8 @@ class StorageExplorer(
         # The plugins' components come after those given and before the
         # defaults (see plugin.py); a plugin that cannot be loaded is left out.
         self._plugins, problems = load_plugins(plugin_options)
+        # Also shown in "About", for the plugins left out.
+        self._plugin_problems = problems
         for problem in problems:
             warnings.warn(problem, RuntimeWarning, stacklevel=2)
         components = PluginComponents(self._plugins)
@@ -843,6 +847,7 @@ class StorageExplorer(
             "jupyterlab_get": self._jupyterlab_get,
             "jupyterlab_save": self._jupyterlab_save,
             "settings_open": self._settings_open,
+            "about": lambda c: self._about(),
             # File operations: most start a job (see _start).
             "move": self._move_request,
             "rename": self._rename_request,

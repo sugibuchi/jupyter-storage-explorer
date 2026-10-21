@@ -74,6 +74,7 @@ function render({ model, el }) {
   x.transfers = createTransfers(x);
   x.jupyterlab = createJupyterLab(x);
   x.properties = createProperties(x);
+  x.about = createAbout(x);
 
   // Lets Markdown previews load the vendored libraries through this widget's kernel.
   fetchVendor = async (name) => {
@@ -190,7 +191,6 @@ function render({ model, el }) {
     "change:_current_format": x.preview.updateButton,
     "change:_selected_format": x.preview.updateButton,
     "change:_unsafe_mode": x.unsafe.render,
-    "change:_settings_path": x.toolbar.renderSettings,
     "change:_engines": x.engine.render,
     "change:_engine": x.engine.render,
     "msg:custom": onCustomMsg,
@@ -200,7 +200,6 @@ function render({ model, el }) {
   applyHeight();
   x.tree.renderStorages();
   x.unsafe.render();
-  x.toolbar.renderSettings();
   x.engine.render();
   onDirChange();
   x.list.render();

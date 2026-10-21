@@ -469,6 +469,11 @@ StorageExplorer(
 `[<name>-support]` installs a plugin alone, using the libraries already installed: plugins never install or upgrade
 them otherwise, so that a shared environment's stay as its administrators set them up.
 
+⚙ at the right of the toolbar → **About** shows the explorer's version and the plugins installed, those not used greyed
+out; hover over ⓘ for a plugin's description.
+
+<img src="figs/using-about.png" width="642" alt="The About dialog: Storage Explorer's version and its plugins">
+
 ### Writing your own
 
 Plugins, and formats, file operations or storages given to one explorer (`supports`, `operations`,
