@@ -10,7 +10,8 @@ from typing import TYPE_CHECKING, Any
 
 from jupyter_storage_explorer.formats.engine import Engine
 from jupyter_storage_explorer.formats.excel import Excel
-from jupyter_storage_explorer.formats.packages import Openpyxl, Pandas, PyArrow
+from jupyter_storage_explorer.formats.package import PythonPackage
+from jupyter_storage_explorer.formats.packages import Openpyxl, PyArrow
 from jupyter_storage_explorer.formats.parquet import Parquet
 from jupyter_storage_explorer.formats.support import (
     LIBRARY_DEFAULT,
@@ -44,6 +45,15 @@ def _query_view(df: Any, limits: ViewLimits) -> QueryView:
     they are only the first of the data."""
     more = len(df) > limits.max_memory_rows
     return QueryView(data=df.head(limits.max_memory_rows), more=more)
+
+
+# The engine's library (the support libraries several engines use are the
+# core's: jupyter_storage_explorer.formats.packages).
+
+
+class Pandas(PythonPackage):
+    package = "pandas"
+    import_name = "pandas"
 
 
 class PandasEngine(Engine):

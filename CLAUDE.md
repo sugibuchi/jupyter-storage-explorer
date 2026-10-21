@@ -343,7 +343,9 @@ the core's supports, those without an engine (library "python"), in `supports/py
 needed to view images), exported by `formats.supports`, not `formats`; the engines' supports, each plugin's with its
 `Engine`, in `plugins/<engine>-support/src/jupyter_storage_explorer_<engine>_support/supports.py` (polars, pandas,
 pyspark; exported by the plugin's package, with its plugin class), importing their libraries only inside methods,
-through `PythonPackage.load()`; the predefined packages in `packages.py` (shared by the plugins), the
+through `PythonPackage.load()`; packages: an engine's own and those only it uses in its plugin's `supports.py`,
+beside its `Engine` (polars: `Polars`, `Fastexcel`; pandas: `Pandas`; pyspark: `PySpark`, `DatabricksConnect`,
+`DeltaSpark`), the support libraries several engines may use (and the core's `Pillow`) in `packages.py`, the
 views in `view.py` (`View`s, `ViewLimits`; `TableView`s, for plugins (the defaults give none), give their counts, `TableView.more`, `total` and `unit`, and the explorer words them in the note, `section()`'s
 `_rows_note`: presentation stays out of `formats`, which never imports `_explorer`), and the defaults in `defaults.py` (`DEFAULT_FORMATS`,
 the standard formats, detected even without a plugin; `DEFAULT_SUPPORTS`, the core's). A format only detects; a support handles one format's data with one library,
@@ -433,8 +435,9 @@ so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
   `on_close`): a reload's view replaces it, the previous one closed, and closing the query (`DataExplorer.close()` for
   a tab) closes the last.
   `_query/data_query.py`'s `DataQuery` does filters, sort and paging as narwhals expressions, either on the data itself
-  ("live") or on rows read into memory (queried with polars); behaviour such as regex syntax then follows the data's
-  library.
+  ("live") or on rows read into memory (queried in the data's own library: eager data as it is, lazy data in the one
+  narwhals collects it into, e.g. PyArrow for DuckDB and Spark; pandas' NaN shown as missing); behaviour such as regex
+  syntax then follows the data's library, as `result()`'s. The core needs no engine: polars is optional.
 - `recipe(fmt, ctx, options)`: the code of "Python code", by title, e.g. `{"Load as LazyFrame": ...,
   "Load as DataFrame": ...}` (`ctx.fs` and `ctx.path` only for what the code must know of the file, e.g. a CSV file's
   separator; titles never name the library: the chain makes a `Recipe` of each, adding the support's

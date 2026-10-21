@@ -19,6 +19,7 @@ from jupyter_storage_explorer_polars_support.supports import (
     JsonLinesByPolarsOptions,
     ParquetByPolars,
     ParquetByPolarsOptions,
+    Polars,
     PolarsEngine,
     PolarsOptions,
 )
@@ -52,6 +53,7 @@ __all__ = [
     "JsonLinesByPolarsOptions",
     "ParquetByPolars",
     "ParquetByPolarsOptions",
+    "Polars",
     "PolarsEngine",
     "PolarsOptions",
     "PolarsSupport",

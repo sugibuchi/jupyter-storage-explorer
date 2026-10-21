@@ -13,12 +13,14 @@ import pytest
 from jupyter_storage_explorer_pyspark_support import (
     CsvByPySpark,
     CsvByPySparkOptions,
+    DatabricksConnect,
     DeltaLakeByPySpark,
     DeltaLakeByPySparkOptions,
     JsonLinesByPySpark,
     JsonLinesByPySparkOptions,
     ParquetByPySpark,
     ParquetByPySparkOptions,
+    PySpark,
     PySparkEngine,
     PySparkOptions,
     PySparkSupport,
@@ -36,7 +38,6 @@ from jupyter_storage_explorer.formats import (
     QueryView,
     ViewLimits,
 )
-from jupyter_storage_explorer.formats.packages import DatabricksConnect, PySpark
 from jupyter_storage_explorer.testing import local_item
 
 LIMITS = ViewLimits()

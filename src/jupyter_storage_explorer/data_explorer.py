@@ -54,8 +54,9 @@ class DataExplorer(anywidget.AnyWidget):
     choose columns, as ``StorageExplorer`` does for data it views.
 
     Queries run on the data itself ("Live") or on its first rows read into
-    memory ("In memory", queried with polars when installed), switched at the
-    top right of the widget (see ``DataQuery``). ``settings`` gives the
+    memory ("In memory", queried in the data's own library; lazy data in the
+    one narwhals collects it into, e.g. PyArrow for DuckDB and Spark),
+    switched at the top right of the widget (see ``DataQuery``). ``settings`` gives the
     current filters, sort order, hidden columns and widths, ``result()`` the
     data with them applied, and ``on_change()`` calls a function when that
     result changes, e.g. to redraw a chart of it.
@@ -216,8 +217,9 @@ class DataExplorer(anywidget.AnyWidget):
 
         Built on the data itself, so it covers all of it, also after In memory
         mode, where the widget showed the first rows only. Filters run in the
-        data's library: details such as regex syntax may differ from what In
-        memory mode (polars) showed.
+        data's library, as In memory mode's do (lazy data's there run in the
+        library it was collected into, which may differ in details such as
+        regex syntax, e.g. PyArrow's for Spark's).
 
         Parameters
         ----------

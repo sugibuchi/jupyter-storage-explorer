@@ -9,8 +9,9 @@ from typing import TYPE_CHECKING, Any
 from jupyter_storage_explorer.formats.delta import DeltaLake
 from jupyter_storage_explorer.formats.engine import Engine
 from jupyter_storage_explorer.formats.excel import Excel
+from jupyter_storage_explorer.formats.package import PythonPackage
 from jupyter_storage_explorer.formats.packages import DeltaLake as DeltaLakePackage
-from jupyter_storage_explorer.formats.packages import Fastexcel, Fsspec, Polars
+from jupyter_storage_explorer.formats.packages import Fsspec
 from jupyter_storage_explorer.formats.parquet import Parquet
 from jupyter_storage_explorer.formats.support import (
     LIBRARY_DEFAULT,
@@ -33,6 +34,22 @@ if TYPE_CHECKING:
 
 AS_LAZY_FRAME = "Load as LazyFrame"
 AS_DATA_FRAME = "Load as DataFrame"
+
+
+# The engine's library, and those only polars uses (the support libraries
+# several engines use are the core's: jupyter_storage_explorer.formats.packages).
+
+
+class Polars(PythonPackage):
+    package = "polars"
+    import_name = "polars"
+
+
+class Fastexcel(PythonPackage):
+    """polars' default Excel engine (calamine)."""
+
+    package = "fastexcel"
+    import_name = "fastexcel"
 
 
 class PolarsEngine(Engine):
