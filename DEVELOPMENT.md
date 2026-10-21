@@ -29,6 +29,7 @@ same extras:
 | `launcher/labextension/`                                       | The JupyterLab extension (TypeScript).                                                               |
 | `launcher/src/jupyter_storage_explorer_launcher/labextension/` | The extension built from `launcher/labextension/` (git-ignored).                                     |
 | `notebooks/`                                                   | Demo notebooks and `make_samples.py`, which writes the sample data they use.                         |
+| `tests/`                                                       | The Python tests, a folder per part of the package (`explorer/`, `formats/`, ...); shared helpers.   |
 | `tests/browser/`                                               | Checks of the widgets' JavaScript, and their smoke test in a browser.                                |
 | `docs/scripts/`                                                | Scripts making the docs' screenshots and the demo GIFs.                                              |
 | `binder/`                                                      | The demo on mybinder.org (the README's "Try it" link): released packages, demo data.                 |

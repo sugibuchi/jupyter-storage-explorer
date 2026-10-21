@@ -10,7 +10,7 @@ All Python goes through uv (never call `python`/`pip` directly). Node.js comes w
 ```bash
 uv sync                                             # both workspace packages, editable, with dev dependencies
 uv run pytest                                       # the Python tests (tests/)
-uv run pytest tests/test_query.py -k range          # one file / matching tests
+uv run pytest tests/query/test_query.py -k range         # one file / matching tests
 uv run pytest --cov                                 # with coverage of src/jupyter_storage_explorer
 uvx ruff check src launcher/src plugins tests docs/scripts  # lint (ruff is not a dev dependency; config in pyproject.toml)
 uvx ruff format src launcher/src plugins tests docs/scripts # format
@@ -42,15 +42,20 @@ dependencies are in each plugin's `dev` group. Fixtures from the public `jupyter
 plugins too: their `tests/conftest.py` imports them; `tests/conftest.py` names it in `pytest_plugins`): `memfs` (a
 cleared fsspec memory filesystem), `make_item` (writes a file there and returns it as formats and supports are given
 it, an `ItemContext`, made by `item_of`; `local_item` for a local file); in `tests/conftest.py`, `mem_explorer` and
-`local` (explorers of those). Test files' names are unique across the folders (`test_<plugin>_*.py`): pytest imports
-them by name. Anything polars
+`local` (explorers of those). `tests/` has a folder per part of the package: `explorer/` (`StorageExplorer` and
+`_explorer/`), `query/` (`_query/`, `DataExplorer`), `formats/`, `filesystems/`, `jobs/` (`_jobs/`), `launcher/` and
+`browser/`; at its top, `conftest.py`, the tests of the top-level modules (`test_plugins.py`, `test_json.py`) and the
+helpers the folders share (`explorers.py`, `items.py`, `all_supports.py`, `plugin_samples.py`, `format_samples.py`),
+imported by name (the folders have no `__init__.py`: pytest puts `conftest.py`'s folder on `sys.path`; never import
+one test file from another, but a helper). Test files' names are unique across the folders (`test_<plugin>_*.py`):
+pytest imports them by name. Anything polars
 reads by URL (`query`, polars previews, the data browser) needs real local files (`tmp_path`), as polars cannot read
 `memory://`. The data browser's tests run each filter on polars, pandas, PyArrow, DuckDB and sqlframe (the PySpark API
 on DuckDB, which narwhals queries as it does Spark: the core's tests have no Spark). pyspark-support's view tests run
 on a real local Spark session (`local_spark`), skipped without Java or pyspark (the shared `.venv` has none): CI's
 `spark` job runs them alone, with Java. The widget tests
 subclass the widget to capture `send()` and drive it through `_on_custom_msg`, as the frontend would; for
-`StorageExplorer`, in `tests/test_explorer_*.py` (a file per feature, as its mixins) on the harness of
+`StorageExplorer`, in `tests/explorer/test_explorer_*.py` (a file per feature, as its mixins) on the harness of
 `tests/explorers.py` (`Explorer`, `make`, `entries`, ...).
 
 The JavaScript has no unit tests. `check_js.py` joins each widget's module as the kernel does (`_static.esm`) and runs
@@ -94,9 +99,9 @@ plugin alone (`all` and `all-supports`: every plugin so); the launcher's `pyproj
   `launch()`. It merges every `storage-explorer/launcher.py` in Jupyter's config paths as layers, system to user
   (their `filesystems()`, `plugin_options()` (merged by plugin, then option), `supports()`, `format_options()` (merged by library, format, then option), `operations()`, `filesystem_mappers()`, `transfer_policy()`, `parameters()`;
   `final()` names what later layers cannot change; retired `style()` and `formats()` are ignored with a warning, `RETIRED`; see `load_settings`, tested in
-  `tests/test_launcher.py`). The settings menu (toolbar.js: ⚙, on every explorer: "About", about.js and `_explorer/about.py`, the
+  `tests/launcher/test_launcher.py`). The settings menu (toolbar.js: ⚙, on every explorer: "About", about.js and `_explorer/about.py`, the
   explorer's version and icon, `static/storage-explorer.svg`, a copy of the launcher's kept the same by
-  `tests/test_explorer_about.py`, and the plugins installed from their entry points' metadata, those not loaded greyed
+  `tests/explorer/test_explorer_about.py`, and the plugins installed from their entry points' metadata, those not loaded greyed
   out with why; names link to their packages' home pages, the tooltips add authors and license; and in the tab, "Edit configuration": `_offer_settings`, trait `_settings_path`, never in notebooks) opens the user's `launcher.py` through the `files.ts` drive, created from
   `launcher_template.py` if missing, once the user confirms (`"settings_open"`: `{"missing"}`, then with `"create"`; `"jupyterlab_get"`/`"jupyterlab_save"` with `"settings"` read
   and write that file only): `~/.jupyter` is hidden, so JupyterLab's own contents API would refuse it. Its JupyterLab extension has four plugins:
@@ -534,7 +539,7 @@ then the fields, then `reader_options` (option names ignore case), in the views 
   `DataQuery`, `FileTasks`, `JobRunner`, the mixins, ...) stay prose.
 - `from __future__ import annotations` everywhere, with type-only imports under `TYPE_CHECKING` (ruff `TC` rules).
 - A new feature of the storage explorer is a mixin in `_explorer/` (Python) and a part in `static/storage_explorer/`
-  (JavaScript), each one feature; its tests go in a `tests/test_explorer_*.py` and, for what users do, a check in
+  (JavaScript), each one feature; its tests go in a `tests/explorer/test_explorer_*.py` and, for what users do, a check in
   `tests/browser/smoke.py`.
 - The root README is the quick start and highlights only; user-facing details are in `docs/storage-explorer.md`
   ("Installation", the extras of both kinds; "Using the explorer", "Unsafe operations", "Transfer policy", "Supported formats", "Format options",
