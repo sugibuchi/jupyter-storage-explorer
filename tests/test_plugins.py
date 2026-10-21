@@ -67,7 +67,7 @@ class TestMetadata:
         for plugin in PLUGINS:
             assert plugin.name == f"jupyter-storage-explorer-{plugin.key}"
             assert plugin.version == explorer_version  # released together
-            assert plugin.description.startswith(plugin.label)
+            assert plugin.description.endswith(" support for Storage Explorer")
 
     def test_of_a_plugin_created_directly(self):
         plugin = PolarsSupport()

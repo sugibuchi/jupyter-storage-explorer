@@ -19,7 +19,6 @@ from jupyter_storage_explorer_pandas_support.supports import (
 
 class PandasSupport(StorageExplorerPlugin):
     key = "pandas-support"
-    label = "pandas support for Storage Explorer"
 
     @property
     def format_supports(self):

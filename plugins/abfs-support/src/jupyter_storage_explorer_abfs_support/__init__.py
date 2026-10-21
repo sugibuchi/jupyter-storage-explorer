@@ -28,7 +28,6 @@ class AbfsSupportOptions(StorageExplorerPluginOptions):
 
 class AbfsSupport(StorageExplorerPlugin):
     key = "abfs-support"
-    label = "Azure Data Lake Storage support for Storage Explorer"
     options_model = AbfsSupportOptions
     options: AbfsSupportOptions
 

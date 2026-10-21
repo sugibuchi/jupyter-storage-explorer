@@ -1,7 +1,7 @@
 [project]
 name = "jupyter-storage-explorer-polars-support"
 dynamic = ["version", "dependencies"]
-description = "Polars support for Storage Explorer: Polars as an engine: the data browser on Delta Lake tables, Parquet, CSV, JSON Lines and Excel, and code loading them"
+description = "Polars support for Storage Explorer"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]

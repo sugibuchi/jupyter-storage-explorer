@@ -1,7 +1,7 @@
 [project]
 name = "jupyter-storage-explorer-pyspark-support"
 dynamic = ["version", "dependencies"]
-description = "PySpark support for Storage Explorer: PySpark (or Databricks Connect) as an engine: the data browser on Spark DataFrames of Delta Lake tables, Parquet, CSV and JSON Lines, and code loading them"
+description = "PySpark support for Storage Explorer"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]

@@ -22,7 +22,6 @@ from jupyter_storage_explorer_polars_support.supports import (
 
 class PolarsSupport(StorageExplorerPlugin):
     key = "polars-support"
-    label = "Polars support for Storage Explorer"
 
     @property
     def format_supports(self):

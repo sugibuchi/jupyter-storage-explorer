@@ -1,7 +1,7 @@
 [project]
 name = "jupyter-storage-explorer-pandas-support"
 dynamic = ["version", "dependencies"]
-description = "pandas support for Storage Explorer: pandas as an engine: the data browser on the first rows of Parquet, CSV, JSON Lines and Excel files, and code loading them"
+description = "pandas support for Storage Explorer"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]

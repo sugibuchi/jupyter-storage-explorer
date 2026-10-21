@@ -65,7 +65,8 @@ class StorageExplorerPlugin:
     before its own defaults.
 
     Conventions: one plugin per engine or filesystem, in a package named
-    ``jupyter-storage-explorer-<name>-support``, its label "<Name> support
+    ``jupyter-storage-explorer-<name>-support``, described (its
+    ``pyproject.toml``'s ``description``, shown to users) as "<Name> support
     for Storage Explorer". The libraries it uses are not dependencies of the
     package (shared Jupyter environments install and configure them with
     care, and a plugin must not change them): its ``full`` extra installs
@@ -82,8 +83,6 @@ class StorageExplorerPlugin:
     key : str
         Identifier, the entry point's name, e.g. "duckdb-support": what
         ``plugin_options`` are given by.
-    label : str
-        Shown to the user, e.g. "DuckDB support for Storage Explorer".
     options_model : type, default StorageExplorerPluginOptions
         The class of its options: a frozen, keyword-only dataclass
         subclassing ``StorageExplorerPluginOptions``, each field with a
@@ -91,7 +90,8 @@ class StorageExplorerPlugin:
     options : StorageExplorerPluginOptions
         Its options, for the properties to make its components with.
     name, description, version : str or None
-        Its package's name, description and version, as its
+        Its package's name, description (shown to users, e.g. "DuckDB
+        support for Storage Explorer") and version, as its
         ``pyproject.toml`` gives them (``[project]``'s ``name``,
         ``description`` and the version uv builds): read from the package's
         metadata, installed with it (also by ``uv sync``, editable), not set
@@ -118,7 +118,6 @@ class StorageExplorerPlugin:
     ...     threads: int = 4
     >>> class DuckDBSupport(StorageExplorerPlugin):
     ...     key = "duckdb-support"
-    ...     label = "DuckDB support for Storage Explorer"
     ...     options_model = DuckDBSupportOptions
     ...
     ...     @property
@@ -141,7 +140,6 @@ class StorageExplorerPlugin:
     """
 
     key: ClassVar[str]
-    label: ClassVar[str]
     options_model: ClassVar[type[StorageExplorerPluginOptions]] = (
         StorageExplorerPluginOptions
     )

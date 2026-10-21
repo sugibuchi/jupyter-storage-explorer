@@ -19,7 +19,6 @@ from jupyter_storage_explorer_pyspark_support.supports import (
 
 class PySparkSupport(StorageExplorerPlugin):
     key = "pyspark-support"
-    label = "PySpark support for Storage Explorer"
 
     @property
     def format_supports(self):

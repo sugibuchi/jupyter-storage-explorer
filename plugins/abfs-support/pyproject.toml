@@ -1,7 +1,7 @@
 [project]
 name = "jupyter-storage-explorer-abfs-support"
 dynamic = ["version", "dependencies"]
-description = "Azure Data Lake Storage support for Storage Explorer: Azure Data Lake Storage Gen2: folders moved in one step, copies within an account on the server, empty folders"
+description = "Azure Data Lake Storage support for Storage Explorer"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]

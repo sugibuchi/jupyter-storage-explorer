@@ -237,7 +237,6 @@ class DuckDBSupportOptions(StorageExplorerPluginOptions):  # enabled, priority, 
 
 class DuckDBSupport(StorageExplorerPlugin):
     key = "duckdb-support"
-    label = "DuckDB support for Storage Explorer"
     options_model = DuckDBSupportOptions
 
     @property
@@ -269,8 +268,8 @@ An engine is defined by one plugin: another using it imports its `Engine` class 
 
 Conventions:
 
-- One plugin per engine or per storage, named `jupyter-storage-explorer-<name>-support`, labelled "<Name> support for
-  Storage Explorer".
+- One plugin per engine or per storage, named `jupyter-storage-explorer-<name>-support`, described (its
+  `pyproject.toml`'s `description`, shown to users) as "<Name> support for Storage Explorer".
 - The libraries it uses are **not** dependencies: shared Jupyter environments install and configure their data
   libraries with care, and installing a plugin must not change them. Its `full` extra installs them; the plugin imports
   them only inside methods (as supports do), so that it loads without them.

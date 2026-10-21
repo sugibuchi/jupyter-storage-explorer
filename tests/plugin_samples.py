@@ -45,7 +45,6 @@ class SampleSupportOptions(StorageExplorerPluginOptions):
 
 class SampleSupport(StorageExplorerPlugin):
     key = "sample-support"
-    label = "Sample support for Storage Explorer"
     options_model = SampleSupportOptions
 
     @property
@@ -64,7 +63,6 @@ class SampleSupport(StorageExplorerPlugin):
 
 class OtherSupport(StorageExplorerPlugin):
     key = "other-support"
-    label = "Other support for Storage Explorer"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -76,13 +74,11 @@ class OptInSupport(StorageExplorerPlugin):
     """Off unless enabled: its options' default."""
 
     key = "opt-in-support"
-    label = "Opt-in support for Storage Explorer"
     options_model = OptInOptions
 
 
 class FailingSupport(StorageExplorerPlugin):
     key = "broken-support"  # the entry point's name in the tests
-    label = "Failing"
 
     def __init__(self, options=None) -> None:
         raise RuntimeError("cannot start")
@@ -90,7 +86,6 @@ class FailingSupport(StorageExplorerPlugin):
 
 class WrongKey(StorageExplorerPlugin):
     key = "another-key"
-    label = "Wrong key"
 
 
 class NotAPlugin:
