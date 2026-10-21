@@ -62,7 +62,7 @@ class AboutMixin:
             )
         plugins.sort(key=lambda p: p["name"].lower())
         return {
-            "name": "Storage Explorer",
+            "name": "Jupyter Storage Explorer",
             "version": _explorer_version(),
             "icon": _icon_url(),
             "plugins": plugins,

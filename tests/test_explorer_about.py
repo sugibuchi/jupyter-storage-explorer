@@ -23,7 +23,7 @@ def about(explorer):
 
 def test_the_explorer(memfs):
     reply = about(make("/", fs=memfs))
-    assert reply["name"] == "Storage Explorer"
+    assert reply["name"] == "Jupyter Storage Explorer"
     assert reply["version"] == version("jupyter-storage-explorer")
     prefix = "data:image/svg+xml;base64,"
     assert reply["icon"].startswith(prefix)

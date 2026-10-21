@@ -210,7 +210,7 @@ def about(x: Explorer) -> None:
     expect(x.menu_item("Edit configuration")).to_have_count(0)
     x.menu_item("About").click()
     dialog = x.el.locator(".jse-dialog:visible")
-    expect(dialog.locator(".jse-about-name")).to_have_text("Storage Explorer")
+    expect(dialog.locator(".jse-about-name")).to_have_text("Jupyter Storage Explorer")
     expect(dialog.locator(".jse-about-icon")).to_be_visible()
     polars = dialog.locator(".jse-about-plugin", has_text="polars-support")
     expect(polars).not_to_have_class(re.compile("jse-disabled"))
