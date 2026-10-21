@@ -115,8 +115,7 @@ a JupyterLab tab of its own. **Close preview** or Esc closes the panel.
 ### Edit files
 
 Double-click a file, or right-click → **Edit**, to open it in JupyterLab's editor; **Save** writes it back to the
-storage. Needs the [launcher](../launcher/README.md) package. JupyterLab reaches only the files you open this way,
-through the explorer: not other files of the storage, nor new ones.
+storage. Needs the [launcher](../launcher/README.md) package.
 
 ### Switch engine
 
