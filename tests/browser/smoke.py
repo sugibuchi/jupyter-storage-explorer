@@ -331,6 +331,27 @@ def preview(x: Explorer) -> None:
 
 
 @check
+def preview_follows_clicks(x: Explorer) -> None:
+    # While the panel is open, a click previews a file, and a data folder too
+    # (a Delta table, a partitioned Parquet dataset), as the kernel finds its
+    # format.
+    badge = x.preview.locator(".jse-badge")
+    x.go("curated")
+    x.row("orders.parquet").click()
+    x.el.locator(".jse-status-bar .jse-preview-btn").click()
+    expect(badge).to_have_text("Parquet · Polars")
+    x.row("customers").click()
+    expect(x.preview.locator(".jse-preview-name")).to_contain_text("customers")
+    expect(badge).to_have_text("Delta Lake table · Polars")
+    x.row("orders_by_month").click()
+    expect(x.preview.locator(".jse-preview-name")).to_contain_text("orders_by_month")
+    expect(badge).to_have_text("Parquet · Polars")
+    x.row("orders.parquet").click()
+    expect(x.preview.locator(".jse-preview-name")).to_contain_text("orders.parquet")
+    x.preview.press("Escape")
+
+
+@check
 def query(x: Explorer) -> None:
     x.go("curated")
     x.row("orders.parquet").click()

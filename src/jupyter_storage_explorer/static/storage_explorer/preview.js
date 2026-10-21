@@ -151,6 +151,21 @@ function createPreview(x) {
         : `Nothing to ${action.toLowerCase()} here`;
   }
 
+  const isOpen = () => !el.hidden;
+
+  // While the panel is open, a single selected folder the kernel found a
+  // format of (_selected_format: a Delta table, a Parquet dataset, ...) is
+  // previewed, as a selected file is at once (list.js' select): detecting a
+  // folder's format takes the kernel a listing.
+  function followFolder() {
+    const known = model.get("_selected_format");
+    const selected = model.get("_selected");
+    if (!enabled() || !isOpen() || !known.format || selected.length !== 1 || selected[0] !== known.path) return;
+    if (known.path === model.get("_preview").path) return;
+    const [entry] = x.list.entriesAt(selected);
+    if (entry && isFolder(entry)) open(known.path, known.format);
+  }
+
   button.addEventListener("click", () => {
     if (enabled() && linkCloses()) return close();
     const wanted = target();
@@ -169,7 +184,8 @@ function createPreview(x) {
     close,
     render,
     updateButton,
-    isOpen: () => !el.hidden,
+    followFolder,
+    isOpen,
     dispose: () => queryPanel?.dispose(),
   };
 }

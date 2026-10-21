@@ -107,7 +107,8 @@ Type in the field above the list to show names containing the text, or matching 
 
 Select a file and click **Preview** at the bottom right of the list (with nothing selected: the folder shown, e.g. a
 Delta Lake table), or double-click a file JupyterLab cannot open, e.g. Parquet. The preview panel opens below the list;
-tables open in the [data browser](#data-browser-and-view-tabs). Right-click → **View** *format* **in new tab** opens it in
+tables open in the [data browser](#data-browser-and-view-tabs). While it is open, clicking a file or a data folder (a
+Delta Lake table, a Parquet dataset) previews it. Right-click → **View** *format* **in new tab** opens it in
 a JupyterLab tab of its own. **Close preview** or Esc closes the panel.
 
 <img src="figs/using-preview.png" width="562" alt="Preview in the status bar, and Preview as in the right-click menu of a Markdown file">
