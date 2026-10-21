@@ -14,7 +14,7 @@ from jupyter_storage_explorer import _plugins
 from jupyter_storage_explorer._static import STATIC
 from jupyter_storage_explorer.plugin import ENTRY_POINT_GROUP
 
-ROOT = pathlib.Path(__file__).parents[1]
+ROOT = pathlib.Path(__file__).parents[2]
 
 
 def about(explorer):

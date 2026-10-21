@@ -1,7 +1,7 @@
 """What formats share (formats/base.py, package.py): reading files
 (ItemContext), generated-code helpers, requirements and detection, with
-signatures (the
-supports: test_supports.py; the formats' file icons: test_explorer_icons.py)."""
+signatures (the supports: test_supports.py; the formats' file icons:
+explorer/test_explorer_icons.py)."""
 
 from __future__ import annotations
 
@@ -9,12 +9,12 @@ import dataclasses
 
 import fsspec
 import pytest
+from format_samples import DUCKDB_BYTES, SQLITE_BYTES, DuckDB, SQLite
 from items import local_item
 
 from jupyter_storage_explorer.filesystems import S3Location
 from jupyter_storage_explorer.formats import (
     Csv,
-    DataFormat,
     DeltaLake,
     ItemContext,
     Parquet,
@@ -147,31 +147,6 @@ class TestDetection:
 
     def test_unknown(self, make_item):
         assert detect(make_item("/a.bin", b"\0"), formats=[Text(), Csv()]) is None
-
-
-class SQLite(DataFormat):
-    name = "sqlite"
-    label = "SQLite database"
-    extensions = (".db", ".sqlite")
-    sniff_bytes = 16
-
-    def sniff(self, ctx, head):
-        return head.startswith(b"SQLite format 3\0")
-
-
-class DuckDB(DataFormat):
-    # Its signature is not at the start: sniff gets the bytes before it too.
-    name = "duckdb"
-    label = "DuckDB database"
-    extensions = (".db", ".duckdb")
-    sniff_bytes = 12
-
-    def sniff(self, ctx, head):
-        return head[8:12] == b"DUCK"
-
-
-SQLITE_BYTES = b"SQLite format 3\0" + b"\0" * 100
-DUCKDB_BYTES = b"\0" * 8 + b"DUCK" + b"\0" * 100
 
 
 class TestSniffing:

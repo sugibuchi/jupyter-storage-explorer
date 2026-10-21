@@ -7,9 +7,9 @@ import itertools
 
 import pytest
 from explorers import entries, make, path_of
+from format_samples import DUCKDB_BYTES, SQLITE_BYTES, DuckDB, SQLite
 from jupyter_storage_explorer_pandas_support import CsvByPandas
 from jupyter_storage_explorer_polars_support import CsvByPolars
-from test_base import DUCKDB_BYTES, SQLITE_BYTES, DuckDB, SQLite
 
 from jupyter_storage_explorer._explorer import previews
 from jupyter_storage_explorer._explorer.supports import SupportChain

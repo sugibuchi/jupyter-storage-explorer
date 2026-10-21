@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from jupyter_storage_explorer.plugin import StorageExplorerPlugin
 
 # The explorer's own icon, the launcher's (launcher/labextension/style/):
-# tests/test_explorer_about.py keeps the two copies the same.
+# tests/explorer/test_explorer_about.py keeps the two copies the same.
 _ICON = "storage-explorer.svg"
 
 
