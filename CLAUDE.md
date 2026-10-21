@@ -418,7 +418,8 @@ its operation's. Tests:
 `tests/test_plugins.py` (fake entry points to `tests/plugin_samples.py`); `tests/all_supports.py` has the supports of the
 repository's plugins, as installed for development, which the other tests chain (`ALL_SUPPORTS`, `all_supports()`),
 and `NO_PLUGINS`, the `plugin_options` disabling them all.
-Plugins never depend on their libraries (their `full` extra installs them): see DEVELOPMENT.md's "Writing a plugin".
+Plugins never depend on their libraries (their `full` extra installs them): see DEVELOPMENT_PLUGIN.md (developing each kind of component and packaging a plugin, with the conventions; written for
+developers and for AI generating plugins: keep its rules, templates and checklist in step with the code).
 
 **Engines in the explorer.** `StorageExplorer(engine_preference=)` orders the chain's `engines`, synced as
 `_engines` (`[{"key", "label"}]`); `_engine` is the one chosen: the user's last (`ExplorerStates.engine`, its JSON
@@ -469,9 +470,9 @@ snippets never get storage options (`spark_url()` rewrites `abfs`/`s3` to `abfss
   ("Using the explorer", "Unsafe operations", "Transfer policy", "Supported formats", "Format options",
   "StorageExplorer options", grouped by use, and last "Extensions" with "File operation extensions" (a table: add new
   ones there)) and `docs/data-explorer.md` (the data
-  browser, `result()`, `on_change()`, `QuerySettings`, "DataExplorer options"). Extending the explorer in Python
-  (icons, filesystem mappers, file operations, "Another library for a format": supports, their options and secrets) is
-  in DEVELOPMENT.md's "Customizing". Update them when operations, formats or options change, and the README's
+  browser, `result()`, `on_change()`, `QuerySettings`, "DataExplorer options"). Custom icons (CSS) are in
+  DEVELOPMENT.md's "Customizing"; extending the explorer in Python (formats, engines, supports with their options and
+  secrets, file operations, filesystem mappers) and packaging plugins, with the conventions, in DEVELOPMENT_PLUGIN.md. Update them when operations, formats or options change, and the README's
   highlights for new features. Keep them short: what users do, not how it works. `supports`, `operations` and
   `filesystem_mappers` are for development: last in the docs, the options tables and the launcher's template.
 - Images and links to other files in the READMEs are absolute URLs (`raw.githubusercontent.com/.../main/...` for

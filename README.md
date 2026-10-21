@@ -113,6 +113,8 @@ The `notebooks` folder has a demo of each widget on sample data.
   its tab with `launcher.py` files.
 - **[Development](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/DEVELOPMENT.md)**: building,
   releasing, and custom icons.
+- **[Developing plugins](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/DEVELOPMENT_PLUGIN.md)**:
+  formats, engines, file operations and storages of your own, packaged as plugins.
 
 ## Requirements
 

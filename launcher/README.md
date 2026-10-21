@@ -76,7 +76,7 @@ The file has some of these functions, all optional:
 | `transfer_policy()`    | Rules of a [transfer policy](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#transfer-policy) |
 | `parameters()`         | Other `StorageExplorer` arguments ([StorageExplorer options](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#storageexplorer-options)), e.g. `{"engine_preference": ["pandas"]}` |
 
-For extending the explorer in Python ([Customizing](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/DEVELOPMENT.md#customizing)),
+For extending the explorer in Python ([Developing plugins](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/DEVELOPMENT_PLUGIN.md)),
 tried before the defaults: `supports()` (`FormatSupport`: formats and the libraries handling them), `operations()`
 (`FileSystemOperations`) and `filesystem_mappers()` (`FileSystemMapper`).
 
