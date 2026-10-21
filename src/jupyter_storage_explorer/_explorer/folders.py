@@ -229,8 +229,9 @@ class FoldersMixin:
         """The format name of a listed file, e.g. "json-lines".
 
         Shown as the row's ``data-file-format``. Empty for folders (detecting
-        them would mean listing each one), files without a URL and
-        unrecognised files.
+        them would mean listing each one), files without a URL, unrecognised
+        files and files a format would confirm by their contents (reading
+        each would be too slow).
         """
         path = _paths.norm(info["name"])
         location = self._location_of(path)
@@ -240,7 +241,7 @@ class FoldersMixin:
             location=location, fs=self._fs, path=path, info=info, children=None
         )
         try:
-            fmt = detect_format(ctx, formats=self._formats)
+            fmt = detect_format(ctx, formats=self._formats, sniff=False)
         except Exception:
             return ""  # detection is best-effort
         return fmt.name if fmt is not None else ""

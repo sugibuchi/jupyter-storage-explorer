@@ -1,5 +1,6 @@
 """What formats share (formats/base.py, package.py): reading files
-(ItemContext), generated-code helpers, requirements and detection (the
+(ItemContext), generated-code helpers, requirements and detection, with
+signatures (the
 supports: test_supports.py; the formats' file icons: test_explorer_icons.py)."""
 
 from __future__ import annotations
@@ -13,7 +14,9 @@ from items import local_item
 from jupyter_storage_explorer.filesystems import S3Location
 from jupyter_storage_explorer.formats import (
     Csv,
+    DataFormat,
     DeltaLake,
+    ItemContext,
     Parquet,
     PythonPackage,
     SupportOptions,
@@ -144,6 +147,104 @@ class TestDetection:
 
     def test_unknown(self, make_item):
         assert detect(make_item("/a.bin", b"\0"), formats=[Text(), Csv()]) is None
+
+
+class SQLite(DataFormat):
+    name = "sqlite"
+    label = "SQLite database"
+    extensions = (".db", ".sqlite")
+    sniff_bytes = 16
+
+    def sniff(self, ctx, head):
+        return head.startswith(b"SQLite format 3\0")
+
+
+class DuckDB(DataFormat):
+    # Its signature is not at the start: sniff gets the bytes before it too.
+    name = "duckdb"
+    label = "DuckDB database"
+    extensions = (".db", ".duckdb")
+    sniff_bytes = 12
+
+    def sniff(self, ctx, head):
+        return head[8:12] == b"DUCK"
+
+
+SQLITE_BYTES = b"SQLite format 3\0" + b"\0" * 100
+DUCKDB_BYTES = b"\0" * 8 + b"DUCK" + b"\0" * 100
+
+
+class TestSniffing:
+    """Formats confirmed by a file's first bytes (``DataFormat.sniff``):
+    always, whichever formats are installed, but never in listings."""
+
+    @pytest.fixture
+    def reads(self, monkeypatch):
+        """The sizes ``ItemContext.head`` was asked for."""
+        sizes = []
+        head = ItemContext.head
+
+        def counted(self, size):
+            sizes.append(size)
+            return head(self, size)
+
+        monkeypatch.setattr(ItemContext, "head", counted)
+        return sizes
+
+    @pytest.mark.parametrize(
+        ("data", "expected"), [(SQLITE_BYTES, SQLite), (DUCKDB_BYTES, DuckDB)]
+    )
+    def test_signature_decides_a_shared_extension(
+        self, make_item, reads, data, expected
+    ):
+        item = make_item("/x.db", data)
+        assert type(detect(item, formats=[SQLite(), DuckDB()])) is expected
+        assert [
+            type(f) for f in matching_formats(item, formats=[SQLite(), DuckDB()])
+        ] == [expected]
+        # Read once per detection, as much as the most demanding format asks.
+        assert reads == [16, 16]
+
+    def test_checked_even_when_one_format_claims_it(self, make_item):
+        # Installing only a SQLite plugin says nothing of the lake's files.
+        item = make_item("/x.db", DUCKDB_BYTES)
+        assert detect(item, formats=[SQLite()]) is None
+        assert matching_formats(item, formats=[SQLite()]) == []
+
+    def test_short_file(self, make_item):
+        assert detect(make_item("/x.db", b"SQL"), formats=[SQLite(), DuckDB()]) is None
+
+    def test_unreadable_file_confirms_nothing(self, make_item, monkeypatch):
+        item = make_item("/x.db", SQLITE_BYTES)
+
+        def fail(self, size):
+            raise OSError("denied")
+
+        monkeypatch.setattr(ItemContext, "head", fail)
+        assert detect(item, formats=[SQLite(), Csv()]) is None
+
+    def test_other_formats_never_read(self, make_item, reads):
+        item = make_item("/a.csv", b"a,b\n")
+        assert type(detect(item, formats=[SQLite(), DuckDB(), Csv()])) is Csv
+        assert reads == []
+
+    def test_listings_never_read(self, make_item, reads):
+        # Undecided, rather than a guess the contents may contradict.
+        item = make_item("/x.db", SQLITE_BYTES)
+        assert detect(item, formats=[SQLite(), DuckDB()], sniff=False) is None
+        csv = make_item("/a.csv", b"a,b\n")
+        assert type(detect(csv, formats=[SQLite(), Csv()], sniff=False)) is Csv
+        assert reads == []
+
+    def test_folders_never_sniffed(self, make_item, memfs, reads):
+        memfs.pipe_file("/d.db/x", b"")
+
+        class Folders(SQLite):
+            def matches(self, ctx):
+                return ctx.is_dir
+
+        assert type(detect(make_item("/d.db"), formats=[Folders()])) is Folders
+        assert reads == []
 
 
 @pytest.mark.parametrize("name", ["DATA.CSV", "data.tsv"])

@@ -70,8 +70,8 @@ can do it does it.
 
 ## Formats
 
-A `DataFormat` only detects: it says whether an item (a file or a folder) is of its kind. Formats are cheap and called
-on every click, so read nothing unless needed.
+A `DataFormat` only detects: it says whether an item (a file or a folder) is of its kind. `matches()` is called for
+every file of a listing, so it reads nothing: the name, or a folder's listing, only.
 
 ```python
 from jupyter_storage_explorer.formats import DataFormat
@@ -86,19 +86,22 @@ class Avro(DataFormat):
 ```
 
 The default `matches(ctx)` checks `extensions`. A folder format (a table of files) overrides it and looks at the
-folder's listing:
+folder's listing (`ctx.children`, `ctx.child_names`).
+
+A format whose files have a binary signature checks it with `sniff`, given the file's first `sniff_bytes` bytes. Give
+it to every format that has one, above all for a common extension (`.db`: SQLite's and DuckDB's): it is checked
+whenever the file is clicked, whichever formats are installed, as files in a storage need not be what installed plugins
+expect. Listings never read files, so such files show no format there until clicked; folders are never sniffed.
 
 ```python
 class DuckDBDatabase(DataFormat):
     name = "duckdb"
     label = "DuckDB database"
     extensions = (".duckdb", ".db")
+    sniff_bytes = 12  # the first 12 bytes, read once for all formats sniffing the file
 
-    def matches(self, ctx):
-        # .db is shared with SQLite: read the file's first bytes (DuckDB's magic number).
-        if ctx.is_dir or not super().matches(ctx):
-            return False
-        return ctx.head(12)[8:12] == b"DUCK"
+    def sniff(self, ctx, head):
+        return head[8:12] == b"DUCK"  # DuckDB's magic number (fewer bytes if the file is shorter)
 ```
 
 `ctx` is an `ItemContext`: `ctx.location`, `ctx.fs`, `ctx.path`, `ctx.info`, `ctx.children` (a folder's listing, None
