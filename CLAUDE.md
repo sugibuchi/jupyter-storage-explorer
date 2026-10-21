@@ -358,7 +358,11 @@ so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
   one of `FILE_ICONS`, or `(name, svg)` for one of its own, shown as an `<img>` so its scripts never run; sent as
   `_format_icons` and `_file_icon_svgs`, checked by `format_icons()` (`_explorer/icons.py`); files of formats without one, e.g. Text's, get
   their extension's icon, `FILE_ICON_EXTENSIONS` in `icons.js`) and implement `matches(ctx)`: cheap detection, called on
-  every click. `ctx` is an `ItemContext` (`base.py`): a frozen dataclass of the item's `location`, the explorer's
+  every click and for every file listed (`_file_format`), reading nothing. Formats with a binary signature declare
+  `sniff_bytes` and `sniff(ctx, head)`: `detect`/`matching_formats` read the file's first bytes once for all formats
+  sniffing it and drop those refusing it (an unreadable file confirms none), always, whichever formats are installed
+  (the files in a storage need not be what installed plugins expect); listings pass `sniff=False`, leaving such files
+  without a format until clicked; folders are never sniffed. `ctx` is an `ItemContext` (`base.py`): a frozen dataclass of the item's `location`, the explorer's
   `fs` and its `path` there (to read more), its fsspec `info` and `children` (a folder's listing, None for a file;
   `is_dir`, `name`), one object rather than parameters so that it can grow without changing the methods'
   signatures; directory formats (Delta, Parquet datasets) inspect `ctx.children`. `detect` and `matching_formats`

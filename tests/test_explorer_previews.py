@@ -6,9 +6,10 @@ import dataclasses
 import itertools
 
 import pytest
-from explorers import make, path_of
+from explorers import entries, make, path_of
 from jupyter_storage_explorer_pandas_support import CsvByPandas
 from jupyter_storage_explorer_polars_support import CsvByPolars
+from test_base import DUCKDB_BYTES, SQLITE_BYTES, DuckDB, SQLite
 
 from jupyter_storage_explorer._explorer import previews
 from jupyter_storage_explorer._explorer.supports import SupportChain
@@ -16,6 +17,7 @@ from jupyter_storage_explorer._query.settings import QuerySettings
 from jupyter_storage_explorer._view_tab import ViewTab
 from jupyter_storage_explorer.data_explorer import DataExplorer
 from jupyter_storage_explorer.formats import (
+    FormatSupport,
     PythonPackage,
     TableView,
     TextView,
@@ -168,6 +170,38 @@ def test_menu_info(mem_explorer):
         {"type": "menu_info", "rid": 1, "path": "/data/table"}
     )
     assert folder["formats"] == ["delta"]
+
+
+class SqliteByPython(FormatSupport):
+    format = SQLite
+    capabilities = ("recipe",)
+
+    def recipe(self, fmt, ctx, options):
+        return {"Connect": "import sqlite3"}
+
+
+class DuckdbByPython(FormatSupport):
+    format = DuckDB
+    capabilities = ("recipe",)
+
+    def recipe(self, fmt, ctx, options):
+        return {"Connect": "import duckdb"}
+
+
+def test_signatures_decide_formats_once_clicked(memfs):
+    # Two ".db" files: the listing reads neither, the menu reads each.
+    memfs.pipe_file("/dbs/a.db", SQLITE_BYTES)
+    memfs.pipe_file("/dbs/b.db", DUCKDB_BYTES)
+    explorer = make("/dbs", fs=memfs, supports=[SqliteByPython, DuckdbByPython])
+    assert {e["name"]: e["format"] for e in entries(explorer)} == {
+        "a.db": "",
+        "b.db": "",
+    }
+    for name, expected in [("a.db", ["sqlite"]), ("b.db", ["duckdb"])]:
+        reply = explorer.request(
+            {"type": "menu_info", "rid": 1, "path": f"/dbs/{name}"}
+        )
+        assert reply["formats"] == expected
 
 
 class TestViewTab:
