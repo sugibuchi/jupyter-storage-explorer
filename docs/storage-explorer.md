@@ -1,10 +1,11 @@
 # StorageExplorer
 
 `StorageExplorer` is the file explorer: browse storage, preview files, query tables, and upload, download, move and
-edit files. For installation, see the [README](../README.md).
+edit files.
 
 <img src="figs/storage-explorer.png" width="954" alt="StorageExplorer with a JSON Lines file open in the data browser">
 
+- [Installation](#installation)
 - [Storages](#storages)
 - [Using the explorer](#using-the-explorer)
 - [Unsafe operations](#unsafe-operations)
@@ -16,6 +17,38 @@ edit files. For installation, see the [README](../README.md).
 - [Working with the explorer from Python](#working-with-the-explorer-from-python)
 - [StorageExplorer options](#storageexplorer-options)
 - [Extensions](#extensions)
+
+## Installation
+
+```bash
+pip install "jupyter-storage-explorer[polars]"
+```
+
+Engines and storages come as plugins, installed with extras of two kinds:
+
+- **Full extras**, e.g. `[polars]`: the plugin and the libraries it uses (Polars, deltalake, fastexcel).
+- **Support-only extras**, e.g. `[polars-support]`: the plugin alone, using the libraries already installed. Nothing
+  else is installed or upgraded.
+
+| Full extra | Support-only extra | Plugin                                                                        | Libraries of the full extra        |
+|------------|--------------------|-------------------------------------------------------------------------------|------------------------------------|
+| `polars`   | `polars-support`   | Polars: Delta Lake, Parquet, CSV, JSON Lines, Excel                           | polars, deltalake, fastexcel       |
+| `pandas`   | `pandas-support`   | pandas: Parquet, CSV, JSON Lines, Excel                                       | pandas, pyarrow, openpyxl          |
+| `pyspark`  | `pyspark-support`  | PySpark or Databricks Connect: Delta Lake, Parquet, CSV, JSON Lines           | pyspark, delta-spark               |
+| `abfs`     | `abfs-support`     | Azure Data Lake Storage Gen2: folders moved in one step, copies on the server | adlfs, azure-storage-file-datalake |
+| `all`      | `all-supports`     | All of the above                                                              | All of the above                   |
+
+Full extras are handy for a quick try. **Support-only extras are highly recommended for an IPython kernel whose data
+access packages are carefully installed and configured** (e.g. a shared JupyterHub image, or Spark and Databricks
+Connect set up for a cluster): the plugins use what is there and never change it.
+
+```bash
+pip install "jupyter-storage-explorer[all-supports]"  # every plugin, with the libraries you have
+```
+
+Install the package for your storage too, e.g. `s3fs` for Amazon S3 (see [Storages](#storages)). Without an engine
+plugin, the explorer still browses, moves and previews text, Markdown, JSON and images. For the JupyterLab launcher
+item, install [`jupyter-storage-explorer-launcher`](../launcher/README.md#installation), which has the same extras.
 
 ## Storages
 

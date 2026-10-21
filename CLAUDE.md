@@ -488,7 +488,7 @@ then the fields, then `reader_options` (option names ignore case), in the views 
   (JavaScript), each one feature; its tests go in a `tests/test_explorer_*.py` and, for what users do, a check in
   `tests/browser/smoke.py`.
 - The root README is the quick start and highlights only; user-facing details are in `docs/storage-explorer.md`
-  ("Using the explorer", "Unsafe operations", "Transfer policy", "Supported formats", "Format options",
+  ("Installation", the extras of both kinds; "Using the explorer", "Unsafe operations", "Transfer policy", "Supported formats", "Format options",
   "StorageExplorer options", grouped by use, and last "Extensions" with "File operation extensions" (a table: add new
   ones there)) and `docs/data-explorer.md` (the data
   browser, `result()`, `on_change()`, `QuerySettings`, "DataExplorer options"). Custom icons (CSS) are in

@@ -38,45 +38,6 @@ for all you can do with it.
   and files in tabs of their own.
 - **Bookmarks**, remembered queries, transfer rules, and a JupyterLab launcher item.
 
-## Installation
-
-```bash
-pip install "jupyter-storage-explorer[polars]"
-```
-
-Engines and storages come as plugins, installed with extras of two kinds:
-
-- **Full extras**, e.g. `[polars]`: the plugin and the libraries it uses (Polars, deltalake, fastexcel).
-- **Support-only extras**, e.g. `[polars-support]`: the plugin alone, using the libraries already installed. Nothing
-  else is installed or upgraded.
-
-| Full extra | Support-only extra | Plugin                                                                                  | Libraries of the full extra        |
-|------------|--------------------|-----------------------------------------------------------------------------------------|------------------------------------|
-| `polars`   | `polars-support`   | Polars: Delta Lake, Parquet, CSV, JSON Lines, Excel                                     | polars, deltalake, fastexcel       |
-| `pandas`   | `pandas-support`   | pandas: Parquet, CSV, JSON Lines, Excel                                                 | pandas, pyarrow, openpyxl          |
-| `pyspark`  | `pyspark-support`  | PySpark or Databricks Connect: Delta Lake, Parquet, CSV, JSON Lines                     | pyspark, delta-spark               |
-| `abfs`     | `abfs-support`     | Azure Data Lake Storage Gen2: folders moved in one step, copies on the server           | adlfs, azure-storage-file-datalake |
-| `all`      | `all-supports`     | All of the above                                                                        | All of the above                   |
-
-Full extras are handy for a quick try. **Support-only extras are highly recommended for an IPython kernel whose data
-access packages are carefully installed and configured** (e.g. a shared JupyterHub image, or Spark and Databricks
-Connect set up for a cluster): the plugins use what is there and never change it.
-
-```bash
-pip install "jupyter-storage-explorer[all-supports]"  # every plugin, with the libraries you have
-```
-
-Install the package for your storage too:
-
-| Storage                        | Package    | Address                                              |
-|--------------------------------|------------|------------------------------------------------------|
-| Amazon S3                      | `s3fs`     | `s3://bucket/path`                                   |
-| Azure Data Lake / Blob Storage | `adlfs`    | `abfs://container@account.dfs.core.windows.net/path` |
-| Google Cloud Storage           | `gcsfs`    | `gs://bucket/path`                                   |
-| Local disk, in-memory          | (included) | `/path`, `memory://`                                 |
-
-Without an engine plugin, the explorer still browses, moves and previews text, Markdown, JSON and images.
-
 ## Quick start
 
 **Try it without installing anything**:
@@ -96,6 +57,15 @@ pip install "jupyter-storage-explorer-launcher[polars]"
 ![The Storage Explorer item in JupyterLab's launcher](https://raw.githubusercontent.com/sugibuchi/jupyter-storage-explorer/main/launcher/figs/launcher.png)
 
 ### From Python code
+
+```bash
+pip install "jupyter-storage-explorer[polars]"
+```
+
+`[polars]` adds the Polars plugin with Polars itself; other engines and storages are extras too, e.g.
+`[polars-support]` for the plugin alone, using the libraries you have (recommended in carefully set up kernels). See
+[Installation](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#installation)
+for all of them and the storage packages.
 
 ```python
 from jupyter_storage_explorer import StorageExplorer

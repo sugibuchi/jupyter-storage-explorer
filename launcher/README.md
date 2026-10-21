@@ -22,7 +22,7 @@ pip install "jupyter-storage-explorer-launcher[polars]"
 ```
 
 The launcher has the same extras as `jupyter-storage-explorer`
-([Installation](https://github.com/sugibuchi/jupyter-storage-explorer#installation)), of two kinds:
+([Installation](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#installation)), of two kinds:
 
 - **Full extras**, e.g. `[polars]`: the plugin and the libraries it uses.
 - **Support-only extras**, e.g. `[polars-support]`: the plugin alone, using the libraries already installed. Nothing
