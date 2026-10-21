@@ -33,6 +33,19 @@ class TestFile:
             "states.json"
         ]  # no temp file left
 
+    def test_columns_by_layout(self, tmp_path):
+        path = tmp_path / "states.json"
+        states = ExplorerStates(path)
+        assert states.columns("standard") is None
+        states.remember_columns("sidebar", ["size", "format"])
+        again = ExplorerStates(path)
+        assert again.columns("sidebar") == ["size", "format"]
+        assert again.columns("standard") is None
+        path.write_text(json.dumps({"columns": {"standard": ["size", 3], "x": "y"}}))
+        again.reload()
+        assert again.columns("standard") == ["size"]
+        assert again.columns("x") is None
+
     def test_reload_reads_changes_made_elsewhere(self, tmp_path):
         path = tmp_path / "states.json"
         mine, other = ExplorerStates(path), ExplorerStates(path)

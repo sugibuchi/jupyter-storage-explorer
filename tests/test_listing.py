@@ -118,6 +118,28 @@ class TestQuery:
             "file10.csv",
         ]
 
+    def test_by_creation_time(self, listing):
+        listing.columns["ctimes"] = [3, None, 1, 2, None]
+        assert names(listing.query(sort="ctime")) == [
+            "b",
+            "A",
+            "File2.csv",
+            "file1.txt",
+            "file10.csv",
+        ]
+
+    def test_by_format_label(self, listing):
+        # Items without a format first; by label, as the list shows them.
+        assert names(listing.query(sort="format", labels={"csv": "CSV"})) == [
+            "b",
+            "A",
+            "file1.txt",
+            "file10.csv",
+            "File2.csv",
+        ]
+        page = listing.query(sort="format", asc=False, labels={"csv": "CSV"})
+        assert names(page)[2:] == ["file10.csv", "File2.csv", "file1.txt"]
+
     def test_text_filter_ignores_case(self, listing):
         page = listing.query(text="FILE1")
         assert names(page) == ["file1.txt", "file10.csv"]

@@ -75,6 +75,17 @@ _QUERY_REQUESTS = frozenset(
 _PANEL_STATES = ("open", "closed", "disabled")
 _LAYOUTS = ("standard", "sidebar")
 
+# The file list's columns the user can show besides Name (the settings menu's
+# Columns), in their order; and those shown by default, per layout.
+_LIST_COLUMNS = ("size", "mtime", "ctime", "format")
+_DEFAULT_COLUMNS = {"standard": ["size", "mtime"], "sidebar": ["size"]}
+
+
+def _known_columns(columns: Sequence[str]) -> list[str]:
+    """``columns`` that the list has, in its order (a file written by another
+    version may name others)."""
+    return [c for c in _LIST_COLUMNS if c in columns]
+
 
 def _check_choice(name: str, value: Any, choices: Sequence[str]) -> None:
     if value not in choices:
@@ -147,8 +158,8 @@ class StorageExplorer(
         "sidebar": a narrow layout, for JupyterLab's side bar (the
         launcher's side panel): a bar of the storage chooser, bookmarks,
         Refresh and the settings menu (with Unsafe mode, first), a bar of
-        Up and the folder's path, the filter, the list (without the
-        Modified column), the pager when there are several pages, and the
+        Up and the folder's path, the filter, the list (its columns
+        Name and, by default, Size), the pager when there are several pages, and the
         status bar.
     open_preview : bool, optional
         Deprecated: ``preview_panel="open"`` instead.
@@ -322,6 +333,9 @@ class StorageExplorer(
     _preview_panel = traitlets.Unicode("closed").tag(sync=True)
     # "standard", or "sidebar": the narrow layout of the launcher's side panel.
     _layout = traitlets.Unicode("standard").tag(sync=True)
+    # The file list's columns besides Name (keys of _LIST_COLUMNS), set by the
+    # settings menu's Columns and remembered by layout in ExplorerStates.
+    _columns = traitlets.List(traitlets.Unicode()).tag(sync=True)
     # Format name -> label shown to the user, e.g. {"delta": "Delta Lake table"}.
     _format_labels = traitlets.Dict().tag(sync=True)
     # Formats of text files (Text and its subclasses, e.g. code, logs, Markdown),
@@ -505,6 +519,11 @@ class StorageExplorer(
             _tree_view=tree_view,
             _preview_panel=preview_panel,
             _layout=layout,
+            # The user's last choice for this layout (the validator keeps the
+            # columns the list has), else its default.
+            _columns=_DEFAULT_COLUMNS[layout]
+            if (remembered := self._states.columns(layout)) is None
+            else remembered,
             _format_labels={f.name: f.label for f in self._formats},
             _text_formats=[f.name for f in self._formats if isinstance(f, Text)],
             _format_icons=icons,
@@ -989,6 +1008,17 @@ class StorageExplorer(
             state = "has no tree" if self._tree_disabled else "has a tree"
             raise traitlets.TraitError(f"the explorer {state}: not {value!r}")
         return value
+
+    @traitlets.validate("_columns")
+    def _validate_columns(self, proposal: dict[str, Any]) -> list[str]:
+        return _known_columns(proposal["value"])
+
+    @traitlets.observe("_columns")
+    def _on_columns(self, change: dict[str, Any]) -> None:
+        """The user chose the list's columns (the settings menu): remember them
+        for explorers of this layout."""
+        if getattr(self, "_engine_ready", False):
+            self._states.remember_columns(self._layout, change["new"])
 
     @traitlets.observe("_engine")
     def _on_engine(self, change: dict[str, Any]) -> None:

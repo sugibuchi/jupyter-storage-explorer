@@ -1,6 +1,6 @@
 // The toolbar: the tree's button, bookmarks, Up, Refresh, the folder's path,
-// Unsafe mode, and the settings menu: "Edit configuration" in the launcher's
-// tabs, "About". The sidebar layout has two narrower bars: the storage
+// Unsafe mode, and the settings menu: the list's Columns, "Edit
+// configuration" in the launcher's tabs, "About". The sidebar layout has two narrower bars: the storage
 // chooser (slot), bookmarks, Refresh and the settings menu, whose first item
 // is then Unsafe mode; below (pathBar), Up and the folder's path.
 
@@ -81,6 +81,31 @@ function createToolbar(x) {
         "-",
       );
     }
+    // The list's columns besides Name (_columns, remembered by the kernel),
+    // each shown or hidden with a click.
+    const chosen = model.get("_columns");
+    const toggle = (key) => {
+      const next = chosen.includes(key) ? chosen.filter((k) => k !== key) : [...chosen, key];
+      model.set(
+        "_columns",
+        LIST_COLUMNS.map((col) => col.key).filter((k) => next.includes(k)),
+      );
+      model.save_changes();
+    };
+    items.push({
+      label: "Columns",
+      icon: "columns",
+      submenu: (sub) =>
+        sub.replaceChildren(
+          ...x.menu.rows(
+            LIST_COLUMNS.filter((col) => col.key !== "name").map((col) => ({
+              label: col.label,
+              icon: chosen.includes(col.key) ? "check" : null,
+              action: () => toggle(col.key),
+            })),
+          ),
+        ),
+    });
     const path = model.get("_settings_path");
     if (path && x.jupyterlab.canOpenSettings()) {
       items.push({

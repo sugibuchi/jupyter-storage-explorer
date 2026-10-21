@@ -74,13 +74,9 @@
   color: var(--jse-error);
 }
 
-/* Narrow: the list shows the name and size only (the tooltip has the times),
-   and the status bar has two rows: the messages, the whole width, then the
-   engine (left) and View (right), as wide as their labels. */
-.jse-sidebar .jse-list .jse-col-mtime {
-  display: none;
-}
-
+/* Narrow: the status bar has two rows: the messages, the whole width, then
+   the engine (left) and View (right), as wide as their labels. (The list
+   shows fewer columns by default, _columns.) */
 .jse-sidebar .jse-status-bar {
   flex-wrap: wrap;
 }
@@ -300,8 +296,10 @@
   color: var(--jse-selected-fg);
 }
 
-/* Dates and arrows in the selected row's colour, as in JupyterLab. */
+/* Dates, formats and arrows in the selected row's colour, as in JupyterLab. */
 .jse-list tbody tr.jse-selected td.jse-col-mtime,
+.jse-list tbody tr.jse-selected td.jse-col-ctime,
+.jse-list tbody tr.jse-selected td.jse-col-format,
 .jse-node.jse-active .jse-twisty {
   color: inherit;
 }
@@ -329,7 +327,9 @@
   text-align: right !important;
 }
 
-.jse-list td.jse-col-mtime {
+.jse-list td.jse-col-mtime,
+.jse-list td.jse-col-ctime,
+.jse-list td.jse-col-format {
   color: var(--jse-fg-muted);
 }
 
