@@ -204,8 +204,9 @@ function createList(x) {
     const next = !additive ? [path] : current.includes(path) ? current.filter((p) => p !== path) : [...current, path];
     model.set("_selected", next);
     model.save_changes();
-    // While the preview panel is open, it follows a single selected file.
-    // Folders are not previewed on click (use Preview for e.g. a Delta table).
+    // While the preview panel is open, it follows a single selected file; a
+    // data folder (e.g. a Delta table) once the kernel tells its format
+    // (preview.js' followFolder), so plain folders leave the panel as it is.
     if (x.preview.isOpen() && next.length === 1 && next[0] !== model.get("_preview").path) {
       const [entry] = entriesAt(next);
       if (entry && !isFolder(entry) && hasUrl(entry)) x.preview.open(next[0]);

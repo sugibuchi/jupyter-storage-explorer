@@ -220,7 +220,10 @@ function render({ model, el }) {
       x.preview.updateButton(); // "Close preview" while the panel shows the selected item
     },
     "change:_current_format": x.preview.updateButton,
-    "change:_selected_format": x.preview.updateButton,
+    "change:_selected_format": () => {
+      x.preview.updateButton();
+      x.preview.followFolder(); // a data folder selected, while the panel is open
+    },
     "change:_unsafe_mode": () => {
       x.unsafe.render();
       x.toolbar.renderUnsafe();
