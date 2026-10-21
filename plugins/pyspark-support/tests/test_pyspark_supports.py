@@ -87,7 +87,11 @@ def session(local_spark, monkeypatch):
 
 def parquet_file(session, path, rows, column):
     """A Parquet file of ``rows`` (one value each) at ``path``, written by
-    Spark: it writes a folder, whose one part file is moved there."""
+    Spark: it writes a folder, whose one part file is moved there. Skipped on
+    Windows without Hadoop's winutils (``HADOOP_HOME``), which Spark needs
+    there to write files, though not to read them."""
+    if os.name == "nt" and not os.environ.get("HADOOP_HOME"):
+        pytest.skip("Spark writes files on Windows only with HADOOP_HOME")
     folder = path.with_name(f"{path.name}.spark")
     df = session.spark.createDataFrame([(v,) for v in rows], [column])
     df.coalesce(1).write.parquet(str(folder))
