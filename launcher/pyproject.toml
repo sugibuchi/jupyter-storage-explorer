@@ -1,6 +1,6 @@
 [project]
 name = "jupyter-storage-explorer-launcher"
-dynamic = ["version", "dependencies", "optional-dependencies"]
+dynamic = ["version", "dependencies"]
 description = "Adds Jupyter Storage Explorer to the JupyterLab launcher, opening it in a tab"
 readme = "README.md"
 license = "MIT"
@@ -39,6 +39,19 @@ classifiers = [
 ]
 requires-python = ">=3.11"
 
+# The explorer's extras, its plugins (see its pyproject.toml): e.g. "polars"
+# installs the explorer's "polars" extra, at the explorer's version that the
+# launcher requires (hatch_build.py).
+[project.optional-dependencies]
+abfs = ["jupyter-storage-explorer[abfs]"]
+abfs-support = ["jupyter-storage-explorer[abfs-support]"]
+pandas = ["jupyter-storage-explorer[pandas]"]
+pandas-support = ["jupyter-storage-explorer[pandas-support]"]
+polars = ["jupyter-storage-explorer[polars]"]
+polars-support = ["jupyter-storage-explorer[polars-support]"]
+pyspark = ["jupyter-storage-explorer[pyspark]"]
+pyspark-support = ["jupyter-storage-explorer[pyspark-support]"]
+
 [project.urls]
 Homepage = "https://github.com/sugibuchi/jupyter-storage-explorer/tree/main/launcher"
 Source = "https://github.com/sugibuchi/jupyter-storage-explorer"
@@ -55,8 +68,7 @@ source = "vcs"
 raw-options = { root = "..", version_scheme = "post-release" }
 
 # The dependencies, set by hatch_build.py: jupyter-core, and
-# jupyter-storage-explorer at the launcher's own version; and the explorer's
-# extras (the plugins), e.g. "polars", the same.
+# jupyter-storage-explorer at the launcher's own version.
 [tool.hatch.metadata.hooks.custom]
 
 [tool.hatch.build.targets.wheel]

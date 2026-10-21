@@ -66,9 +66,10 @@ its process).
 
 A uv workspace of packages released together (version from git tags via hatch-vcs): the explorer, the launcher and
 the plugins (`plugins/<name>-support`). The launcher and the plugins require the explorer of exactly their own version
-(their `hatch_build.py` sets their dependencies; add new ones there); the explorer's extras, set by the root's
-`hatch_build.py` (`PLUGINS`), require the plugins of its version: `<name>` with the plugin's `full` extra (its
-libraries), `<name>-support` the plugin alone; the launcher's `hatch_build.py` offers the same extras:
+(their `hatch_build.py` sets their dependencies, as the version comes from git; add new ones there); the explorer's
+extras, declared in the root's `pyproject.toml` without versions (each plugin's exact pin of the explorer makes them the
+plugins of its version), are `<name>`, the plugin with its `full` extra (its libraries), and `<name>-support`, the
+plugin alone; the launcher's `pyproject.toml` offers the same extras (the explorer's, at the version it pins):
 
 - `jupyter-storage-explorer` (root, `src/jupyter_storage_explorer/`): the anywidget widgets `StorageExplorer` (files)
   and `DataExplorer` (a dataframe given by the user, any library narwhals supports, with `QuerySettings`). Runtime
@@ -432,7 +433,7 @@ its operation's. Tests:
 `tests/test_plugins.py` (fake entry points to `tests/plugin_samples.py`); `tests/all_supports.py` has the supports of the
 repository's plugins, as installed for development, which the other tests chain (`ALL_SUPPORTS`, `all_supports()`),
 and `NO_PLUGINS`, the `plugin_options` disabling them all.
-Plugins never depend on their libraries (their `full` extra installs them): see DEVELOPMENT_PLUGIN.md (developing each kind of component and packaging a plugin, with the conventions; written for
+Plugins never depend on their libraries (their `full` extra installs them): see docs/DEVELOPMENT_PLUGIN.md (developing each kind of component and packaging a plugin, with the conventions; written for
 developers and for AI generating plugins: keep its rules, templates and checklist in step with the code).
 
 **Engines in the explorer.** `StorageExplorer(engine_preference=)` orders the chain's `engines`, synced as
@@ -492,7 +493,7 @@ then the fields, then `reader_options` (option names ignore case), in the views 
   ones there)) and `docs/data-explorer.md` (the data
   browser, `result()`, `on_change()`, `QuerySettings`, "DataExplorer options"). Custom icons (CSS) are in
   DEVELOPMENT.md's "Customizing"; extending the explorer in Python (formats, engines, supports with their options and
-  secrets, file operations, filesystem mappers) and packaging plugins, with the conventions, in DEVELOPMENT_PLUGIN.md. Update them when operations, formats or options change, and the README's
+  secrets, file operations, filesystem mappers) and packaging plugins, with the conventions, in docs/DEVELOPMENT_PLUGIN.md. Update them when operations, formats or options change, and the README's
   highlights for new features. Keep them short: what users do, not how it works. `supports`, `operations` and
   `filesystem_mappers` are for development: last in the docs, the options tables and the launcher's template.
 - Images and links to other files in the READMEs are absolute URLs (`raw.githubusercontent.com/.../main/...` for

@@ -4,9 +4,10 @@
 
 The repository is a [uv workspace](https://docs.astral.sh/uv/concepts/projects/workspaces/) of packages released
 together with the same version (from the git tags). The launcher and the plugins require the explorer of exactly their
-version (their `hatch_build.py`, which sets their dependencies), as they may use the explorer's internals; the
-explorer's extras (`polars`, `polars-support`, ...) require the plugins of its version (`hatch_build.py`), and the
-launcher has the same extras:
+version (their `hatch_build.py`, which sets their dependencies: the version comes from git), as they may use the
+explorer's internals. The explorer's extras (`polars`, `polars-support`, ...) are declared in its `pyproject.toml`
+without versions: each plugin's exact pin of the explorer makes them the plugins of its version. The launcher has the
+same extras:
 
 | Package                                   | Folder                    | Contents                                                                                              |
 |-------------------------------------------|---------------------------|-------------------------------------------------------------------------------------------------------|
@@ -216,7 +217,7 @@ uv run --group docs docs/scripts/make_all.py
 ## Customizing
 
 Icons are changed with CSS (below). Formats, engines, file operations and storages are added in Python, and packaged
-as plugins that every explorer uses once installed: see [DEVELOPMENT_PLUGIN.md](DEVELOPMENT_PLUGIN.md), which also
+as plugins that every explorer uses once installed: see [DEVELOPMENT_PLUGIN.md](docs/DEVELOPMENT_PLUGIN.md), which also
 covers this repository's plugins (`plugins/`).
 
 ### Icons

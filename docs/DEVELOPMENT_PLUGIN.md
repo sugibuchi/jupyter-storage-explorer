@@ -310,7 +310,7 @@ class ServerSideCopy(FileSystemOperations):
 Operations run in a worker thread: report to `progress` (`advance`, `working_on`) and call `progress.check()` between
 steps, which raises `OperationCancelled` when the user cancels. Import the storage's SDK lazily, and raise
 `NotSupported` when it is missing, so that the defaults take over. `AzureDataLakeGen2Operation`
-([plugins/abfs-support](plugins/abfs-support)) is a complete example.
+([plugins/abfs-support](../plugins/abfs-support)) is a complete example.
 
 ## Filesystem mappers
 
@@ -566,15 +566,16 @@ lists the plugin with its version.
 
 ## Plugins of this repository
 
-The plugins in [`plugins/`](plugins) (polars, pandas, pyspark, abfs) follow these conventions and are released with the
-explorer, at its version: each requires the explorer of exactly its own version (its `hatch_build.py`), and the
+The plugins in [`plugins/`](../plugins) (polars, pandas, pyspark, abfs) follow these conventions and are released with the
+explorer, at its version: each requires the explorer of exactly its own version (its `hatch_build.py`: the version comes from git), and the
 explorer's extras install them (`polars`: with its libraries; `polars-support`: alone). To add one:
 
 1. Copy one of them (e.g. `plugins/polars-support`), renaming the package, module, plugin class and entry point. Its
    tests are in its `tests/`, named `test_<name>_*.py` (pytest at the root runs every plugin's, and imports test files
    by name).
-2. Add its name to `PLUGINS` in the root's and the launcher's `hatch_build.py` (the extras), and the package to the
-   root's dev dependencies and `[tool.uv.sources]`.
+2. Add its extras, `<name>` (the plugin's `full`) and `<name>-support` (the plugin alone), to
+   `[project.optional-dependencies]` in the root's and the launcher's `pyproject.toml`, without versions (the plugin
+   requires the explorer of exactly its own), and the package to the root's dev dependencies and `[tool.uv.sources]`.
 3. Give it a release workflow, `.github/workflows/release-<plugin>.yaml` (a copy of another's), and its PyPI project a
-   trusted publisher for it (see [One-time setup for PyPI](DEVELOPMENT.md#one-time-setup-for-pypi)).
-4. List it in [docs/storage-explorer.md](docs/storage-explorer.md#plugins)'s table and the README's extras.
+   trusted publisher for it (see [One-time setup for PyPI](../DEVELOPMENT.md#one-time-setup-for-pypi)).
+4. List it in [docs/storage-explorer.md](storage-explorer.md#plugins)'s table and the README's extras.
