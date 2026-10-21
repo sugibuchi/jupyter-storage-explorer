@@ -263,8 +263,9 @@ whichever key a filesystem uses.
 `"disabled"`, fixed at creation, `_tree_disabled`), `preview_panel` (`_preview_panel`: `"open"` starts with
 `_preview` `{"empty": true}`; `"disabled"`: no Preview rows, the `"preview"` notice ignored, items viewed in new
 tabs, `x.preview.view`, and the Preview button is View, a tab of the same target, hidden without the extension) and `layout` (`_layout`: `"sidebar"`, class `jse-sidebar`: a bar of the storage chooser,
-bookmarks, Refresh and ⚙, whose menu has Unsafe mode first (the button red while on, `renderUnsafe`); a bar of Up and
-the path; the filter; the list; the pager below it). The list's columns besides Name (`_columns`: `"size"`, `"mtime"`,
+bookmarks, Refresh, the filter button and ⚙, whose menu has Unsafe mode first (the button red while on,
+`renderUnsafe`); a bar of Up and the path; the filter, hidden until its button shows it (`x.list.showFilter`,
+cleared when hidden), as JupyterLab's file browser's; the list; the pager below it). The list's columns besides Name (`_columns`: `"size"`, `"mtime"`,
 `"ctime"`, `"format"`, `_LIST_COLUMNS`; default Size and Modified, the sidebar's Size) are chosen in ⚙ → Columns and
 remembered by layout (`ExplorerStates.columns(layout)`, JSON "columns"); the kernel's `Listing` sorts by each, Format by
 label, as the browser does. Otherwise the storage chooser sits above the tree

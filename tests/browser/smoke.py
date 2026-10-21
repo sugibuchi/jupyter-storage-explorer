@@ -1487,6 +1487,18 @@ def side_panel(lab: Lab, page: Page) -> None:
     menu.first.click()
     expect(settings).not_to_have_class(re.compile(r"\bjse-unsafe-on\b"))
     row = side.locator(".jse-list tbody tr")
+    # The filter, hidden until its button (left of the settings) shows it;
+    # hidden again, it filters nothing.
+    filter_btn = side.locator(".jse-toolbar .jse-filter-btn")
+    field = side.locator(".jse-list-pane .jse-filter-input")
+    expect(field).to_be_hidden()
+    filter_btn.click()
+    expect(field).to_be_focused()
+    field.press_sequentially("cur")
+    expect(row).to_have_count(1)
+    filter_btn.click()
+    expect(field).to_be_hidden()
+    expect(row.filter(has=page.get_by_text("landing", exact=True))).to_be_visible()
     row.filter(has=page.get_by_text("curated", exact=True)).dblclick()
     expect(side.locator(".jse-crumb").last).to_have_text("curated")
     row.filter(has=page.get_by_text("orders.parquet", exact=True)).click(button="right")
