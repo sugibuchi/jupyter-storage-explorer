@@ -68,6 +68,19 @@ function createList(x) {
   const pane = h("div", { className: "jse-pane jse-list-pane" }, bar, el, ...(sidebar ? [pagerEl] : []));
   const statusEl = h("div", { className: "jse-status" });
 
+  // In the sidebar layout, the filter shows on demand (the toolbar's filter
+  // button), as in JupyterLab's file browser: there its bar holds only the
+  // filter. Hidden, it filters nothing.
+  let filterShown = !sidebar;
+  bar.hidden = !filterShown;
+
+  function showFilter(on) {
+    filterShown = on;
+    bar.hidden = !on;
+    if (on) filter.focus();
+    else filter.clear();
+  }
+
   // --- The listing, decoded and sorted ---
 
   // The current directory's items (_listing), decoded once per listing. None
@@ -477,6 +490,8 @@ function createList(x) {
     flash,
     entriesAt,
     open,
+    showFilter,
+    filterShown: () => filterShown,
     locationOf,
     dispose: () => clearTimeout(flashTimer),
   };

@@ -33,7 +33,8 @@
 }
 
 /* The tree's button, first in the toolbar: highlighted while the tree shows. */
-.jse-tree-btn.jse-on {
+.jse-tree-btn.jse-on,
+.jse-filter-btn.jse-on {
   color: var(--jse-accent);
 }
 
@@ -189,7 +190,8 @@
   white-space: nowrap;
 }
 
-.jse-pager[hidden] {
+.jse-pager[hidden],
+.jse-pane-bar[hidden] {
   display: none;
 }
 

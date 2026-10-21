@@ -1,8 +1,9 @@
 // The toolbar: the tree's button, bookmarks, Up, Refresh, the folder's path,
 // Unsafe mode, and the settings menu: the list's Columns, "Edit
 // configuration" in the launcher's tabs, "About". The sidebar layout has two narrower bars: the storage
-// chooser (slot), bookmarks, Refresh and the settings menu, whose first item
-// is then Unsafe mode; below (pathBar), Up and the folder's path.
+// chooser (slot), bookmarks, Refresh, the filter button (the list's filter,
+// hidden until it is pressed) and the settings menu, whose first item is
+// then Unsafe mode; below (pathBar), Up and the folder's path.
 
 function createToolbar(x) {
   const { model } = x;
@@ -13,11 +14,14 @@ function createToolbar(x) {
   const refreshBtn = iconButton("refresh", "Refresh");
   const pathEl = h("div", { className: "jse-path" });
   const settingsBtn = iconButton("settings", "Settings", "jse-settings-btn");
+  // The sidebar layout's filter button, left of the settings: shows or hides
+  // the list's filter (list.js' showFilter), as JupyterLab's file browser's.
+  const filterBtn = iconButton("filter", "Show the filter", "jse-filter-btn");
   // Where the storage chooser goes in the sidebar layout (see placeStorages
   // in storage_explorer.js); it takes the bar's room left by the buttons.
   const slot = h("div", { className: "jse-storage-slot" });
   const el = sidebar
-    ? h("div", { className: "jse-toolbar" }, treeBtn, slot, x.bookmarks.button, refreshBtn, settingsBtn)
+    ? h("div", { className: "jse-toolbar" }, treeBtn, slot, x.bookmarks.button, refreshBtn, filterBtn, settingsBtn)
     : h("div", { className: "jse-toolbar" }, treeBtn, x.bookmarks.button, upBtn, refreshBtn, pathEl, x.unsafe.el, settingsBtn);
   const pathBar = sidebar ? h("div", { className: "jse-path-bar" }, upBtn, pathEl) : null;
 
@@ -36,6 +40,13 @@ function createToolbar(x) {
     treeBtn.title = state === "open" ? "Hide the folder tree" : "Show the folder tree";
     treeBtn.ariaLabel = treeBtn.title;
   }
+
+  filterBtn.addEventListener("click", () => {
+    const on = !x.list.filterShown();
+    x.list.showFilter(on);
+    filterBtn.classList.toggle("jse-on", on);
+    filterBtn.title = filterBtn.ariaLabel = on ? "Hide the filter" : "Show the filter";
+  });
 
   treeBtn.addEventListener("click", () => {
     model.set("_tree_view", model.get("_tree_view") === "open" ? "closed" : "open");
