@@ -54,6 +54,8 @@ packages = ["src/jupyter_storage_explorer_abfs_support"]
 dev = [
     "adlfs>=2022.2.0",
     "azure-storage-file-datalake>=12.0.0",
+    # The tests' (tests/), besides the libraries.
+    "pytest>=9.1.1",
 ]
 
 [tool.uv]
@@ -61,3 +63,6 @@ cache-keys = [{ file = "pyproject.toml" }, { file = "hatch_build.py" }, { git = 
 
 [tool.uv.sources]
 jupyter-storage-explorer = { workspace = true }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

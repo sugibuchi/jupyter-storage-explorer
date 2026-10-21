@@ -122,7 +122,8 @@ cache-keys = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+# The explorer's and the launcher's tests, and each plugin's (in its folder).
+testpaths = ["tests", "plugins"]
 # The launcher's Python code, for tests/test_launcher.py: CI does not install
 # the launcher (its JupyterLab extension is not built there).
 pythonpath = ["launcher/src"]
@@ -135,7 +136,7 @@ filterwarnings = [
 # its code from launcher/src), for Codecov.
 [tool.coverage.run]
 source = ["src/jupyter_storage_explorer", "plugins"]
-omit = ["plugins/*/hatch_build.py"]
+omit = ["plugins/*/hatch_build.py", "plugins/*/tests/*"]
 
 [tool.ruff]
 exclude = [

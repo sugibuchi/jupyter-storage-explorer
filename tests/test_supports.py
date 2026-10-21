@@ -203,13 +203,11 @@ class TestOptions:
 
     def test_option_names(self):
         assert SupportOptions.option_names() == frozenset()
-        assert PolarsOptions.option_names() == {
+        assert SecretOptions.option_names() == {
+            "password",
             "storage_options",
-            "credential_provider",
-        }
-        assert DeltaLakeByPolarsOptions.option_names() >= {
-            "use_pyarrow",
-            "storage_options",
+            "version",
+            "engine",
         }
 
     def test_not_a_support(self):

@@ -56,6 +56,8 @@ dev = [
     "pandas>=2.0",
     "pyarrow>=14",
     "openpyxl>=3.1",
+    # The tests' (tests/), besides the libraries.
+    "pytest>=9.1.1",
 ]
 
 [tool.uv]
@@ -63,3 +65,6 @@ cache-keys = [{ file = "pyproject.toml" }, { file = "hatch_build.py" }, { git = 
 
 [tool.uv.sources]
 jupyter-storage-explorer = { workspace = true }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -8,7 +8,6 @@ import traitlets
 from all_supports import all_supports
 from explorers import make, path_of
 from jupyter_storage_explorer_polars_support import DeltaLakeByPolars
-from jupyter_storage_explorer_pyspark_support import PySparkEngine
 
 from jupyter_storage_explorer._explorer.states import ExplorerStates
 from jupyter_storage_explorer._explorer.supports import SupportChain
@@ -21,7 +20,7 @@ from jupyter_storage_explorer.formats import (
     Parquet,
     PythonPackage,
 )
-from jupyter_storage_explorer.formats.packages import DatabricksConnect, PySpark
+from jupyter_storage_explorer.formats.packages import DatabricksConnect
 
 
 class Installed(PythonPackage):
@@ -66,12 +65,6 @@ class TestEngine:
         assert not neither.is_installed()
         assert [type(p) for p in neither.packages()] == [Missing]  # the first
         assert engine("e", ()).is_installed()  # none needed
-
-    def test_pyspark_with_databricks_connect(self, monkeypatch):
-        monkeypatch.setattr(PySpark, "is_installed", lambda self: False)
-        monkeypatch.setattr(DatabricksConnect, "is_installed", lambda self: True)
-        assert PySparkEngine.is_installed()
-        assert [p.package for p in PySparkEngine.packages()] == ["databricks-connect"]
 
     def test_dotted_import_names(self):
         # "databricks.connect": a missing parent is not installed, not an error.

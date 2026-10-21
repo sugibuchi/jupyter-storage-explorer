@@ -33,9 +33,17 @@ Python and `static/` changes need no build: restart the kernel. The launcher's J
 
 ## Tests
 
-The Python tests: fixtures in `tests/conftest.py` are `memfs` (a cleared fsspec memory filesystem), `make_item`
-(writes a file there and returns it as formats and supports are given it, an `ItemContext`, made by
-`tests/items.py`'s `item_of`; `local_item` for a local file), and `mem_explorer` and `local` (explorers of those). Anything polars
+The Python tests: the explorer's and the launcher's in `tests/`, each plugin's in `plugins/<name>-support/tests/`
+(`uv run pytest` at the root runs both; a plugin's alone, with only its dependencies, in its folder: `uv run
+--isolated --package <its package> pytest`. Not a plain `uv run` there: it installs the plugin's `dev` group into the
+shared `.venv`, e.g. pyspark, which the explorer's tests expect missing, until `uv sync` at the root). Plugins' tests cover their own code (supports, options, engine,
+operations, entry point); the explorer's use the plugins' supports as material (`tests/all_supports.py`). Their
+dependencies are in each plugin's `dev` group. Fixtures from the public `jupyter_storage_explorer.testing` (for
+plugins too: their `tests/conftest.py` imports them; `tests/conftest.py` names it in `pytest_plugins`): `memfs` (a
+cleared fsspec memory filesystem), `make_item` (writes a file there and returns it as formats and supports are given
+it, an `ItemContext`, made by `item_of`; `local_item` for a local file); in `tests/conftest.py`, `mem_explorer` and
+`local` (explorers of those). Test files' names are unique across the folders (`test_<plugin>_*.py`): pytest imports
+them by name. Anything polars
 reads by URL (`query`, polars previews, the data browser) needs real local files (`tmp_path`), as polars cannot read
 `memory://`. The data browser's tests run each filter on polars, pandas, PyArrow, DuckDB and sqlframe (the PySpark API
 on DuckDB, which narwhals queries as it does Spark; real Spark needs Java, so it is not tested). The widget tests
@@ -67,7 +75,7 @@ libraries), `<name>-support` the plugin alone; the launcher's `hatch_build.py` o
   dependencies are only anywidget, fsspec, narwhals, pygments, traitlets; polars, pandas, pyarrow, deltalake, fastexcel,
   openpyxl, Pillow, PySpark are all optional and probed at run time; the engines' supports come with plugins. Its top
   level has the widgets (`storage_explorer.py`, `data_explorer.py`), the
-  `Location` interface (`location.py`), the `StorageExplorerPlugin` class (`plugin.py`; loaded by `_plugins.py`) and small
+  `Location` interface (`location.py`), the `StorageExplorerPlugin` class (`plugin.py`; loaded by `_plugins.py`), the helpers plugins test with (`testing.py`: items and pytest fixtures; needs pytest) and small
   private helpers (`_paths`, `_infos`, `_json`, `_static`, `_callbacks`); the rest is in packages: public, `filesystems/`
   (`locations.py`: the predefined locations; `mapper.py`: the `FileSystemMapper` interface and `MapperChain`; `mappers.py`: the predefined mappers;
   `operation.py`: the `FileSystemOperations` interface; `operations.py`: the predefined operations) and `formats/`; private, `_explorer/`
@@ -197,7 +205,7 @@ such keys; written to a local disk they would leave the target folder), before w
 Data Lake SDK, and copies within an account on the server (Copy Blob, `start_copy_from_url`, with a Blob client made from
 the Data Lake client's `url` and `credential`, polled until it ends; a folder's files at once, in a `TaskGroup`, at most `concurrency` at a time;
 a failed or cancelled copy aborted and deleted), connected from the adlfs filesystem's settings and run on its loop with `fsspec.asyn.sync`; tested with
-a fake client (`tests/test_abfs.py`, faking `_azure.py`'s names: the SDK and adlfs, imported on first use, so that the plugin
+a fake client (`plugins/abfs-support/tests/test_abfs_operation.py`, faking `_azure.py`'s names: the SDK and adlfs, imported on first use, so that the plugin
 loads without them; an operation without them raises `NotSupported`). `move` and `copy` take a source
 and a target filesystem, the same one or not (keyword `same`, see Storage).
 Between filesystems, single files go through `FileSystemOperations._copy_file` and `_move_file`
@@ -367,7 +375,7 @@ so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
 - `view(fmt, ctx, options, limits)`: one `View` dataclass of `view.py`. A `QueryView` (`data`: any
   dataframe narwhals supports, best lazy; `more`: eager data of the first rows only, e.g. pandas' `max_memory_rows`,
   which the browser notes as rows cut in memory, `DataQuery(cut=)`; PySpark's read the URL in the kernel's Spark
-  session, `spark_session()`, faked with sqlframe in `tests/test_pyspark_views.py`) opens the data browser (`_new_query`: the first view's data, then the view
+  session, `spark_session()`, faked with sqlframe in `plugins/pyspark-support/tests/test_pyspark_supports.py`) opens the data browser (`_new_query`: the first view's data, then the view
   again on reload, with the context it was opened with); whether an item opens in the data browser is known only
   once viewed, so the menu offers "Preview" and "View in a new tab" for whatever has a format. The others
   (`TableView`, `TextView`, `TreeView`, `MarkdownView`, `MediaView`...) are sent as the one item of the preview's

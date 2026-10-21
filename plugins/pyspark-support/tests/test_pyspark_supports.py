@@ -1,15 +1,15 @@
-"""The PySpark supports' views and options (plugins/pyspark-support), on
-sqlframe: Spark's API on DuckDB (real Spark needs Java), as their Spark
-session; and the session's builder, faked."""
+"""pyspark-support: its supports' views and options, on sqlframe: Spark's API
+on DuckDB (real Spark needs Java), as their Spark session; their code; the
+session's builder, faked; its engine and entry point."""
 
 from __future__ import annotations
 
 from dataclasses import fields
+from importlib.metadata import entry_points
 from types import SimpleNamespace
 
-import polars as pl
+import duckdb
 import pytest
-from items import local_item
 from jupyter_storage_explorer_pyspark_support import (
     CsvByPySpark,
     CsvByPySparkOptions,
@@ -19,11 +19,15 @@ from jupyter_storage_explorer_pyspark_support import (
     JsonLinesByPySparkOptions,
     ParquetByPySpark,
     ParquetByPySparkOptions,
+    PySparkEngine,
     PySparkOptions,
+    PySparkSupport,
+    spark_url,
 )
 from jupyter_storage_explorer_pyspark_support import supports as pyspark
 from sqlframe.duckdb import DuckDBSession
 
+from jupyter_storage_explorer.filesystems import S3Location
 from jupyter_storage_explorer.formats import (
     Csv,
     DeltaLake,
@@ -33,10 +37,12 @@ from jupyter_storage_explorer.formats import (
     ViewLimits,
 )
 from jupyter_storage_explorer.formats.packages import DatabricksConnect, PySpark
+from jupyter_storage_explorer.testing import local_item
 
 LIMITS = ViewLimits()
-# The real one: the autouse fixture below replaces it for the views.
+# The real ones: the autouse fixture below replaces them for the views.
 SPARK_SESSION = pyspark.spark_session
+SPARK_URL = pyspark._url
 FORMAT_OPTIONS = (
     CsvByPySparkOptions,
     JsonLinesByPySparkOptions,
@@ -66,9 +72,38 @@ def rows(view):
     return [tuple(row) for row in view.data.collect()]
 
 
+def test_plugin_registered():
+    [entry_point] = entry_points(
+        group="jupyter_storage_explorer.plugins", name="pyspark-support"
+    )
+    plugin = entry_point.load()()
+    assert isinstance(plugin, PySparkSupport)
+    assert plugin.description == "PySpark support for Storage Explorer"
+    assert CsvByPySpark in plugin.format_supports
+
+
+def test_engine_with_databricks_connect(monkeypatch):
+    monkeypatch.setattr(PySpark, "is_installed", lambda self: False)
+    monkeypatch.setattr(DatabricksConnect, "is_installed", lambda self: True)
+    assert PySparkEngine.is_installed()
+    assert [p.package for p in PySparkEngine.packages()] == ["databricks-connect"]
+
+
+def test_spark_url(tmp_path):
+    assert spark_url("s3://bucket/x") == "s3a://bucket/x"
+    assert (
+        spark_url("abfs://c@a.dfs.core.windows.net/x")
+        == "abfss://c@a.dfs.core.windows.net/x"
+    )
+    assert spark_url("az://c/x") == "abfss://c/x"
+    assert spark_url("gs://bucket/x") == "gs://bucket/x"
+    # Local files: Spark reads their file:/// URLs.
+    assert spark_url(local_item(tmp_path).location.url).startswith("file:///")
+
+
 def test_parquet(tmp_path):
     path = tmp_path / "a.parquet"
-    pl.DataFrame({"a": [1, 2, 3]}).write_parquet(path)
+    duckdb.sql("select * from range(1, 4) t(a)").write_parquet(str(path))
     view = ParquetByPySpark().view(
         Parquet(), local_item(path), ParquetByPySparkOptions(), LIMITS
     )
@@ -126,7 +161,7 @@ class TestOptions:
 
     def test_session_options_reach_the_session(self, tmp_path, session):
         path = tmp_path / "a.parquet"
-        pl.DataFrame({"a": [1]}).write_parquet(path)
+        duckdb.sql("select 1 as a").write_parquet(str(path))
         options = ParquetByPySparkOptions(
             session_options={"spark.sql.shuffle.partitions": "4"}
         )
@@ -221,6 +256,61 @@ class TestOptions:
             merge_schema=True, reader_options={"MERGESCHEMA": False}
         )
         assert parquet.reader_code() == ".option('MERGESCHEMA', False)"
+
+
+class TestRecipes:
+    def test_csv_with_its_separator(self, make_item):
+        [code] = (
+            CsvByPySpark()
+            .recipe(Csv(), make_item("/a.tsv", b"x\ty\n"), CsvByPySparkOptions())
+            .values()
+        )
+        assert code.splitlines()[-1] == (
+            "df = spark.read.options(sep='\\t', header=True, inferSchema=True)"
+            ".csv('memory:///a.tsv')"
+        )
+
+    def test_spark_session_created(self, make_item):
+        [code] = (
+            ParquetByPySpark()
+            .recipe(Parquet(), make_item("/a.parquet", b""), ParquetByPySparkOptions())
+            .values()
+        )
+        assert code == (
+            "from pyspark.sql import SparkSession\n"
+            "\n"
+            "spark = SparkSession.builder.getOrCreate()\n"
+            "df = spark.read.parquet('memory:///a.parquet')"
+        )
+
+    def test_partitioned_parquet(self, make_item, memfs):
+        # Spark finds partitions itself.
+        memfs.pipe_file("/t/year=2025/month=1/part-0.parquet", b"")
+        [code] = (
+            ParquetByPySpark()
+            .recipe(Parquet(), make_item("/t"), ParquetByPySparkOptions())
+            .values()
+        )
+        assert code.splitlines()[-1] == "df = spark.read.parquet('memory:///t')"
+
+    def test_delta(self, make_item, memfs, monkeypatch):
+        monkeypatch.setattr(pyspark, "_url", SPARK_URL)
+        memfs.pipe_file("/t/_delta_log/0.json", b"{}")
+        item = make_item("/t", location=S3Location(bucket="b", key="t"))
+        [code] = (
+            DeltaLakeByPySpark()
+            .recipe(DeltaLake(), item, DeltaLakeByPySparkOptions())
+            .values()
+        )
+        # The session is obtained, not configured: Delta Lake's setup in
+        # Spark is left to the user. Spark's URL: s3a.
+        assert code == (
+            "from pyspark.sql import SparkSession\n"
+            "\n"
+            "# Needs Delta Lake in the Spark session (Databricks has it)\n"
+            "spark = SparkSession.builder.getOrCreate()\n"
+            "df = spark.read.format(\"delta\").load('s3a://b/t')"
+        )
 
 
 class Builder:
