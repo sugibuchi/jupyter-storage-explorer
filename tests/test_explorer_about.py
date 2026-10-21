@@ -25,6 +25,9 @@ def test_the_explorer(memfs):
     reply = about(make("/", fs=memfs))
     assert reply["name"] == "Jupyter Storage Explorer"
     assert reply["version"] == version("jupyter-storage-explorer")
+    assert reply["authors"] == ["Tsuyoshi SUGIBUCHI"]
+    assert reply["license"] == "MIT"
+    assert reply["homepage"].startswith("https://github.com/sugibuchi/")
     prefix = "data:image/svg+xml;base64,"
     assert reply["icon"].startswith(prefix)
     assert base64.b64decode(reply["icon"].removeprefix(prefix)).startswith(b"<svg")
@@ -53,6 +56,9 @@ def test_the_plugins(memfs):
         "name": "jupyter-storage-explorer-polars-support",
         "version": version("jupyter-storage-explorer-polars-support"),
         "description": "Polars support for Storage Explorer",
+        "authors": ["Tsuyoshi SUGIBUCHI"],
+        "license": "MIT",
+        "homepage": "https://github.com/sugibuchi/jupyter-storage-explorer/tree/main/plugins/polars-support",
         "enabled": True,
         "note": "",
     }
@@ -70,4 +76,5 @@ def test_a_plugin_not_loaded(memfs, monkeypatch):
     [plugin] = about(explorer)["plugins"]
     assert plugin["enabled"] is False
     assert plugin["name"] == "broken-support"  # no package: its key
+    assert (plugin["authors"], plugin["license"], plugin["homepage"]) == ([], "", "")
     assert plugin["note"].startswith("Not loaded: AttributeError")
