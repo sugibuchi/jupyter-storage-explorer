@@ -78,7 +78,7 @@ The file has some of these functions, all optional:
 | `parameters()`      | Other `StorageExplorer` arguments ([StorageExplorer options](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#storageexplorer-options)), e.g. `{"engine_preference": ["pandas"]}` |
 
 For extending the explorer in Python
-([Developing plugins](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/DEVELOPMENT_PLUGIN.md)),
+([Developing plugins](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/development-plugin.md)),
 tried before the defaults: `supports()` (`FormatSupport`: formats and the libraries handling them), `operations()`
 (`FileSystemOperations`) and `filesystem_mappers()` (`FileSystemMapper`).
 

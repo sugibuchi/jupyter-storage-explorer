@@ -217,7 +217,7 @@ uv run --group docs docs/scripts/make_all.py
 ## Customizing
 
 Icons are changed with CSS (below). Formats, engines, file operations and storages are added in Python, and packaged
-as plugins that every explorer uses once installed: see [DEVELOPMENT_PLUGIN.md](docs/DEVELOPMENT_PLUGIN.md), which also
+as plugins that every explorer uses once installed: see [development-plugin.md](docs/development-plugin.md), which also
 covers this repository's plugins (`plugins/`).
 
 ### Icons

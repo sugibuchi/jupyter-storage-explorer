@@ -433,7 +433,7 @@ its operation's. Tests:
 `tests/test_plugins.py` (fake entry points to `tests/plugin_samples.py`); `tests/all_supports.py` has the supports of the
 repository's plugins, as installed for development, which the other tests chain (`ALL_SUPPORTS`, `all_supports()`),
 and `NO_PLUGINS`, the `plugin_options` disabling them all.
-Plugins never depend on their libraries (their `full` extra installs them): see docs/DEVELOPMENT_PLUGIN.md (developing each kind of component and packaging a plugin, with the conventions; written for
+Plugins never depend on their libraries (their `full` extra installs them): see docs/development-plugin.md (developing each kind of component and packaging a plugin, with the conventions; written for
 developers and for AI generating plugins: keep its rules, templates and checklist in step with the code).
 
 **Engines in the explorer.** `StorageExplorer(engine_preference=)` orders the chain's `engines`, synced as
@@ -493,7 +493,7 @@ then the fields, then `reader_options` (option names ignore case), in the views 
   ones there)) and `docs/data-explorer.md` (the data
   browser, `result()`, `on_change()`, `QuerySettings`, "DataExplorer options"). Custom icons (CSS) are in
   DEVELOPMENT.md's "Customizing"; extending the explorer in Python (formats, engines, supports with their options and
-  secrets, file operations, filesystem mappers) and packaging plugins, with the conventions, in docs/DEVELOPMENT_PLUGIN.md. Update them when operations, formats or options change, and the README's
+  secrets, file operations, filesystem mappers) and packaging plugins, with the conventions, in docs/development-plugin.md. Update them when operations, formats or options change, and the README's
   highlights for new features. Keep them short: what users do, not how it works. `supports`, `operations` and
   `filesystem_mappers` are for development: last in the docs, the options tables and the launcher's template.
 - Images and links to other files in the READMEs are absolute URLs (`raw.githubusercontent.com/.../main/...` for

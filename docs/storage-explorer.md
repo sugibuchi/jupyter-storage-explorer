@@ -270,7 +270,7 @@ may work, but are not guaranteed to.
 Each format's view (the preview, the data browser) is the [engine](#engines) chosen's, and its code is shown for
 every engine in **Python code**, each recipe with its engine (a support given for an engine replaces the default one's).
 The name identifies the format in CSS (see [Icons](../DEVELOPMENT.md#icons)) and in [Format options](#format-options).
-To handle a format with another library, see [Format supports](DEVELOPMENT_PLUGIN.md#format-supports).
+To handle a format with another library, see [Format supports](development-plugin.md#format-supports).
 
 ## Format options
 
@@ -436,9 +436,9 @@ For extending the explorer (see [Extensions](#extensions)), tried before the def
 
 | Option                     | Meaning                                                                                                               |
 |----------------------------|-----------------------------------------------------------------------------------------------------------------------|
-| `operations=[...]`         | File operations; see [File operations](DEVELOPMENT_PLUGIN.md#file-operations).                                     |
-| `supports=[...]`           | Formats and the libraries handling them; see [Format supports](DEVELOPMENT_PLUGIN.md#format-supports).            |
-| `filesystem_mappers=[...]` | How storages are told apart; see [Filesystem mappers](DEVELOPMENT_PLUGIN.md#filesystem-mappers).                   |
+| `operations=[...]`         | File operations; see [File operations](development-plugin.md#file-operations).                                     |
+| `supports=[...]`           | Formats and the libraries handling them; see [Format supports](development-plugin.md#format-supports).            |
+| `filesystem_mappers=[...]` | How storages are told apart; see [Filesystem mappers](development-plugin.md#filesystem-mappers).                   |
 
 ## Extensions
 
@@ -475,4 +475,4 @@ out; hover over ⓘ for a plugin's description.
 ### Writing your own
 
 Plugins, and formats, file operations or storages given to one explorer (`supports`, `operations`,
-`filesystem_mappers`): see [DEVELOPMENT_PLUGIN.md](DEVELOPMENT_PLUGIN.md).
+`filesystem_mappers`): see [development-plugin.md](development-plugin.md).
