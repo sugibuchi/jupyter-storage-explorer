@@ -1137,9 +1137,12 @@ class StorageExplorer(
     # through them, never through fsspec directly. Moving, copying and
     # deleting go through the operations objects instead (see filesystems/) ---
 
-    def _ls(self, path: str) -> list[dict[str, Any]]:
-        """The items in directory ``path`` (fsspec's ``ls(detail=True)`` entries)."""
-        infos = self._fs.ls(path, detail=True)
+    def _ls(
+        self, path: str, fs: AbstractFileSystem | None = None
+    ) -> list[dict[str, Any]]:
+        """The items in directory ``path`` (fsspec's ``ls(detail=True)`` entries);
+        ``fs``: another filesystem than the one shown, e.g. a viewed item's."""
+        infos = (fs or self._fs).ls(path, detail=True)
         # Some backends include the directory itself in its own listing.
         return [i for i in infos if _paths.norm(i["name"]) != _paths.norm(path)]
 
@@ -1167,6 +1170,8 @@ class StorageExplorer(
         fs.pipe_file(path, data)
         fs.invalidate_cache(path)
 
-    def _invalidate_cache(self, path: str | None = None) -> None:
+    def _invalidate_cache(
+        self, path: str | None = None, fs: AbstractFileSystem | None = None
+    ) -> None:
         """Forget cached listings (of ``path``, else all), so changes made elsewhere show."""
-        self._fs.invalidate_cache(path)
+        (fs or self._fs).invalidate_cache(path)

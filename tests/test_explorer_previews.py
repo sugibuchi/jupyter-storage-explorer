@@ -57,6 +57,59 @@ class TestPreview:
         local.request({"type": "query_reload", "rid": 1, "path": path})
         assert len(calls) == 2
 
+    def test_reload_views_the_item_as_it_is_now(self, tmp_path, monkeypatch):
+        # A dataset folder gaining a file: the reload's context has its new
+        # listing and info, not those of when it was opened.
+        pl = pytest.importorskip("polars")
+        (tmp_path / "ds").mkdir()
+        pl.DataFrame({"a": [1]}).write_parquet(tmp_path / "ds" / "part-0.parquet")
+        contexts = []
+        view = SupportChain.view
+
+        def recording(self, fmt, ctx, *args, **kwargs):
+            contexts.append(ctx)
+            return view(self, fmt, ctx, *args, **kwargs)
+
+        monkeypatch.setattr(SupportChain, "view", recording)
+        explorer = make(str(tmp_path))
+        path = path_of(explorer, "ds")
+        explorer.message({"type": "preview", "path": path})
+        pl.DataFrame({"a": [2]}).write_parquet(tmp_path / "ds" / "part-1.parquet")
+        reply = explorer.request({"type": "query_reload", "rid": 1, "path": path})
+        assert "error" not in reply
+        first, again = (sorted(c.child_names) for c in contexts)
+        assert (first, again) == (
+            ["part-0.parquet"],
+            ["part-0.parquet", "part-1.parquet"],
+        )
+        rows = explorer.request(
+            {"type": "query_rows", "rid": 2, "path": path, "offset": 0, "window": 5}
+        )
+        assert sorted(rows["rows"]) == [[1], [2]]
+
+    @pytest.mark.parametrize(
+        ("change", "error"),
+        [
+            # No longer a dataset: another kind of file in it.
+            (
+                lambda ds: (ds / "notes.txt").write_text("x"),
+                "no longer matches Parquet",
+            ),
+            (lambda ds: [p.unlink() for p in ds.iterdir()] and ds.rmdir(), "is gone"),
+        ],
+    )
+    def test_reload_of_an_item_changed_or_gone(self, tmp_path, change, error):
+        pl = pytest.importorskip("polars")
+        ds = tmp_path / "ds"
+        ds.mkdir()
+        pl.DataFrame({"a": [1]}).write_parquet(ds / "part-0.parquet")
+        explorer = make(str(tmp_path))
+        path = path_of(explorer, "ds")
+        explorer.message({"type": "preview", "path": path})
+        change(ds)
+        reply = explorer.request({"type": "query_reload", "rid": 1, "path": path})
+        assert error in reply["error"]
+
     def test_limits(self, tmp_path):
         (tmp_path / "a.txt").write_text("x" * 100)
         explorer = make(

@@ -411,7 +411,9 @@ so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
   dataframe narwhals supports, best lazy; `more`: eager data of the first rows only, e.g. pandas' `max_memory_rows`,
   which the browser notes as rows cut in memory, `DataQuery(cut=)`; PySpark's read the URL in the kernel's Spark
   session, `spark_session()`, faked with sqlframe in `plugins/pyspark-support/tests/test_pyspark_supports.py`) opens the data browser (`_new_query`: the first view's data, then the view
-  again on reload, with the context it was opened with); whether an item opens in the data browser is known only
+  again on reload, with a context read again: `_viewer`'s later calls, `_refreshed`, the item's info and listing on its
+  own filesystem without fsspec's cache, its format checked again, else an error; a table set's reload views it again
+  too, `TableSet._load`, the new view replacing the old); whether an item opens in the data browser is known only
   once viewed, so the menu offers "Preview" and "View in a new tab" for whatever has a format. A `TableSetView`
   (`nodes`: `Leaf(label, id)` tables, maybe in `Node(label, children)` groups; `loader(id)`, a table's data or a
   `QueryView` of it, whose `more` and `on_close` are kept, as pandas' Excel sheets; `selector` "tree" or "tab"; polars'
