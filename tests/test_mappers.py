@@ -80,6 +80,19 @@ class SSHFileSystem(AbstractFileSystem):
     protocol = ("sftp", "ssh")
 
 
+class FsspecDatabricks(AbstractFileSystem):
+    """fsspec-databricks' (https://github.com/sugibuchi/fsspec-databricks)."""
+
+    __module__ = "fsspec_databricks.spec"
+    __qualname__ = "DatabricksFileSystem"
+    protocol = "dbfs"
+    root_marker = "/"
+
+
+# Both implementations of Databricks' files: fsspec's own, and fsspec-databricks'.
+DATABRICKS = [DatabricksFileSystem, FsspecDatabricks]
+
+
 class OtherFileSystem(AbstractFileSystem):
     """A filesystem no mapper knows."""
 
@@ -403,13 +416,30 @@ class TestLevels:
             ("/volumes/main", None),  # paths are case-sensitive
         ],
     )
-    def test_databricks(self, path, level):
-        fs = DatabricksFileSystem.__new__(DatabricksFileSystem)  # no workspace
+    @pytest.mark.parametrize("cls", DATABRICKS)
+    def test_databricks(self, cls, path, level):
+        fs = cls.__new__(cls)  # no workspace
         assert chain.level_of(fs, path) == level
 
-    def test_databricks_urls(self):
-        fs = DatabricksFileSystem.__new__(DatabricksFileSystem)
+
+class TestDatabricks:
+    """fsspec-databricks' DatabricksFileSystem and fsspec's own."""
+
+    @pytest.mark.parametrize("cls", DATABRICKS)
+    def test_urls_fsspec_reads(self, cls):
+        """dbfs://Volumes/...: fsspec takes a protocol only before "://", and
+        fsspec-databricks refuses dbfs:///Volumes/..."""
+        fs = cls.__new__(cls)
         location = location_of(fs, "/Volumes/main/sales/raw/x.csv")
-        assert location == FsspecLocation(url="dbfs:/Volumes/main/sales/raw/x.csv")
+        assert location == FsspecLocation(url="dbfs://Volumes/main/sales/raw/x.csv")
         assert location.protocol == "dbfs"
         assert path_in(fs, location) == "/Volumes/main/sales/raw/x.csv"
+        assert location_of(fs, "").url == "dbfs://"
+
+    @pytest.mark.parametrize(
+        "url", ["dbfs:/Volumes/x", "dbfs://Volumes/x", "dbfs:///Volumes/x"]
+    )
+    def test_any_form_found(self, url):
+        fs = FsspecDatabricks.__new__(FsspecDatabricks)
+        assert path_in(fs, FsspecLocation(url=url)) == "/Volumes/x"
+        assert path_in(fs, FsspecLocation(url="other:///Volumes/x")) is None

@@ -180,7 +180,9 @@ user, path), `LocalLocation` (`path` as fsspec names it, "C:/x" on Windows, `os_
 and machine id: `file:///...`), `MemoryLocation` (path, process), `FsspecLocation` (fsspec's URL, for filesystems
 no mapper knows). Locations come from mappers (`filesystems/mapper.py`, the `filesystem_mappers=` argument,
 then `default_mappers()` of `mappers.py`): a `FileSystemMapper` per fsspec implementation, matched by qualified class names through the MRO
-(so optional packages are not imported; tests fake s3fs, gcsfs, fsspec's SFTP and sshfs classes by `__module__`). It gives
+(so optional packages are not imported; tests fake s3fs, gcsfs, fsspec's SFTP, sshfs and fsspec-databricks classes by
+`__module__`; `DatabricksMapper` maps fsspec-databricks' and fsspec's own DBFS classes, URLs `dbfs://Volumes/...`, the
+form both read through fsspec; pyspark-support's `spark_url` makes them Databricks' `dbfs:/Volumes/...`). It gives
 `to_location(fs, path)` (no credentials; locations are defined per kind of storage, so implementations of one agree:
 SFTP's from fsspec's and from sshfs's `fs.storage_args`/`storage_options`; "" gives the top folder; None for items
 without one) and `path_of(fs, location)`, the reverse, None unless `fs` reaches it, which each concrete mapper decides

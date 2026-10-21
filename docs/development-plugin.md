@@ -358,8 +358,9 @@ default it is `levels` by the folder's depth from the filesystem's top folder (e
 is called for every folder listed: decide from the path and the instance's settings, never by reading the storage.
 
 Normalize locations when made (lower-case hosts, no trailing "/"): equal locations must name the same item. The
-predefined mappers cover Azure, S3, Google Cloud Storage, SFTP, local disks, memory and Databricks (fsspec's URLs,
-`dbfs:/...`); other filesystems get fsspec's URLs.
+predefined mappers cover Azure, S3, Google Cloud Storage, SFTP, local disks, memory and Databricks
+([fsspec-databricks](https://github.com/sugibuchi/fsspec-databricks) and fsspec's own; fsspec's URLs,
+`dbfs://Volumes/...`); other filesystems get fsspec's URLs.
 
 ## Packaging a plugin
 

@@ -42,11 +42,15 @@ _SPARK_SCHEMES = {"abfs": "abfss", "az": "abfss", "s3": "s3a"}
 
 def spark_url(url: str) -> str:
     """``url`` as Spark reads it, e.g. "abfss://c@a.dfs.core.windows.net/x" for
-    "abfs://c@a.dfs.core.windows.net/x" or "s3a://bucket/x" for "s3://bucket/x".
+    "abfs://c@a.dfs.core.windows.net/x" or "s3a://bucket/x" for "s3://bucket/x";
+    Databricks' "dbfs:/Volumes/x" for "dbfs://Volumes/x" (fsspec's form, see
+    ``DatabricksMapper``), whose "Volumes" Spark would take for a host.
 
     Other URLs and local paths are unchanged.
     """
     scheme, sep, rest = url.partition("://")
+    if sep and scheme == "dbfs":
+        return f"dbfs:/{rest.lstrip('/')}"
     return (
         f"{_SPARK_SCHEMES[scheme]}://{rest}"
         if sep and scheme in _SPARK_SCHEMES

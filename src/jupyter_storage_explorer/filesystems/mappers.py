@@ -282,24 +282,32 @@ class SSHFSMapper(SFTPMapper):
 
 
 class DatabricksMapper(FsspecMapper):
-    """fsspec's ``DatabricksFileSystem``: a Databricks workspace's files
-    (https://docs.databricks.com/aws/en/files/).
+    """A Databricks workspace's files (https://docs.databricks.com/aws/en/files/):
+    fsspec-databricks' ``DatabricksFileSystem`` (Unity Catalog volumes,
+    workspace files and legacy DBFS), and fsspec's own (legacy DBFS).
 
-    Its locations are Databricks' URLs, ``dbfs:/Volumes/...`` (fsspec's
-    class names no protocol of its own). Nothing in them tells the workspace,
-    so, as fsspec's URLs, they are looked for among the explorer's storages
-    only, and two instances are one filesystem only if fsspec says so.
+    Its locations' URLs are ``dbfs://Volumes/...``: the form both read
+    through fsspec, which takes a protocol only before "://" (so not
+    Databricks' ``dbfs:/Volumes/...``, which Spark reads, see pyspark-support's
+    ``spark_url``; nor ``dbfs:///Volumes/...``, which fsspec-databricks
+    refuses). Nothing in them tells the workspace, so, as fsspec's URLs, they
+    are looked for among the explorer's storages only, and two instances are
+    one filesystem only if fsspec says so.
     """
 
-    classes = ("fsspec.implementations.dbfs.DatabricksFileSystem",)
+    classes = (
+        "fsspec_databricks.spec.DatabricksFileSystem",
+        "fsspec.implementations.dbfs.DatabricksFileSystem",
+    )
 
     def matches(self, fs: AbstractFileSystem) -> bool:
         return FileSystemMapper.matches(self, fs)
 
     def to_location(self, fs: AbstractFileSystem, path: str) -> FsspecLocation:
-        return FsspecLocation(url=f"dbfs:/{path.lstrip('/')}")
+        return FsspecLocation(url=f"dbfs://{path.lstrip('/')}")
 
     def path_of(self, fs: AbstractFileSystem, location: Location) -> str | None:
+        # Any of the forms: dbfs:/x, dbfs://x, dbfs:///x.
         if not isinstance(location, FsspecLocation) or location.protocol != "dbfs":
             return None
         return "/" + location.url.removeprefix("dbfs:").lstrip("/")
