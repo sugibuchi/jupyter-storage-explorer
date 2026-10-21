@@ -8,12 +8,12 @@ the folder JupyterLab's file browser shows.
 
 ![The Storage Explorer item in JupyterLab's launcher](https://raw.githubusercontent.com/sugibuchi/jupyter-storage-explorer/main/launcher/figs/launcher.png)
 
-It also adds a **side panel**: click the Storage Explorer icon in JupyterLab's left side bar (or *Show Storage
-Explorer in the Side Bar* in the command palette) for a narrow explorer next to your notebooks, with the same storages
-as the tab: the list of a folder, without the tree or the preview panel; files you view (**View** at the bottom, a
-double-click, or right-click → **View in new tab**) open in new tabs. The filter button, left of ⚙, shows the filter
-by name, as in JupyterLab's file browser. Its kernel starts when you first open it, and it stays open after a page
-reload.
+It also adds a **side panel**, a narrow explorer next to your notebooks:
+
+- Open it with the Storage Explorer icon in the left side bar.
+- The same storages as the tab; a folder's list, without the tree or the preview panel.
+- Files you view (**View**, a double-click) open in new tabs.
+- The filter button, left of ⚙, shows the filter.
 
 <img src="https://raw.githubusercontent.com/sugibuchi/jupyter-storage-explorer/main/launcher/figs/side-panel.png" width="867" alt="The side panel in JupyterLab's left side bar, a Parquet file selected, beside the tab its View button opened in the data browser">
 
