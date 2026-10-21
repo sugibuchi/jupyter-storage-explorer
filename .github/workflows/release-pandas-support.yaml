@@ -1,0 +1,54 @@
+# Release, part 3: once release-explorer.yaml has succeeded for a version tag
+# (so jupyter-storage-explorer, which the plugin depends on, is on PyPI),
+# build jupyter-storage-explorer-pandas-support for the same tag, add it to the GitHub
+# release (_release-plugin.yaml), and publish it to PyPI. It can also be run
+# by hand for a tag (Actions > Release pandas-support > Run workflow), e.g. to retry.
+#
+# PyPI publishing uses trusted publishing (no token): the PyPI project
+# jupyter-storage-explorer-pandas-support needs a trusted publisher for this
+# repository, workflow `release-pandas-support.yaml` and environment `pypi` (see
+# DEVELOPMENT.md). A workflow publishes one project: PyPI refuses one
+# workflow for several.
+name: Release pandas-support
+
+on:
+  workflow_run:
+    workflows: ["Release explorer"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Version tag to release, e.g. v0.14.0"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    # Only after a successful explorer release.
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    uses: ./.github/workflows/_release-plugin.yaml
+    permissions:
+      contents: write
+    with:
+      plugin: pandas-support
+      # The tag the explorer was released for (a tag push's "branch"), or the one given.
+      tag: ${{ inputs.tag || github.event.workflow_run.head_branch }}
+
+  pypi:
+    needs: release
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/jupyter-storage-explorer-pandas-support/
+    permissions:
+      id-token: write  # trusted publishing
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist-pandas-support
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

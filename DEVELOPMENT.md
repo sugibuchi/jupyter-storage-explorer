@@ -8,29 +8,29 @@ version (their `hatch_build.py`, which sets their dependencies), as they may use
 explorer's extras (`polars`, `polars-support`, ...) require the plugins of its version (`hatch_build.py`), and the
 launcher has the same extras:
 
-| Package                                    | Folder                    | Contents                                                                 |
-|--------------------------------------------|---------------------------|--------------------------------------------------------------------------|
-| `jupyter-storage-explorer`                 | `.`                       | The widgets `StorageExplorer` and `DataExplorer`; pure Python, no build. |
-| `jupyter-storage-explorer-launcher`        | `launcher/`               | The JupyterLab launcher item, and `launch()` run in the tab it opens.    |
-| `jupyter-storage-explorer-<name>-support`  | `plugins/<name>-support/` | The plugins: `polars`, `pandas`, `pyspark` (engines) and `abfs` (Azure Data Lake Storage operations). |
+| Package                                   | Folder                    | Contents                                                                                              |
+|-------------------------------------------|---------------------------|-------------------------------------------------------------------------------------------------------|
+| `jupyter-storage-explorer`                | `.`                       | The widgets `StorageExplorer` and `DataExplorer`; pure Python, no build.                              |
+| `jupyter-storage-explorer-launcher`       | `launcher/`               | The JupyterLab launcher item, and `launch()` run in the tab it opens.                                 |
+| `jupyter-storage-explorer-<name>-support` | `plugins/<name>-support/` | The plugins: `polars`, `pandas`, `pyspark` (engines) and `abfs` (Azure Data Lake Storage operations). |
 
-| Path                                                           | Contents                                                                     |
-|----------------------------------------------------------------|------------------------------------------------------------------------------|
-| `src/jupyter_storage_explorer/`                                | The widgets: `storage_explorer.py`, `data_explorer.py`.                      |
-| `src/jupyter_storage_explorer/filesystems/`                    | Filesystems' locations (mappers) and file operations: interfaces users extend, and the default ones.           |
-| `src/jupyter_storage_explorer/formats/`                        | The formats files are previewed, queried and loaded as.                      |
-| `src/jupyter_storage_explorer/_explorer/`                      | `StorageExplorer`'s features, as mixins of the class.                        |
-| `src/jupyter_storage_explorer/_jobs/`                          | File operations planned and run as jobs, without the widget.                 |
-| `src/jupyter_storage_explorer/_query/`                         | The data browser: filters, settings, and a dataset open in it.               |
-| `src/jupyter_storage_explorer/static/`                         | The widgets' JavaScript and CSS, loaded at run time (no build step).         |
-| `src/jupyter_storage_explorer/static/storage_explorer/`        | The storage explorer's JavaScript, a file per feature, joined at run time.   |
-| `launcher/src/jupyter_storage_explorer_launcher/`              | `launch()`, which merges the `storage-explorer/launcher.py` files (layers).  |
-| `launcher/labextension/`                                       | The JupyterLab extension (TypeScript).                                       |
-| `launcher/src/jupyter_storage_explorer_launcher/labextension/` | The extension built from `launcher/labextension/` (git-ignored).             |
-| `notebooks/`                                                   | Demo notebooks and `make_samples.py`, which writes the sample data they use. |
-| `tests/browser/`                                               | Checks of the widgets' JavaScript, and their smoke test in a browser.        |
-| `docs/scripts/`                                                | Scripts making the docs' screenshots and the demo GIFs.                      |
-| `binder/`                                                      | The demo on mybinder.org (the README's "Try it" link): released packages, demo data. |
+| Path                                                           | Contents                                                                                             |
+|----------------------------------------------------------------|------------------------------------------------------------------------------------------------------|
+| `src/jupyter_storage_explorer/`                                | The widgets: `storage_explorer.py`, `data_explorer.py`.                                              |
+| `src/jupyter_storage_explorer/filesystems/`                    | Filesystems' locations (mappers) and file operations: interfaces users extend, and the default ones. |
+| `src/jupyter_storage_explorer/formats/`                        | The formats files are previewed, queried and loaded as.                                              |
+| `src/jupyter_storage_explorer/_explorer/`                      | `StorageExplorer`'s features, as mixins of the class.                                                |
+| `src/jupyter_storage_explorer/_jobs/`                          | File operations planned and run as jobs, without the widget.                                         |
+| `src/jupyter_storage_explorer/_query/`                         | The data browser: filters, settings, and a dataset open in it.                                       |
+| `src/jupyter_storage_explorer/static/`                         | The widgets' JavaScript and CSS, loaded at run time (no build step).                                 |
+| `src/jupyter_storage_explorer/static/storage_explorer/`        | The storage explorer's JavaScript, a file per feature, joined at run time.                           |
+| `launcher/src/jupyter_storage_explorer_launcher/`              | `launch()`, which merges the `storage-explorer/launcher.py` files (layers).                          |
+| `launcher/labextension/`                                       | The JupyterLab extension (TypeScript).                                                               |
+| `launcher/src/jupyter_storage_explorer_launcher/labextension/` | The extension built from `launcher/labextension/` (git-ignored).                                     |
+| `notebooks/`                                                   | Demo notebooks and `make_samples.py`, which writes the sample data they use.                         |
+| `tests/browser/`                                               | Checks of the widgets' JavaScript, and their smoke test in a browser.                                |
+| `docs/scripts/`                                                | Scripts making the docs' screenshots and the demo GIFs.                                              |
+| `binder/`                                                      | The demo on mybinder.org (the README's "Try it" link): released packages, demo data.                 |
 
 All Python commands go through [uv](https://docs.astral.sh/uv/). Node.js, for the extension and the JavaScript's checks,
 comes with the dev dependencies (`nodejs-wheel`), so `uv run node`, `uv run npx` and `uv run jlpm` work without
@@ -139,10 +139,11 @@ git push origin vX.Y.Z
    same tag, checks them (version X.Y.Z, the wheel has the extension and requires `jupyter-storage-explorer==X.Y.Z`),
    adds them to the GitHub release and publishes them to PyPI. To retry it, run it by hand for the tag:
    *Actions ▸ Release launcher ▸ Run workflow*.
-3. **Release plugins** (`.github/workflows/release-plugins.yaml`), run when the first has succeeded too, builds each
-   plugin of `plugins/` for the same tag, checks them (version X.Y.Z, each requires `jupyter-storage-explorer==X.Y.Z` and
-   has its entry point), adds them to the GitHub release and publishes them to PyPI. To retry it: *Actions ▸ Release
-   plugins ▸ Run workflow*.
+3. **Release <plugin>** (`.github/workflows/release-<plugin>.yaml`, one per plugin of `plugins/`: PyPI's trusted
+   publishing takes one workflow per project), run when the first has succeeded too, builds the plugin for the same
+   tag, checks it (version X.Y.Z, it requires `jupyter-storage-explorer==X.Y.Z` and has its entry point) and adds it to
+   the GitHub release, with the reusable `_release-plugin.yaml`, then publishes it to PyPI. To retry one: *Actions ▸
+   Release <plugin> ▸ Run workflow*.
 
 ### Release notes
 
@@ -165,15 +166,16 @@ The workflows publish with PyPI's [trusted publishing](https://docs.pypi.org/tru
    *Your account ▸ Publishing*), with the owner and repository of this GitHub repository and environment `pypi`:
 
    | PyPI project                        | Workflow                  |
-   |-------------------------------------|---------------------------|
+      |-------------------------------------|---------------------------|
    | `jupyter-storage-explorer`                 | `release-explorer.yaml`   |
    | `jupyter-storage-explorer-launcher`        | `release-launcher.yaml`   |
-   | `jupyter-storage-explorer-abfs-support`    | `release-plugins.yaml`    |
-   | `jupyter-storage-explorer-pandas-support`  | `release-plugins.yaml`    |
-   | `jupyter-storage-explorer-polars-support`  | `release-plugins.yaml`    |
-   | `jupyter-storage-explorer-pyspark-support` | `release-plugins.yaml`    |
+   | `jupyter-storage-explorer-abfs-support`    | `release-abfs-support.yaml`    |
+   | `jupyter-storage-explorer-pandas-support`  | `release-pandas-support.yaml`  |
+   | `jupyter-storage-explorer-polars-support`  | `release-polars-support.yaml`  |
+   | `jupyter-storage-explorer-pyspark-support` | `release-pyspark-support.yaml` |
 
-   A new plugin needs its own trusted publisher before its first release.
+   A new plugin needs a workflow of its own (copy one of `release-<plugin>.yaml`) and its trusted publisher before its
+   first release.
 
 2. On GitHub, create the environment `pypi` (*Settings ▸ Environments*); optionally require a reviewer there, so that
    publishing waits for approval.
@@ -215,7 +217,8 @@ uv run --group docs docs/scripts/make_all.py
 
 Icons are changed with CSS. Engines, formats, file operations and storages are added by [plugins](#writing-a-plugin),
 which every explorer uses once installed; for one explorer, the same Python objects are given to `StorageExplorer` (or
-returned by functions of the launcher's `storage-explorer/launcher.py`, see the [launcher's README](launcher/README.md)),
+returned by functions of the launcher's `storage-explorer/launcher.py`, see
+the [launcher's README](launcher/README.md)),
 each tried before the plugins' and the defaults.
 
 ### Writing a plugin
@@ -278,8 +281,8 @@ Conventions:
 The plugins of `plugins/` follow these conventions, and are released with the explorer: each requires the explorer of
 its own version (its `hatch_build.py`), and the explorer's extras install them (`polars`: with its libraries,
 `polars-support`: alone). To add one, copy one of them, add it to `PLUGINS` in the root's and the launcher's
-`hatch_build.py`, to the root's dev dependencies and `[tool.uv.sources]`, and give its PyPI project a trusted publisher
-(see [One-time setup for PyPI](#one-time-setup-for-pypi)).
+`hatch_build.py`, to the root's dev dependencies and `[tool.uv.sources]`, give it a release workflow
+(`.github/workflows/release-<plugin>.yaml`, a copy of another's) and its PyPI project a trusted publisher (see [One-time setup for PyPI](#one-time-setup-for-pypi)).
 
 ### Icons
 
@@ -288,31 +291,56 @@ The icons are JupyterLab's file browser's, as SVG images (`.jse-icon svg`), chos
 its own icon, `file_icon = ("avro", "<svg ...>...</svg>")`, shown as an image (`.jse-icon img`). Rows in the explorer
 carry attributes to select them by:
 
-| Selector                                 | Rows                                                                                     |
-|------------------------------------------|------------------------------------------------------------------------------------------|
-| `.jse-browser`                           | The explorer (every selector starts with it, so nothing else on the page changes)        |
-| `[data-depth="0"]`, `[data-depth="1"]`, … | Folders in the tree and the list, by their level: `0` the top folder, `1` the folders in it, … |
-| `[data-file-format]`                     | Files of a known format (not those of no known format, or without a URL)                 |
-| `[data-file-format="parquet"]`           | Files of one format: `parquet`, `csv`, `json`, `json-lines`, `excel`, `markdown`, `text`, `image` |
-| `.jse-icon svg`, `.jse-icon::before`     | In a row, the icon's image, and where to show something else instead                     |
+| Selector                                  | Rows                                                                                              |
+|-------------------------------------------|---------------------------------------------------------------------------------------------------|
+| `.jse-browser`                            | The explorer (every selector starts with it, so nothing else on the page changes)                 |
+| `[data-depth="0"]`, `[data-depth="1"]`, … | Folders in the tree and the list, by their level: `0` the top folder, `1` the folders in it, …    |
+| `[data-file-format]`                      | Files of a known format (not those of no known format, or without a URL)                          |
+| `[data-file-format="parquet"]`            | Files of one format: `parquet`, `csv`, `json`, `json-lines`, `excel`, `markdown`, `text`, `image` |
+| `.jse-icon svg`, `.jse-icon::before`      | In a row, the icon's image, and where to show something else instead                              |
 
 To change an icon, hide its image and show something else in its `::before`, e.g. an emoji. This CSS shows the top
 folder as 🗄️, the folders in it as 🗃️ (deeper ones keep the folder icon), and gives data files their own icons:
 
 ```css
 /* Folders: an emoji per depth */
-.jse-browser :is([data-depth="0"], [data-depth="1"]) .jse-icon svg { display: none; }
-.jse-browser [data-depth="0"] .jse-icon::before { content: "🗄️"; }
-.jse-browser [data-depth="1"] .jse-icon::before { content: "🗃️"; }
+.jse-browser :is([data-depth="0"], [data-depth="1"]) .jse-icon svg {
+    display: none;
+}
+
+.jse-browser [data-depth="0"] .jse-icon::before {
+    content: "🗄️";
+}
+
+.jse-browser [data-depth="1"] .jse-icon::before {
+    content: "🗃️";
+}
 
 /* Files: an emoji per format */
-.jse-browser [data-file-format] .jse-icon svg { display: none; }
-.jse-browser [data-file-format] .jse-icon::before { content: "📄"; }
+.jse-browser [data-file-format] .jse-icon svg {
+    display: none;
+}
+
+.jse-browser [data-file-format] .jse-icon::before {
+    content: "📄";
+}
+
 .jse-browser [data-file-format="csv"] .jse-icon::before,
-.jse-browser [data-file-format="excel"] .jse-icon::before { content: "📊"; }
-.jse-browser [data-file-format="parquet"] .jse-icon::before { content: "🧱"; }
-.jse-browser [data-file-format="image"] .jse-icon::before { content: "🖼️"; }
-.jse-browser [data-file-format="markdown"] .jse-icon::before { content: "📝"; }
+.jse-browser [data-file-format="excel"] .jse-icon::before {
+    content: "📊";
+}
+
+.jse-browser [data-file-format="parquet"] .jse-icon::before {
+    content: "🧱";
+}
+
+.jse-browser [data-file-format="image"] .jse-icon::before {
+    content: "🖼️";
+}
+
+.jse-browser [data-file-format="markdown"] .jse-icon::before {
+    content: "📝";
+}
 ```
 
 #### Test in notebooks
@@ -453,7 +481,8 @@ A *support* handles a format's data with an engine: a `FormatSupport` subclass, 
 it implements: `"view"`, returning what to show (a `QueryView` of data for the data browser, or e.g. a `TableView` or
 `TextView`), and `"recipe"`, the code of "Python code" by title. Its `engine` is an `Engine` subclass, the library users
 choose in the explorer's status bar (with its `key`, `label` and `requirements`, `PythonPackage` instances): one of
-a plugin's (`PolarsEngine` of `jupyter_storage_explorer_polars_support`, `PandasEngine`, `PySparkEngine`, ...) or one of your own. Supports given as `supports` are
+a plugin's (`PolarsEngine` of `jupyter_storage_explorer_polars_support`, `PandasEngine`, `PySparkEngine`, ...) or one of
+your own. Supports given as `supports` are
 tried before the defaults, e.g. DuckDB for the data browser on Parquet:
 
 ```python
@@ -493,14 +522,18 @@ path in it (`ctx.fs`, `ctx.path`; `ctx.head_text(n)`, `ctx.head(n)` and `ctx.rea
 explorer, e.g. for a text view), its info (`ctx.size`), its listing if it is a folder (`ctx.children`,
 `ctx.child_names`, `ctx.is_dir`); then its options, and `view` also `limits` (`ViewLimits`: bytes and rows to read).
 Formats' `matches(ctx)` gets the same context. A format of your own (a `DataFormat` subclass) is the `format` of
-your supports: explorers detect the formats of their supports. A support's options are the fields of a frozen dataclass, its
-`options_model` (a `SupportOptions` subclass, each field with a default), made from [`format_options`](docs/storage-explorer.md#format-options)
-under its engine's key (`engine.key`, e.g. `"duckdb"`; `"python"` for a support without an engine). Mark credentials so that "Python code" never shows them:
+your supports: explorers detect the formats of their supports. A support's options are the fields of a frozen dataclass,
+its
+`options_model` (a `SupportOptions` subclass, each field with a default), made from [
+`format_options`](docs/storage-explorer.md#format-options)
+under its engine's key (`engine.key`, e.g. `"duckdb"`; `"python"` for a support without an engine). Mark credentials so
+that "Python code" never shows them:
 `secret_field(default=None)` for a whole value, `secret_dict_field(default=None, secret_keys=["connection_string"])` for
 keys of a mapping such as storage options; the code gets options through `options.code_value(name)`, which leaves them
 out. A view holding something to release, e.g. a database connection, releases it in a function given to its
 `on_close` (`view.on_close(lambda view: con.close())`), as `StorageExplorer.on_change` takes one: the explorer calls it
-once it no longer shows the view, also when the kernel exits. `recipe` returns code by title, e.g. `{"Load as DataFrame": "import duckdb\n..."}`,
+once it no longer shows the view, also when the kernel exits. `recipe` returns code by title, e.g.
+`{"Load as DataFrame": "import duckdb\n..."}`,
 the title saying what the code does, not the library. `FormatSupport`'s docstring has the rules for writing one. In
 `launcher.py`, return supports from `supports()`, and their options from `format_options()`; `engine_preference`
 (in `parameters()`) puts DuckDB first.
