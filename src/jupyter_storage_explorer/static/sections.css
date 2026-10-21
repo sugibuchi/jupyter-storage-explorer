@@ -167,8 +167,9 @@
   flex-direction: column;
 }
 
-/* The data browser scrolls its table itself. */
+/* The data browser scrolls its table itself, also in a table set. */
 .jse-preview-panel .jse-dialog-body:has(> .jse-query),
+.jse-preview-panel .jse-dialog-body:has(> .jse-table-set),
 .jse-view-tab .jse-dialog-body:has(> .jse-query) {
   overflow: hidden;
 }

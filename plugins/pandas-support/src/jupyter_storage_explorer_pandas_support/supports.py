@@ -22,7 +22,7 @@ from jupyter_storage_explorer.formats.support import (
     secret_dict_field,
 )
 from jupyter_storage_explorer.formats.text import Csv, Json, JsonLines
-from jupyter_storage_explorer.formats.view import QueryView
+from jupyter_storage_explorer.formats.view import Leaf, QueryView, TableSetView
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -182,9 +182,11 @@ class JsonByPandasOptions(PandasOptions):
 class ExcelByPandasOptions(PandasOptions):
     """pandas' ``read_excel`` arguments, besides ``storage_options``: unset
     ones are left to pandas, but ``engine`` in the data browser
-    (``"openpyxl"``). The data browser shows one sheet, reading at most
-    ``max_memory_rows`` rows (fewer with ``nrows``). The plugin's README lists
-    them."""
+    (``"openpyxl"``). The data browser shows the sheet ``sheet_name`` gives,
+    or each of those it gives (a list, or None for all), on tabs; without it,
+    the workbook's sheets on tabs, or its only sheet; at most
+    ``max_memory_rows`` rows of each (fewer with ``nrows``). The plugin's
+    README lists them."""
 
     sheet_name: str | int | Sequence[str | int] | _Default | None = LIBRARY_DEFAULT
     header: int | Sequence[int] | _Default | None = LIBRARY_DEFAULT
@@ -343,6 +345,18 @@ class JsonByPandas(_PandasByUrl):
         return {AS_DATA_FRAME: code}
 
 
+def _sheets(
+    names: list[str], sheets: Mapping[str, Any], limits: ViewLimits
+) -> TableSetView:
+    """Sheets read already (``names`` -> ``sheets``) on tabs, as a
+    spreadsheet shows them."""
+    return TableSetView(
+        nodes=[Leaf(label=name, id=name) for name in names],
+        loader=lambda name: _query_view(sheets[name], limits),
+        selector="tab",
+    )
+
+
 class ExcelByPandas(_PandasByUrl):
     format = Excel
     options_model = ExcelByPandasOptions
@@ -356,14 +370,36 @@ class ExcelByPandas(_PandasByUrl):
         options: ExcelByPandasOptions,
         limits: ViewLimits,
     ) -> View:
-        # The first sheet, as polars reads it (ExcelByPolars), unless the
-        # options name another.
+        # As polars' (ExcelByPolars): the sheets sheet_name gives (several on
+        # tabs), else the workbook's on tabs, or its only sheet.
         pd = Pandas().load()
         arguments = {"engine": "openpyxl", **_view_arguments(options, limits)}
-        df = pd.read_excel(io.BytesIO(ctx.read_whole(limits)), **arguments)
-        if isinstance(df, dict):
-            raise ValueError("several sheets: choose one with sheet_name")
-        return _query_view(df, limits)
+        workbook = io.BytesIO(ctx.read_whole(limits))
+        if "sheet_name" in arguments:
+            data = pd.read_excel(workbook, **arguments)
+            if not isinstance(data, dict):
+                return _query_view(data, limits)
+            return _sheets(
+                [str(name) for name in data],
+                {str(name): df for name, df in data.items()},
+                limits,
+            )
+        # The workbook, parsed once; each sheet read when chosen.
+        # ExcelFile takes the engine's arguments; parse() the others.
+        workbook_arguments = {
+            key: arguments.pop(key)
+            for key in ("engine", "engine_kwargs")
+            if key in arguments
+        }
+        excel = pd.ExcelFile(workbook, **workbook_arguments)
+        names = [str(name) for name in excel.sheet_names]
+        if len(names) == 1:
+            return _query_view(excel.parse(names[0], **arguments), limits)
+        return TableSetView(
+            nodes=[Leaf(label=name, id=name) for name in names],
+            loader=lambda name: _query_view(excel.parse(name, **arguments), limits),
+            selector="tab",
+        )
 
     data_frame_template = cleandoc("""
         import pandas as pd

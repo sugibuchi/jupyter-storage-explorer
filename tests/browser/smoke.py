@@ -1123,6 +1123,78 @@ def storage_levels(lab: Lab, page: Page) -> None:
     expect(x.node("landing")).to_have_attribute("data-fs-level", "bucket")
 
 
+@check
+def excel_sheets(x: Explorer) -> None:
+    # A workbook's sheets on tabs below the data browser (a table set, from
+    # polars' and pandas' Excel views): the first shown, then the one chosen.
+    tables = x.preview.locator(".jse-table-set")
+    tabs = tables.locator(".jse-table-set-tabs .jse-table-set-tab")
+    status = tables.locator(".jse-query-status")
+    active = re.compile(r"\bjse-active\b")
+    x.go("reports")
+    for engine in ("Polars", "pandas"):
+        x.row("budget_2026.xlsx").click(button="right")
+        x.menu_item("Preview as").hover()
+        x.el.locator(
+            ".jse-submenu .jse-menu-item:visible", has_text=f"({engine})"
+        ).click()
+        expect(x.preview.locator(".jse-badge")).to_have_text(
+            f"Excel workbook · {engine}"
+        )
+        expect(tabs).to_have_text(["Budget 2026", "Notes"])
+        expect(tabs.first).to_have_class(active)
+        expect(status).to_have_text("Rows 1–36 / 36")
+        tabs.last.click()
+        expect(tabs.last).to_have_class(active)
+        expect(tables.locator(".jse-query thead")).to_contain_text("Figures in EUR")
+    x.preview.press("Escape")
+
+
+# A support of the explorer's own, viewing Excel workbooks' sheets in a tree,
+# under a group: a table set's other selector.
+TABLE_SET_TREE = """\
+import demo_data
+import polars as pl
+from jupyter_storage_explorer import StorageExplorer
+from jupyter_storage_explorer.formats import Excel, FormatSupport, Leaf, Node, TableSetView
+from jupyter_storage_explorer_polars_support import PolarsEngine
+
+class SheetsByPolars(FormatSupport):
+    format = Excel
+    engine = PolarsEngine
+    capabilities = ("view",)
+
+    def view(self, fmt, ctx, options, limits):
+        sheets = pl.read_excel(ctx.fs.cat_file(ctx.path), sheet_id=0)
+        tables = [Leaf(label=name, id=name) for name in sheets]
+        return TableSetView(nodes=[Node(label="workbook", children=tables)], loader=sheets.__getitem__)
+
+supports = [SheetsByPolars, *demo_data.supports()]
+StorageExplorer(filesystems=demo_data.filesystems(), supports=supports)"""
+
+
+@lab_check
+def table_set_tree(lab: Lab, page: Page) -> None:
+    # A table set's tables in a tree beside the data browser, and in a tab of
+    # its own.
+    x = Explorer(lab, page, TABLE_SET_TREE)
+    x.go("reports")
+    x.row("budget_2026.xlsx").click()
+    x.el.locator(".jse-status-bar .jse-preview-btn").click()
+    tables = x.preview.locator(".jse-table-set")
+    tree = tables.locator(".jse-table-set-tree")
+    rows = tree.locator(".jse-table-set-row")
+    expect(rows).to_have_text(["workbook", "Budget 2026", "Notes"])
+    tree.locator(".jse-table-set-leaf", has_text="Notes").click()
+    expect(tree.locator(".jse-table-set-leaf.jse-active")).to_have_text("Notes")
+    expect(tables.locator(".jse-query thead")).to_contain_text("Figures in EUR")
+    x.preview.locator("button[title='View in a new tab']").click()
+    tab = page.locator(".jse-table-set-view-tab")
+    expect(tab.locator(".jse-table-set-leaf")).to_have_text(["Budget 2026", "Notes"])
+    expect(tab.locator(".jse-query-status")).to_have_text("Rows 1–36 / 36")
+    x.back_to_notebook()
+
+
 @lab_check
 def python_callbacks(lab: Lab, page: Page) -> None:
     x = Explorer(lab, page, CALLBACKS)

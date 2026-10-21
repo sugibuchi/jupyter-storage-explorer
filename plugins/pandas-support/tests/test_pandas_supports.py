@@ -32,6 +32,7 @@ from jupyter_storage_explorer.formats import (
     JsonLines,
     Parquet,
     QueryView,
+    TableSetView,
     ViewLimits,
 )
 
@@ -108,11 +109,24 @@ class TestViews:
         assert list(query.data.columns) == ["a", "year"]
         assert query.data["year"].astype(int).tolist() == [2025, 2025, 2026, 2026]
 
-    def test_excel(self, make_item):
+    def test_excel_sheets_on_tabs(self, make_item):
         item = make_item("/a.xlsx", workbook())
-        # The first sheet.
+        view = ExcelByPandas().view(Excel(), item, PandasOptions(), PANDAS_LIMITS)
+        assert isinstance(view, TableSetView)
+        assert view.selector == "tab"
+        assert [leaf.id for leaf in view.leaves()] == ["one", "two"]
+        # Each sheet's first rows, as QueryViews telling whether there are more.
+        one, two = view.loader("one"), view.loader("two")
+        assert (one.data["a"].tolist(), one.more) == ([1, 2], True)
+        assert (two.data["b"].tolist(), two.more) == ([1], False)
+
+    def test_excel_with_one_sheet(self, make_item):
+        buffer = io.BytesIO()
+        pd.DataFrame({"a": [1]}).to_excel(buffer, sheet_name="only", index=False)
+        item = make_item("/a.xlsx", buffer.getvalue())
         query = ExcelByPandas().view(Excel(), item, PandasOptions(), PANDAS_LIMITS)
-        assert (query.data["a"].tolist(), query.more) == ([1, 2], True)
+        assert isinstance(query, QueryView)
+        assert query.data["a"].tolist() == [1]
 
 
 class TestRecipes:
@@ -189,10 +203,15 @@ class TestReaderOptions:
         options = ExcelByPandasOptions(sheet_name="two")
         query = ExcelByPandas().view(Excel(), item, options, PANDAS_LIMITS)
         assert list(query.data.columns) == ["b"]
-        with pytest.raises(ValueError, match="several sheets"):
-            ExcelByPandas().view(
-                Excel(), item, ExcelByPandasOptions(sheet_name=None), PANDAS_LIMITS
-            )
+
+    @pytest.mark.parametrize("sheet_name", [None, ["two", "one"]])
+    def test_excel_sheets_asked_for_on_tabs(self, make_item, sheet_name):
+        item = make_item("/a.xlsx", workbook())
+        options = ExcelByPandasOptions(sheet_name=sheet_name)  # None: all
+        view = ExcelByPandas().view(Excel(), item, options, PANDAS_LIMITS)
+        assert isinstance(view, TableSetView)
+        assert sorted(leaf.id for leaf in view.leaves()) == ["one", "two"]
+        assert view.loader("one").more
 
     def test_parquet_arguments_in_the_data_browser(self, make_item):
         item = make_item("/a.parquet", parquet_bytes({"a": [1, 2, 3], "b": [4, 5, 6]}))

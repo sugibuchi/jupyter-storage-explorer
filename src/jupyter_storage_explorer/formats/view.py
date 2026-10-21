@@ -1,16 +1,17 @@
 """Views of a format's data: ``FormatSupport.view`` returns one of these, and
 the explorer shows it in the preview panel or a tab of its own: the data
-browser for a ``QueryView``, the others rendered by the frontend according
-to their ``kind``."""
+browser for a ``QueryView``, and for the table chosen of a
+``TableSetView``'s; the others rendered by the frontend according to their
+``kind``."""
 
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Sequence
 
 log = logging.getLogger(__name__)
 
@@ -146,6 +147,129 @@ class QueryView(View):
     kind: ClassVar[str] = "query"
     data: Any
     more: bool = False
+
+
+@dataclass(frozen=True, kw_only=True)
+class Node:
+    """A group of tables in a ``TableSetView``'s tree, e.g. a database's
+    schema.
+
+    Parameters
+    ----------
+    label : str
+        Shown in the tree.
+    children : sequence of Node, default ()
+        The groups and tables (``Leaf``) in it.
+    """
+
+    label: str
+    children: Sequence[Node] = ()
+
+
+@dataclass(frozen=True, kw_only=True)
+class Leaf(Node):
+    """A table of a ``TableSetView``, which its ``loader`` reads by ``id``.
+
+    Parameters
+    ----------
+    label : str
+        Shown in the tree or on its tab.
+    id : str
+        What ``loader`` is given, unique in the view (e.g. "sales.orders").
+
+    Raises
+    ------
+    ValueError
+        If given ``children``: a table holds none.
+    """
+
+    id: str
+
+    def __post_init__(self) -> None:
+        if self.children:
+            raise ValueError(f"table {self.label!r} cannot have children")
+
+
+@dataclass(frozen=True, kw_only=True)
+class TableSetView(View):
+    """Several tables of one item, e.g. a database's or a workbook's: the
+    user chooses one, which the data browser shows as it shows a
+    ``QueryView``'s data.
+
+    Parameters
+    ----------
+    nodes : sequence of Node
+        The tables (``Leaf``), maybe in groups (``Node``).
+    loader : callable
+        Reads a table, as ``loader(id)``: any dataframe narwhals supports,
+        best lazy, as a ``QueryView``'s ``data``; or a ``QueryView`` of it,
+        e.g. with ``more=True`` for eager data holding the first rows only
+        (it is closed once the table is no longer shown). Called when the
+        table is chosen, and again when the data browser reads it again. What
+        it holds open (e.g. a database connection) stays readable until the
+        view is closed: release it with ``on_close``.
+    selector : {"tree", "tab"}, default "tree"
+        How tables are chosen: in a tree beside the table, or on tabs below
+        it, as a spreadsheet's sheets ("tab": ``nodes`` are all tables, with
+        no groups).
+
+    Raises
+    ------
+    ValueError
+        If ``selector`` is unknown, "tab" with groups, no table is given, or
+        two tables have one ``id``.
+
+    Examples
+    --------
+    In a support's ``view()``, a workbook's sheets:
+
+    >>> sheets = pl.read_excel(path, sheet_id=0)  # {name: DataFrame}
+    >>> TableSetView(
+    ...     nodes=[Leaf(label=name, id=name) for name in sheets],
+    ...     loader=sheets.__getitem__,
+    ...     selector="tab",
+    ... )
+
+    A database's schemas and tables, the connection closed with the view:
+
+    >>> con = duckdb.connect(path, read_only=True)
+    >>> view = TableSetView(
+    ...     nodes=[
+    ...         Node(label="sales", children=[Leaf(label="orders", id="sales.orders")]),
+    ...     ],
+    ...     loader=con.table,
+    ... )
+    >>> view.on_close(lambda view: con.close())
+    """
+
+    kind: ClassVar[str] = "table_set"
+    nodes: Sequence[Node]
+    loader: Callable[[str], Any]
+    selector: Literal["tree", "tab"] = "tree"
+
+    def __post_init__(self) -> None:
+        if self.selector not in ("tree", "tab"):
+            raise ValueError(f'selector must be "tree" or "tab", not {self.selector!r}')
+        if self.selector == "tab" and not all(isinstance(n, Leaf) for n in self.nodes):
+            raise ValueError('selector "tab" takes tables (Leaf) only, with no groups')
+        ids = [leaf.id for leaf in self.leaves()]
+        if not ids:
+            raise ValueError("a table set needs at least one table (Leaf)")
+        if len(set(ids)) < len(ids):
+            twice = sorted({i for i in ids if ids.count(i) > 1})
+            raise ValueError(f"tables' ids must be unique: {', '.join(twice)}")
+
+    def leaves(self) -> list[Leaf]:
+        """The tables, in the order the tree shows them."""
+
+        def walk(nodes: Sequence[Node]) -> list[Leaf]:
+            return [
+                leaf
+                for node in nodes
+                for leaf in ([node] if isinstance(node, Leaf) else walk(node.children))
+            ]
+
+        return walk(self.nodes)
 
 
 @dataclass(frozen=True, kw_only=True)

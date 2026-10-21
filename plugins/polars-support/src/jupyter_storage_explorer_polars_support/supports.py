@@ -23,10 +23,10 @@ from jupyter_storage_explorer.formats.support import (
     secret_field,
 )
 from jupyter_storage_explorer.formats.text import Csv, Json, JsonLines
-from jupyter_storage_explorer.formats.view import QueryView
+from jupyter_storage_explorer.formats.view import Leaf, QueryView, TableSetView
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping, Sequence
+    from collections.abc import Callable, Mapping, Sequence
 
     from jupyter_storage_explorer.formats.base import ItemContext
     from jupyter_storage_explorer.formats.view import View, ViewLimits
@@ -188,9 +188,10 @@ _SCAN_PARQUET_ONLY = frozenset({"hidden_file_prefix", "cache", "extra_columns"})
 @dataclass(frozen=True, kw_only=True)
 class ExcelByPolarsOptions(SupportOptions):
     """polars' ``read_excel`` arguments, and how the code reads the bytes:
-    unset ones are left to polars. The data browser shows one sheet: the
-    first, or the one ``sheet_id``, ``sheet_name`` or ``table_name`` give.
-    The plugin's README lists them.
+    unset ones are left to polars. The data browser shows the sheet (or
+    table) ``sheet_id``, ``sheet_name`` or ``table_name`` give, or each of
+    those they give, on tabs; without them, the workbook's sheets on tabs,
+    or its only sheet. The plugin's README lists them.
 
     Attributes
     ----------
@@ -374,6 +375,16 @@ class JsonByPolars(FormatSupport):
         return {AS_DATA_FRAME: self.data_frame_template.format(url=url, kwargs=kwargs)}
 
 
+def _sheets(names: list[str], loader: Callable[[str], Any]) -> TableSetView:
+    """A workbook's sheets ``names`` on tabs, as a spreadsheet shows them,
+    each read by ``loader(name)``."""
+    return TableSetView(
+        nodes=[Leaf(label=name, id=name) for name in names],
+        loader=loader,
+        selector="tab",
+    )
+
+
 class ExcelByPolars(FormatSupport):
     format = Excel
     engine = PolarsEngine
@@ -392,7 +403,7 @@ class ExcelByPolars(FormatSupport):
         options: ExcelByPolarsOptions,
         limits: ViewLimits,
     ) -> View:
-        # Excel cannot be read lazily: one sheet is read whole, through the
+        # Excel cannot be read lazily: a sheet is read whole, through the
         # explorer's filesystem, and queried in memory.
         size = ctx.info.get("size")
         if size is not None and size > limits.max_whole_file_bytes:
@@ -400,14 +411,23 @@ class ExcelByPolars(FormatSupport):
             raise ValueError(f"too large to view (over {limit} MB)")
         if options.engine in (LIBRARY_DEFAULT, "calamine"):
             Fastexcel().load()  # polars' default engine
-        data = (
-            Polars().load().read_excel(ctx.fs.cat_file(ctx.path), **options.arguments())
+        pl = Polars().load()
+        workbook = ctx.fs.cat_file(ctx.path)
+        arguments = options.arguments()
+        if {"sheet_id", "sheet_name", "table_name"} & arguments.keys():
+            # The sheets (or table) asked for: several make a dict.
+            data = pl.read_excel(workbook, **arguments)
+            if not isinstance(data, dict):
+                return QueryView(data=data)
+            return _sheets(list(data), data.__getitem__)
+        # The workbook's sheets, each read when chosen: fastexcel (installed
+        # with this support) only lists them, whichever engine reads them.
+        names = Fastexcel().load().read_excel(workbook).sheet_names
+        if len(names) == 1:
+            return QueryView(data=pl.read_excel(workbook, **arguments))
+        return _sheets(
+            names, lambda name: pl.read_excel(workbook, sheet_name=name, **arguments)
         )
-        if isinstance(data, dict):
-            raise ValueError(
-                "several sheets: choose one with sheet_id, sheet_name or table_name"
-            )
-        return QueryView(data=data)
 
     # polars reads the bytes, fetched with fsspec so any storage works.
     data_frame_template = cleandoc("""

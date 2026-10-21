@@ -50,7 +50,7 @@ Every format takes:
 
 The other options are each format's reader's arguments, of the same names, with their descriptions from pandas' API
 documentation. Those not set are not passed: pandas' defaults, shown, apply, but where the explorer gives its own. The
-data browser reads at most `max_memory_rows` rows (see `view_limits`) and shows one sheet of a workbook. Values that are
+data browser reads at most `max_memory_rows` rows (see `view_limits`), of each sheet of a workbook. Values that are
 Python objects (e.g. data types such as `np.float64` in `dtype`; strings such as `"Int64"` are fine) are used in the
 data
 browser but left out of the code, as are options that look like credentials.
@@ -144,7 +144,9 @@ browser but left out of the code, as are options that look like credentials.
 ### Excel (`excel`)
 
 `ExcelByPandasOptions`: the arguments of
-[`pd.read_excel`](https://pandas.pydata.org/docs/reference/api/pandas.read_excel.html).
+[`pd.read_excel`](https://pandas.pydata.org/docs/reference/api/pandas.read_excel.html). The data browser shows a
+workbook's sheets on tabs below the table (only one sheet: that one), each read when chosen; with `sheet_name`, the
+sheet it gives (several, or `None` for all: on tabs).
 
 | Option            | Default                                         | Meaning                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 |-------------------|-------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|

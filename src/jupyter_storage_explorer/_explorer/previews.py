@@ -13,6 +13,8 @@ from jupyter_storage_explorer import _paths
 from jupyter_storage_explorer._explorer.common import error_text, explorers
 from jupyter_storage_explorer._json import jsonable
 from jupyter_storage_explorer._query.data_query import DataQuery
+from jupyter_storage_explorer._query.table_set import SEPARATOR, TableSet
+from jupyter_storage_explorer._table_set_tab import TableSetTab
 from jupyter_storage_explorer._view_tab import ViewTab
 from jupyter_storage_explorer.data_explorer import DataExplorer
 from jupyter_storage_explorer.formats import (
@@ -20,6 +22,7 @@ from jupyter_storage_explorer.formats import (
     ItemContext,
     MediaView,
     QueryView,
+    TableSetView,
     TableView,
     View,
 )
@@ -182,7 +185,8 @@ class PreviewsMixin:
         engine: str | EllipsisType | None = ...,
     ) -> None:
         """Preview the file or directory at ``path`` in the preview panel: the
-        data browser for a ``QueryView``, else the view's section.
+        data browser for a ``QueryView``, a ``TableSetView``'s tables, else
+        the view's section (see ``_show``).
 
         ``format`` names one of the formats matching it (e.g. "text" for a JSON
         file); by default the best match is used. ``engine`` (a key; None for
@@ -200,8 +204,8 @@ class PreviewsMixin:
         }
         # Shown while the (possibly remote) reads below run.
         self._preview = {**base, "loading": True}
-        view: View | None = None
-        data: DataQuery | None = None
+        # What shows it: the view, else its query or tables, which own it.
+        shown: View | DataQuery | TableSet | None = None
         try:
             item = self._detect(path)
             if item is None:
@@ -217,27 +221,50 @@ class PreviewsMixin:
                 key = self._view_engine(fmt, item.ctx.name, engine)
                 base["engine"], base["engine_label"] = key, self._engine_label(key)
                 viewer = self._viewer(fmt, item, key)
-                view = viewer()
-                if isinstance(view, QueryView):
-                    data = self._new_query(view, viewer, item)
-                    base["query"] = data.opening()
-                else:
-                    base["sections"] = [section(view)]
+                shown = viewer()
+                shown = self._show(shown, viewer, item, base)
         except Exception as exc:
             base["error"] = error_text(exc)
-            # Nothing shows them: released at once (closing is idempotent).
-            if data is not None:
-                data.close()
-            if view is not None:
-                view.close()
-            view = data = None
+            # Nothing shows it: released at once.
+            if shown is not None:
+                shown.close()
+            shown = None
         # The previous preview's, closed once the new one is open.
         self._release_preview()
-        if data is not None:
-            self._queries[path] = data
+        if isinstance(shown, DataQuery):
+            self._queries[path] = shown
+        elif isinstance(shown, TableSet):
+            self._table_sets[path] = shown
         else:
-            self._preview_view = view
+            self._preview_view = shown
         self._preview = base
+
+    def _show(
+        self,
+        view: View,
+        viewer: Callable[[], View],
+        item: _Detected,
+        preview: dict[str, Any],
+    ) -> View | DataQuery | TableSet:
+        """Set what ``preview`` shows of ``view``, which ``viewer`` gave of
+        ``item``: "query" (the data browser's) for a ``QueryView``,
+        "table_set" for a ``TableSetView``, else "sections". Returns what
+        then owns the view: its query, its tables, or the view. The view is
+        closed if they cannot be made."""
+        try:
+            if isinstance(view, QueryView):
+                data = self._new_query(view, viewer, item)
+                preview["query"] = data.opening()
+                return data
+            if isinstance(view, TableSetView):
+                tables = self._table_set(view, item)
+                preview["table_set"] = tables.opening()
+                return tables
+        except Exception:
+            view.close()
+            raise
+        preview["sections"] = [section(view)]
+        return view
 
     def _close_preview(self) -> None:
         self._release_preview()
@@ -245,11 +272,15 @@ class PreviewsMixin:
 
     def _release_preview(self) -> None:
         """Close what the preview panel shows: the data browser's query (and
-        so the view its data came from), or the view shown."""
+        so the view its data came from), a table set (its table's query, then
+        its view), or the view shown."""
         queries, self._queries = list(self._queries.values()), {}
+        table_sets, self._table_sets = list(self._table_sets.values()), {}
         view, self._preview_view = self._preview_view, None
         for data in queries:
             data.close()
+        for tables in table_sets:
+            tables.close()
         if view is not None:
             view.close()
 
@@ -268,7 +299,13 @@ class PreviewsMixin:
         """The query the preview panel shows in the data browser, or None
         (closed, loading, or showing something else)."""
         preview = self._preview
-        if not preview.get("query") or preview.get("loading"):
+        if preview.get("loading"):
+            return None
+        if preview.get("table_set"):
+            # The table chosen's.
+            tables = self._table_sets.get(preview.get("path"))
+            return tables.query if tables is not None else None
+        if not preview.get("query"):
             return None
         return self._queries.get(preview.get("path"))
 
@@ -332,6 +369,67 @@ class PreviewsMixin:
             first.append(view.data)
             return DataQuery(source, key, self._states, **options)
 
+    def _table_set(self, view: TableSetView, item: _Detected) -> TableSet:
+        """The data browser's tables of ``view``, the view ``item`` gave.
+
+        Each table chosen is read by the view's ``loader``, again on reload
+        (a ``QueryView`` it gives tells whether the rows are cut short, and is
+        closed with the table's query); its settings are remembered by the
+        item's URL and the table's id, as a ``QueryView``'s by location, with
+        the mode last chosen for it.
+        """
+        url = item.ctx.location.url
+        limits = self._view_limits
+        options = {
+            "fetch": self._fetch_rows,
+            "max_live_rows": limits.max_live_rows,
+            "max_memory_rows": limits.max_memory_rows,
+            "page_rows": limits.max_display_rows,
+        }
+
+        def make_query(table: str) -> DataQuery:
+            key = f"{url}#{table}"
+            state = self._states.query(key)
+            mode = state.mode if state is not None else "auto"
+            # The table's QueryView, if the loader gave one (its data cut
+            # short or not: ``more``), closed once replaced or no longer shown.
+            loaded: list[QueryView | None] = [None]
+
+            def source() -> Any:
+                data = view.loader(table)
+                if isinstance(data, QueryView):
+                    previous, loaded[0] = loaded[0], data
+                    if previous is not None:
+                        previous.close()
+                    return data.data
+                return data
+
+            def cut() -> bool:
+                return loaded[0] is not None and loaded[0].more
+
+            def close() -> None:
+                if loaded[0] is not None:
+                    loaded[0].close()
+
+            table_options = {**options, "cut": cut, "on_close": close}
+            try:
+                return DataQuery(source, key, self._states, mode=mode, **table_options)
+            except ValueError:
+                if mode != "live":
+                    raise
+                # "live" chosen when the table was lazy, and no longer is.
+                return DataQuery(source, key, self._states, **table_options)
+
+        return TableSet(view, make_query)
+
+    def _table_set_request(self, content: dict[str, Any]) -> dict[str, Any]:
+        """Answer "table_set_open": show another table of the table set
+        previewed (``TableSet.choose``)."""
+        tables = self._table_sets.get(content.get("path"))
+        if tables is None:
+            return {"error": "the tables are no longer open; preview them again"}
+        return tables.choose(content)
+
     # --- Views in tabs of their own ("View in a new tab"), which the
     # launcher's JupyterLab extension shows: a DataExplorer of the data for
     # a QueryView, else a ViewTab of the view ---
@@ -344,6 +442,7 @@ class PreviewsMixin:
         path = content.get("path")
         view: View | None = None
         data: DataQuery | None = None
+        tables: TableSet | None = None
         try:
             item, fmt = self._formats_of(path, content.get("format") or None)
             engine = content.get("engine", ...)
@@ -354,7 +453,7 @@ class PreviewsMixin:
             label = " · ".join(filter(None, [fmt.label, self._engine_label(key)]))
             if isinstance(view, QueryView):
                 data = self._new_query(view, viewer, item)
-                widget: DataExplorer | ViewTab = DataExplorer._of_query(
+                widget: DataExplorer | TableSetTab | ViewTab = DataExplorer._of_query(
                     data,
                     self._states,
                     data.key,
@@ -362,6 +461,9 @@ class PreviewsMixin:
                     label=label,
                     height="fill",
                 )
+            elif isinstance(view, TableSetView):
+                tables = self._table_set(view, item)
+                widget = TableSetTab(tables, title=title, label=label)
             else:
                 widget = ViewTab(
                     section(view), title=title, label=label, on_close=view.close
@@ -369,6 +471,8 @@ class PreviewsMixin:
         except Exception as exc:
             if data is not None:
                 data.close()
+            if tables is not None:
+                tables.close()
             if view is not None:
                 view.close()
             return {"error": error_text(exc)}
@@ -388,7 +492,15 @@ class PreviewsMixin:
 
     def _query_request(self, content: dict[str, Any]) -> dict[str, Any]:
         """Answer the data browser's requests ("query_rows", "query_check",
-        "query_save", "query_reload", "query_mode") on the data previewed."""
+        "query_save", "query_reload", "query_mode") on the data previewed;
+        for a table set's table, "path" also names the table (see
+        ``table_set.query_path``)."""
+        path, separator, table = content["path"].partition(SEPARATOR)
+        if separator:
+            tables = self._table_sets.get(path)
+            if tables is None:
+                return {"error": "the tables are no longer open; preview them again"}
+            return tables.handle(content, table)
         data = self._queries.get(content["path"])
         if data is None:
             return {"error": "the data is no longer open; preview it again"}

@@ -16,7 +16,7 @@ function createPreview(x) {
   const splitter = h("div", { className: "jse-splitter", title: "Drag to resize" });
   // tabIndex makes the panel focusable, so it receives Escape.
   const el = h("div", { className: "jse-preview-panel", tabIndex: -1, hidden: true }, splitter, head, body);
-  let queryPanel = null; // the data browser shown in the panel
+  let queryPanel = null; // the data browser (or a table set's) shown in the panel
 
   // `format` (a format name) previews with that format instead of the best
   // match; `engine` (a key, or null for the built-in views) with that
@@ -47,7 +47,7 @@ function createPreview(x) {
 
   function render() {
     const preview = model.get("_preview");
-    if (!preview.query) {
+    if (!preview.query && !preview.table_set) {
       queryPanel?.dispose();
       queryPanel = null;
     }
@@ -86,6 +86,11 @@ function createPreview(x) {
     } else if (preview.query) {
       queryPanel?.dispose();
       queryPanel = createQueryPanel({ request: x.request, ask: x.ask, answer: x.answer, flash: x.flash }, preview.path, preview.query);
+      children = [queryPanel.el];
+    } else if (preview.table_set) {
+      // Several tables: a tree or tabs to choose one, and the data browser on it.
+      queryPanel?.dispose();
+      queryPanel = createTableSetPanel({ request: x.request, ask: x.ask, answer: x.answer, flash: x.flash }, preview.path, preview.table_set);
       children = [queryPanel.el];
     } else {
       children = preview.sections.map(renderSection);

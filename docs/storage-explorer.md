@@ -294,7 +294,7 @@ StorageExplorer("s3://my-bucket/data", states=ExplorerStates("states.json", max_
 | CSV, TSV                                                     | `csv`        | First rows                    | ✓            | polars, pandas, PySpark                             |
 | JSON Lines                                                   | `json-lines` | First records                 | ✓            | polars, pandas, PySpark                             |
 | JSON                                                         | `json`       | Collapsible tree              |              | Python, polars, pandas                              |
-| Excel (`.xlsx`)                                              | `excel`      | First rows of the first sheet | ✓            | polars, pandas                                      |
+| Excel (`.xlsx`)                                              | `excel`      | Its sheets, on tabs           | ✓            | polars, pandas                                      |
 | Markdown                                                     | `markdown`   | Rendered                      |              | Python                                              |
 | Text, code, configuration (YAML, SQL, Python, …)             | `text`       | With syntax highlighting      |              | Python                                              |
 | Images (PNG, JPEG, GIF, SVG, …)                              | `image`      | Shown                         |              | Python (Pillow)                                     |
@@ -364,11 +364,12 @@ explorer.selected_urls  # the URLs of the selected items
 explorer.folder_location  # where the folder shown is: its .url, and a local folder's .path
 explorer.selected_locations  # the same for the selected items
 explorer.query_result()  # the table in the data browser, with its filters; None if none
+explorer.query_table  # of an item of several tables (a database, a workbook...): the one chosen
 ```
 
 `on_change(f)` calls `f(explorer)` when the folder shown or the selection changes, and `on_query_change(f)` when
-`query_result()` does: another table opened in the preview panel (or none), other filters, sort or columns, or the data
-read again. The functions run as the kernel handles the widget's messages, so what they print goes to no cell: display
+`query_result()` does: another table opened in the preview panel (or none), also another of an item's several tables,
+other filters, sort or columns, or the data read again. The functions run as the kernel handles the widget's messages, so what they print goes to no cell: display
 into an `ipywidgets.Output`. Keep them quick: the widget waits for them. `remove=True` stops calling one.
 
 For example, a chart of the CSV file you click, which follows the filters you set in the data browser. Some CSV files
