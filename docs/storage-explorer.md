@@ -200,6 +200,21 @@ For example, with a MinIO storage, `s3fs` with `endpoint_url="http://minio:9000"
 - If not, but fsspec's configuration sets that endpoint for S3, they are read with the S3 storage fsspec opens.
 - Otherwise they are refused.
 
+## Large files
+
+Files sent between your computer and the explorer go through the kernel's connection with the page, so they are
+limited:
+
+| Transfer                                        | Limit                                       |
+|-------------------------------------------------|---------------------------------------------|
+| Upload from your computer (drop a file)         | 10 MB per file (`max_upload_bytes`)         |
+| **Download to local**                           | 100 MB                                      |
+| Between storages (paste, drag to an explorer)   | None: the kernel copies them, in the background |
+| From or to JupyterLab's file browser (drag, **Download to JupyterLab**) | None: the kernel copies them on the server's disk |
+
+For larger files, put them on a storage the kernel reaches (e.g. JupyterLab's file browser, by its own upload) and
+copy them from there, or download them to JupyterLab, then from its file browser.
+
 ## Transfer policy
 
 `transfer_policy=[...]` limits where files may be copied or moved: within a storage (moves onto a folder, renames, copy
@@ -243,7 +258,8 @@ tables side by side.
 
 The engine is the library previews read data with: **Polars**, **pandas** or **PySpark**, each with its
 [plugin](#plugins). Engines read storage with their
-own settings, e.g. credentials in the environment, not the explorer's: see [Format options](#format-options). Text,
+own settings, e.g. the environment's credential setup (an AWS profile, an Azure CLI login), not the explorer's: see
+[Format options](#format-options). Text,
 Markdown, JSON and images are shown by the explorer itself. When the engine chosen cannot view an item, use **Preview
 as**.
 

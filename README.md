@@ -114,37 +114,19 @@ The `notebooks` folder has a demo of each widget on sample data.
 
 ## Why Storage Explorer?
 
-Storage Explorer aims to be a **data-aware file explorer for large data lakes**, made for the daily work of data
-scientists and engineers. Rather than adding data lake access to JupyterLab's file browser, a narrow sidebar, it is a
-widget in JupyterLab's main area, in a notebook or a tab of its own, with room for what working with data needs (the
-launcher also has a narrow side panel, for picking files beside your notebooks):
+A **data-aware file explorer for large data lakes**, in JupyterLab's main area (a notebook or a tab), with room for
+what working with data needs; it complements JupyterLab's file browser rather than replacing it.
 
-- **Built for large folders**: data lakes often hold thousands of items in one folder (partitions, part files, daily
-  drops). The list is paged, sorted and filtered as you type, regular expressions included; folders of tens of
-  thousands of items are listed by the kernel, a page at a time. Moving, copying, deleting and uploading run in the
-  background, with their progress and Cancel, so the explorer stays usable while thousands of files move.
-- **Preview as you browse**: tree, list and preview side by side. Click through files and see each one at once,
-  without opening and closing tabs.
-- **Tables, not just files**: Delta Lake tables and partitioned Parquet datasets are recognised as tables, not
-  folders. Open them in the data browser to choose among hundreds of columns and filter and sort the data where it
-  lives, with the engine you choose (Polars, pandas, or one of your own).
-- **From browsing to code**: copy ready-to-run code to load a file or table with polars, pandas, PySpark and more, or
-  the URLs of the files you selected, ready for any library. In Python, `folder_location` and `selected_locations`
-  give the folder shown and the files selected, with their URLs.
-- **Part of your notebook**: explorers are widgets, placed in your notebook next to your analysis. Your code can
-  follow what you browse (`on_change()`, `on_query_change()`): a chart of the file you click, redrawn as you filter it
-  in the data browser (`query_result()`). `DataExplorer` brings the same data browser to any dataframe, and gives the
-  rows you filtered back to your code (`result()`). See
-  [Working with the explorer from Python](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#working-with-the-explorer-from-python).
-- **At home in JupyterLab**: drag files from JupyterLab's file browser into an explorer to upload them to a storage,
-  or onto the file browser to download them to the server. Split the main area to put explorers side by side, in
-  notebooks or tabs of their own, and drag files from one storage to another, e.g. from S3 to Azure. Files open in
-  JupyterLab's own editors, and tables in a tab of their own.
-- **Safe by default**: in a data lake, a folder is often a whole table. Folders can't be moved, copied, renamed or
-  deleted by a stray drag: that takes
+- **Large folders**: paged, sorted and filtered as you type; tens of thousands of items listed by the kernel; file
+  operations in the background, with progress and Cancel.
+- **Tables, not just files**: Delta Lake tables and partitioned Parquet datasets open in the data browser, queried
+  where they live with the engine you choose.
+- **From browsing to code**: ready-to-run code and URLs for what you select; your code can follow what you browse
+  ([from Python](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#working-with-the-explorer-from-python)).
+- **At home in JupyterLab**: drag files to and from its file browser and between storages; edit files in its editors;
+  keep an explorer in its side bar, beside your notebooks
+  ([the launcher's side panel](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/launcher/README.md)).
+- **Safe by default**: folders are moved, copied, renamed or deleted only in
   [Unsafe mode](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#unsafe-operations),
-  which turns itself off after one operation. Teams can also restrict where files may go with a
-  [transfer policy](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#transfer-policy).
+  for one operation.
 - **Runs in your kernel**: with your credentials and your libraries, and no server setup.
-
-It complements JupyterLab's file browser rather than replacing it.
