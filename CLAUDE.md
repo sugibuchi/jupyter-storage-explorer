@@ -531,6 +531,14 @@ then the fields, then `reader_options` (option names ignore case), in the views 
 ## Conventions
 
 - Comments and docstrings are written in full sentences explaining *why*; keep that density and tone.
+- Write docs (this file, DEVELOPMENT.md, `docs/`, READMEs) so that people can review them:
+  - One idea per sentence: about 30 words, never more than 50.
+  - At most one parenthesis per sentence, never nested.
+  - Three or more items make a list.
+  - Add a new fact as its own sentence or bullet where it belongs. Never append it to an existing sentence.
+  - Name an identifier only when the reader needs it to find the code. A function's details belong in its docstring.
+  - Describe what is, not what was: git keeps the history.
+  - When editing a passage that breaks these rules, rewrite it.
 - Docstrings of the public API, what users construct, call, subclass or override (`StorageExplorer`, `DataExplorer`,
   `fetch_rows` (the `fetch_rows=` default of both), `QuerySettings`, `ExplorerStates` (with `Bookmark`,
   `QueryState`), `FileSystemOperations` and its subclasses (with `_copy_file`, `_move_file`), `Measurement`,
