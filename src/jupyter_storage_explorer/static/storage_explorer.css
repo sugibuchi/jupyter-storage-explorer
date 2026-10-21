@@ -75,21 +75,33 @@
 }
 
 /* Narrow: the list shows the name and size only (the tooltip has the times),
-   and the status bar's buttons are as wide as their labels, leaving the
-   messages some room. */
+   and the status bar has two rows: the messages, the whole width, then the
+   engine (left) and View (right), as wide as their labels. */
 .jse-sidebar .jse-list .jse-col-mtime {
   display: none;
 }
 
+.jse-sidebar .jse-status-bar {
+  flex-wrap: wrap;
+}
+
+.jse-sidebar .jse-status-bar .jse-status {
+  flex: 1 0 100%;
+  border-bottom: 1px solid var(--jse-border);
+}
+
 .jse-sidebar .jse-status-bar > .jse-engine-btn {
   width: auto;
+  margin-left: 0;
+  border-left: none;
 }
 
 .jse-sidebar .jse-status-bar > .jse-preview-btn {
   flex: 0 1 auto;
   width: auto;
   min-width: 0;
-  max-width: 11em;
+  margin-left: auto;
+  border-left: none;
 }
 
 /* Right to left, so a long path is cut at its start (…/folder shown); the
