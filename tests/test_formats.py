@@ -348,7 +348,8 @@ class TestRecipes:
             "df = pd.read_csv('memory:///a.tsv', sep='\\t')"
         )
         assert last_line(code["pyspark: Load as DataFrame"]) == (
-            "df = spark.read.csv('memory:///a.tsv', header=True, inferSchema=True, sep='\\t')"
+            "df = spark.read.options(sep='\\t', header=True, inferSchema=True)"
+            ".csv('memory:///a.tsv')"
         )
 
     def test_lazy_and_eager_with_polars(self, make_item, memfs):

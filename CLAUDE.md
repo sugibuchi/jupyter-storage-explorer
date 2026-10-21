@@ -453,8 +453,11 @@ only through `SupportOptions.code_value(name)`, which drops secret fields, secre
 many backends) and non-literal values. ruff's `extend-immutable-calls` (pyproject.toml) knows the two helpers. Spark
 reads with its own storage settings (`spark_url()` rewrites `abfs`/`s3` to `abfss`/`s3a`): PySpark's supports take
 `PySparkOptions`, `session_options` (`SparkSession.builder.config`, by `spark_session(session_options)`; a running
-session gets the runtime ones) and `reader_options` (`spark.read.option`, overriding CSV's defaults), both in the
-views and the code (`session_code()`, `reader_code()`).
+session gets the runtime ones) and `reader_options` (`spark.read.option`), and a subclass per format
+(`CsvByPySparkOptions`, ...) whose fields are Spark's (and Delta's) documented reader options in snake case (the
+camel-case name, or metadata `SPARK_NAME`; None leaves it to Spark): the support's defaults (CSV's separator detected),
+then the fields, then `reader_options` (option names ignore case), in the views and the code (`session_code()`,
+`reader_code()`: `.options(...)` then `.option(...)`). Their tables are in the plugin's README only (docs link to it).
 
 ## Conventions
 
