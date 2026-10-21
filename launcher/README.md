@@ -14,6 +14,9 @@ as the tab: the list of a folder, without the tree or the preview panel; files y
 double-click, or right-click → **View in new tab**) open in new tabs. Its kernel
 starts when you first open it, and it stays open after a page reload.
 
+<img src="https://raw.githubusercontent.com/sugibuchi/jupyter-storage-explorer/main/launcher/figs/side-panel.png" width="867" alt="The side panel in JupyterLab's left side bar, a Parquet file selected, beside the tab its View button opened in the data browser">
+
+
 It also integrates every Storage Explorer, in its tab or in a notebook, with JupyterLab:
 
 - **Drag and drop**: drag files onto JupyterLab's file browser to download them there.

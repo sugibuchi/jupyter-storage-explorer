@@ -1170,7 +1170,9 @@ def drag_between_tabs(lab: Lab, page: Page) -> None:
     expect(page.locator(".jse-launcher-panel")).to_have_count(2, timeout=30_000)
     # Side by side: the second tab dragged to the right edge of the main area
     # (JupyterLab 4.0's tab menu has no "Split Tab").
-    page.locator(".lm-TabBar-tab", has_text="Storage Explorer").last.hover()
+    page.locator(
+        "#jp-main-dock-panel .lm-TabBar-tab", has_text="Storage Explorer"
+    ).last.hover()
     dock = page.locator("#jp-main-dock-panel").bounding_box()
     assert dock is not None
     page.mouse.down()

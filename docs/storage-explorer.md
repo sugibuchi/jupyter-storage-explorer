@@ -147,7 +147,7 @@ of files and folders, their total size, and the oldest and newest files.
 Right-click a folder → **Add bookmark**. ☆ lists them; click one to open it, right-click it for Copy URL (Copy path
 for a local folder) and Delete bookmark.
 
-<img src="figs/using-bookmarks.png" width="308" alt="The bookmarks menu">
+<img src="figs/using-bookmarks.png" width="334" alt="The bookmarks menu">
 
 ### Copy, cut and paste
 

@@ -89,7 +89,11 @@ def make(lab: Lab) -> None:
         film.snap(1200)
 
         # Back in the explorer, whose preview shows the file as saved.
-        film.click(page.locator(".lm-TabBar-tab", has_text="Storage Explorer").first)
+        film.click(
+            page.locator(
+                "#jp-main-dock-panel .lm-TabBar-tab", has_text="Storage Explorer"
+            ).first
+        )
         page.wait_for_timeout(1000)
         film.snap(1000)
         changes = (
