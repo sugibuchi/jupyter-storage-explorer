@@ -300,6 +300,8 @@ StorageExplorer(
 | `polars` | `pyarrow_options`        | `delta`                                         | `scan_delta`'s `pyarrow_options`.                                                                              |
 | `pandas` | `storage_options`        | `parquet`, `csv`, `json-lines`, `json`, `excel` | pandas' `storage_options` (fsspec's), in the code.                                                             |
 | `python` | `storage_options`        | `json`, `text` (also Markdown's code), `image`  | `fsspec.open`'s keyword arguments, in the code.                                                                |
+| `pyspark` | `session_options`       | `delta`, `parquet`, `csv`, `json-lines`         | Spark configuration, `SparkSession.builder.config(key, value)` for each (with a session running, only what Spark changes at run time), in the data browser and the code. |
+| `pyspark` | `reader_options`        | `delta`, `parquet`, `csv`, `json-lines`         | `spark.read.option(key, value)` for each, in the data browser and the code; for CSV, they override `header`, `inferSchema` and `sep`. |
 
 Options that look like credentials are left out of the code. A library, format or option name that no support takes is
 an error.

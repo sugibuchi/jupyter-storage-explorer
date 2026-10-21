@@ -451,7 +451,10 @@ declared on the fields (`support.py`): `secret_field(...)` (metadata `is_secret`
 only through `SupportOptions.code_value(name)`, which drops secret fields, secret keys at any depth, and, through
 `_shown_options(value, secret_keys)`, credential-looking keys anyway (a safety net: storage options' keys come from
 many backends) and non-literal values. ruff's `extend-immutable-calls` (pyproject.toml) knows the two helpers. Spark
-snippets never get storage options (`spark_url()` rewrites `abfs`/`s3` to `abfss`/`s3a`).
+reads with its own storage settings (`spark_url()` rewrites `abfs`/`s3` to `abfss`/`s3a`): PySpark's supports take
+`PySparkOptions`, `session_options` (`SparkSession.builder.config`, by `spark_session(session_options)`; a running
+session gets the runtime ones) and `reader_options` (`spark.read.option`, overriding CSV's defaults), both in the
+views and the code (`session_code()`, `reader_code()`).
 
 ## Conventions
 

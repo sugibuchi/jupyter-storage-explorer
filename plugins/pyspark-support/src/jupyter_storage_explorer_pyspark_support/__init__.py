@@ -12,6 +12,7 @@ from jupyter_storage_explorer_pyspark_support.supports import (
     JsonLinesByPySpark,
     ParquetByPySpark,
     PySparkEngine,
+    PySparkOptions,
     spark_session,
     spark_url,
 )
@@ -36,6 +37,7 @@ __all__ = [
     "JsonLinesByPySpark",
     "ParquetByPySpark",
     "PySparkEngine",
+    "PySparkOptions",
     "PySparkSupport",
     "spark_session",
     "spark_url",
