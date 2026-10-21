@@ -10,7 +10,8 @@ the folder JupyterLab's file browser shows.
 
 It also adds a **side panel**: click the Storage Explorer icon in JupyterLab's left side bar (or *Show Storage
 Explorer in the Side Bar* in the command palette) for a narrow explorer next to your notebooks, with the same storages
-as the tab: the list of a folder, without the tree or the preview panel; files you view open in new tabs. Its kernel
+as the tab: the list of a folder, without the tree or the preview panel; files you view (**View** at the bottom, a
+double-click, or right-click → **View in new tab**) open in new tabs. Its kernel
 starts when you first open it, and it stays open after a page reload.
 
 It also integrates every Storage Explorer, in its tab or in a notebook, with JupyterLab:

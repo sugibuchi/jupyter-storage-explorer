@@ -1239,7 +1239,9 @@ def side_panel(lab: Lab, page: Page) -> None:
     expect(side).to_have_class(re.compile(r"\bjse-sidebar\b"))
     expect(side.locator(".jse-tree-pane")).to_be_hidden()
     expect(side.locator(".jse-tree-btn")).to_be_hidden()
-    expect(side.locator(".jse-preview-btn")).to_be_hidden()
+    view = side.locator(".jse-status-bar .jse-preview-btn")  # View, without the panel
+    expect(view).to_have_text("View")
+    expect(view).to_be_disabled()
     expect(side.locator(".jse-unsafe")).to_have_count(0)
     expect(side.locator(".jse-engine-btn")).to_have_text("Polars")
     expect(side.locator(".jse-toolbar .jse-fs-select")).to_be_visible()
@@ -1265,10 +1267,18 @@ def side_panel(lab: Lab, page: Page) -> None:
     expect(menu.filter(has_text="Preview")).to_have_count(0)
     side.press("Escape")
     page.keyboard.press("Escape")
-    # A double-click views it in a new tab.
-    row.filter(has=page.get_by_text("orders.parquet", exact=True)).dblclick()
+    # View, in the status bar, views the selected item in a new tab; so does a
+    # double-click.
+    row.filter(has=page.get_by_text("orders.parquet", exact=True)).click()
+    expect(view).to_have_text("View (Parquet)")
+    view.click()
     tab = page.locator(".jse-query-tab")
     expect(tab.locator(".jse-query-status")).to_have_text("Rows 1–100 / 2,400")
+    row.filter(has=page.get_by_text("orders.parquet", exact=True)).dblclick()
+    expect(tab).to_have_count(2)
+    # The tab's stylesheets, on the page after the panel's, keep its hidden
+    # buttons hidden.
+    expect(side.locator(".jse-tree-btn")).to_be_hidden()
     # After a page reload, the panel is open again, with its console (not a
     # tab of the main area), where it was.
     page.wait_for_timeout(3000)  # the workspace saved

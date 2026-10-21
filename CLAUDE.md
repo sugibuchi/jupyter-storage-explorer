@@ -253,8 +253,8 @@ whichever key a filesystem uses.
 
 **Layout.** `tree_view` (trait `_tree_view`: `"open"`, `"closed"`, set by the toolbar's tree button, or
 `"disabled"`, fixed at creation, `_tree_disabled`), `preview_panel` (`_preview_panel`: `"open"` starts with
-`_preview` `{"empty": true}`; `"disabled"`: no Preview button or rows, the `"preview"` notice ignored, items viewed in
-new tabs, `x.preview.view`) and `layout` (`_layout`: `"sidebar"`, class `jse-sidebar`: a bar of the storage chooser,
+`_preview` `{"empty": true}`; `"disabled"`: no Preview rows, the `"preview"` notice ignored, items viewed in new
+tabs, `x.preview.view`, and the Preview button is View, a tab of the same target, hidden without the extension) and `layout` (`_layout`: `"sidebar"`, class `jse-sidebar`: a bar of the storage chooser,
 bookmarks, Refresh and ⚙, whose menu has Unsafe mode first (the button red while on, `renderUnsafe`); a bar of Up and
 the path; the filter; the list without Modified; the pager below it). Otherwise the storage chooser sits above the tree
 while it shows, else first in the list's bar (`placeStorages`). `open_preview` is deprecated (DeprecationWarning).

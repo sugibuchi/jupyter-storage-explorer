@@ -2,6 +2,7 @@
 // the item's view (sections.js), or the data browser for data to query
 // (query.js). The Preview button at the right of the status bar opens it for
 // the selected item (or the folder shown); the button or Esc closes it.
+// Without the panel, the button is View, which opens a new tab instead.
 
 function createPreview(x) {
   const { model } = x;
@@ -24,10 +25,11 @@ function createPreview(x) {
     model.send({ type: "preview", path, format, ...(engine === undefined ? {} : { engine }) });
   }
 
-  // Without a preview panel (preview_panel="disabled"), the button is hidden
-  // and the menus offer no "Preview"; items are viewed in new tabs (view).
+  // Without a preview panel (preview_panel="disabled"), the menus offer no
+  // "Preview"; items are viewed in new tabs (view), and the button is View,
+  // opening a tab of what Preview would preview (hidden without the
+  // launcher's extension, which makes the tabs).
   const enabled = () => model.get("_preview_panel") !== "disabled";
-  button.hidden = !enabled();
 
   // Views the item where this explorer views items: in the panel, else in a
   // new tab (with the launcher's extension), else not at all.
@@ -124,7 +126,9 @@ function createPreview(x) {
   }
 
   function updateButton() {
-    if (linkCloses()) {
+    const tabs = !enabled();
+    button.hidden = tabs && !x.jupyterlab.canOpenViewTab();
+    if (!tabs && linkCloses()) {
       button.disabled = false;
       setButton("close", "Close preview");
       button.title = "Close the preview panel (Esc)";
@@ -132,20 +136,22 @@ function createPreview(x) {
     }
     const wanted = target();
     const selected = model.get("_selected").length;
-    const action = "Preview";
+    const action = tabs ? "View" : "Preview";
     button.disabled = wanted == null;
-    setButton("eye", wanted ? `${action} (${x.formatLabel(wanted.format)})` : "Preview");
+    setButton(tabs ? "open-in-new" : "eye", wanted ? `${action} (${x.formatLabel(wanted.format)})` : action);
     button.title = wanted
-      ? `${action}: ${selected === 0 ? "this folder" : "the selected item"} as ${x.formatLabel(wanted.format)}`
+      ? `${tabs ? "View in a new tab" : action}: ${selected === 0 ? "this folder" : "the selected item"} as ${x.formatLabel(wanted.format)}`
       : selected > 1
-        ? "Select one item to preview"
-        : "Nothing to preview here";
+        ? `Select one item to ${action.toLowerCase()}`
+        : `Nothing to ${action.toLowerCase()} here`;
   }
 
   button.addEventListener("click", () => {
-    if (linkCloses()) return close();
+    if (enabled() && linkCloses()) return close();
     const wanted = target();
-    if (wanted != null) open(wanted.path, wanted.format);
+    if (wanted == null) return;
+    if (enabled()) open(wanted.path, wanted.format);
+    else void x.jupyterlab.openViewTab(wanted.path, wanted.format);
   });
 
   return {
