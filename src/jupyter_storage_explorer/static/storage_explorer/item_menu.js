@@ -106,10 +106,12 @@ function createItemMenu(x) {
     const allowed = files || x.unsafe.on();
     const what = files ? "files" : "items";
     const withUrls = targets.every(hasUrl);
+    // The list's keys for its rows (shortcuts.js); the tree has none.
+    const key = (shortcut) => (withOpen ? shortcut : undefined);
 
     // Groups of items, joined by separators; groups left empty are dropped.
     const open = [];
-    if (withOpen && folder) open.push({ label: "Open", icon: "folder", action: () => x.navigate(folder.path) });
+    if (withOpen && folder) open.push({ label: "Open", icon: "folder", shortcut: key("Enter"), action: () => x.navigate(folder.path) });
     const viewAs = [];
     if (info) {
       // Only for what has a format: a file's is in the listing; whether a
@@ -154,9 +156,14 @@ function createItemMenu(x) {
     // "Copy" and "Cut" copy for "Paste" (and put the URLs on the clipboard).
     const clipboard = [];
     if (withUrls && allowed) {
-      clipboard.push({ label: count ? `Copy ${count}${what}` : "Copy", icon: "copy", action: () => x.clipboard.copyFiles(targets) });
+      clipboard.push({ label: count ? `Copy ${count}${what}` : "Copy", icon: "copy", shortcut: key("mod+c"), action: () => x.clipboard.copyFiles(targets) });
       if (!targets.some((t) => t.path === model.get("_root"))) {
-        clipboard.push({ label: count ? `Cut ${count}${what}` : "Cut", icon: "cut", action: () => x.clipboard.copyFiles(targets, true) });
+        clipboard.push({
+          label: count ? `Cut ${count}${what}` : "Cut",
+          icon: "cut",
+          shortcut: key("mod+x"),
+          action: () => x.clipboard.copyFiles(targets, true),
+        });
       }
     }
     // Locations are copied as URLs, and on a local disk as plain paths too:
@@ -197,10 +204,11 @@ function createItemMenu(x) {
       change.push({ label: "Edit", icon: "open-in-new", action: () => x.jupyterlab.open(single.path) });
     }
     if (single && allowed && single.path !== model.get("_root")) {
-      change.push({ label: "Rename", icon: "edit", action: () => x.operations.rename(single) });
+      change.push({ label: "Rename", icon: "edit", shortcut: key("F2"), action: () => x.operations.rename(single) });
     }
     if (folder) change.push({ label: "Create a folder", icon: "new-folder", action: () => x.operations.createFolder(folder.path) });
-    if (allowed) change.push({ label: count ? `Delete ${count}${what}` : "Delete", icon: "close", action: () => x.operations.remove(targets) });
+    if (allowed)
+      change.push({ label: count ? `Delete ${count}${what}` : "Delete", icon: "close", shortcut: key("Delete"), action: () => x.operations.remove(targets) });
 
     // Files only: downloading folders is intentionally not supported. The
     // kernel refuses files the explorer's policy does not let go there.

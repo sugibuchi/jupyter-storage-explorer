@@ -75,6 +75,8 @@ function render({ model, el }) {
   x.jupyterlab = createJupyterLab(x);
   x.properties = createProperties(x);
   x.about = createAbout(x);
+  // Keys in the file list: Ctrl+C, Ctrl+X, Ctrl+V, F2, Delete, Enter.
+  createShortcuts(x).attach(x.list.pane);
 
   // Lets Markdown previews load the vendored libraries through this widget's kernel.
   fetchVendor = async (name) => {

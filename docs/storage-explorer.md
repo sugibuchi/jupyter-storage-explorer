@@ -154,6 +154,20 @@ for a local folder) and Delete bookmark.
 
 Between storages and between explorers, also in other notebooks.
 
+### Keyboard shortcuts
+
+Click the list, then use the keys its right-click menu shows (⌘ instead of Ctrl on macOS):
+
+| Key            | Does                                                         |
+|----------------|--------------------------------------------------------------|
+| Ctrl+C, Ctrl+X | Copy, cut the selected items                                 |
+| Ctrl+V         | Paste into the folder shown                                  |
+| F2             | Rename the selected item                                     |
+| Delete         | Delete the selected items (⌘⌫ on macOS)                      |
+| Enter          | Open the selected item, as a double-click                    |
+
+Folders still need [Unsafe mode](#unsafe-operations).
+
 ### Drag and drop
 
 Drop files from JupyterLab's file browser or your computer to upload them; drag files onto a folder to move them, onto

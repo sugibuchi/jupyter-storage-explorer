@@ -450,6 +450,19 @@
   flex: 1;
 }
 
+/* A row's key in the file list (shortcuts.js), at its right. */
+.jse-menu-shortcut {
+  margin-left: 16px;
+  color: var(--jse-fg-muted);
+  font-size: 0.9em;
+}
+
+/* The list takes the focus for its keys (shortcuts.js), without an outline:
+   the selection shows where they act. */
+.jse-list-pane:focus {
+  outline: none;
+}
+
 .jse-menu-item:hover:not(.jse-disabled) {
   background: var(--jse-hover);
 }
