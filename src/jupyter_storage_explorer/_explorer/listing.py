@@ -17,7 +17,7 @@ from typing import Any
 # A name's parts for sorting: digits, letters, or any other single character.
 _PARTS = re.compile(r"(\d+)|([^\W\d_]+)|(.)", re.DOTALL)
 
-SORT_KEYS = ("name", "size", "mtime")
+SORT_KEYS = ("name", "size", "mtime", "ctime", "format")
 
 
 def name_key(name: str) -> list[tuple[int, int, str]]:
@@ -86,10 +86,12 @@ class Listing:
         asc: bool = True,
         page: int = 0,
         page_size: int = 100,
+        labels: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         """A page of the items whose names match ``text`` (a substring, or a
         regular expression with ``regex``; case is ignored), sorted by
-        ``sort`` with folders first.
+        ``sort`` with folders first; "format" by the formats' ``labels``
+        (name -> label, as the list shows them; else their names).
 
         Returns {"listing": the page's columns, as ``_make_listing``'s,
         "matching", "total", "page"}, the page number limited to those there
@@ -98,7 +100,7 @@ class Listing:
         """
         if sort not in SORT_KEYS:
             raise ValueError(f"cannot sort by {sort!r}")
-        order = self._order(sort, asc)
+        order = self._order(sort, asc, labels or {})
         out: dict[str, Any] = {}
         if text and regex:
             try:
@@ -122,18 +124,25 @@ class Listing:
             "page": page,
         }
 
-    def _order(self, sort: str, asc: bool) -> list[int]:
+    def _order(self, sort: str, asc: bool, labels: dict[str, str]) -> list[int]:
         """Indexes of the items in this order: folders first, each group sorted.
 
         Items comparing equal keep the listing's order, as the browser's
         (stable) sort does.
         """
         if (sort, asc) not in self._orders:
-            column = self.columns["names" if sort == "name" else f"{sort}s"]
             if sort == "name":
-                keys = [name_key(n) for n in column]
+                keys: list[Any] = [name_key(n) for n in self.columns["names"]]
+            elif sort == "format":
+                # By label, as names are; items without a format ("") first.
+                names = self.columns["formats"]
+                keys = [
+                    name_key(labels.get(names[f], names[f]))
+                    for f in self.columns["format"]
+                ]
             else:
                 # As in the browser, a missing value sorts as the smallest.
+                column = self.columns[f"{sort}s"]
                 keys = [-math.inf if v is None else v for v in column]
             is_dir = self.columns["is_dir"]
             groups = (

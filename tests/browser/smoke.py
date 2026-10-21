@@ -221,6 +221,28 @@ def tree_toggle(x: Explorer) -> None:
 
 
 @check
+def list_columns(x: Explorer) -> None:
+    # The settings menu's Columns shows and hides the list's columns but Name.
+    x.go("curated")
+    headers = x.el.locator(".jse-list th")
+    expect(headers).to_have_text(["Name", "Size", "Modified"])
+
+    def toggle(label: str) -> None:
+        x.el.locator(".jse-settings-btn").click()
+        x.menu_item("Columns").hover()
+        x.el.locator(".jse-submenu .jse-menu-item", has_text=label).click()
+
+    toggle("Format")
+    expect(headers).to_have_text(["Name", "Size", "Modified", "Format"])
+    expect(x.row("orders.parquet").locator(".jse-col-format")).to_have_text("Parquet")
+    toggle("Modified")
+    expect(headers).to_have_text(["Name", "Size", "Format"])
+    toggle("Modified")
+    toggle("Format")
+    expect(headers).to_have_text(["Name", "Size", "Modified"])
+
+
+@check
 def about(x: Explorer) -> None:
     # The settings menu: "About" in every explorer; "Edit configuration" in
     # the launcher's tabs only (launcher_settings).

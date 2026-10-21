@@ -6,10 +6,14 @@
 
 const PAGE_SIZE = 100;
 
+// Name, then those the settings menu's Columns can show (_columns, in this
+// order; the kernel's _LIST_COLUMNS).
 const LIST_COLUMNS = [
   { key: "name", label: "Name" },
   { key: "size", label: "Size" },
   { key: "mtime", label: "Modified" },
+  { key: "ctime", label: "Created" },
+  { key: "format", label: "Format" },
 ];
 
 // Names with numbers in order ("2" before "10"), ignoring case and accents.
@@ -83,10 +87,22 @@ function createList(x) {
     return [...entries].filter((e) => wanted.has(e.path));
   }
 
+  // The columns shown: Name, and those chosen (_columns).
+  function shownColumns() {
+    const chosen = model.get("_columns");
+    return LIST_COLUMNS.filter((col) => col.key === "name" || chosen.includes(col.key));
+  }
+
+  // A format's label, as the Format column shows it ("" for none).
+  const formatText = (entry) => (entry.format ? x.formatLabel(entry.format) : "");
+
   function compare(a, b) {
     const aDir = isFolder(a);
     if (aDir !== isFolder(b)) return aDir ? -1 : 1;
-    const r = sort.key === "name" ? nameOrder.compare(a.name, b.name) : (a[sort.key] ?? -Infinity) - (b[sort.key] ?? -Infinity);
+    let r;
+    if (sort.key === "name") r = nameOrder.compare(a.name, b.name);
+    else if (sort.key === "format") r = nameOrder.compare(formatText(a), formatText(b));
+    else r = (a[sort.key] ?? -Infinity) - (b[sort.key] ?? -Infinity);
     return sort.asc ? r : -r;
   }
 
@@ -250,7 +266,15 @@ function createList(x) {
   // The folder whose items the list last showed, to tell when another's arrive.
   let showsDir = null;
 
-  function row(entry, selected) {
+  // A cell of each column but Name.
+  const CELLS = {
+    size: (entry) => formatSize(entry.size),
+    mtime: (entry) => formatTime(entry.mtime),
+    ctime: (entry) => formatTime(entry.ctime),
+    format: formatText,
+  };
+
+  function row(entry, selected, columns) {
     const isDir = isFolder(entry);
     const formatIcon = model.get("_format_icons")[entry.format];
     const tr = h(
@@ -262,8 +286,7 @@ function createList(x) {
         h("span", { className: "jse-icon" }, fileIcon(entry.name, isDir, formatIcon, model.get("_file_icon_svgs")[formatIcon])),
         visible(entry.name),
       ),
-      h("td", { className: "jse-col-size", textContent: formatSize(entry.size) }),
-      h("td", { className: "jse-col-mtime", textContent: formatTime(entry.mtime) }),
+      ...columns.filter((col) => col.key !== "name").map((col) => h("td", { className: `jse-col-${col.key}`, textContent: CELLS[col.key](entry) })),
     );
     if (isDir) {
       tr.dataset.dropDir = entry.path; // files dropped here are uploaded or moved into this folder
@@ -310,8 +333,11 @@ function createList(x) {
       page = 0;
       filter.clear(false);
     }
+    const columns = shownColumns();
+    // A column hidden (the settings menu) no longer sorts the list: by name, then.
+    if (!columns.some((col) => col.key === sort.key)) Object.assign(sort, { key: "name", asc: true });
     headRow.replaceChildren(
-      ...LIST_COLUMNS.map((col) => {
+      ...columns.map((col) => {
         const th = h("th", { className: `jse-col-${col.key}`, textContent: col.label });
         if (sort.key === col.key) th.append(icon(sort.asc ? "caret-up" : "caret-down"));
         th.addEventListener("click", () => {
@@ -350,12 +376,12 @@ function createList(x) {
     prevPageBtn.disabled = page === 0;
     nextPageBtn.disabled = page >= pages - 1;
     const selected = new Set(model.get("_selected"));
-    const rows = shown.map((entry) => [row(entry, selected), entry]);
+    const rows = shown.map((entry) => [row(entry, selected, columns), entry]);
     tbody.replaceChildren(...rows.map(([tr]) => tr));
     setTooltips(rows);
     if (!shown.length && total) {
       const text = loading ? "Loading…" : "No items match the filter";
-      tbody.append(h("tr", {}, h("td", { className: "jse-placeholder", colSpan: LIST_COLUMNS.length, textContent: text })));
+      tbody.append(h("tr", {}, h("td", { className: "jse-placeholder", colSpan: columns.length, textContent: text })));
     }
     x.preview.updateButton();
     renderStatus();

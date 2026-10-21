@@ -1,11 +1,13 @@
 """The explorer's layout: the folder tree (tree_view), the preview panel
-(preview_panel) and the sidebar layout (layout)."""
+(preview_panel), the sidebar layout (layout) and the list's columns."""
 
 from __future__ import annotations
 
 import pytest
 import traitlets
 from explorers import make
+
+from jupyter_storage_explorer._explorer.states import ExplorerStates
 
 
 def test_defaults(memfs):
@@ -76,6 +78,27 @@ class TestPreviewDisabled:
         reply = explorer.request({"type": "view_tab", "rid": 1, "path": "/a.txt"})
         assert "error" not in reply
         assert reply["model_id"] in explorer._view_tabs
+
+
+class TestColumns:
+    def test_defaults_by_layout(self, memfs):
+        assert make("/", fs=memfs)._columns == ["size", "mtime"]
+        assert make("/", fs=memfs, layout="sidebar")._columns == ["size"]
+
+    def test_chosen_columns_remembered_by_layout(self, memfs):
+        states = ExplorerStates()
+        explorer = make("/", fs=memfs, states=states)
+        explorer.set_state({"_columns": ["format", "size", "owner"]})
+        # In the list's order, without columns it does not have.
+        assert explorer._columns == ["size", "format"]
+        assert make("/", fs=memfs, states=states)._columns == ["size", "format"]
+        sidebar = make("/", fs=memfs, states=states, layout="sidebar")
+        assert sidebar._columns == ["size"]
+
+    def test_none_at_all(self, memfs):
+        states = ExplorerStates()
+        make("/", fs=memfs, states=states).set_state({"_columns": []})
+        assert make("/", fs=memfs, states=states)._columns == []
 
 
 def test_sidebar_layout(memfs):

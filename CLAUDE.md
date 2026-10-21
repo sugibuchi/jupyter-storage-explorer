@@ -256,7 +256,10 @@ whichever key a filesystem uses.
 `_preview` `{"empty": true}`; `"disabled"`: no Preview rows, the `"preview"` notice ignored, items viewed in new
 tabs, `x.preview.view`, and the Preview button is View, a tab of the same target, hidden without the extension) and `layout` (`_layout`: `"sidebar"`, class `jse-sidebar`: a bar of the storage chooser,
 bookmarks, Refresh and ⚙, whose menu has Unsafe mode first (the button red while on, `renderUnsafe`); a bar of Up and
-the path; the filter; the list without Modified; the pager below it). Otherwise the storage chooser sits above the tree
+the path; the filter; the list; the pager below it). The list's columns besides Name (`_columns`: `"size"`, `"mtime"`,
+`"ctime"`, `"format"`, `_LIST_COLUMNS`; default Size and Modified, the sidebar's Size) are chosen in ⚙ → Columns and
+remembered by layout (`ExplorerStates.columns(layout)`, JSON "columns"); the kernel's `Listing` sorts by each, Format by
+label, as the browser does. Otherwise the storage chooser sits above the tree
 while it shows, else first in the list's bar (`placeStorages`). `open_preview` is deprecated (DeprecationWarning).
 
 **Unsafe mode.** Folder operations (move, copy or cut and paste, rename, delete) are offered only while the "Unsafe

@@ -1,5 +1,5 @@
-"""What explorers remember: bookmarks, the data browser's recent queries, and
-the engine chosen.
+"""What explorers remember: bookmarks, the data browser's recent queries, the
+engine chosen and the columns of the file list.
 
 One ``ExplorerStates`` is shared by the explorers in the kernel unless they are
 given their own (``StorageExplorer(states=...)``). With a path, it is kept in a
@@ -15,7 +15,8 @@ same file::
             {"url": "s3://bucket/sales/2024.parquet", "location": {...},
              "settings": {...}, "mode": "live"}
         ],
-        "engine": "polars"  # the key of the engine chosen, if any
+        "engine": "polars",  # the key of the engine chosen, if any
+        "columns": {"standard": ["size", "mtime"]}  # the list's, by layout
     }
 
 where "location" is ``Location.to_json()`` and "settings" are in the form of
@@ -48,7 +49,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
 
 # The keys this version reads and writes; others are kept as they are.
-_KNOWN_KEYS = ("bookmarks", "queries", "engine")
+_KNOWN_KEYS = ("bookmarks", "queries", "engine", "columns")
 
 
 @dataclass(frozen=True)
@@ -82,11 +83,11 @@ class Bookmark:
 
 
 class ExplorerStates:
-    """What explorers remember: bookmarks, how data was last queried, and the
-    engine chosen.
+    """What explorers remember: bookmarks, how data was last queried, the
+    engine chosen and the file list's columns.
 
-    ``StorageExplorer`` reads its bookmarks here, and the engine its user
-    chose last (``engine``); the data browser restores the filters, sort
+    ``StorageExplorer`` reads its bookmarks here, the engine its user chose
+    last (``engine``) and the columns its list shows (``columns``); the data browser restores the filters, sort
     order, hidden columns, widths and mode a dataset was last shown with. Only the ``max_queries`` datasets
     queried last are remembered.
 
@@ -131,6 +132,8 @@ class ExplorerStates:
         self._queries: list[dict[str, Any]] = []
         # The key of the engine chosen last, if any.
         self._engine: str | None = None
+        # The file list's columns chosen, by layout ("standard", "sidebar").
+        self._columns: dict[str, list[str]] = {}
         # Keys of the file this version does not know, written back as they are.
         self._others: dict[str, Any] = {}
         self.reload()
@@ -166,6 +169,12 @@ class ExplorerStates:
         queries = (_read_query(q) for q in _list(data.get("queries")))
         self._queries = [q for q in queries if q is not None][: self.max_queries]
         self._engine = _text(data.get("engine"))
+        columns = data.get("columns")
+        self._columns = {
+            layout: [c for c in names if isinstance(c, str)]
+            for layout, names in (columns.items() if isinstance(columns, dict) else ())
+            if isinstance(layout, str) and isinstance(names, list)
+        }
         self._others = {k: v for k, v in data.items() if k not in _KNOWN_KEYS}
 
     @contextlib.contextmanager
@@ -193,6 +202,7 @@ class ExplorerStates:
             "bookmarks": [_bookmark_entry(b) for b in self._bookmarks],
             "queries": self._queries,
             **({"engine": self._engine} if self._engine is not None else {}),
+            **({"columns": self._columns} if self._columns else {}),
         }
         self.path.parent.mkdir(parents=True, exist_ok=True)
         fd, temp = tempfile.mkstemp(
@@ -287,6 +297,40 @@ class ExplorerStates:
         """
         with self._changing():
             self._engine = key
+
+    # --- The file list's columns ---
+
+    def columns(self, layout: str) -> list[str] | None:
+        """The columns the user chose last for the file list of explorers of
+        ``layout``, besides Name.
+
+        Parameters
+        ----------
+        layout : str
+            The explorers' layout, "standard" or "sidebar": each remembers
+            its own, as the side panel has less room.
+
+        Returns
+        -------
+        list of str or None
+            Column keys, e.g. ``["size", "mtime"]``; None if none were chosen.
+        """
+        names = self._columns.get(layout)
+        return None if names is None else list(names)
+
+    def remember_columns(self, layout: str, columns: list[str]) -> None:
+        """Remember the columns chosen for the file list of explorers of
+        ``layout`` (and write the file, if any).
+
+        Parameters
+        ----------
+        layout : str
+            "standard" or "sidebar".
+        columns : list of str
+            Column keys, e.g. ``["size", "mtime"]``.
+        """
+        with self._changing():
+            self._columns[layout] = list(columns)
 
     # --- Queries ---
 

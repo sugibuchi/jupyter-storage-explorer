@@ -204,6 +204,7 @@ function render({ model, el }) {
     "change:_filesystem_names": x.tree.renderStorages,
     "change:_listing": x.list.render,
     "change:_selected": x.list.render,
+    "change:_columns": x.list.render,
     "change:_error": x.list.renderStatus,
     "change:_height": applyHeight,
     "change:_tree_view": onTreeView,

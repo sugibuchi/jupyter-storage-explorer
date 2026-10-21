@@ -80,12 +80,12 @@ class FoldersMixin:
 
         One list per column, an item per entry: "names", "is_dir" (0 or 1),
         "sizes" (None for folders), "mtimes" and "ctimes" (modification and
-        creation times, for tooltips: whole seconds, or None), and
+        creation times, for the columns and tooltips: whole seconds, or None), and
         "format", an index into "formats", whose first name is "" (none; all
         folders). Paths are not sent: an entry's is "dir" joined with its name,
         unless "paths" (otherwise None) gives them all, for a filesystem that
         names them differently. Locations are not sent either, as most are never
-        used: the frontend asks for them ("locations") when copying; "no_url`r
+        used: the frontend asks for them ("locations") when copying; "no_url"
         lists the indexes of the entries without one (see _location_of).
         """
         listing: dict[str, Any] = {
@@ -164,6 +164,7 @@ class FoldersMixin:
             asc=content.get("asc", True),
             page=int(content.get("page", 0)),
             page_size=int(content.get("page_size", 100)),
+            labels=self._format_labels,
         )
 
     def _listed_paths(self) -> list[str]:
