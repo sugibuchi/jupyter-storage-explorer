@@ -206,8 +206,7 @@ tables side by side.
 
 ### Engines
 
-The engine is the library previews read data with, when installed: **Polars** (the default), **pandas** (the first
-100,000 rows, as it reads files whole) or **PySpark** (in the kernel's Spark session). Engines read storage with their
+The engine is the library previews read data with, when installed: **Polars**, **pandas** or **PySpark**. Engines read storage with their
 own settings, e.g. credentials in the environment, not the explorer's: see [Format options](#format-options). Text,
 Markdown, JSON and images are shown by the explorer itself. When the engine chosen cannot view an item, use **Preview
 as**.
