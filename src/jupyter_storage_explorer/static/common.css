@@ -97,6 +97,13 @@
   color: var(--jse-icon);
 }
 
+/* Hidden buttons stay hidden whatever sets their display: this file is on
+   the page once per kind of widget, so a later copy's rules win over a
+   widget's own of the same weight. */
+.jse-btn.jse-btn[hidden] {
+  display: none;
+}
+
 /* Buttons among labels (the pagers, the data browser's toolbar): filled, as
    JupyterLab's plain buttons, so that they stand out from the text; icons in
    the text's colour. After .jse-icon-btn, which they override. */

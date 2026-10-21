@@ -143,7 +143,7 @@ class TestOpenPreview:
         explorer = make(filesystems={"disk": str(tmp_path), "mem": memfs})
         assert explorer._preview == {}
         explorer = make(
-            filesystems={"disk": str(tmp_path), "mem": memfs}, open_preview=True
+            filesystems={"disk": str(tmp_path), "mem": memfs}, preview_panel="open"
         )
         assert explorer._preview == {"empty": True}
         explorer._filesystem = "mem"

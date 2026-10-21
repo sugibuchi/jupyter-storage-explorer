@@ -102,7 +102,12 @@ plugin alone (`all` and `all-supports`: every plugin so); the launcher's `pyproj
     whose session is lost (server restart) or whose kernel changes or restarts is replaced by a new tab. Each tab's
     view (storage, folder per storage) is reported by the explorer as a bubbling `"jupyter-storage-explorer:view"` DOM
     event, kept in JupyterLab's state database (saved with the workspace) and passed back as `launch(view=...)`
-    (`StorageExplorer._restore_view`).
+    (`StorageExplorer._restore_view`). The side panel (`sidePanel.ts`, `ExplorerSidePanel`, in the left side bar, and
+    the command "Show Storage Explorer in the Side Bar") holds such a console too, of its own session name, made by
+    `console:create` (for ipywidgets' widget manager) when the panel is first shown, then moved into the panel
+    (`panel.show()`: it was a hidden tab); restored consoles of that name are moved back in (`adopt`, after
+    `app.restored`); an `ExplorerTab` with `side` runs `launch(sidebar=True)` (`SIDEBAR`: `layout="sidebar"`, no tree,
+    no preview panel, over `parameters()`) and replaces itself through the panel.
   - `download.ts`: files dragged from any explorer onto JupyterLab's file browser are downloaded to the Jupyter server.
   - `files.ts`, "Open in JupyterLab": a JupyterLab drive (`StorageExplorer:<storage>/<path>`, not shown in the file
     browser) serving only the files explorers opened on the page, read and saved through the explorer's kernel
@@ -115,7 +120,8 @@ plugin alone (`all` and `all-supports`: every plugin so); the launcher's `pyproj
     else a `ViewTab` (`_view_tab.py`: the view's section, rendered by `static/view_tab.js` with the shared
     `sections.js`), and keeps it in `_view_tabs` until the tab closes (`"view_tab"`, `"view_tab_closed"`); the tab
     renders any widget by model id (`openWidget`), with the output renderers of the notebook or console holding the
-    explorer (ipywidgets ties widgets to that kernel connection), and closes with it or a kernel restart.
+    explorer (ipywidgets ties widgets to that kernel connection; the side panel's: its `explorerConsole`), and closes
+    with it or a kernel restart.
 
 ## Architecture
 
@@ -244,6 +250,14 @@ recursive `find`; with it, they list folder by folder (`_common.measure_by_folde
 time), reporting files found, leaving unlistable folders in `errors` (not `fs.walk`, whose `on_error` misses
 subfolders) and returning what was found, `complete` False, on a cancel. `_infos.mtime` gives the modification time
 whichever key a filesystem uses.
+
+**Layout.** `tree_view` (trait `_tree_view`: `"open"`, `"closed"`, set by the toolbar's tree button, or
+`"disabled"`, fixed at creation, `_tree_disabled`), `preview_panel` (`_preview_panel`: `"open"` starts with
+`_preview` `{"empty": true}`; `"disabled"`: no Preview rows, the `"preview"` notice ignored, items viewed in new
+tabs, `x.preview.view`, and the Preview button is View, a tab of the same target, hidden without the extension) and `layout` (`_layout`: `"sidebar"`, class `jse-sidebar`: a bar of the storage chooser,
+bookmarks, Refresh and ⚙, whose menu has Unsafe mode first (the button red while on, `renderUnsafe`); a bar of Up and
+the path; the filter; the list without Modified; the pager below it). Otherwise the storage chooser sits above the tree
+while it shows, else first in the list's bar (`placeStorages`). `open_preview` is deprecated (DeprecationWarning).
 
 **Unsafe mode.** Folder operations (move, copy or cut and paste, rename, delete) are offered only while the "Unsafe
 mode" slider in the toolbar is on (trait `_unsafe_mode`). In the frontend, every operation calls `x.unsafe.take()` as

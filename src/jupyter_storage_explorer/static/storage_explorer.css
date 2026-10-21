@@ -25,6 +25,85 @@
   display: none;
 }
 
+/* In the list's bar while the tree is hidden: before the filter, which
+   keeps most of the room. */
+.jse-list-pane .jse-fs-select {
+  flex: none;
+  max-width: 40%;
+}
+
+/* The tree's button, first in the toolbar: highlighted while the tree shows. */
+.jse-tree-btn.jse-on {
+  color: var(--jse-accent);
+}
+
+/* The sidebar layout (layout="sidebar"): the storage chooser takes the
+   toolbar's room left by its buttons; Up and the path are on a bar of their
+   own below; the pager below the list. */
+.jse-storage-slot {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  margin-right: 4px;
+}
+
+.jse-path-bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 24px;
+  padding: 2px 6px;
+  border-bottom: 1px solid var(--jse-border);
+  background: var(--jse-bar-bg);
+}
+
+.jse-path-bar .jse-path {
+  margin-left: 2px;
+}
+
+.jse-sidebar .jse-list-pane > .jse-pager {
+  justify-content: center;
+  margin-left: 0;
+  padding: 2px 6px;
+  border-top: 1px solid var(--jse-border);
+  background: var(--jse-bar-bg);
+}
+
+/* Unsafe mode on, from the settings menu (the sidebar layout has no switch). */
+.jse-settings-btn.jse-unsafe-on {
+  color: var(--jse-error);
+}
+
+/* Narrow: the list shows the name and size only (the tooltip has the times),
+   and the status bar has two rows: the messages, the whole width, then the
+   engine (left) and View (right), as wide as their labels. */
+.jse-sidebar .jse-list .jse-col-mtime {
+  display: none;
+}
+
+.jse-sidebar .jse-status-bar {
+  flex-wrap: wrap;
+}
+
+.jse-sidebar .jse-status-bar .jse-status {
+  flex: 1 0 100%;
+  border-bottom: 1px solid var(--jse-border);
+}
+
+.jse-sidebar .jse-status-bar > .jse-engine-btn {
+  width: auto;
+  margin-left: 0;
+  border-left: none;
+}
+
+.jse-sidebar .jse-status-bar > .jse-preview-btn {
+  flex: 0 1 auto;
+  width: auto;
+  min-width: 0;
+  margin-left: auto;
+  border-left: none;
+}
+
 /* Right to left, so a long path is cut at its start (…/folder shown); the
    crumbs themselves are left to right (.jse-crumbs). */
 .jse-path {
@@ -77,6 +156,11 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
+}
+
+/* The tree closed (its button) or disabled (tree_view). */
+.jse-pane[hidden] {
+  display: none;
 }
 
 .jse-tree-pane {
@@ -429,7 +513,8 @@
   color: var(--jse-fg-muted);
 }
 
-.jse-status-bar > .jse-engine-btn[hidden] {
+.jse-status-bar > .jse-engine-btn[hidden],
+.jse-status-bar > .jse-preview-btn[hidden] {
   display: none;
 }
 

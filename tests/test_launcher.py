@@ -252,6 +252,32 @@ class TestMerging:
         assert explorer._filesystem_names == ["Lake"]
         assert explorer._height == "fill"
 
+    def test_the_side_panels_layout_over_the_parameters(self, tmp_path):
+        path = layer(
+            tmp_path,
+            "user",
+            """
+            def parameters():
+                return {"tree_view": "closed", "height": "500px", "max_upload_bytes": 5}
+            """,
+        )
+        settings = load_settings([path])
+        _, kwargs = settings.explorer_arguments(sidebar=True)
+        assert kwargs == {
+            "states": launcher.states_file(),
+            "max_upload_bytes": 5,
+            **launcher.SIDEBAR,
+        }
+        # The tab's keeps the parameters.
+        assert settings.explorer_arguments()[1]["tree_view"] == "closed"
+        explorer = launcher._create_explorer(settings, None, sidebar=True)
+        assert (explorer._layout, explorer._tree_view, explorer._preview_panel) == (
+            "sidebar",
+            "disabled",
+            "disabled",
+        )
+        assert explorer._settings_path  # "Edit configuration" there too
+
 
 class TestFinal:
     def test_final_settings_cannot_be_changed(self, tmp_path):

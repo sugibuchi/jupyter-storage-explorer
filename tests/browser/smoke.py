@@ -202,6 +202,25 @@ def browse(x: Explorer) -> None:
 
 
 @check
+def tree_toggle(x: Explorer) -> None:
+    # The tree's button, first in the toolbar, hides the tree; the storage
+    # chooser then comes first in the list's bar.
+    button = x.el.locator(".jse-toolbar .jse-tree-btn")
+    expect(button).to_have_class(ON)
+    button.click()
+    expect(x.el.locator(".jse-tree-pane")).to_be_hidden()
+    expect(button).not_to_have_class(ON)
+    select = x.el.locator(".jse-list-pane .jse-pane-bar .jse-fs-select")
+    expect(select).to_be_visible()
+    select.select_option("Scratch")
+    expect(x.el.locator(".jse-crumb").first).to_have_text("/scratch")
+    button.click()
+    expect(x.el.locator(".jse-tree-pane .jse-fs-select")).to_have_value("Scratch")
+    expect(x.el.locator(".jse-tree .jse-node").first).to_contain_text("scratch")
+    x.storage("Sales lake")
+
+
+@check
 def about(x: Explorer) -> None:
     # The settings menu: "About" in every explorer; "Edit configuration" in
     # the launcher's tabs only (launcher_settings).
@@ -978,7 +997,7 @@ import ipywidgets
 from jupyter_storage_explorer import StorageExplorer
 
 explorer = StorageExplorer(
-    filesystems=demo_data.filesystems(), supports=demo_data.supports(), open_preview=True
+    filesystems=demo_data.filesystems(), supports=demo_data.supports(), preview_panel="open"
 )
 selected = ipywidgets.Label("-").add_class("smoke-selected")
 rows = ipywidgets.Label("-").add_class("smoke-rows")
@@ -1111,10 +1130,12 @@ def launcher_settings(lab: Lab, page: Page) -> None:
         page.keyboard.press("Control+End")
         # Not typed: the editor would indent and close brackets itself.
         page.keyboard.insert_text(
-            "\n\ndef parameters():\n    return {'open_preview': True}\n"
+            "\n\ndef parameters():\n    return {'preview_panel': 'open'}\n"
         )
         page.keyboard.press("Control+s")
-        wait_for(lambda: "open_preview" in path.read_text(encoding="utf-8"), "the save")
+        wait_for(
+            lambda: "preview_panel" in path.read_text(encoding="utf-8"), "the save"
+        )
         tab = open_launcher_tab(lab, page)  # the folder it opens on, as no storages
         expect(tab.locator(".jse-preview-panel")).to_contain_text(
             "Click a file to preview it"
@@ -1149,7 +1170,9 @@ def drag_between_tabs(lab: Lab, page: Page) -> None:
     expect(page.locator(".jse-launcher-panel")).to_have_count(2, timeout=30_000)
     # Side by side: the second tab dragged to the right edge of the main area
     # (JupyterLab 4.0's tab menu has no "Split Tab").
-    page.locator(".lm-TabBar-tab", has_text="Storage Explorer").last.hover()
+    page.locator(
+        "#jp-main-dock-panel .lm-TabBar-tab", has_text="Storage Explorer"
+    ).last.hover()
     dock = page.locator("#jp-main-dock-panel").bounding_box()
     assert dock is not None
     page.mouse.down()
@@ -1194,6 +1217,78 @@ def launcher_tab_restart(lab: Lab, page: Page) -> None:
     tab = launcher_explorer(page, f'.jse-launcher-panel:not([id="{old}"])')
     expect(tab.locator(".jse-crumb").last).to_have_text("pipelines")
     expect(page.locator(".jse-launcher-panel")).to_have_count(1)
+
+
+def open_side_panel(page: Page, *, click: bool = True) -> Locator:
+    """The side panel, opened from its side bar icon (else, as restored after
+    a reload), once its explorer lists the lake: its explorer."""
+    panel = page.locator(".jse-side-panel")
+    if click:
+        page.locator(".jp-SideBar .lm-TabBar-tab[title='Storage Explorer']").click()
+    explorer = panel.locator(".jse-browser")
+    expect(explorer.locator(".jse-list tbody tr").first).to_be_visible(timeout=90_000)
+    return explorer
+
+
+@lab_check
+def side_panel(lab: Lab, page: Page) -> None:
+    # The narrow explorer in the left side bar, of a kernel of its own: no
+    # tree, no preview panel (items open in new tabs); the storage chooser in
+    # the toolbar, Unsafe mode in the settings menu, Up and the path below;
+    # the engine in the status bar.
+    page.goto(lab.url())
+    side = open_side_panel(page)
+    expect(side).to_have_class(re.compile(r"\bjse-sidebar\b"))
+    expect(side.locator(".jse-tree-pane")).to_be_hidden()
+    expect(side.locator(".jse-tree-btn")).to_be_hidden()
+    view = side.locator(".jse-status-bar .jse-preview-btn")  # View, without the panel
+    expect(view).to_have_text("View")
+    expect(view).to_be_disabled()
+    expect(side.locator(".jse-unsafe")).to_have_count(0)
+    expect(side.locator(".jse-engine-btn")).to_have_text("Polars")
+    expect(side.locator(".jse-toolbar .jse-fs-select")).to_be_visible()
+    expect(
+        side.locator(".jse-path-bar button[title='Parent directory']")
+    ).to_be_visible()
+    expect(side.locator(".jse-path-bar .jse-crumb").first).to_have_text("/sales-lake")
+    settings = side.locator(".jse-settings-btn")
+    menu = side.locator(".jse-menu:not(.jse-submenu) > .jse-menu-item:visible")
+    settings.click()
+    expect(menu.first).to_have_text("Unsafe mode: off")
+    menu.first.click()
+    expect(settings).to_have_class(re.compile(r"\bjse-unsafe-on\b"))
+    settings.click()
+    expect(menu.first).to_have_text("Unsafe mode: on")
+    menu.first.click()
+    expect(settings).not_to_have_class(re.compile(r"\bjse-unsafe-on\b"))
+    row = side.locator(".jse-list tbody tr")
+    row.filter(has=page.get_by_text("curated", exact=True)).dblclick()
+    expect(side.locator(".jse-crumb").last).to_have_text("curated")
+    row.filter(has=page.get_by_text("orders.parquet", exact=True)).click(button="right")
+    expect(menu.filter(has_text="View Parquet in new tab")).to_be_visible()
+    expect(menu.filter(has_text="Preview")).to_have_count(0)
+    side.press("Escape")
+    page.keyboard.press("Escape")
+    # View, in the status bar, views the selected item in a new tab; so does a
+    # double-click.
+    row.filter(has=page.get_by_text("orders.parquet", exact=True)).click()
+    expect(view).to_have_text("View (Parquet)")
+    view.click()
+    tab = page.locator(".jse-query-tab")
+    expect(tab.locator(".jse-query-status")).to_have_text("Rows 1–100 / 2,400")
+    row.filter(has=page.get_by_text("orders.parquet", exact=True)).dblclick()
+    expect(tab).to_have_count(2)
+    # The tab's stylesheets, on the page after the panel's, keep its hidden
+    # buttons hidden.
+    expect(side.locator(".jse-tree-btn")).to_be_hidden()
+    # After a page reload, the panel is open again, with its console (not a
+    # tab of the main area), where it was.
+    page.wait_for_timeout(3000)  # the workspace saved
+    page.goto(re.sub(r"([?&])reset&?", r"\1", page.url))
+    side = open_side_panel(page, click=False)
+    expect(side.locator(".jse-crumb").last).to_have_text("curated")
+    expect(page.locator(".jse-launcher-panel")).to_have_count(1)
+    expect(page.locator(".jse-side-panel .jse-launcher-panel")).to_have_count(1)
 
 
 # --- Helpers ---

@@ -1,13 +1,46 @@
-// The toolbar: bookmarks, Up, Refresh, the folder's path, Unsafe mode, and
-// the settings menu: "Edit configuration" in the launcher's tabs, "About".
+// The toolbar: the tree's button, bookmarks, Up, Refresh, the folder's path,
+// Unsafe mode, and the settings menu: "Edit configuration" in the launcher's
+// tabs, "About". The sidebar layout has two narrower bars: the storage
+// chooser (slot), bookmarks, Refresh and the settings menu, whose first item
+// is then Unsafe mode; below (pathBar), Up and the folder's path.
 
 function createToolbar(x) {
   const { model } = x;
+  const sidebar = model.get("_layout") === "sidebar";
+  // Shows or hides the folder tree (_tree_view); none without a tree.
+  const treeBtn = iconButton("tree", "Folder tree", "jse-tree-btn");
   const upBtn = iconButton("up", "Parent directory");
   const refreshBtn = iconButton("refresh", "Refresh");
   const pathEl = h("div", { className: "jse-path" });
   const settingsBtn = iconButton("settings", "Settings", "jse-settings-btn");
-  const el = h("div", { className: "jse-toolbar" }, x.bookmarks.button, upBtn, refreshBtn, pathEl, x.unsafe.el, settingsBtn);
+  // Where the storage chooser goes in the sidebar layout (see placeStorages
+  // in storage_explorer.js); it takes the bar's room left by the buttons.
+  const slot = h("div", { className: "jse-storage-slot" });
+  const el = sidebar
+    ? h("div", { className: "jse-toolbar" }, treeBtn, slot, x.bookmarks.button, refreshBtn, settingsBtn)
+    : h("div", { className: "jse-toolbar" }, treeBtn, x.bookmarks.button, upBtn, refreshBtn, pathEl, x.unsafe.el, settingsBtn);
+  const pathBar = sidebar ? h("div", { className: "jse-path-bar" }, upBtn, pathEl) : null;
+
+  // In the sidebar layout, Unsafe mode is in the settings menu: while it is
+  // on, the settings button is red, as the switch would be.
+  function renderUnsafe() {
+    const on = sidebar && x.unsafe.on();
+    settingsBtn.classList.toggle("jse-unsafe-on", on);
+    settingsBtn.title = on ? "Settings (Unsafe mode is on)" : "Settings";
+  }
+
+  function renderTreeButton() {
+    const state = model.get("_tree_view");
+    treeBtn.hidden = state === "disabled";
+    treeBtn.classList.toggle("jse-on", state === "open");
+    treeBtn.title = state === "open" ? "Hide the folder tree" : "Show the folder tree";
+    treeBtn.ariaLabel = treeBtn.title;
+  }
+
+  treeBtn.addEventListener("click", () => {
+    model.set("_tree_view", model.get("_tree_view") === "open" ? "closed" : "open");
+    model.save_changes();
+  });
 
   // The current folder's path, a crumb per folder from the root.
   function renderPath() {
@@ -36,6 +69,18 @@ function createToolbar(x) {
   // launcher's extension.
   function showSettingsMenu() {
     const items = [];
+    if (sidebar) {
+      const on = x.unsafe.on();
+      items.push(
+        {
+          label: on ? "Unsafe mode: on" : "Unsafe mode: off",
+          icon: on ? "check" : null,
+          title: x.unsafe.el.title,
+          action: () => x.unsafe.set(!on),
+        },
+        "-",
+      );
+    }
     const path = model.get("_settings_path");
     if (path && x.jupyterlab.canOpenSettings()) {
       items.push({
@@ -54,7 +99,7 @@ function createToolbar(x) {
     else showSettingsMenu();
   });
 
-  return { el, renderPath };
+  return { el, pathBar, slot, renderPath, renderTreeButton, renderUnsafe };
 }
 
 // "Unsafe mode": while on, risky operations are offered (today: moving,
@@ -82,14 +127,18 @@ function createUnsafe(x) {
 
   const on = () => model.get("_unsafe_mode");
 
-  input.addEventListener("change", () => {
-    model.set("_unsafe_mode", input.checked);
+  // Also from the settings menu, in the sidebar layout (no switch there).
+  function set(value) {
+    model.set("_unsafe_mode", value);
     model.save_changes();
-  });
+  }
+
+  input.addEventListener("change", () => set(input.checked));
 
   return {
     el,
     on,
+    set,
     render() {
       input.checked = on();
       el.classList.toggle("jse-on", on());

@@ -61,7 +61,7 @@ def filesystems():
 # def parameters():
 #     return {
 #         "engine_preference": ["pandas", "polars"],
-#         "open_preview": True,
+#         "preview_panel": "open",
 #         "max_upload_bytes": 100 * 1024 * 1024,
 #     }
 

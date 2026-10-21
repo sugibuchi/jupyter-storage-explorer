@@ -73,9 +73,9 @@ def make(lab: Lab) -> None:
         page.keyboard.press("Control+Shift+L")
         page.wait_for_selector(".jp-LauncherCard:visible", timeout=30000)
         bottom = open_tab(page, film)
-        page.locator(".lm-TabBar-tab", has_text="Storage Explorer").last.click(
-            button="right"
-        )
+        page.locator(
+            "#jp-main-dock-panel .lm-TabBar-tab", has_text="Storage Explorer"
+        ).last.click(button="right")
         page.locator(".lm-Menu-itemLabel", has_text="Split Tab").first.hover()
         page.get_by_role("menuitem", name="Down", exact=True).click()
         page.mouse.move(WIDTH / 2, HEIGHT / 2)
