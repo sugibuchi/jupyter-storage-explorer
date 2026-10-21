@@ -262,3 +262,116 @@
 .jse-query-cols label[hidden] {
   display: none;
 }
+
+/* A table set (createTableSetPanel): its tables in a tree beside the data
+   browser, or on tabs below it, as a spreadsheet's sheets. */
+.jse-table-set {
+  display: flex;
+  flex: 1 1 0;
+  min-height: 0;
+  gap: 6px;
+}
+
+.jse-table-set-by-tab {
+  flex-direction: column;
+}
+
+.jse-table-set-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+}
+
+.jse-table-set-tree {
+  flex: 0 0 auto;
+  width: 14em;
+  max-width: 40%;
+  overflow: auto;
+  border-right: 1px solid var(--jse-border);
+  resize: horizontal;
+}
+
+.jse-table-set-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 6px 2px 4px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.jse-table-set-row:hover {
+  background: var(--jse-hover);
+}
+
+.jse-table-set-row.jse-active {
+  background: var(--jse-selected-bg);
+  color: var(--jse-selected-fg);
+}
+
+.jse-table-set-twisty,
+.jse-table-set-icon {
+  display: inline-flex;
+  flex: none;
+  width: 16px;
+  color: var(--jse-icon);
+}
+
+.jse-table-set-icon {
+  margin-right: 4px;
+}
+
+.jse-table-set-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.jse-table-set-row.jse-active .jse-table-set-twisty {
+  color: inherit;
+}
+
+/* Icons in the chosen row, white as in the explorer's tree. */
+.jse-table-set-row.jse-active .jse-file-svg .jp-icon-selectable[fill] {
+  fill: var(--jse-selected-fg);
+}
+
+.jse-table-set-row.jse-active .jse-file-svg .jp-icon-selectable-inverse[fill] {
+  fill: var(--jse-selected-bg);
+}
+
+/* Tabs: one line, scrolling sideways when there are many. */
+.jse-table-set-tabs {
+  display: flex;
+  flex: none;
+  gap: 2px;
+  overflow-x: auto;
+  border-top: 1px solid var(--jse-border);
+}
+
+.jse-table-set-tabs .jse-table-set-tab {
+  flex: none;
+  max-width: 16em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 2px 12px;
+  border: 1px solid var(--jse-border);
+  border-top: none;
+  border-radius: 0 0 4px 4px;
+  background: var(--jse-bg-alt);
+  color: var(--jse-fg-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.jse-table-set-tabs .jse-table-set-tab:hover {
+  color: var(--jse-fg);
+}
+
+.jse-table-set-tabs .jse-table-set-tab.jse-active {
+  background: var(--jse-bg);
+  color: var(--jse-accent);
+  font-weight: 600;
+}

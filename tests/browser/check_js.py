@@ -30,6 +30,7 @@ RULES = {
     "storage_explorer": ["no-undef: error", "no-unused-vars: [error, {args: none}]"],
     "data_explorer": ["no-undef: error"],
     "view_tab": ["no-undef: error"],
+    "table_set_tab": ["no-undef: error"],
 }
 
 

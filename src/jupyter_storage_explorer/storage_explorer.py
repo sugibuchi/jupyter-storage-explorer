@@ -57,6 +57,8 @@ if TYPE_CHECKING:
     from fsspec import AbstractFileSystem
 
     from jupyter_storage_explorer._query.data_query import DataQuery
+    from jupyter_storage_explorer._query.table_set import TableSet
+    from jupyter_storage_explorer._table_set_tab import TableSetTab
     from jupyter_storage_explorer._view_tab import ViewTab
     from jupyter_storage_explorer.data_explorer import DataExplorer
     from jupyter_storage_explorer.filesystems.mapper import FileSystemMapper
@@ -69,7 +71,14 @@ if TYPE_CHECKING:
 
 # The data browser's requests, after which query_result() may have changed.
 _QUERY_REQUESTS = frozenset(
-    {"query_rows", "query_check", "query_save", "query_reload", "query_mode"}
+    {
+        "query_rows",
+        "query_check",
+        "query_save",
+        "query_reload",
+        "query_mode",
+        "table_set_open",
+    }
 )
 
 # The values of tree_view and preview_panel, and of layout.
@@ -478,12 +487,14 @@ class StorageExplorer(
         self._listing_version = 0
         # Data browser: path -> the data being queried.
         self._queries: dict[str, DataQuery] = {}
+        # A table set previewed (TableSetView): path -> its tables.
+        self._table_sets: dict[str, TableSet] = {}
         # The view the preview panel shows, if not the data browser's (whose
         # query owns its view): closed when the panel shows something else.
         self._preview_view: View | None = None
         # Views in tabs of their own ("view_tab"): model id -> widget,
         # kept here while the tab is open.
-        self._view_tabs: dict[str, DataExplorer | ViewTab] = {}
+        self._view_tabs: dict[str, DataExplorer | TableSetTab | ViewTab] = {}
         # The launcher's settings file and the function creating it (see
         # _offer_settings); None in notebooks.
         self._settings_file: tuple[str, Callable[[], Any]] | None = None
@@ -788,7 +799,9 @@ class StorageExplorer(
         its ``DataExplorer`` gives its own. Execute it while the panel shows
         the data: some supports release what their data reads from (e.g. a
         database connection) once the panel shows something else
-        (``View.close``).
+        (``View.close``). For an item of several tables (a support's
+        ``TableSetView``, e.g. a database's), the table chosen in its tree or
+        on its tabs, which ``query_table`` names.
 
         Parameters
         ----------
@@ -806,6 +819,7 @@ class StorageExplorer(
         See Also
         --------
         on_query_change : A function called when this changes.
+        query_table : Which table of several this is.
         DataExplorer.result : The same for a dataframe.
 
         Examples
@@ -817,13 +831,43 @@ class StorageExplorer(
         data = self._shown_query()
         return None if data is None else data.result(all_columns=all_columns)
 
+    @property
+    def query_table(self) -> str | None:
+        """Which table the preview panel shows of an item of several tables
+        (a support's ``TableSetView``, e.g. a database's or a workbook's):
+        the one chosen in its tree or on its tabs.
+
+        Returns
+        -------
+        str or None
+            The table's ``id`` (``Leaf.id``, e.g. "sales.orders"), also when
+            it could not be read (``query_result()`` is then None); None when
+            the panel shows no such item.
+
+        See Also
+        --------
+        query_result : The table's data, with the data browser's settings.
+
+        Examples
+        --------
+        >>> def show(explorer):
+        ...     print(explorer.query_table, explorer.query_result())
+        >>> explorer.on_query_change(show)  # also called when another table is chosen
+        """
+        preview = self._preview
+        if preview.get("loading") or not preview.get("table_set"):
+            return None
+        tables = self._table_sets.get(preview.get("path"))
+        return tables.table if tables is not None else None
+
     def on_query_change(
         self, callback: Callable[[StorageExplorer], Any], *, remove: bool = False
     ) -> None:
         """Call a function whenever ``query_result()`` changes in the widget.
 
         That is when the preview panel opens another table in the data
-        browser, or stops showing one (closed, or another kind of file
+        browser (also another of an item's several tables: ``query_table``),
+        or stops showing one (closed, or another kind of file
         previewed: ``query_result()`` is then None), and when the user
         changes a filter, the sort order or the columns shown, or reads the
         data again with the reload button; not for paging, column widths or
@@ -927,6 +971,8 @@ class StorageExplorer(
             "query_save": self._query_request,
             "query_reload": self._query_request,
             "query_mode": self._query_request,
+            # A table set's: the table chosen (see TableSet).
+            "table_set_open": self._table_set_request,
             "view_tab": self._view_tab_request,
             # Bookmarks.
             "bookmarks": lambda c: self._bookmark_list(),

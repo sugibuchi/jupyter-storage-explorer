@@ -149,7 +149,9 @@ out of the code, as are options that look like credentials.
 ### Excel (`excel`)
 
 `ExcelByPolarsOptions`: the arguments of
-[`pl.read_excel`](https://docs.pola.rs/api/python/stable/reference/api/polars.read_excel.html).
+[`pl.read_excel`](https://docs.pola.rs/api/python/stable/reference/api/polars.read_excel.html). The data browser
+shows a workbook's sheets on tabs below the table (only one sheet: that one), each read when chosen; with
+`sheet_id`, `sheet_name` or `table_name`, the sheet or table they give (several: on tabs).
 
 | Option                | Default      | Meaning                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 |-----------------------|--------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|

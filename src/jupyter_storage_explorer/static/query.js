@@ -602,3 +602,111 @@ function createQueryPanel(host, path, data) {
     },
   };
 }
+
+// A table set (TableSetView): its tables in a tree beside the data browser
+// ("tree"), or on tabs below it, as a spreadsheet's sheets ("tab"), and the
+// data browser on the one chosen. `data` is the kernel's TableSet.opening():
+// {selector, nodes: [{label, id} for tables, {label, children} for groups],
+// table, query (or error)}. `path` names the item in requests
+// ("table_set_open"); the data browser's also name the table (query_path in
+// table_set.py), so that a table no longer shown is never answered for.
+// Returns {el, dispose}, as createQueryPanel.
+function createTableSetPanel(host, path, data) {
+  const tabs = data.selector === "tab";
+  const body = h("div", { className: "jse-table-set-body" });
+  const chooser = h("div", { className: tabs ? "jse-table-set-tabs" : "jse-table-set-tree", role: tabs ? "tablist" : "tree" });
+  const el = h("div", { className: `jse-table-set jse-table-set-by-${data.selector}` }, ...(tabs ? [body, chooser] : [chooser, body]));
+  const items = new Map(); // table id -> its row or tab
+  let table = data.table;
+  let panel = null;
+  let disposed = false;
+  let asked = 0; // the latest "table_set_open", whose reply only is shown
+
+  function mark() {
+    for (const [id, item] of items) {
+      item.classList.toggle("jse-active", id === table);
+      item.setAttribute("aria-selected", String(id === table));
+    }
+    items.get(table)?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }
+
+  // The table chosen: {table, query} or {table, error}.
+  function show(state) {
+    panel?.dispose();
+    panel = null;
+    table = state.table;
+    mark();
+    if (state.error) {
+      body.replaceChildren(h("div", { className: "jse-preview-error", textContent: state.error }));
+    } else {
+      panel = createQueryPanel(host, `${path}\u0000${state.table}`, state.query);
+      body.replaceChildren(panel.el);
+    }
+  }
+
+  async function choose(id) {
+    if (id === table && panel) return;
+    const mine = ++asked;
+    panel?.dispose();
+    panel = null;
+    table = id;
+    mark();
+    body.replaceChildren(h("div", { className: "jse-placeholder", textContent: "Loading…" }));
+    const reply = await host.request({ type: "table_set_open", path, table: id });
+    if (disposed || mine !== asked) return;
+    show("table" in reply ? reply : { table: id, error: reply.error });
+  }
+
+  // A table's row in the tree, or its tab.
+  function tableItem(node, depth) {
+    const item = tabs
+      ? h("button", { className: "jse-table-set-tab", role: "tab", textContent: visible(node.label), title: visible(node.label) })
+      : h(
+          "div",
+          { className: "jse-table-set-row jse-table-set-leaf", role: "treeitem", title: visible(node.label) },
+          h("span", { className: "jse-table-set-twisty" }),
+          h("span", { className: "jse-table-set-icon" }, fileIcon(node.label, false, "spreadsheet")),
+          h("span", { className: "jse-table-set-label", textContent: visible(node.label) }),
+        );
+    if (!tabs) item.style.paddingLeft = `${depth * 14 + 4}px`;
+    item.addEventListener("click", () => choose(node.id));
+    items.set(node.id, item);
+    return item;
+  }
+
+  // A group's row and its nodes, open at first; clicking the row closes it.
+  function groupItem(node, depth) {
+    const children = h("div", { role: "group" }, ...treeItems(node.children, depth + 1));
+    const twisty = h("span", { className: "jse-table-set-twisty" }, icon("caret-down"));
+    const row = h(
+      "div",
+      { className: "jse-table-set-row jse-table-set-group", role: "treeitem", title: visible(node.label) },
+      twisty,
+      h("span", { className: "jse-table-set-icon" }, fileIcon(node.label, true)),
+      h("span", { className: "jse-table-set-label", textContent: visible(node.label) }),
+    );
+    row.style.paddingLeft = `${depth * 14 + 4}px`;
+    row.setAttribute("aria-expanded", "true");
+    row.addEventListener("click", () => {
+      children.hidden = !children.hidden;
+      row.setAttribute("aria-expanded", String(!children.hidden));
+      twisty.replaceChildren(icon(children.hidden ? "caret-right" : "caret-down"));
+    });
+    return h("div", {}, row, children);
+  }
+
+  function treeItems(nodes, depth) {
+    return nodes.map((node) => (node.children ? groupItem(node, depth) : tableItem(node, depth)));
+  }
+
+  chooser.replaceChildren(...treeItems(data.nodes, 0));
+  show(data);
+
+  return {
+    el,
+    dispose() {
+      disposed = true;
+      panel?.dispose();
+    },
+  };
+}

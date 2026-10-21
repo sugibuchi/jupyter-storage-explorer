@@ -408,7 +408,16 @@ so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
   which the browser notes as rows cut in memory, `DataQuery(cut=)`; PySpark's read the URL in the kernel's Spark
   session, `spark_session()`, faked with sqlframe in `plugins/pyspark-support/tests/test_pyspark_supports.py`) opens the data browser (`_new_query`: the first view's data, then the view
   again on reload, with the context it was opened with); whether an item opens in the data browser is known only
-  once viewed, so the menu offers "Preview" and "View in a new tab" for whatever has a format. The others
+  once viewed, so the menu offers "Preview" and "View in a new tab" for whatever has a format. A `TableSetView`
+  (`nodes`: `Leaf(label, id)` tables, maybe in `Node(label, children)` groups; `loader(id)`, a table's data or a
+  `QueryView` of it, whose `more` and `on_close` are kept, as pandas' Excel sheets; `selector` "tree" or "tab"; polars'
+  and pandas' Excel views give the sheets on tabs unless options name one, or the workbook has one) opens the data
+  browser on the table chosen: a `TableSet` (`_query/table_set.py`; one
+  `DataQuery` at a time, settings remembered by "<url>#<id>"), sent as the preview's `"table_set"` and shown by
+  `createTableSetPanel` (query.js); "table_set_open" chooses a table, and the data browser's requests carry
+  `query_path(path, id)` (path NUL id), so a table no longer shown is never answered for; `query_result()` is the
+  table chosen's, which `StorageExplorer.query_table` names (its id); in a view tab, a
+  `TableSetTab` (`_table_set_tab.py`). The others
   (`TableView`, `TextView`, `TreeView`, `MarkdownView`, `MediaView`...) are sent as the one item of the preview's
   `"sections"` (`section()`), which the frontend renders by `kind`. Supports never check their packages: the
   chain calls only installed ones. `ViewLimits`: `max_bytes`,

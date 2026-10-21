@@ -174,11 +174,13 @@ class ParquetByDuckDB(FormatSupport):
 
 ### `view(fmt, ctx, options, limits)`
 
-Returns one view. A `QueryView` opens the data browser (filters, sort, pages); the others show what was read:
+Returns one view. A `QueryView` opens the data browser (filters, sort, pages), a `TableSetView` the browser on the
+table chosen of several; the others show what was read:
 
 | View                               | Fields                                                                 | Shown as                          |
 |------------------------------------|------------------------------------------------------------------------|-----------------------------------|
 | `QueryView(data=..., more=False)`  | Any dataframe narwhals supports, best lazy; `more`: eager data cut short | The data browser                  |
+| `TableSetView(nodes, loader, selector="tree")` | `nodes`: tables (`Leaf(label, id)`), maybe in groups (`Node(label, children)`); `loader(id)`: a table's dataframe, as `QueryView`'s `data` | The tables in a tree (`"tree"`) or on tabs (`"tab"`, tables only), and the data browser on the one chosen |
 | `TableView(columns, rows, ...)`    | `dtypes`, `more`, `total`, `unit` ("rows", "records")                  | A table, with a note of the counts |
 | `TextView(text, language=None)`    | `html`: highlighted text (optional)                                    | Text                              |
 | `MarkdownView(text)`               |                                                                        | Rendered Markdown (sanitized)     |
@@ -192,7 +194,22 @@ DataFrame) is queried as the browser pages; an eager library reads at most `max_
 
 A view holding a resource (a connection, a temporary file) releases it in a function given to `view.on_close(f)`: the
 explorer calls it once it no longer shows the view (another preview, the panel or tab closed, the kernel exiting).
-Until then, a `QueryView`'s data must stay readable.
+Until then, a `QueryView`'s data must stay readable, as must a `TableSetView`'s tables: its `loader` is called each
+time a table is chosen or read again, e.g. a database's tables from one connection, closed in `on_close`:
+
+```python
+con = duckdb.connect(path, read_only=True)
+tables = con.sql("select table_schema, table_name from information_schema.tables").fetchall()
+schemas = sorted({schema for schema, _ in tables})
+view = TableSetView(
+    nodes=[
+        Node(label=s, children=[Leaf(label=t, id=f"{s}.{t}") for schema, t in tables if schema == s])
+        for s in schemas
+    ],
+    loader=con.table,
+)
+view.on_close(lambda view: con.close())
+```
 
 ### `recipe(fmt, ctx, options)`
 

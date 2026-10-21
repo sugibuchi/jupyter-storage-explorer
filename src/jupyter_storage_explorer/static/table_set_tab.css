@@ -1,0 +1,14 @@
+/* Table Set Tab: a table set (query.css: .jse-table-set) under a title bar,
+   filling the tab. */
+.jse-table-set-view-tab {
+  display: flex;
+  flex-direction: column;
+}
+
+.jse-table-set-view-tab .jse-table-set-view-tab-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 80px;
+  overflow: hidden;
+}

@@ -34,6 +34,7 @@ from jupyter_storage_explorer.formats import (
     JsonLines,
     Parquet,
     QueryView,
+    TableSetView,
     ViewLimits,
 )
 from jupyter_storage_explorer.testing import local_item
@@ -116,12 +117,26 @@ class TestViews:
         frame = data(DeltaLakeByPolars(), DeltaLake(), local_item(tmp_path / "t"))
         assert frame.collect().height == 2
 
-    def test_excel(self, make_item):
-        # polars reads the workbook through the explorer's filesystem: read
-        # whole (a DataFrame), queried in memory; the first sheet.
+    def test_excel_sheets_on_tabs(self, make_item):
+        # polars reads the workbook through the explorer's filesystem: each
+        # sheet whole (a DataFrame), queried in memory, when chosen.
         item = make_item("/a.xlsx", workbook())
+        view = ExcelByPolars().view(Excel(), item, ExcelByPolarsOptions(), LIMITS)
+        assert isinstance(view, TableSetView)
+        assert view.selector == "tab"
+        assert [(n.label, n.id) for n in view.nodes] == [("one", "one"), ("two", "two")]
+        assert view.loader("one")["a"].to_list() == [1, 2, 3]
+        assert view.loader("two").columns == ["b"]
+
+    def test_excel_with_one_sheet(self, make_item):
+        book = openpyxl.Workbook()
+        book.active.append(["a"])
+        book.active.append([1])
+        buffer = io.BytesIO()
+        book.save(buffer)
+        item = make_item("/a.xlsx", buffer.getvalue())
         frame = data(ExcelByPolars(), Excel(), item, ExcelByPolarsOptions())
-        assert frame["a"].to_list() == [1, 2, 3]
+        assert frame["a"].to_list() == [1]
 
     def test_parquet_folder_skips_hidden_files(self, tmp_path):
         pl.DataFrame({"a": [1]}).write_parquet(tmp_path / "part-0.parquet")
@@ -339,11 +354,21 @@ class TestReaderOptions:
         [code] = ExcelByPolars().recipe(Excel(), item, options).values()
         assert "df = pl.read_excel(f.read(), sheet_name='two')" in code
 
-    def test_excel_several_sheets_refused(self, make_item):
+    @pytest.mark.parametrize(
+        "options",
+        [ExcelByPolarsOptions(sheet_id=1), ExcelByPolarsOptions(sheet_name="one")],
+    )
+    def test_excel_sheet_asked_for(self, make_item, options):
+        item = make_item("/a.xlsx", workbook())
+        assert data(ExcelByPolars(), Excel(), item, options).columns == ["a"]
+
+    def test_excel_sheets_asked_for_on_tabs(self, make_item):
         item = make_item("/a.xlsx", workbook())
         options = ExcelByPolarsOptions(sheet_id=0)  # all sheets
-        with pytest.raises(ValueError, match="several sheets"):
-            ExcelByPolars().view(Excel(), item, options, LIMITS)
+        view = ExcelByPolars().view(Excel(), item, options, LIMITS)
+        assert isinstance(view, TableSetView)
+        assert [leaf.id for leaf in view.leaves()] == ["one", "two"]
+        assert view.loader("two").columns == ["b"]
 
     def test_json_code(self, make_item):
         options = JsonByPolarsOptions(infer_schema_length=None)
