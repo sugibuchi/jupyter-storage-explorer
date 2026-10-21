@@ -23,14 +23,17 @@ from jupyter_storage_explorer_polars_support.supports import (
 class PolarsSupport(StorageExplorerPlugin):
     key = "polars-support"
     label = "Polars support for Storage Explorer"
-    format_supports = (
-        DeltaLakeByPolars,
-        ParquetByPolars,
-        CsvByPolars,
-        ExcelByPolars,
-        JsonByPolars,
-        JsonLinesByPolars,
-    )
+
+    @property
+    def format_supports(self):
+        return (
+            DeltaLakeByPolars,
+            ParquetByPolars,
+            CsvByPolars,
+            ExcelByPolars,
+            JsonByPolars,
+            JsonLinesByPolars,
+        )
 
 
 __all__ = [

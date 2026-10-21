@@ -81,7 +81,7 @@ libraries), `<name>-support` the plugin alone; the launcher's `hatch_build.py` o
   them, imported from its modules by the package and the tests.
 - `jupyter-storage-explorer-launcher` (`launcher/`): a JupyterLab launcher item opening a tab whose kernel runs
   `launch()`. It merges every `storage-explorer/launcher.py` in Jupyter's config paths as layers, system to user
-  (their `filesystems()`, `plugins()` (replaced by later layers), `supports()`, `format_options()` (merged by library, format, then option), `operations()`, `filesystem_mappers()`, `transfer_policy()`, `parameters()`;
+  (their `filesystems()`, `plugin_options()` (merged by plugin, then option), `supports()`, `format_options()` (merged by library, format, then option), `operations()`, `filesystem_mappers()`, `transfer_policy()`, `parameters()`;
   `final()` names what later layers cannot change; retired `style()` and `formats()` are ignored with a warning, `RETIRED`; see `load_settings`, tested in
   `tests/test_launcher.py`). The tab's explorer gets a settings button (`_offer_settings`, trait `_settings_path`;
   never in notebooks) opening the user's `launcher.py` through the `files.ts` drive, created from
@@ -397,16 +397,22 @@ so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
   left to the user. `PythonPackage`s (`packages.py`) only say what a support needs (`package`, `import_name`,
   `is_installed()`, `load()`).
 
-**Plugins** (`plugin.py`, `_plugins.py`). A `StorageExplorerPlugin` subclass lists components as classes
-(`format_supports`, `formats`, `filesystem_operations`, `filesystem_mappers`; tuples), registered as an entry point of
-`jupyter_storage_explorer.plugins` named by its `key`. `load_plugins(keys)` (the explorer's `plugins=`: None for all,
-by key; else those named, in order, only they imported; an unknown key is a ValueError) leaves out, with a reason the
-explorer warns of (`RuntimeWarning`), a plugin that fails to import, is no plugin class, has another key, or a name
-two packages register. `PluginComponents` gives the supports and formats as classes and creates the operations and
-mappers (no arguments). The explorer uses each kind as given (`supports=`, `operations=`, `filesystem_mappers=`), then
-the plugins', then its defaults. The launcher's `plugins()` (replaced by later layers) sets `plugins`. Tests:
+**Plugins** (`plugin.py`, `_plugins.py`). A `StorageExplorerPlugin` subclass, registered as an entry point of
+`jupyter_storage_explorer.plugins` named by its `key`, is created by each explorer with its options (`options_model`, a
+frozen dataclass subclassing `StorageExplorerPluginOptions`: `enabled`, `priority`, default `LOWEST_PRIORITY`, and its
+own; `self.options`); its properties give its components, made with them (`format_supports`: classes or objects;
+`formats`: classes; `filesystem_operations`, `filesystem_mappers`: objects, classes created without arguments).
+`load_plugins(plugin_options)` (the explorer's `plugin_options`: `{key: {option: value}}`) loads every plugin installed
+but those disabled (`"enabled": False`: not imported; a model may default to False, opt-in), highest priority first, then
+by key; an option the model lacks is a ValueError; it leaves out, with a reason the explorer warns of
+(`RuntimeWarning`), a plugin that fails to import or be created, is no plugin class, has another key, or a name two
+packages register, and options of plugins not installed. `PluginComponents` gathers the components. The explorer uses
+each kind as given (`supports=`, `operations=`, `filesystem_mappers=`), then the plugins', then its defaults. The
+launcher's `plugin_options()` (merged by plugin, then option) sets `plugin_options`. abfs-support's `concurrency` is
+its operation's. Tests:
 `tests/test_plugins.py` (fake entry points to `tests/plugin_samples.py`); `tests/all_supports.py` has the supports of the
-repository's plugins, as installed for development, which the other tests chain (`ALL_SUPPORTS`, `all_supports()`).
+repository's plugins, as installed for development, which the other tests chain (`ALL_SUPPORTS`, `all_supports()`),
+and `NO_PLUGINS`, the `plugin_options` disabling them all.
 Plugins never depend on their libraries (their `full` extra installs them): see DEVELOPMENT.md's "Writing a plugin".
 
 **Engines in the explorer.** `StorageExplorer(engine_preference=)` orders the chain's `engines`, synced as

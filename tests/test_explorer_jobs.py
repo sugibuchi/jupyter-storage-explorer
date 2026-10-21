@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from all_supports import NO_PLUGINS
 from explorers import Explorer, entries, make, storage, without_ids
 from jupyter_storage_explorer_abfs_support import AzureDataLakeGen2Operation
 
@@ -177,7 +178,7 @@ class TestJobs:
         assert reply["deleted"] == []
 
     def test_default_operations(self, memfs):
-        explorer = make("/", fs=memfs, plugins=[])
+        explorer = make("/", fs=memfs, plugin_options=NO_PLUGINS)
         kinds = [type(o) for o in explorer._operations.operations]
         assert kinds == [AtomicMoveOperation, AsyncFsspecOperations, FsspecOperations]
         # Those given come first, then the plugins', then the defaults.

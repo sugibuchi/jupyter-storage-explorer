@@ -8,7 +8,7 @@ from typing import get_args
 
 import polars as pl
 import pytest
-from all_supports import ALL_SUPPORTS, all_supports
+from all_supports import ALL_SUPPORTS, NO_PLUGINS, all_supports
 from items import local_item
 from jupyter_storage_explorer_pandas_support import CsvByPandas, PandasOptions
 from jupyter_storage_explorer_polars_support import (
@@ -494,5 +494,5 @@ class TestExplorer:
             def default_supports():
                 return [CsvByPolars]
 
-        explorer = Explorer(fs=None, plugins=[])
+        explorer = Explorer(fs=None, plugin_options=NO_PLUGINS)
         assert [type(s) for s in explorer._supports.supports] == [CsvByPolars]

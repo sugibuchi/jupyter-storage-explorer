@@ -10,5 +10,5 @@ pip install "jupyter-storage-explorer[pandas-support]"  # the plugin only, with 
 
 Its libraries (`pandas`, `pyarrow`, `openpyxl`) are not its dependencies, so that installing it never
 changes those of a shared environment: the first command (or `jupyter-storage-explorer-pandas-support[full]`) installs them too.
-Explorers use every plugin installed, unless their `plugins` argument names others
-(see [StorageExplorer options](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#storageexplorer-options)).
+Explorers use every plugin installed, unless their `plugin_options` disable it: `{"pandas-support": {"enabled": False}}`
+(see [Plugins](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#plugins)).

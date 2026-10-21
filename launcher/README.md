@@ -71,7 +71,7 @@ The file has some of these functions, all optional:
 | Function               | Returns                                                                                   |
 |------------------------|-------------------------------------------------------------------------------------------|
 | `filesystems()`        | `{name: URL or fsspec filesystem}`                                                        |
-| `plugins()`            | The keys of the plugins the tab uses, e.g. `["polars-support"]`; without it, every plugin installed |
+| `plugin_options()`     | The plugins' options, by key, e.g. `{"pandas-support": {"enabled": False}}` ([Plugins](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#plugins)) |
 | `format_options()`     | The libraries' options, by library and format ([Format options](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#format-options)) |
 | `transfer_policy()`    | Rules of a [transfer policy](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#transfer-policy) |
 | `parameters()`         | Other `StorageExplorer` arguments ([StorageExplorer options](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#storageexplorer-options)), e.g. `{"engine_preference": ["pandas"]}` |
@@ -108,7 +108,7 @@ A later layer changes an earlier one's settings this way:
 | Function                                        | Merged with earlier layers                     |
 |-------------------------------------------------|------------------------------------------------|
 | `filesystems()`                                 | By name: added or replaced; `None` removes one |
-| `plugins()`                                     | Replaced                                       |
+| `plugin_options()`                              | By plugin, then option                         |
 | `parameters()`                                  | By name                                        |
 | `format_options()`                              | By library, format, then option                |
 | `supports()`, `operations()`, `filesystem_mappers()` | Later layers' first, all before the defaults |

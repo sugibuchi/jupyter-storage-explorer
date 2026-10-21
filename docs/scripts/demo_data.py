@@ -442,7 +442,7 @@ def supports() -> list[Any]:
 
     # Only polars reads by URL; the other plugins read the demo's own files,
     # so that files saved from JupyterLab show as saved.
-    result = [cls() for cls in PolarsSupport.format_supports]
+    result = [cls() for cls in PolarsSupport().format_supports]
     for support in result:
         if "view" in support.capabilities:
             view = support.view

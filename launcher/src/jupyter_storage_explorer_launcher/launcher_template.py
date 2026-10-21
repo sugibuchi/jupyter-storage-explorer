@@ -21,11 +21,14 @@ def filesystems():
     }
 
 
-# The plugins the tab uses, by key: every plugin installed if this function
-# is left out (see "Plugins" in the launcher's README).
+# The plugins' options, by plugin key: every plugin installed is used unless
+# "enabled" is False; "priority" puts one before the others.
 #
-# def plugins():
-#     return ["polars-support", "pandas-support"]
+# def plugin_options():
+#     return {
+#         "pandas-support": {"enabled": False},
+#         "abfs-support": {"concurrency": 16},
+#     }
 
 
 # Options of the libraries reading the data for previews, the data browser

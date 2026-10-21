@@ -184,31 +184,33 @@ class TestMerging:
         mappers = [type(m).__name__ for m in kwargs["filesystem_mappers"]]
         assert mappers == ["GCSMapper", "S3Mapper"]
 
-    def test_plugins_replaced_by_later_layers(self, tmp_path):
+    def test_plugin_options_by_plugin_then_option(self, tmp_path):
         system = layer(
             tmp_path,
             "system",
             """
-            def plugins():
-                return ["polars-support", "pandas-support"]
+            def plugin_options():
+                return {
+                    "pandas-support": {"enabled": False},
+                    "abfs-support": {"concurrency": 16, "priority": 1},
+                }
             """,
         )
         user = layer(
             tmp_path,
             "user",
             """
-            def plugins():
-                return ["pandas-support"]
+            def plugin_options():
+                return {"abfs-support": {"concurrency": 8}}
             """,
         )
-        assert load_settings([system]).explorer_arguments()[1]["plugins"] == [
-            "polars-support",
-            "pandas-support",
-        ]
         _, kwargs = load_settings([user, system]).explorer_arguments()
-        assert kwargs["plugins"] == ["pandas-support"]
-        # Without any: every plugin installed (the explorer's default).
-        assert "plugins" not in load_settings([]).explorer_arguments()[1]
+        assert kwargs["plugin_options"] == {
+            "pandas-support": {"enabled": False},
+            "abfs-support": {"concurrency": 8, "priority": 1},
+        }
+        # Without any: every plugin installed, with its defaults.
+        assert "plugin_options" not in load_settings([]).explorer_arguments()[1]
 
     def test_transfer_policy_later_layers_first(self, tmp_path):
         system = layer(
@@ -375,12 +377,12 @@ class TestErrors:
             ),
             ("def supports():\n    return 'csv'", "supports() must return a list"),
             (
-                "def plugins():\n    return 'polars'",
-                "plugins() must return a list of names",
+                "def plugin_options():\n    return {'pandas-support': False}",
+                "'pandas-support' must map option names to values",
             ),
             (
-                "def parameters():\n    return {'plugins': []}",
-                "plugins is set by its own function",
+                "def parameters():\n    return {'plugin_options': {}}",
+                "plugin_options is set by its own function",
             ),
             (
                 # The flat options of versions before 0.14.

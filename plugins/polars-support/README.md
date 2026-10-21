@@ -10,5 +10,5 @@ pip install "jupyter-storage-explorer[polars-support]"  # the plugin only, with 
 
 Its libraries (`polars`, `deltalake`, `fastexcel`) are not its dependencies, so that installing it never
 changes those of a shared environment: the first command (or `jupyter-storage-explorer-polars-support[full]`) installs them too.
-Explorers use every plugin installed, unless their `plugins` argument names others
-(see [StorageExplorer options](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#storageexplorer-options)).
+Explorers use every plugin installed, unless their `plugin_options` disable it: `{"polars-support": {"enabled": False}}`
+(see [Plugins](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#plugins)).

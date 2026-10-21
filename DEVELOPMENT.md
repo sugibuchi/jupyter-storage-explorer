@@ -221,19 +221,36 @@ each tried before the plugins' and the defaults.
 ### Writing a plugin
 
 A plugin is a package adding an engine (e.g. DuckDB) or a storage (e.g. Azure Data Lake Storage) to every explorer:
-a `StorageExplorerPlugin` subclass listing its components as classes, which explorers create without arguments, and
-registered as an entry point named by its key:
+a `StorageExplorerPlugin` subclass, registered as an entry point named by its key. Explorers create it with its
+options (`self.options`, an `options_model` object), and its properties give its components, made with them:
 
 ```python
-from jupyter_storage_explorer import StorageExplorerPlugin
+from dataclasses import dataclass
+
+from jupyter_storage_explorer import StorageExplorerPlugin, StorageExplorerPluginOptions
+
+
+@dataclass(frozen=True, kw_only=True)
+class DuckDBSupportOptions(StorageExplorerPluginOptions):  # enabled, priority, and its own
+    threads: int = 4
 
 
 class DuckDBSupport(StorageExplorerPlugin):
     key = "duckdb-support"
     label = "DuckDB support for Storage Explorer"
-    format_supports = (ParquetByDuckDB,)  # FormatSupport classes, see "Another library for a format"
-    filesystem_operations = ()            # FileSystemOperations classes, see "File operations"
-    filesystem_mappers = ()               # FileSystemMapper classes, see "Filesystem mappers"
+    options_model = DuckDBSupportOptions
+
+    @property
+    def format_supports(self):  # FormatSupport classes or objects, see "Another library for a format"
+        return (ParquetByDuckDB(threads=self.options.threads),)
+
+    @property
+    def filesystem_operations(self):  # FileSystemOperations, see "File operations"
+        return ()
+
+    @property
+    def filesystem_mappers(self):  # FileSystemMapper, see "Filesystem mappers"
+        return ()
 ```
 
 ```toml
@@ -241,8 +258,11 @@ class DuckDBSupport(StorageExplorerPlugin):
 duckdb-support = "jupyter_storage_explorer_duckdb_support:DuckDBSupport"
 ```
 
-Explorers load every plugin installed, by key, unless `plugins=[...]` names those to use; a plugin that cannot be
-imported is left out with a warning. What plugins give comes after what an explorer is given, and before the defaults.
+Explorers load every plugin installed, unless `plugin_options` disables it (`{"duckdb-support": {"enabled": False}}`;
+it is not imported then), highest `priority` first, then by key; a plugin that cannot be imported or created is left
+out with a warning. `plugin_options` gives its options too, by key (`{"duckdb-support": {"threads": 8}}`; in the
+launcher's tabs, `plugin_options()`); an option its `options_model` lacks is an error. What plugins give comes after
+what an explorer is given, and before the defaults.
 An engine is defined by one plugin: another using it imports its `Engine` class (two classes of one key are an error).
 
 Conventions:

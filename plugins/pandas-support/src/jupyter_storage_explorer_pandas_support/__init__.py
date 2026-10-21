@@ -20,13 +20,16 @@ from jupyter_storage_explorer_pandas_support.supports import (
 class PandasSupport(StorageExplorerPlugin):
     key = "pandas-support"
     label = "pandas support for Storage Explorer"
-    format_supports = (
-        ParquetByPandas,
-        CsvByPandas,
-        ExcelByPandas,
-        JsonByPandas,
-        JsonLinesByPandas,
-    )
+
+    @property
+    def format_supports(self):
+        return (
+            ParquetByPandas,
+            CsvByPandas,
+            ExcelByPandas,
+            JsonByPandas,
+            JsonLinesByPandas,
+        )
 
 
 __all__ = [

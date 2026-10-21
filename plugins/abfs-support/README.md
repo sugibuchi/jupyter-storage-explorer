@@ -10,5 +10,8 @@ pip install "jupyter-storage-explorer[abfs-support]"  # the plugin only, with th
 
 Its libraries (`adlfs`, `azure-storage-file-datalake`) are not its dependencies, so that installing it never
 changes those of a shared environment: the first command (or `jupyter-storage-explorer-abfs-support[full]`) installs them too.
-Explorers use every plugin installed, unless their `plugins` argument names others
-(see [StorageExplorer options](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#storageexplorer-options)).
+Explorers use every plugin installed, unless their `plugin_options` disable it: `{"abfs-support": {"enabled": False}}`
+(see [Plugins](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#plugins)).
+
+Its option `concurrency` (default 64) is the most files copied at once on the server, e.g.
+`plugin_options={"abfs-support": {"concurrency": 16}}`.

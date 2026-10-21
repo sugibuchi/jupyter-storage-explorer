@@ -11,8 +11,11 @@ from jupyter_storage_explorer.formats.defaults import DEFAULT_SUPPORTS
 if TYPE_CHECKING:
     from jupyter_storage_explorer.formats import FormatSupport
 
-PLUGINS, _problems = load_plugins(None)
+PLUGINS, _problems = load_plugins()
 assert not _problems, _problems
+
+# plugin_options disabling every plugin: the core alone.
+NO_PLUGINS = {p.key: {"enabled": False} for p in PLUGINS}
 
 ALL_SUPPORTS: tuple[type[FormatSupport], ...] = (
     *PluginComponents(PLUGINS).supports,

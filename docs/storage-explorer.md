@@ -408,7 +408,7 @@ Storages and data:
 | Option                    | Meaning                                                                                                    |
 |---------------------------|------------------------------------------------------------------------------------------------------------|
 | `filesystems={...}`       | Several named storages; see [Several storages in one explorer](#several-storages-in-one-explorer).         |
-| `plugins=[...]`           | The plugins to use, by key, e.g. `["polars-support"]` (default: all installed); see [Plugins](#plugins).    |
+| `plugin_options={...}`    | The plugins' options, by key, e.g. `{"pandas-support": {"enabled": False}}`; see [Plugins](#plugins). |
 | `format_options={...}`    | The engines' options; see [Format options](#format-options).                                               |
 | `engine_preference=[...]` | The engines in the order they are offered, the first chosen until the user chooses; see [Engines](#engines). |
 
@@ -448,15 +448,23 @@ For extending the explorer (see [Extensions](#extensions)), tried before the def
 
 ### Plugins
 
-Plugins add engines and storages. Explorers use every plugin installed; `plugins=[...]` names those to use, by key (in
-the launcher's tabs, `plugins()` in [its configuration](../launcher/README.md#configuration)).
+Plugins add engines and storages. Explorers use every plugin installed; `plugin_options` gives their options by key:
+`enabled` (False: not used), `priority` (higher first) and the plugin's own (in the launcher's tabs,
+`plugin_options()` in [its configuration](../launcher/README.md#configuration)):
+
+```python
+StorageExplorer(
+    "abfs://lake@myaccount.dfs.core.windows.net/raw",
+    plugin_options={"pandas-support": {"enabled": False}, "abfs-support": {"concurrency": 16}},
+)
+```
 
 | Plugin            | Adds                                                                                          | Install                                          |
 |-------------------|-----------------------------------------------------------------------------------------------|--------------------------------------------------|
 | `polars-support`  | Polars: Delta Lake, Parquet, CSV, JSON Lines, Excel                                           | `pip install "jupyter-storage-explorer[polars]"`  |
 | `pandas-support`  | pandas: Parquet, CSV, JSON Lines, Excel                                                       | `pip install "jupyter-storage-explorer[pandas]"`  |
 | `pyspark-support` | PySpark or Databricks Connect: Delta Lake, Parquet, CSV, JSON Lines                           | `pip install "jupyter-storage-explorer[pyspark]"` |
-| `abfs-support`    | Azure Data Lake Storage Gen2: folders moved in one step, copies within an account on the server, empty folders | `pip install "jupyter-storage-explorer[abfs]"`    |
+| `abfs-support`    | Azure Data Lake Storage Gen2: folders moved in one step, copies within an account on the server (`concurrency`, default 64, at once), empty folders | `pip install "jupyter-storage-explorer[abfs]"`    |
 
 `[<name>-support]` installs a plugin alone, using the libraries already installed: plugins never install or upgrade
 them otherwise, so that a shared environment's stay as its administrators set them up.

@@ -124,14 +124,17 @@ class StorageExplorer(
         while it is open, clicking a file previews it (tables open in the
         data browser, see ``query_result``). False: closed until the user
         previews something.
-    plugins : sequence of str, optional
-        The keys of the plugins to use (``StorageExplorerPlugin.key``, e.g.
-        ``["polars-support"]``), in this order; only they are imported.
-        Default: every plugin installed, by key. A plugin that cannot be
-        loaded is left out with a warning; a key no plugin installed has is a
-        ValueError. What plugins give is used after the ``supports``,
-        ``operations`` and ``filesystem_mappers`` given, and before the
-        defaults.
+    plugin_options : mapping, optional
+        The plugins' options, by key (``StorageExplorerPlugin.key``), e.g.
+        ``{"pandas-support": {"enabled": False}, "abfs-support":
+        {"concurrency": 16}}``: those of every plugin, ``enabled`` (False:
+        not used, nor imported) and ``priority`` (higher first; default the
+        lowest, then by key), and the plugin's own (its ``options_model``).
+        Every plugin installed is used unless disabled here. A plugin that
+        cannot be loaded, or options of one not installed, are left out with
+        a warning; an option a plugin does not have is a ValueError. What
+        plugins give is used after the ``supports``, ``operations`` and
+        ``filesystem_mappers`` given, and before the defaults.
     supports : sequence of FormatSupport classes or objects, optional
         Libraries of your own handling formats' data (previews, the data
         browser, "Python code"), e.g. ``[ParquetByDuckDB]``, tried before
@@ -339,7 +342,7 @@ class StorageExplorer(
         filesystems: Mapping[str, AbstractFileSystem | str] | None = None,
         height: str = "400px",
         open_preview: bool = False,
-        plugins: Sequence[str] | None = None,
+        plugin_options: Mapping[str, Mapping[str, Any]] | None = None,
         supports: Sequence[type[FormatSupport] | FormatSupport] | None = None,
         format_options: FormatOptions | None = None,
         engine_preference: Sequence[str] | None = None,
@@ -374,7 +377,7 @@ class StorageExplorer(
         self._max_browser_items = max_browser_items
         # The plugins' components come after those given and before the
         # defaults (see plugin.py); a plugin that cannot be loaded is left out.
-        self._plugins, problems = load_plugins(plugins)
+        self._plugins, problems = load_plugins(plugin_options)
         for problem in problems:
             warnings.warn(problem, RuntimeWarning, stacklevel=2)
         components = PluginComponents(self._plugins)

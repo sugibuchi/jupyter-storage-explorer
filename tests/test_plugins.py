@@ -1,28 +1,31 @@
-"""Plugins (plugin.py, _plugins.py): which are loaded, what they give the
-explorer, and in which order."""
+"""Plugins (plugin.py, _plugins.py): which are loaded, with which options,
+what they give the explorer, and in which order."""
 
 from __future__ import annotations
 
 from importlib.metadata import EntryPoint
 
-import plugin_samples
 import pytest
-from all_supports import PLUGINS
+from all_supports import NO_PLUGINS, PLUGINS
 from explorers import make
 from plugin_samples import (
     AvroBySample,
-    SampleEngine,
     SampleMapper,
     SampleOperations,
     SampleSupport,
+    SampleSupportOptions,
 )
 
 from jupyter_storage_explorer import _plugins
 from jupyter_storage_explorer._explorer.supports import SupportChain
 from jupyter_storage_explorer._plugins import load_plugins
-from jupyter_storage_explorer.filesystems import FileSystemMapper, FsspecOperations
+from jupyter_storage_explorer.filesystems import FsspecOperations
 from jupyter_storage_explorer.formats import Csv, Engine, FormatSupport
-from jupyter_storage_explorer.plugin import ENTRY_POINT_GROUP
+from jupyter_storage_explorer.plugin import (
+    ENTRY_POINT_GROUP,
+    LOWEST_PRIORITY,
+    StorageExplorerPluginOptions,
+)
 
 
 def entry_point(name, target):
@@ -40,9 +43,13 @@ def installed(monkeypatch):
     return install
 
 
+def keys(plugins):
+    return [p.key for p in plugins]
+
+
 def test_the_repository_plugins():
     # Installed for development: each loads, under its key.
-    assert [p.key for p in PLUGINS] == [
+    assert keys(PLUGINS) == [
         "abfs-support",
         "pandas-support",
         "polars-support",
@@ -55,28 +62,65 @@ class TestLoading:
         installed(
             **{"sample-support": "SampleSupport", "other-support": "OtherSupport"}
         )
-        plugins, problems = load_plugins(None)
-        assert [p.key for p in plugins] == ["other-support", "sample-support"]
+        plugins, problems = load_plugins()
+        assert keys(plugins) == ["other-support", "sample-support"]
+        assert problems == []
+        # Created with their options' defaults.
+        assert plugins[1].options == SampleSupportOptions()
+        assert plugins[1].options.priority == LOWEST_PRIORITY
+
+    def test_options(self, installed):
+        installed(**{"sample-support": "SampleSupport"})
+        [plugin], _ = load_plugins({"sample-support": {"concurrency": 8}})
+        assert plugin.options == SampleSupportOptions(concurrency=8)
+        # Its properties make its components with them.
+        [operations] = plugin.filesystem_operations
+        assert operations.concurrency == 8
+
+    def test_disabled_not_imported(self, installed):
+        # A broken plugin disabled is no problem: it is not imported.
+        installed(**{"sample-support": "SampleSupport", "broken-support": "Missing"})
+        plugins, problems = load_plugins({"broken-support": {"enabled": False}})
+        assert keys(plugins) == ["sample-support"]
         assert problems == []
 
-    def test_those_named_in_their_order(self, installed):
-        # Only those named are imported: a broken one not named is no problem.
+    def test_opt_in(self, installed):
+        # A plugin whose options' default is disabled.
+        installed(**{"opt-in-support": "OptInSupport"})
+        assert load_plugins() == ([], [])
+        [plugin], _ = load_plugins({"opt-in-support": {"enabled": True}})
+        assert plugin.key == "opt-in-support"
+
+    def test_priority_then_key(self, installed):
         installed(
             **{
                 "sample-support": "SampleSupport",
                 "other-support": "OtherSupport",
-                "broken-support": "Missing",
+                "opt-in-support": "OptInSupport",
             }
         )
-        plugins, problems = load_plugins(["sample-support", "other-support"])
-        assert [p.key for p in plugins] == ["sample-support", "other-support"]
-        assert problems == []
-        assert load_plugins([]) == ([], [])
+        plugins, _ = load_plugins(
+            {
+                "sample-support": {"priority": 10},
+                "opt-in-support": {"enabled": True, "priority": 0},
+            }
+        )
+        assert keys(plugins) == ["sample-support", "opt-in-support", "other-support"]
 
-    def test_unknown_key(self, installed):
+    def test_options_of_a_plugin_not_installed(self, installed):
+        # Shared settings may name plugins an environment lacks: a warning.
         installed(**{"sample-support": "SampleSupport"})
-        with pytest.raises(ValueError, match=r"\['polars-suport'\] not installed"):
-            load_plugins(["polars-suport"])
+        plugins, problems = load_plugins({"duckdb-support": {"enabled": False}})
+        assert keys(plugins) == ["sample-support"]
+        assert problems == ["plugin_options: plugin 'duckdb-support' is not installed"]
+
+    def test_unknown_option(self, installed):
+        installed(**{"sample-support": "SampleSupport"})
+        with pytest.raises(
+            ValueError,
+            match=r"plugin_options\['sample-support'\]: unknown options \['concurency'\]",
+        ):
+            load_plugins({"sample-support": {"concurency": 8}})
 
     @pytest.mark.parametrize(
         ("target", "problem"),
@@ -84,12 +128,13 @@ class TestLoading:
             ("Missing", "AttributeError"),
             ("NotAPlugin", "is no StorageExplorerPlugin"),
             ("WrongKey", "its class's key is 'another-key'"),
+            ("FailingSupport", "RuntimeError: cannot start"),
         ],
     )
     def test_left_out_with_the_reason(self, installed, target, problem):
         installed(**{"broken-support": target, "sample-support": "SampleSupport"})
-        plugins, problems = load_plugins(None)
-        assert plugins == [SampleSupport]  # the others are loaded
+        plugins, problems = load_plugins()
+        assert keys(plugins) == ["sample-support"]  # the others are loaded
         [reason] = problems
         assert reason.startswith("plugin 'broken-support' not loaded")
         assert problem in reason
@@ -97,7 +142,7 @@ class TestLoading:
     def test_one_key_registered_twice(self, monkeypatch):
         points = [entry_point("sample-support", "SampleSupport")] * 2
         monkeypatch.setattr(_plugins, "entry_points", lambda group: points)
-        plugins, [problem] = load_plugins(None)
+        plugins, [problem] = load_plugins()
         assert plugins == []
         assert "registered by" in problem
 
@@ -107,37 +152,52 @@ class TestExplorer:
         installed(**{"sample-support": "SampleSupport"})
         given = FsspecOperations()
         mapper = SampleMapper()
-        explorer = make("/", fs=memfs, operations=[given], filesystem_mappers=[mapper])
+        explorer = make(
+            "/",
+            fs=memfs,
+            operations=[given],
+            filesystem_mappers=[mapper],
+            plugin_options={"sample-support": {"concurrency": 2}},
+        )
         operations = explorer._operations.operations
         assert operations[0] is given
-        assert type(operations[1]) is SampleOperations  # created by the explorer
+        assert type(operations[1]) is SampleOperations
+        assert operations[1].concurrency == 2  # with the plugin's options
         mappers = explorer._mappers.mappers
         assert mappers[0] is mapper
-        assert type(mappers[1]) is SampleMapper
+        assert type(mappers[1]) is SampleMapper  # a class, created
         assert isinstance(explorer._supports.supports[0], AvroBySample)
         # Its format is detected, and its engine (no view) not offered.
         assert explorer._formats[0].name == "avro"
         assert explorer._engines == []
+        assert isinstance(explorer._plugins[0], SampleSupport)
 
     def test_no_plugin(self, memfs):
-        explorer = make("/", fs=memfs, plugins=[])
+        explorer = make("/", fs=memfs, plugin_options=NO_PLUGINS)
         # No engine to choose; the standard formats are detected all the same.
         assert explorer._engines == []
         assert {"parquet", "delta", "csv"} <= set(explorer._format_labels)
 
-    def test_some_plugins(self, memfs):
-        explorer = make("/", fs=memfs, plugins=["pandas-support"])
+    def test_some_disabled(self, memfs):
+        explorer = make(
+            "/",
+            fs=memfs,
+            plugin_options={
+                "polars-support": {"enabled": False},
+                "pyspark-support": {"enabled": False},
+            },
+        )
         assert [e["key"] for e in explorer._engines] == ["pandas"]
 
-    def test_a_broken_plugin_warns(self, installed, memfs):
+    def test_problems_warn(self, installed, memfs):
         installed(**{"broken-support": "Missing", "sample-support": "SampleSupport"})
         with pytest.warns(RuntimeWarning, match="plugin 'broken-support' not loaded"):
             explorer = make("/", fs=memfs)
         assert explorer._formats[0].name == "avro"  # the others are used
 
-    def test_unknown_plugin(self, memfs):
-        with pytest.raises(ValueError, match="not installed"):
-            make("/", fs=memfs, plugins=["polars"])
+    def test_options_of_a_plugin_not_installed_warn(self, memfs):
+        with pytest.warns(RuntimeWarning, match="'polars' is not installed"):
+            make("/", fs=memfs, plugin_options={"polars": {"enabled": False}})
 
 
 def test_one_engine_class_per_key():
@@ -153,7 +213,6 @@ def test_one_engine_class_per_key():
     assert SupportChain([AvroBySample, AvroBySample]).supports  # the same class
 
 
-def test_samples_are_what_they_claim():
-    assert issubclass(SampleMapper, FileSystemMapper)
-    assert SampleEngine.key == "sample"
-    assert plugin_samples.OtherSupport.format_supports == ()
+def test_options_model():
+    assert StorageExplorerPluginOptions.option_names() == {"enabled", "priority"}
+    assert SampleSupportOptions.option_names() == {"enabled", "priority", "concurrency"}
