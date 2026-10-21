@@ -185,9 +185,10 @@ function createItemMenu(x) {
     if (paste) clipboard.push(paste);
 
     const change = [];
-    // "Edit": the file in JupyterLab's own editor or viewer.
+    // "Edit": the file in JupyterLab's own editor or viewer, in a tab of its
+    // own (so the icon of "View in new tab").
     if (single && x.jupyterlab.canOpen(single)) {
-      change.push({ label: "Edit", icon: "edit", action: () => x.jupyterlab.open(single.path) });
+      change.push({ label: "Edit", icon: "open-in-new", action: () => x.jupyterlab.open(single.path) });
     }
     if (single && allowed && single.path !== model.get("_root")) {
       change.push({ label: "Rename", icon: "edit", action: () => x.operations.rename(single) });

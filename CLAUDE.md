@@ -439,12 +439,14 @@ snippets never get storage options (`spark_url()` rewrites `abfs`/`s3` to `abfss
   (JavaScript), each one feature; its tests go in a `tests/test_explorer_*.py` and, for what users do, a check in
   `tests/browser/smoke.py`.
 - The root README is the quick start and highlights only; user-facing details are in `docs/storage-explorer.md`
-  ("File operation extensions" (a table: add new ones there), "Using the explorer", "Unsafe operations", "Transfer
-  policy", "Supported formats", "Format options", "StorageExplorer options") and `docs/data-explorer.md` (the data
+  ("Using the explorer", "Unsafe operations", "Transfer policy", "Supported formats", "Format options",
+  "StorageExplorer options", grouped by use, and last "Extensions" with "File operation extensions" (a table: add new
+  ones there)) and `docs/data-explorer.md` (the data
   browser, `result()`, `on_change()`, `QuerySettings`, "DataExplorer options"). Extending the explorer in Python
   (icons, filesystem mappers, file operations, "Another library for a format": supports, their options and secrets) is
   in DEVELOPMENT.md's "Customizing". Update them when operations, formats or options change, and the README's
-  highlights for new features. Keep them short.
+  highlights for new features. Keep them short: what users do, not how it works. `supports`, `operations` and
+  `filesystem_mappers` are for development: last in the docs, the options tables and the launcher's template.
 - Images and links to other files in the READMEs are absolute URLs (`raw.githubusercontent.com/.../main/...` for
   images, `github.com/.../blob/main/...` for files): PyPI shows the README but cannot resolve relative paths. `docs/`
   is read on GitHub only, so it uses relative paths. Screenshots are in `docs/figs/` (the launcher's in
