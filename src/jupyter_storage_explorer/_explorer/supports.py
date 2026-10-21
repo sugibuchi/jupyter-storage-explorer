@@ -28,8 +28,9 @@ if TYPE_CHECKING:
 ALL_FORMATS = "*"
 
 # The engines offered first when the explorer is given no engine_preference:
-# polars views data in the data browser (pandas gives tables of first rows).
-DEFAULT_ENGINE_PREFERENCE = ("polars",)
+# polars queries the data itself, lazily; pandas reads it whole, so only its
+# first rows. Others (e.g. PySpark) follow by key.
+DEFAULT_ENGINE_PREFERENCE = ("polars", "pandas")
 
 
 def engine_key(support: FormatSupport) -> str | None:

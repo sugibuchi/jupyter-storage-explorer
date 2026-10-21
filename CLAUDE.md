@@ -351,7 +351,7 @@ so a library is added to a format (e.g. DuckDB for Parquet) without touching it.
   their options:
   `of(fmt, capability)` lists the supports for the format with the capability whose packages are installed (empty:
   none of the registered ones can); `engines`: the installed engines with a view support, `engine_preference` (keys;
-  default `DEFAULT_ENGINE_PREFERENCE`, polars) first, then by key; `viewers(fmt)`: the engine keys that can view it,
+  default `DEFAULT_ENGINE_PREFERENCE`, polars then pandas) first, then by key; `viewers(fmt)`: the engine keys that can view it,
   then None for the built-in views ("Preview as"); `engine_for(fmt, engine)`: the engine chosen if it handles the
   format (no fallback to another engine: LookupError if its support is not installed), else the built-in views;
   `view(fmt, ctx, limits, engine)` with that engine's supports (ValueError if each refuses it; RuntimeError, the

@@ -144,10 +144,10 @@ class StorageExplorer(
         {"storage_options": keys[location.account_name]}}}``.
     engine_preference : sequence of str, optional
         The engines' keys (``Engine.key``, e.g. ``["pandas", "polars"]``) in
-        the order the settings menu offers them; the first is used until
+        the order the engine menu offers them; the first is used until
         the user chooses another (a choice remembered in ``states``). Those
         not installed are left out; the other engines installed follow, by
-        key. Default: ``["polars"]``, then the others.
+        key. Default: ``["polars", "pandas"]``, then the others.
     view_limits : ViewLimits, optional
         How much views read and show, in the preview panel and in tabs:
         bytes and rows of a file's beginning, the data browser's page size and

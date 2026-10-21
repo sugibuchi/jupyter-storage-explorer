@@ -83,7 +83,7 @@ class TestOrder:
             e.key for e in SupportChain(supports, engine_preference=preference).engines
         ]
 
-    def test_default_polars_first_then_by_key(self):
+    def test_default_polars_then_pandas(self):
         assert self.keys(default_supports()) == ["polars", "pandas"]
 
     def test_preference_then_the_others_by_key(self):
