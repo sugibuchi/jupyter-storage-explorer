@@ -16,8 +16,8 @@ from jupyter_storage_explorer.formats import Leaf, Node, QueryView, TableSetView
 TABLES = {"a": pl.LazyFrame({"x": [1, 2, 3]}), "b": pl.LazyFrame({"y": ["p", "q"]})}
 
 
-def leaves() -> list[Leaf]:
-    return [Leaf(label=name.upper(), id=name) for name in [*TABLES, "broken"]]
+def leaves(ids=(*TABLES, "broken")) -> list[Leaf]:
+    return [Leaf(label=name.upper(), id=name) for name in ids]
 
 
 class Tables:
@@ -28,6 +28,8 @@ class Tables:
         self.selector = selector
         self.loaded: list[str] = []
         self.closed = 0
+        # The tables the item holds, as the next view gives them.
+        self.ids = [*TABLES, "broken"]
 
     def load(self, table: str):
         self.loaded.append(table)
@@ -39,7 +41,7 @@ class Tables:
         self.closed += 1
 
     def view(self) -> TableSetView:
-        nodes = leaves()
+        nodes = leaves(self.ids)
         if self.selector == "tree":
             nodes = [Node(label="main", children=nodes)]
         view = TableSetView(nodes=nodes, loader=self.load, selector=self.selector)
@@ -174,6 +176,38 @@ class TestPreview:
         local.request({"type": "query_reload", "rid": 1, "path": query_path(path, "a")})
         assert tables.loaded == ["a", "a"]
 
+    def test_reload_views_the_item_again(self, local, tables, monkeypatch):
+        """From a new view, which replaces the previous one (closed): what a
+        loader read with its view (e.g. a workbook's bytes) is read again."""
+        views = []
+        monkeypatch.setattr(
+            SupportChain,
+            "view",
+            lambda self, *args, **kw: views.append(tables.view()) or views[-1],
+        )
+        path, _ = preview(local)
+        assert (len(views), tables.closed) == (1, 0)
+        reply = local.request(
+            {"type": "query_reload", "rid": 1, "path": query_path(path, "a")}
+        )
+        assert "error" not in reply
+        assert (len(views), tables.closed) == (2, 1)  # the first view, closed
+        assert local._table_sets[path].view is views[1]
+        choose(local, path, "b")  # from the new view, not viewed again
+        assert len(views) == 2
+        local._close_preview()
+        assert tables.closed == 2
+
+    def test_reload_of_a_table_no_longer_there(self, local, tables, monkeypatch):
+        path, _ = preview(local)
+        monkeypatch.setattr(tables, "ids", ["b"])  # "a" removed
+        reply = local.request(
+            {"type": "query_reload", "rid": 1, "path": query_path(path, "a")}
+        )
+        assert "'a' is no longer there" in reply["error"]
+        assert tables.closed == 1  # the new view, not kept
+        assert choose(local, path, "b")["table"] == "b"  # others still chosen
+
     def test_settings_remembered_by_table(self, local, tables):
         path, _ = preview(local)
         rows(local, path, "a", settings={"widths": {"x": 120}})
@@ -233,6 +267,32 @@ class TestPreview:
         local._close_preview()
         assert tables.closed == 1
         assert not local._table_sets
+
+
+def test_excel_sheet_reloaded_from_the_file_as_it_is_now(tmp_path):
+    """polars' Excel loader reads the workbook's bytes read with its view: a
+    reload views the workbook again, so a sheet shows its rows as now."""
+    openpyxl = pytest.importorskip("openpyxl")
+
+    def save(rows):
+        book = openpyxl.Workbook()
+        book.active.title = "one"
+        for row in (["a"], *rows):
+            book.active.append(row)
+        book.create_sheet("two").append(["b"])
+        book.save(tmp_path / "book.xlsx")
+
+    save([[1]])
+    explorer = make(str(tmp_path))
+    path = path_of(explorer, "book.xlsx")
+    explorer.message({"type": "preview", "path": path})
+    assert explorer._preview["table_set"]["selector"] == "tab"
+    save([[1], [2]])
+    explorer.request(
+        {"type": "query_reload", "rid": 1, "path": query_path(path, "one")}
+    )
+    reply = rows(explorer, path, "one")
+    assert reply["rows"] == [[1], [2]]
 
 
 class TestViewTab:

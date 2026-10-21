@@ -6,13 +6,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from jupyter_storage_explorer._explorer.common import error_text
-from jupyter_storage_explorer.formats.view import Leaf
+from jupyter_storage_explorer.formats.view import Leaf, TableSetView
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
     from jupyter_storage_explorer._query.data_query import DataQuery
-    from jupyter_storage_explorer.formats.view import Node, TableSetView
+    from jupyter_storage_explorer.formats.view import Node, View
 
 # Between the item's path and a table's id in the data browser's requests'
 # "path" (see query_path): neither holds it.
@@ -40,21 +40,42 @@ def _nodes_json(nodes: Sequence[Node]) -> list[dict[str, Any]]:
 
 class TableSet:
     """A ``TableSetView`` in the data browser: the table chosen (the first at
-    first), queried by a ``DataQuery`` that ``make_query(id)`` makes, which
-    reads it with the view's ``loader``. One table is open at a time: choosing
-    another closes the previous one's query. ``close()`` closes the query,
-    then the view."""
+    first), queried by a ``DataQuery`` that ``make_query(id, load)`` makes,
+    reading it with ``load(again)`` (``_load``). One table is open at a time:
+    choosing another closes the previous one's query. A reload (``again``)
+    reads the table from a new view, ``view_again()``'s, which replaces the
+    view (closed). ``close()`` closes the query, then the view."""
 
     def __init__(
-        self, view: TableSetView, make_query: Callable[[str], DataQuery]
+        self,
+        view: TableSetView,
+        make_query: Callable[[str, Callable[[bool], Any]], DataQuery],
+        view_again: Callable[[], View] | None = None,
     ) -> None:
         self.view = view
         self._make_query = make_query
+        self._view_again = view_again
         self.table: str = view.leaves()[0].id
         self.query: DataQuery | None = None
         # Why the table chosen could not be read, if it could not.
         self.error = ""
         self._open(self.table)
+
+    def _load(self, table: str, again: bool) -> Any:
+        """``table``'s data, ``loader(table)``'s: from the view, or, ``again``
+        (a reload), from the item viewed again, if that still holds it."""
+        view = self.view
+        if again and self._view_again is not None:
+            view = self._view_again()
+            if not isinstance(view, TableSetView):
+                view.close()
+                raise ValueError("the item no longer holds tables")
+            if table not in {leaf.id for leaf in view.leaves()}:
+                view.close()
+                raise ValueError(f"the table {table!r} is no longer there")
+            previous, self.view = self.view, view
+            previous.close()
+        return view.loader(table)
 
     def _open(self, table: str) -> None:
         """Query ``table`` instead of the table shown, if it can be read."""
@@ -63,7 +84,7 @@ class TableSet:
             previous.close()
         self.table = table
         try:
-            self.query = self._make_query(table)
+            self.query = self._make_query(table, lambda again: self._load(table, again))
         except Exception as exc:
             self.error = error_text(exc)
         else:

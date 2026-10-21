@@ -153,13 +153,38 @@ class PreviewsMixin:
     ) -> Callable[[], View]:
         """Views ``item`` as ``fmt`` with ``engine`` (a key; None for the
         built-in views; see ``_view_engine``), each time it is called: on
-        the storage it is on (its context's), also after switching storages."""
+        the storage it is on (its context's), also after switching storages.
+        The first time with the context ``item`` was detected with; later (the
+        data browser's reload) with one read again (``_refreshed``), so the
+        view is of the item as it is now."""
         limits = self._view_limits
+        viewed = [False]
 
         def view() -> View:
-            return self._supports.view(fmt, item.ctx, limits, engine)
+            ctx = self._refreshed(fmt, item.ctx) if viewed[0] else item.ctx
+            viewed[0] = True
+            return self._supports.view(fmt, ctx, limits, engine)
 
         return view
+
+    def _refreshed(self, fmt: DataFormat, ctx: ItemContext) -> ItemContext:
+        """``ctx`` with the item's info and listing read again, on its own
+        filesystem, without fsspec's cached listings: what a reload views. Its
+        format is checked again (which refreshes what ``fmt`` keeps of it, e.g.
+        a Parquet dataset's layout); ValueError if it no longer matches, or
+        the item is gone."""
+        self._invalidate_cache(ctx.path, ctx.fs)
+        try:
+            info = self._info(ctx.path, ctx.fs)
+        except FileNotFoundError:
+            raise ValueError(f"{ctx.name} is gone") from None
+        children = (
+            self._ls(ctx.path, ctx.fs) if info.get("type") == "directory" else None
+        )
+        fresh = dataclasses.replace(ctx, info=info, children=children)
+        if not fmt.matches(fresh):
+            raise ValueError(f"{ctx.name} no longer matches {fmt.label}")
+        return fresh
 
     def _formats_of(
         self, path: str, format: str | None
@@ -257,7 +282,7 @@ class PreviewsMixin:
                 preview["query"] = data.opening()
                 return data
             if isinstance(view, TableSetView):
-                tables = self._table_set(view, item)
+                tables = self._table_set(view, viewer, item)
                 preview["table_set"] = tables.opening()
                 return tables
         except Exception:
@@ -369,12 +394,18 @@ class PreviewsMixin:
             first.append(view.data)
             return DataQuery(source, key, self._states, **options)
 
-    def _table_set(self, view: TableSetView, item: _Detected) -> TableSet:
-        """The data browser's tables of ``view``, the view ``item`` gave.
+    def _table_set(
+        self, view: TableSetView, viewer: Callable[[], View], item: _Detected
+    ) -> TableSet:
+        """The data browser's tables of ``view``, the view ``viewer`` gave of
+        ``item``.
 
-        Each table chosen is read by the view's ``loader``, again on reload
-        (a ``QueryView`` it gives tells whether the rows are cut short, and is
-        closed with the table's query); its settings are remembered by the
+        Each table chosen is read by the view's ``loader`` (a ``QueryView`` it
+        gives tells whether the rows are cut short, and is closed with the
+        table's query). A reload views the item again with ``viewer`` and reads
+        the table from that view, which replaces the previous one (closed), so
+        a loader's data read with the view (e.g. a workbook's bytes) is read
+        again too (``TableSet._load``). Its settings are remembered by the
         item's URL and the table's id, as a ``QueryView``'s by location, with
         the mode last chosen for it.
         """
@@ -387,16 +418,19 @@ class PreviewsMixin:
             "page_rows": limits.max_display_rows,
         }
 
-        def make_query(table: str) -> DataQuery:
+        def make_query(table: str, load: Callable[[bool], Any]) -> DataQuery:
             key = f"{url}#{table}"
             state = self._states.query(key)
             mode = state.mode if state is not None else "auto"
             # The table's QueryView, if the loader gave one (its data cut
             # short or not: ``more``), closed once replaced or no longer shown.
             loaded: list[QueryView | None] = [None]
+            # Whether the table was read: the next read is a reload.
+            read = [False]
 
             def source() -> Any:
-                data = view.loader(table)
+                data = load(read[0])
+                read[0] = True
                 if isinstance(data, QueryView):
                     previous, loaded[0] = loaded[0], data
                     if previous is not None:
@@ -417,10 +451,12 @@ class PreviewsMixin:
             except ValueError:
                 if mode != "live":
                     raise
-                # "live" chosen when the table was lazy, and no longer is.
+                # "live" chosen when the table was lazy, and no longer is:
+                # read again from the same view, not a reload.
+                read[0] = False
                 return DataQuery(source, key, self._states, **table_options)
 
-        return TableSet(view, make_query)
+        return TableSet(view, make_query, viewer)
 
     def _table_set_request(self, content: dict[str, Any]) -> dict[str, Any]:
         """Answer "table_set_open": show another table of the table set
@@ -462,7 +498,7 @@ class PreviewsMixin:
                     height="fill",
                 )
             elif isinstance(view, TableSetView):
-                tables = self._table_set(view, item)
+                tables = self._table_set(view, viewer, item)
                 widget = TableSetTab(tables, title=title, label=label)
             else:
                 widget = ViewTab(
