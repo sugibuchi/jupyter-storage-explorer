@@ -123,7 +123,9 @@ what working with data needs; it complements JupyterLab's file browser rather th
   where they live with the engine you choose.
 - **From browsing to code**: ready-to-run code and URLs for what you select; your code can follow what you browse
   ([from Python](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#working-with-the-explorer-from-python)).
-- **At home in JupyterLab**: drag files to and from its file browser and between storages; edit files in its editors.
+- **At home in JupyterLab**: drag files to and from its file browser and between storages; edit files in its editors;
+  keep an explorer in its side bar, beside your notebooks
+  ([the launcher's side panel](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/launcher/README.md)).
 - **Safe by default**: folders are moved, copied, renamed or deleted only in
   [Unsafe mode](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#unsafe-operations),
   for one operation.
