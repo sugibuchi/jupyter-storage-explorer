@@ -116,8 +116,7 @@ a JupyterLab tab of its own. **Close preview** or Esc closes the panel.
 
 Double-click a file, or right-click → **Edit**, to open it in JupyterLab's editor; **Save** writes it back to the
 storage. Needs the [launcher](../launcher/README.md) package. JupyterLab reaches only the files you open this way,
-through the explorer: not other files of the storage, nor new ones (see
-[Compared with jupyter-fs and jupyter-fsspec](#compared-with-jupyter-fs-and-jupyter-fsspec)).
+through the explorer: not other files of the storage, nor new ones.
 
 ### Switch engine
 
@@ -248,35 +247,6 @@ captures the same text in both. Both patterns must have the same group names. Wi
 | Within each user's folder              | `abfs://home@L/(?P<user>[^/]+)/.*` in both                                                    |
 
 The `deny` after it has no groups, e.g. `{"rule": "deny", "src": r"abfs://[^@/]+@L/.*"}` for "not between containers".
-
-## Security
-
-The explorer runs in your kernel, as your code does, so it can do what your code can, and no more:
-
-- **Credentials** are those of your environment: an AWS profile, an Azure CLI login or managed identity, Google's
-  default credentials, as the storage's library finds them, or options you give a storage. The explorer never asks
-  for secrets, and "Python code" leaves out options that look like credentials.
-- **Nothing is added to the Jupyter server**: no endpoints to reach storages. The launcher's extension only shows
-  explorers and opens the files you open (Edit) through their kernels.
-- **Unsafe mode and the transfer policy prevent mistakes**; they are not a security boundary, as code in the kernel
-  can do whatever its credentials allow.
-- **Files are shown safely**: names with control or invisible characters show them as `\uXXXX`, Markdown is rendered
-  without scripts, notebooks open untrusted unless signed, and drags from other browser tabs are refused.
-- **Files pasted from another kernel** are read with one of the explorer's storages or, for the storages it knows
-  (Azure, S3, Google Cloud Storage, SFTP), one opened with your credentials; never from wherever another kind of URL
-  points (see [File transfer between file systems](#file-transfer-between-file-systems)).
-
-## Compared with jupyter-fs and jupyter-fsspec
-
-[jupyter-fs](https://github.com/jpmorganchase/jupyter-fs) and
-[jupyter-fsspec](https://github.com/fsspec/jupyter-fsspec) run in the Jupyter server: they add storages to
-JupyterLab's interface as browsers of their own, configured on the server, ready without a kernel. jupyter-fs, a
-contents manager, also opens any file of them in JupyterLab's editors and notebooks. Storage Explorer runs in your
-kernel instead: no server setup, your own credentials and libraries, the data viewed and queried where your analysis
-runs, and explorers in your notebooks. It opens in JupyterLab only the files you open from it, and needs a kernel (the
-launcher's tabs and side panel start their own).
-
-They work side by side: Storage Explorer leaves JupyterLab's file browser and contents as they are.
 
 ## Data browser and view tabs
 

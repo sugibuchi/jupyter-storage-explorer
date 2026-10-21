@@ -104,6 +104,32 @@ After rebuilding the extension, install it there again (`uv pip install --python
 
 CLAUDE.md describes each part in more detail.
 
+## Design
+
+### Security
+
+The explorer runs in the user's kernel, as their code does: it can do what their code can, and no more. Keep it so.
+
+- **Credentials** are the environment's: an AWS profile, an Azure CLI login or managed identity, Google's default
+  credentials, as each storage's library finds them, or options given to a storage. The explorer never asks for
+  secrets, nor reads them from environment variables: asking would happen in every kernel (each launcher tab, each
+  notebook), and secrets in environment variables are a practice we do not support. "Python code" leaves out options
+  that look like credentials (the secret fields, and a check of option names).
+- **Nothing is added to the Jupyter server**: no server extension, no endpoints reaching storages. The launcher's
+  JupyterLab extension only shows explorers and passes the frontend's requests to their kernels.
+- **Unsafe mode and the transfer policy prevent mistakes**; they are not a security boundary: code in the kernel can
+  do whatever its credentials allow.
+- **Notebooks opened from a storage** (Edit) are untrusted unless signed, as JupyterLab's own are: their outputs'
+  HTML and scripts do not run until the user trusts them. The kernel checks signatures with nbformat's notary, as
+  jupyter_server does, and signs a notebook saved while trusted.
+- **What storages hold is shown, never run**: names show control and invisible characters as `\uXXXX` (`visible()`),
+  Markdown is sanitized, and a format's own icon is shown as an image, in which scripts do not run.
+- **Pages cannot name files**: drags carry only a random id of the drag, so drags from other browser tabs or sites are
+  refused.
+- **Files pasted from another kernel** are read with one of the explorer's storages or, for the kinds of storage the
+  mappers know (Azure, S3, Google Cloud Storage, SFTP), one opened with the user's credentials if it reaches them;
+  never from wherever an unknown URL points (`MapperChain.locate`).
+
 ## The JupyterLab extension
 
 The extension is not built when the package is built: build it yourself with `jlpm` in `launcher/labextension/`. The
