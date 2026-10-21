@@ -1,6 +1,7 @@
 # jupyter-storage-explorer-abfs-support
 
-Azure Data Lake Storage support for Storage Explorer, the [Jupyter Storage Explorer](https://github.com/sugibuchi/jupyter-storage-explorer) plugin for
+Azure Data Lake Storage support for Storage Explorer,
+the [Jupyter Storage Explorer](https://github.com/sugibuchi/jupyter-storage-explorer) plugin for
 Azure Data Lake Storage Gen2: folders moved in one step, copies within an account on the server, empty folders.
 
 ```bash
@@ -9,7 +10,8 @@ pip install "jupyter-storage-explorer[abfs-support]"  # the plugin only, with th
 ```
 
 Its libraries (`adlfs`, `azure-storage-file-datalake`) are not its dependencies, so that installing it never
-changes those of a shared environment: the first command (or `jupyter-storage-explorer-abfs-support[full]`) installs them too.
+changes those of a shared environment: the first command (or `jupyter-storage-explorer-abfs-support[full]`) installs
+them too.
 Explorers use every plugin installed, unless their `plugin_options` disable it: `{"abfs-support": {"enabled": False}}`
 (see [Plugins](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#plugins)).
 
@@ -38,11 +40,11 @@ StorageExplorer(
 )
 ```
 
-| Option        | Default | Meaning                                                                                                     |
-|---------------|---------|-------------------------------------------------------------------------------------------------------------|
-| `enabled`     | `True`  | Whether explorers use the plugin. `False`: not even imported.                                               |
+| Option        | Default | Meaning                                                                                                    |
+|---------------|---------|------------------------------------------------------------------------------------------------------------|
+| `enabled`     | `True`  | Whether explorers use the plugin. `False`: not even imported.                                              |
 | `priority`    | lowest  | Plugins of a higher priority come first: their operations are tried before the others'. Equal ones by key. |
-| `concurrency` | `64`    | The most files copied at once on the server (`AzureDataLakeGen2Operation`'s `concurrency`).                 |
+| `concurrency` | `64`    | The most files copied at once on the server (`AzureDataLakeGen2Operation`'s `concurrency`).                |
 
 ## AzureDataLakeGen2Operation
 
@@ -59,6 +61,6 @@ StorageExplorer(
 )
 ```
 
-| Parameter     | Default | Meaning                                                                                                                         |
-|---------------|---------|---------------------------------------------------------------------------------------------------------------------------------|
+| Parameter     | Default | Meaning                                                                                                                      |
+|---------------|---------|------------------------------------------------------------------------------------------------------------------------------|
 | `concurrency` | `64`    | The most files copied at once: a folder's files are copied a folder at a time, at most this many at once, its folders first. |
