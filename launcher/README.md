@@ -21,10 +21,28 @@ It also integrates every Storage Explorer, in its tab or in a notebook, with Jup
 pip install "jupyter-storage-explorer-launcher[polars]"
 ```
 
-`[polars]` adds the plugin previewing and querying data with Polars, and Polars itself. The launcher has the same
-extras as `jupyter-storage-explorer`
-([Installation](https://github.com/sugibuchi/jupyter-storage-explorer#installation)):
-`pandas`, `pyspark`, `abfs`, and `<name>-support` for a plugin alone, using the libraries you have.
+The launcher has the same extras as `jupyter-storage-explorer`
+([Installation](https://github.com/sugibuchi/jupyter-storage-explorer#installation)), of two kinds:
+
+- **Full extras**, e.g. `[polars]`: the plugin and the libraries it uses.
+- **Support-only extras**, e.g. `[polars-support]`: the plugin alone, using the libraries already installed. Nothing
+  else is installed or upgraded.
+
+| Full extra | Support-only extra | Plugin                                                              |
+|------------|--------------------|---------------------------------------------------------------------|
+| `polars`   | `polars-support`   | Polars: Delta Lake, Parquet, CSV, JSON Lines, Excel                 |
+| `pandas`   | `pandas-support`   | pandas: Parquet, CSV, JSON Lines, Excel                             |
+| `pyspark`  | `pyspark-support`  | PySpark or Databricks Connect: Delta Lake, Parquet, CSV, JSON Lines |
+| `abfs`     | `abfs-support`     | Azure Data Lake Storage Gen2                                        |
+| `all`      | `all-supports`     | All of the above                                                    |
+
+Full extras are handy for a quick try. **Support-only extras are highly recommended for an IPython kernel whose data
+access packages are carefully installed and configured** (e.g. a shared JupyterHub image): the plugins use what is
+there and never change it.
+
+```bash
+pip install "jupyter-storage-explorer-launcher[all-supports]"  # every plugin, with the libraries you have
+```
 
 Install it in the environment of JupyterLab and of the default kernel (on JupyterHub, usually the single-user image),
 then restart JupyterLab. Requires JupyterLab 4.0 or later.

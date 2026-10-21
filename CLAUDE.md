@@ -69,7 +69,7 @@ the plugins (`plugins/<name>-support`). The launcher and the plugins require the
 (their `hatch_build.py` sets their dependencies, as the version comes from git; add new ones there); the explorer's
 extras, declared in the root's `pyproject.toml` without versions (each plugin's exact pin of the explorer makes them the
 plugins of its version), are `<name>`, the plugin with its `full` extra (its libraries), and `<name>-support`, the
-plugin alone; the launcher's `pyproject.toml` offers the same extras (the explorer's, at the version it pins):
+plugin alone (`all` and `all-supports`: every plugin so); the launcher's `pyproject.toml` offers the same extras (the explorer's, at the version it pins):
 
 - `jupyter-storage-explorer` (root, `src/jupyter_storage_explorer/`): the anywidget widgets `StorageExplorer` (files)
   and `DataExplorer` (a dataframe given by the user, any library narwhals supports, with `QuerySettings`). Runtime

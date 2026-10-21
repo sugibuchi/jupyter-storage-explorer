@@ -44,15 +44,27 @@ for all you can do with it.
 pip install "jupyter-storage-explorer[polars]"
 ```
 
-`[polars]` adds the plugin previewing and querying data with Polars, and Polars itself. Plugins for other engines and
-storages are extras too; `<name>-support` installs a plugin alone, using the libraries you have:
+Engines and storages come as plugins, installed with extras of two kinds:
 
-| Extra     | Plugin                                                                                     |
-|-----------|--------------------------------------------------------------------------------------------|
-| `polars`  | Polars (with deltalake and fastexcel): Delta Lake, Parquet, CSV, JSON Lines, Excel         |
-| `pandas`  | pandas (with PyArrow and openpyxl): Parquet, CSV, JSON Lines, Excel                        |
-| `pyspark` | PySpark or Databricks Connect (with delta-spark): Delta Lake, Parquet, CSV, JSON Lines     |
-| `abfs`    | Azure Data Lake Storage Gen2: folders moved in one step, copies on the server (with adlfs) |
+- **Full extras**, e.g. `[polars]`: the plugin and the libraries it uses (Polars, deltalake, fastexcel).
+- **Support-only extras**, e.g. `[polars-support]`: the plugin alone, using the libraries already installed. Nothing
+  else is installed or upgraded.
+
+| Full extra | Support-only extra | Plugin                                                                                  | Libraries of the full extra        |
+|------------|--------------------|-----------------------------------------------------------------------------------------|------------------------------------|
+| `polars`   | `polars-support`   | Polars: Delta Lake, Parquet, CSV, JSON Lines, Excel                                     | polars, deltalake, fastexcel       |
+| `pandas`   | `pandas-support`   | pandas: Parquet, CSV, JSON Lines, Excel                                                 | pandas, pyarrow, openpyxl          |
+| `pyspark`  | `pyspark-support`  | PySpark or Databricks Connect: Delta Lake, Parquet, CSV, JSON Lines                     | pyspark, delta-spark               |
+| `abfs`     | `abfs-support`     | Azure Data Lake Storage Gen2: folders moved in one step, copies on the server           | adlfs, azure-storage-file-datalake |
+| `all`      | `all-supports`     | All of the above                                                                        | All of the above                   |
+
+Full extras are handy for a quick try. **Support-only extras are highly recommended for an IPython kernel whose data
+access packages are carefully installed and configured** (e.g. a shared JupyterHub image, or Spark and Databricks
+Connect set up for a cluster): the plugins use what is there and never change it.
+
+```bash
+pip install "jupyter-storage-explorer[all-supports]"  # every plugin, with the libraries you have
+```
 
 Install the package for your storage too:
 

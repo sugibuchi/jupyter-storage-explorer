@@ -574,7 +574,7 @@ explorer's extras install them (`polars`: with its libraries; `polars-support`: 
    tests are in its `tests/`, named `test_<name>_*.py` (pytest at the root runs every plugin's, and imports test files
    by name).
 2. Add its extras, `<name>` (the plugin's `full`) and `<name>-support` (the plugin alone), to
-   `[project.optional-dependencies]` in the root's and the launcher's `pyproject.toml`, without versions (the plugin
+   `[project.optional-dependencies]` in the root's and the launcher's `pyproject.toml` (and to their `all` and `all-supports`), without versions (the plugin
    requires the explorer of exactly its own), and the package to the root's dev dependencies and `[tool.uv.sources]`.
 3. Give it a release workflow, `.github/workflows/release-<plugin>.yaml` (a copy of another's), and its PyPI project a
    trusted publisher for it (see [One-time setup for PyPI](../DEVELOPMENT.md#one-time-setup-for-pypi)).

@@ -47,10 +47,10 @@ dependencies = [
 
 # The plugins of this repository (plugins/<name>-support), released with the
 # explorer at its version: "<name>" installs one with its libraries (its "full"
-# extra), "<name>-support" alone, using the libraries already installed. No
-# version here: each plugin requires the explorer of exactly its own version,
-# so only the plugins of this one's can be installed with it. The launcher
-# offers the same extras.
+# extra), "<name>-support" alone, using the libraries already installed; "all"
+# and "all-supports" every plugin so. No version here: each plugin requires
+# the explorer of exactly its own version, so only the plugins of this one's
+# can be installed with it. The launcher offers the same extras.
 [project.optional-dependencies]
 abfs = ["jupyter-storage-explorer-abfs-support[full]"]
 abfs-support = ["jupyter-storage-explorer-abfs-support"]
@@ -60,6 +60,9 @@ polars = ["jupyter-storage-explorer-polars-support[full]"]
 polars-support = ["jupyter-storage-explorer-polars-support"]
 pyspark = ["jupyter-storage-explorer-pyspark-support[full]"]
 pyspark-support = ["jupyter-storage-explorer-pyspark-support"]
+# Every plugin: with their libraries, or alone.
+all = ["jupyter-storage-explorer[abfs,pandas,polars,pyspark]"]
+all-supports = ["jupyter-storage-explorer[abfs-support,pandas-support,polars-support,pyspark-support]"]
 
 [project.urls]
 Homepage = "https://github.com/sugibuchi/jupyter-storage-explorer"

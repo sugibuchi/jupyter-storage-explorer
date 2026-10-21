@@ -464,7 +464,7 @@ StorageExplorer(
 
 Each plugin's README has its options (`plugin_options`, and `format_options` for its engine).
 
-`[<name>-support]` installs a plugin alone, using the libraries already installed: plugins never install or upgrade
+`[all]` installs every plugin with its libraries. `[<name>-support]` (`[all-supports]` for every plugin) installs a plugin alone, using the libraries already installed: plugins never install or upgrade
 them otherwise, so that a shared environment's stay as its administrators set them up.
 
 ⚙ at the right of the toolbar → **About** shows the explorer's version and the plugins installed, those not used greyed

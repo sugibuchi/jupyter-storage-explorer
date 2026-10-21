@@ -51,6 +51,8 @@ polars = ["jupyter-storage-explorer[polars]"]
 polars-support = ["jupyter-storage-explorer[polars-support]"]
 pyspark = ["jupyter-storage-explorer[pyspark]"]
 pyspark-support = ["jupyter-storage-explorer[pyspark-support]"]
+all = ["jupyter-storage-explorer[all]"]
+all-supports = ["jupyter-storage-explorer[all-supports]"]
 
 [project.urls]
 Homepage = "https://github.com/sugibuchi/jupyter-storage-explorer/tree/main/launcher"
