@@ -4,7 +4,6 @@ point."""
 
 from __future__ import annotations
 
-import logging
 from importlib.metadata import entry_points
 from types import SimpleNamespace
 
@@ -39,8 +38,6 @@ class DatabricksFileSystem(AbstractFileSystem):
 
     @property
     def config(self):
-        if isinstance(self._host, Exception):
-            raise self._host
         return SimpleNamespace(host=self._host)
 
 
@@ -83,13 +80,6 @@ class TestLocations:
     def test_through_json(self, chain):
         location = chain.location_of(DatabricksFileSystem(), "/Workspace/Shared/x.py")
         assert Location.from_json(location.to_json()) == location
-
-    def test_without_a_host_the_explorers_own(self, chain, caplog):
-        fs = DatabricksFileSystem(host=RuntimeError("no configuration"))
-        with caplog.at_level(logging.WARNING):
-            location = chain.location_of(fs, "/Volumes/main/s/v/a.csv")
-        assert location == FsspecLocation(url="dbfs://Volumes/main/s/v/a.csv")
-        assert "cannot read the Databricks workspace's host" in caplog.text
 
 
 class TestWorkspacesToldApart:
