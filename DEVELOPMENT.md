@@ -1115,6 +1115,10 @@ Changes to the Python code or to `src/jupyter_storage_explorer/static/` need no 
 Commit `package.json`, `yarn.lock`, `.yarnrc.yml`, `tsconfig.json`, `src/` and `style/` of `launcher/labextension/`;
 not `node_modules/`, `lib/` or `.yarn/`.
 
+The extension's packages are updated by hand: `uv run jlpm up <package>` there, then `uv run jlpm build` and the smoke
+test. Dependabot does not update them, as it writes `yarn.lock` in a format jlpm's Yarn does not, but its alerts report
+vulnerable ones.
+
 ## Releasing
 
 Releases are made by GitHub Actions: push a version tag from `main`,
