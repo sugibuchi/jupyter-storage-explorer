@@ -36,6 +36,24 @@ explorer exactly, so an extra always installs the plugin of the explorer's versi
 | `docs/scripts/`                                                | Scripts making the docs' screenshots and the demo GIFs.                                              |
 | `binder/`                                                      | The demo on mybinder.org (the README's "Try it" link): released packages, demo data.                 |
 
+The explorer's runtime dependencies are only anywidget, fsspec, narwhals, pygments and traitlets. Every other library,
+such as polars, pandas, PyArrow, Pillow or PySpark, is optional and probed at run time. The engines' supports come with
+the plugins.
+
+### The public API
+
+Users import only from these modules and the plugins' packages. Their `__all__` is the public API: what users
+construct, subclass, call or annotate with.
+
+- `jupyter_storage_explorer`, the top level: the widgets, `Location` and `StorageExplorerPlugin`;
+- `jupyter_storage_explorer.filesystems`: locations, mappers and operations;
+- `jupyter_storage_explorer.formats` and `formats.supports`.
+
+The explorer's machinery stays out of them, such as `SupportChain`, `OperationChain` and `detect`. The package and the
+tests import it from its modules.
+
+`jupyter_storage_explorer.testing` has the helpers plugins test with: items and pytest fixtures. It needs pytest.
+
 All Python commands go through [uv](https://docs.astral.sh/uv/). Node.js, for the extension and the JavaScript's checks,
 comes with the dev dependencies (`nodejs-wheel`), so `uv run node`, `uv run npx` and `uv run jlpm` work without
 installing it.
@@ -72,14 +90,86 @@ uv run --group docs tests/browser/smoke.py           # the widgets in a real Jup
 CI runs the first four and compiles the extension's TypeScript. It does not run the smoke test: run it yourself after
 changing `static/` or the extension.
 
+### Python tests
+
+The explorer's and the launcher's tests are in `tests/`, and each plugin's in `plugins/<name>-support/tests/`.
+`uv run pytest` at the root runs them all.
+
+To run a plugin's tests alone, with only its dependencies, run this in its folder:
+
+```bash
+uv run --isolated --package <its package> pytest
+```
+
+A plain `uv run` there would install the plugin's `dev` group into the shared `.venv`, e.g. pyspark. The explorer's
+tests expect pyspark missing, until `uv sync` at the root removes it.
+
+`tests/` has a folder per part of the package:
+
+| Folder         | Tests of                                       |
+|----------------|------------------------------------------------|
+| `explorer/`    | `StorageExplorer` and `_explorer/`             |
+| `query/`       | `_query/` and `DataExplorer`                   |
+| `formats/`     | `formats/`                                     |
+| `filesystems/` | `filesystems/`                                 |
+| `jobs/`        | `_jobs/`                                       |
+| `launcher/`    | The launcher                                   |
+| `browser/`     | The JavaScript's checks and the smoke test     |
+
+The top of `tests/` has `conftest.py`, the tests of the top-level modules, and the helpers the folders share.
+
+- The folders have no `__init__.py`. pytest puts `conftest.py`'s folder on `sys.path`, so helpers are imported by name.
+- Never import one test file from another: move what they share to a helper.
+- Test files' names are unique across the folders, as pytest imports them by name. A plugin's are `test_<plugin>_*.py`.
+
+The fixtures come from the public `jupyter_storage_explorer.testing`, which plugins' tests use too:
+
+- `memfs`: a cleared fsspec memory filesystem;
+- `make_item`: writes a file there and returns it as formats and supports get it, an `ItemContext`;
+- `local_item`: the same for a local file.
+
+`tests/conftest.py` adds `mem_explorer` and `local`, explorers of those.
+
+The widget tests subclass the widget to capture `send()`. They drive it through `_on_custom_msg`, as the frontend
+would. `StorageExplorer`'s are in `tests/explorer/test_explorer_*.py`, a file per feature, on the harness of
+`tests/explorers.py`.
+
+Plugins' tests cover their own code: supports, options, engine, operations and entry point. The explorer's tests use
+the plugins' supports as material, from `tests/all_supports.py`. The plugins' test dependencies are in each one's
+`dev` group.
+
+A few libraries need care:
+
+- **polars** cannot read `memory://`. Whatever polars reads by URL needs real local files, in `tmp_path`.
+- **The data browser's tests** run each filter on polars, pandas, PyArrow, DuckDB and sqlframe. sqlframe is the PySpark
+  API on DuckDB, which narwhals queries as it does Spark: the core's tests have no Spark.
+- **pyspark-support's view tests** run on a real local Spark session. They are skipped without Java or pyspark, which
+  the shared `.venv` lacks. CI's `spark` job runs them alone, with Java.
+
+### The smoke test
+
 The JavaScript has no unit tests. Instead, `tests/browser/smoke.py` starts a JupyterLab of its own and clicks through
 the main features in the installed Microsoft Edge: browsing, previews, the data browser, file operations, transfers and
 the launcher's tab. Give check names to run only those. A failed check leaves a screenshot,
 `tests/browser/smoke-<check>.png`.
 
-For performance, `uv run tests/performance/benchmark.py` times what users wait for: opening large folders, clicks,
-copies and scrolling the data browser. It runs on a memory filesystem with a latency per call, so that round trips
-count as on cloud storages. Compare its timings before and after a change, on the same machine.
+- Add a check there for each new feature.
+- It runs JupyterLab with the demo data of `docs/scripts/`, through `_lab.py` and `demo_data.py`.
+- It reloads the page and restarts a launcher tab's kernel. Check a server restart by hand: stop and start its process.
+
+For a one-off look, write a Playwright script on `_lab` the same way. Use a new notebook each time: a reused name
+reuses its kernel, which keeps the old JavaScript.
+
+`tests/browser/check_js.py` joins each widget's module as the kernel does. It runs `node --check` and ESLint on it, for
+names used but defined nowhere, or defined but unused.
+
+### Performance
+
+`uv run tests/performance/benchmark.py` times what users wait for: opening large folders, clicks, copies and scrolling
+the data browser. It runs on a memory filesystem with a latency per call, so that round trips count as on cloud
+storages. Compare its timings before and after a change, on the same machine.
+
+### Older JupyterLab
 
 The packages support JupyterLab 4.0 or later, but the development environment has the latest. To run the smoke test on
 an older JupyterLab, make an environment of its own, outside the repository. `uv run --with` would not do, as it does
@@ -112,6 +202,7 @@ uv pip install --python ../lab40 -e launcher --reinstall-package jupyter-storage
 - **The data browser** is `DataQuery`, in `_query/`. It works on any dataframe narwhals supports. `DataExplorer` shows
   it alone.
 - **Formats**, in `formats/`, detect each kind of file. Supports preview, query and load it, one library each.
+- **The launcher** opens explorers in JupyterLab's tabs and side bar, with the settings of `launcher.py` files.
 
 The sections below describe each part.
 
@@ -204,6 +295,78 @@ Two rules keep the frontend working:
   and invisible characters as `\uXXXX`.
 - anywidget's `model` has only `get`, `set`, `save_changes`, `on`, `off` and `send`. Backbone methods such as
   `previous()` throw inside `set`, which silently breaks syncing.
+
+### The launcher
+
+The launcher, in `launcher/`, adds a JupyterLab launcher item. It opens a tab whose kernel runs `launch()`.
+
+`launch()` merges every `storage-explorer/launcher.py` in Jupyter's configuration paths, as layers from system to
+user. `load_settings` does the merging. Each file may define these functions:
+
+- `filesystems()`, `operations()`, `filesystem_mappers()` and `transfer_policy()`;
+- `plugin_options()`, merged by plugin, then option;
+- `supports()`, and `format_options()`, merged by library, format, then option;
+- `parameters()`, the explorer's other arguments;
+- `final()`, which names what later layers cannot change.
+
+The retired `style()` and `formats()` are ignored with a warning.
+
+The settings menu, ⚙, is on every explorer. Its "About" shows the versions of the explorer and of the plugins
+installed, with plugins not loaded greyed out and why. Its icon, `static/storage-explorer.svg`, is a copy of the
+launcher's, which a test keeps the same.
+
+In a launcher tab, the menu also has "Edit configuration". It opens the user's `launcher.py` in JupyterLab's editor.
+
+- If the file is missing, it is created from `launcher_template.py`, once the user confirms.
+- It is read and written through the explorer's kernel. `~/.jupyter` is hidden, so JupyterLab's own contents API
+  would refuse it.
+- Notebooks never offer it.
+
+#### The JupyterLab extension
+
+The extension has four plugins:
+
+| Plugin         | Does                                                                                   |
+|----------------|----------------------------------------------------------------------------------------|
+| `index.ts`     | The tab, a console, and the side panel.                                                |
+| `download.ts`  | Downloads items dropped onto JupyterLab's file browser to the Jupyter server.           |
+| `files.ts`     | "Open in JupyterLab": a drive serving the files explorers opened.                       |
+| `queryTabs.ts` | "View in a new tab".                                                                   |
+
+**The tab.** ipywidgets binds a console's widgets to its first kernel. So a tab whose session is lost, or whose kernel
+changes or restarts, is replaced by a new tab.
+
+Each tab's view, its storage and folders, is restored with the workspace:
+
+1. The explorer reports it as a bubbling `"jupyter-storage-explorer:view"` DOM event.
+2. The tab keeps it in JupyterLab's state database, which is saved with the workspace.
+3. A restored tab passes it back as `launch(view=...)`.
+
+**The side panel** holds such a console too, under a session name of its own. The command "Show Storage Explorer in
+the Side Bar" shows it.
+
+- Its console is made by `console:create` when the panel is first shown, for ipywidgets' widget manager. Then it is
+  moved into the panel.
+- Restored consoles of that name are moved back in, once JupyterLab is restored.
+- It runs `launch(sidebar=True)`: the sidebar layout, without the tree or the preview panel.
+
+**Open in JupyterLab.** `files.ts` is a JupyterLab drive, `StorageExplorer:<storage>/<path>`, not shown in the file
+browser.
+
+- It serves only the files explorers opened on the page. Typed paths, new files and renames are refused.
+- Files are read and saved through the explorer's kernel, with contents models from `_explorer/jupyterlab_files.py`.
+- Their hash lets JupyterLab detect changes made elsewhere before saving.
+- Notebooks are trusted as jupyter_server trusts them, with nbformat's notary in the kernel. Tests get their own
+  `JUPYTER_DATA_DIR`.
+
+**View in a new tab.** The kernel views the item and opens a widget of the view:
+
+- a `DataExplorer` of the same query, for a `QueryView`;
+- else a `ViewTab`, which renders the view's section with the shared `sections.js`.
+
+The explorer keeps the widget until its tab closes. The tab renders it with the output renderers of the notebook or
+console holding the explorer, as ipywidgets ties widgets to that kernel connection. The tab closes with the explorer or
+a kernel restart.
 
 ### Storages
 
