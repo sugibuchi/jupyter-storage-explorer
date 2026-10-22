@@ -36,11 +36,13 @@ Pass a function (`lambda: pl.scan_parquet(url)`) for **⟳** to read the data ag
 
 ### Filter
 
-Click a column's funnel to filter it: *Null / empty*, *Range*, *Contains* or *Regex*.
+Click a column's funnel to filter it: *Null / empty* or *Range*, also *Contains* or *Regex* for text, and *=* for
+true or false.
 
 <img src="figs/browser-filter.png" width="462" alt="The filter dialog of a column, with a range">
 
-Active filters are listed in the toolbar: click one to edit it, × to remove it. **Reset** removes them all.
+Active filters are listed in the toolbar: click one to edit it, × to remove it. **Reset** removes them all and shows
+the hidden columns again.
 
 <img src="figs/browser-chips.png" width="830" alt="Two active filters in the toolbar">
 

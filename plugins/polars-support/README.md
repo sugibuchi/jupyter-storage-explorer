@@ -49,11 +49,9 @@ Every format but JSON and Excel takes:
 | `credential_provider` | `"auto"` | polars' `credential_provider`: a function giving cloud storage credentials, in the data browser only (never in the code).                                                                                                                                                                                                                                                                                                                                                                     |
 
 The other options are each format's reader's arguments, of the same names, with their descriptions from polars' API
-documentation. Those not set are not passed: polars' defaults, shown, apply, but where the explorer gives its own.
-Values
-that are Python objects (e.g. data types such as `pl.String` in `schema_overrides`) are used in the data browser but
-left
-out of the code, as are options that look like credentials.
+documentation. Those not set are not passed, so polars' defaults, shown below, apply, except where the explorer sets
+its own. Values that are Python objects (e.g. data types such as `pl.String` in `schema_overrides`) are used in the
+data browser but left out of the code, as are options that look like credentials.
 
 ### CSV (`csv`)
 

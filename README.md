@@ -74,7 +74,8 @@ StorageExplorer("s3://my-bucket/data")
 ```
 
 Options after the address go to the storage package, e.g. `profile="analytics"`. Double-click a file to preview it;
-right-click for everything else.
+right-click for everything else. With the launcher installed, files that JupyterLab can show open in its editors
+instead.
 
 Browse a dataframe and get the rows you filtered back:
 

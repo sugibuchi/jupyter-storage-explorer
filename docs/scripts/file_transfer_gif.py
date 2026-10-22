@@ -1,4 +1,4 @@
-"""docs/figs/file-transfer.gif, in "File transfer between file systems": two
+"""docs/figs/file-transfer.gif, in "File transfers between storages": two
 Storage Explorer tabs from JupyterLab's launcher, one above the other, each
 with a kernel of its own, and a file dragged from a team's shared folder on
 the server's disk (top) into the scratch storage of the other tab (bottom).

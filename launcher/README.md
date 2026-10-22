@@ -78,8 +78,8 @@ one from a template with an example of each setting.
 
 <img src="https://raw.githubusercontent.com/sugibuchi/jupyter-storage-explorer/main/launcher/figs/settings-editor.png" width="834" alt="launcher.py, created from the template, open in JupyterLab's editor beside the Storage Explorer tab">
 
-Uncomment and edit the settings you need, then save. Reload the web browser, then open the explorer tab again to apply
-the changes.
+Uncomment and edit the settings you need, then save. Open a new Storage Explorer tab, or reload the page, to apply the
+changes.
 
 For example, to open each tab on the data lake and the folder it starts on, with a preview at once:
 
@@ -131,8 +131,9 @@ launcher's tabs and to explorers in notebooks alike.
 
 #### Bookmarks and query settings
 
-The tabs share bookmarks and the data browser's query settings in `storage-explorer/states.json` in the same
-directory, unless `parameters()` sets `states` (another file's path, or `None`: in each tab's memory).
+The tabs share bookmarks, the data browser's query settings, the engine chosen and the list's columns. They keep them
+in `storage-explorer/states.json` in the same directory, unless `parameters()` sets `states` (another file's path, or
+`None`: in each tab's memory).
 
 ### Layers of the configuration file
 

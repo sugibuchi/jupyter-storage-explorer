@@ -183,8 +183,8 @@ class ParquetByDuckDB(FormatSupport):
 
 ### `view(fmt, ctx, options, limits)`
 
-Returns one view. A `QueryView` opens the data browser (filters, sort, pages), a `TableSetView` the browser on the
-table chosen of several; the others show what was read:
+Returns one view. A `QueryView` opens the data browser (filters, sort, pages). A `TableSetView` offers several tables,
+and opens the data browser on the one chosen. The others show what was read:
 
 | View                               | Fields                                                                 | Shown as                          |
 |------------------------------------|------------------------------------------------------------------------|-----------------------------------|
@@ -429,7 +429,7 @@ license = "MIT"  # shown in "About", with the authors
 authors = [{ name = "Your Name" }]
 requires-python = ">=3.11"
 # The explorer only: never the backend library (see "full").
-dependencies = ["jupyter-storage-explorer>=0.14,<0.15"]
+dependencies = ["jupyter-storage-explorer>=0.17,<0.18"]
 
 # The libraries it uses: installed only on request, so that installing the
 # plugin never changes those of a shared environment.
@@ -574,7 +574,7 @@ def test_view(tmp_path):
 
 def test_code(make_item):
     code = ParquetByDuckDB().recipe(Parquet(), make_item("/a.parquet", b""), DuckDBOptions())
-    assert "read_parquet('memory:///a.parquet')" in code["Load as a relation"]
+    assert "read_parquet('memory:///a.parquet')" in code["Load as relation"]
 
 
 def test_capabilities_are_implemented():

@@ -8,8 +8,8 @@ All Python goes through uv (never call `python`/`pip` directly). Node.js comes w
 (`nodejs-wheel`), so `uv run node`, `uv run npx` and `uv run jlpm` work without a Node install.
 
 ```bash
-uv sync                                             # both workspace packages, editable, with dev dependencies
-uv run pytest                                       # the Python tests (tests/)
+uv sync                                             # every workspace package, editable, with dev dependencies
+uv run pytest                                       # the Python tests: tests/ and each plugin's tests/
 uv run pytest tests/query/test_query.py -k range         # one file / matching tests
 uv run pytest --cov                                 # with coverage of src/jupyter_storage_explorer
 uvx ruff check src launcher/src plugins tests docs/scripts  # lint (ruff is not a dev dependency; config in pyproject.toml)
@@ -84,8 +84,8 @@ the code. The traps:
   which the chain reports as an error.
 - Work functions of jobs run in a worker thread: never touch traits or call `send` there. Call `progress.check()`
   between items, so a cancel stops them.
-- The reads of a preview or a view tab run in a worker thread too, as a load (`_jobs/loader.py`). Take what they need of the explorer,
-  such as `_fs` and `_engine`, on the main thread before, and show the result in the load's `done`.
+- The reads of a preview or a view tab run in a worker thread too, as a load (`_jobs/loader.py`). Take what they need
+  of the explorer, such as `_fs` and `_engine`, on the main thread before, and show the result in the load's `done`.
 - Detect an item with `_detection(path, fs)`, on the main thread, and wait for its future in a load's work: a click's
   selection, menu and preview share one detection.
 - The data browser's requests run in the lane of their query (`Loader.answer`). Close a query or table set with
@@ -152,7 +152,7 @@ Write docs so that people can review them. That covers this file, DEVELOPMENT.md
 - The root README is the quick start and the highlights. Update its highlights for new features.
 - `docs/storage-explorer.md` has the user-facing details: installation, using the explorer, unsafe operations, the
   transfer policy, formats, format options and the explorer's options.
-- Its last section, "Extensions", has the table of file operation extensions. Add new ones there.
+- Its last section, "Extensions", has the table of plugins. Add new ones there.
 - `docs/data-explorer.md` covers the data browser, `result()`, `on_change()`, `QuerySettings` and `DataExplorer`'s
   options.
 - DEVELOPMENT.md has custom icons, in "Customizing", and how the code fits together, in "Architecture".
