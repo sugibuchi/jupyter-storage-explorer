@@ -10,10 +10,8 @@ host, so that each is told apart, and found again from another kernel.
 
 from __future__ import annotations
 
-import contextlib
 import dataclasses
 import logging
-import weakref
 from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
@@ -72,9 +70,10 @@ class DatabricksWorkspaceMapper(FileSystemMapper):
     workspace's host (``DatabricksLocation``), and the folders' levels of the
     explorer's ``DatabricksMapper`` (volumes, catalogs, schemas, ...).
 
-    The host is the filesystem's Databricks SDK configuration's, read once
-    per filesystem: reading it may resolve the credentials. A filesystem whose
-    host cannot be read gets the explorer's own locations, without a host.
+    The host is the filesystem's Databricks SDK configuration's, which
+    fsspec-databricks makes once, when the filesystem first needs it (also to
+    list). A filesystem whose host cannot be read gets the explorer's own
+    locations, without a host.
 
     Not a subclass of ``DatabricksMapper``: the explorer takes the mappers of
     fsspec's URLs (``FsspecMapper`` and its subclasses) to know nothing of
@@ -85,31 +84,20 @@ class DatabricksWorkspaceMapper(FileSystemMapper):
     classes = ("fsspec_databricks.spec.DatabricksFileSystem",)
 
     def __init__(self) -> None:
-        # Filesystem -> its host name, or "" if it cannot be read.
-        self._hosts: weakref.WeakKeyDictionary[AbstractFileSystem, str] = (
-            weakref.WeakKeyDictionary()
-        )
         # The explorer's own: the levels, and the locations without a host.
         self._fsspec = DatabricksMapper()
 
     def level(self, fs: AbstractFileSystem, path: str) -> str | None:
         return self._fsspec.level(fs, path)
 
-    def host(self, fs: AbstractFileSystem) -> str:
+    @staticmethod
+    def host(fs: AbstractFileSystem) -> str:
         """The host name of ``fs``'s workspace, or "" if it cannot be read."""
         try:
-            return self._hosts[fs]
-        except (KeyError, TypeError):
-            pass
-        try:
-            host = _host_name(fs.config.host or "")
+            return _host_name(fs.config.host or "")
         except Exception:
             log.warning("cannot read the Databricks workspace's host", exc_info=True)
-            host = ""
-        # Not weakly referenceable: read again next time.
-        with contextlib.suppress(TypeError):
-            self._hosts[fs] = host
-        return host
+            return ""
 
     def to_location(self, fs: AbstractFileSystem, path: str) -> Location:
         host = self.host(fs)

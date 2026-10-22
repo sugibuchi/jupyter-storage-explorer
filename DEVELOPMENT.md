@@ -653,8 +653,8 @@ Object stores, such as S3 and GCS, have no empty folders. That matters when crea
 
 databricks-support, in `plugins/databricks-support`, adds `DatabricksWorkspaceMapper`, for fsspec-databricks'
 filesystems. Its `DatabricksLocation`s keep the workspace's host besides the path, so that workspaces are told apart and
-files pasted from another kernel are found in theirs. The host is read once per filesystem, from its Databricks SDK
-configuration. The mapper does not subclass `DatabricksMapper`: the chain takes `FsspecMapper` subclasses to know
+files pasted from another kernel are found in theirs. The host is the filesystem's Databricks SDK configuration's,
+which fsspec-databricks makes once. The mapper does not subclass `DatabricksMapper`: the chain takes `FsspecMapper` subclasses to know
 nothing of what an instance reaches. The plugin is experimental, as fsspec-databricks is, and stays out of `all` and
 `all-supports`.
 

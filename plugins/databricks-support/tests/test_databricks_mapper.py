@@ -35,12 +35,10 @@ class DatabricksFileSystem(AbstractFileSystem):
 
     def __init__(self, host=HOST, **kwargs):
         super().__init__(**kwargs)
-        self.host_reads = 0
         self._host = host
 
     @property
     def config(self):
-        self.host_reads += 1
         if isinstance(self._host, Exception):
             raise self._host
         return SimpleNamespace(host=self._host)
@@ -85,12 +83,6 @@ class TestLocations:
     def test_through_json(self, chain):
         location = chain.location_of(DatabricksFileSystem(), "/Workspace/Shared/x.py")
         assert Location.from_json(location.to_json()) == location
-
-    def test_the_host_read_once(self, chain):
-        fs = DatabricksFileSystem()
-        for name in ("a", "b", "c"):
-            chain.location_of(fs, f"/Volumes/main/s/v/{name}")
-        assert fs.host_reads == 1
 
     def test_without_a_host_the_explorers_own(self, chain, caplog):
         fs = DatabricksFileSystem(host=RuntimeError("no configuration"))
