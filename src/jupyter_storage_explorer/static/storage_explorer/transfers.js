@@ -298,7 +298,7 @@ function createTransfers(x) {
     const items = draggedItems(entry, folders);
     if (!items.length) {
       ev.preventDefault(); // a folder, locked
-      x.flash("Turn on unsafe mode to move folders");
+      x.flash(x.unsafe.refusal("move folders"));
       return;
     }
     const id = randomId();

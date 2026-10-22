@@ -72,7 +72,7 @@ function createOperations(x) {
   async function remove(targets) {
     const folders = x.unsafe.take();
     if (targets.some(isFolder) && !folders) {
-      x.flash("Turn on unsafe mode to delete folders");
+      x.flash(x.unsafe.refusal("delete folders"));
       return;
     }
     const paths = targets.map((t) => t.path);
@@ -137,7 +137,7 @@ function createOperations(x) {
   async function rename(target) {
     const folders = x.unsafe.take();
     if (isFolder(target) && !folders) {
-      x.flash("Turn on unsafe mode to rename folders");
+      x.flash(x.unsafe.refusal("rename folders"));
       return;
     }
     const old = basename(target.path);
@@ -181,7 +181,7 @@ function createClipboard(x) {
   async function copyFiles(targets, cut = false) {
     const hasFolders = targets.some(isFolder);
     if (!x.unsafe.take() && hasFolders) {
-      x.flash(`Turn on unsafe mode to ${cut ? "cut" : "copy"} folders`);
+      x.flash(x.unsafe.refusal(`${cut ? "cut" : "copy"} folders`));
       return;
     }
     const locations = await x.locationsOf(targets);
@@ -222,7 +222,7 @@ function createClipboard(x) {
   async function paste(clip, dest, folders = x.unsafe.take()) {
     const [noun, verb, doing] = clip.cut ? ["Move", "Moved", "Moving"] : ["Paste", "Pasted", "Pasting"];
     if (clip.folders && !folders) {
-      x.flash(`Turn on unsafe mode to ${noun.toLowerCase()} folders`);
+      x.flash(x.unsafe.refusal(`${noun.toLowerCase()} folders`));
       return;
     }
     const names = clip.files.map((f) => f.name);

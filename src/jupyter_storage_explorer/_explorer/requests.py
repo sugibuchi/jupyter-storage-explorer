@@ -64,6 +64,16 @@ class FileRequestsMixin:
             else:
                 self.send(reply, [data])
 
+    def _unsafe(self, content: dict[str, Any]) -> bool:
+        """Whether a request may handle folders, as ``unsafe_mode`` says:
+        always, never (whatever the page sends), or if the user's switch was
+        on when it started (the request's "unsafe")."""
+        if self._unsafe_setting == "always":
+            return True
+        if self._unsafe_setting == "blocked":
+            return False
+        return bool(content.get("unsafe"))
+
     # --- Move: files (and, in unsafe mode, folders) dragged onto a folder;
     # rename and delete: chosen in the right-click menu ---
 
@@ -73,21 +83,21 @@ class FileRequestsMixin:
                 content["paths"],
                 content["dest"],
                 content.get("if_exists", "ask"),
-                folders=bool(content.get("unsafe")),
+                folders=self._unsafe(content),
             )
         )
 
     def _rename_request(self, content: dict[str, Any]) -> dict[str, Any]:
         return self._plan_request(
             lambda: self._tasks().rename(
-                content["path"], content["name"], folders=bool(content.get("unsafe"))
+                content["path"], content["name"], folders=self._unsafe(content)
             )
         )
 
     def _delete_request(self, content: dict[str, Any]) -> dict[str, Any]:
         return self._plan_request(
             lambda: self._tasks().delete(
-                content["paths"], folders=bool(content.get("unsafe"))
+                content["paths"], folders=self._unsafe(content)
             )
         )
 
@@ -105,7 +115,7 @@ class FileRequestsMixin:
                 content.get("if_exists", "ask"),
                 explorer=content.get("explorer"),
                 filesystem=content.get("filesystem"),
-                folders=bool(content.get("unsafe")),
+                folders=self._unsafe(content),
                 cut=bool(content.get("cut")),
             )
         )
@@ -195,7 +205,7 @@ class FileRequestsMixin:
                 sources,
                 content["dest"],
                 content.get("if_exists", "ask"),
-                folders=bool(content.get("unsafe")),
+                folders=self._unsafe(content),
             )
         )
 

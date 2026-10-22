@@ -62,6 +62,8 @@ def filesystems():
 #     return {
 #         "engine_preference": ["pandas", "polars"],
 #         "preview_panel": "open",
+#         "unsafe_mode": "on_demand",  # or "always", or "blocked": no folder operations
+#         "code_snippet": "enabled",  # or "disabled", or engines: ["polars"]
 #         "max_upload_bytes": 100 * 1024 * 1024,
 #     }
 
