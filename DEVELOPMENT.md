@@ -113,7 +113,7 @@ uv pip install --python ../lab40 -e launcher --reinstall-package jupyter-storage
   it alone.
 - **Formats**, in `formats/`, detect each kind of file. Supports preview, query and load it, one library each.
 
-The sections below describe every part but the formats, the plugins and the engines, which CLAUDE.md describes.
+The sections below describe each part.
 
 ### Widgets
 
@@ -521,6 +521,209 @@ regular expression, always case-insensitive.
 
 The list's filter is cleared when another folder's listing arrives, not on the click. So the previous folder's items
 never show unfiltered.
+
+### Formats
+
+A format only detects files. A support handles one format's data with one library. So a library is added to a format,
+e.g. DuckDB for Parquet, without touching the format.
+[development-plugin.md](docs/development-plugin.md) says how to write each, with their rules.
+
+`formats/` is laid out as `filesystems/`:
+
+| Module                          | Contents                                                                         |
+|---------------------------------|----------------------------------------------------------------------------------|
+| `base.py`                       | `DataFormat`, `ItemContext`, the file icons, and the explorer's `detect`.        |
+| `support.py`                    | `FormatSupport`, its options, and the helpers of the generated code.             |
+| `engine.py`                     | `Engine`: a library users choose, such as polars.                                |
+| `package.py`, `packages.py`     | `PythonPackage`: what a support needs, and the packages several engines share.   |
+| `view.py`                       | The views supports return, and `ViewLimits`.                                     |
+| `delta.py`, `parquet.py`, ...   | A module per predefined format.                                                  |
+| `supports/python.py`            | The core's supports, without an engine: text, JSON, Markdown, images.            |
+| `defaults.py`                   | `DEFAULT_FORMATS` and `DEFAULT_SUPPORTS`.                                        |
+
+The engines' supports are in their plugins, in `plugins/<engine>-support/src/.../supports.py`. They import their
+libraries only inside methods, through `PythonPackage.load()`.
+
+`formats` never imports `_explorer`. Presentation, such as the wording of a table's row counts, stays in the explorer.
+
+#### Detection
+
+A `DataFormat` declares its name, label, priority, extensions and file icon. Its `matches(ctx)` is cheap: it is called
+on every click and for every file listed, and reads nothing.
+
+`ctx` is an `ItemContext`. It is one frozen dataclass rather than parameters, so it can grow without changing
+signatures. It has:
+
+- the item's location, the explorer's filesystem, and the item's path there;
+- its fsspec info, and a folder's listing as `children`;
+- methods reading the item: `head`, `head_text` and `read_whole`.
+
+Formats with a binary signature also declare `sniff_bytes` and `sniff(ctx, head)`.
+
+- `detect` reads a file's first bytes once for all the formats sniffing it, and drops those refusing it.
+- It does so whichever plugins are installed: the files in a storage need not be what the plugins expect.
+- Listings skip sniffing, so such files have no format until clicked. Folders are never sniffed.
+
+The highest priority wins: Delta 20, Parquet 10, others 0, and Text -10. What supports share about a format is on it,
+such as `Csv.separator` or `Parquet.data_url`.
+
+Directory formats, Delta and Parquet datasets, inspect the folder's listing. Parquet also takes Hive-style partition
+folders, such as `year=…/month=…/`. It follows them down one branch, one more listing per partition column, and keeps
+each dataset's layout by location for the supports.
+
+A format's file icon is one of JupyterLab's, or an SVG of its own shown as an image, so its scripts never run. Files of
+a format without an icon get their extension's.
+
+#### Supports
+
+A `FormatSupport` declares:
+
+- `format`, matched with `isinstance`, so subclasses too;
+- `engine`, an `Engine` class, or None for the built-in views;
+- `additional_requirements`, packages besides the engine's;
+- `capabilities`: the names of the methods it implements, "view" and "recipe".
+
+The explorer reads only `capabilities`, so a method not listed is never called. Nothing checks that at run time, by
+design: users generate supports with AI from the rules in `FormatSupport`'s docstring. A test keeps those rules true of
+the defaults.
+
+Each method gets the format object, then the `ItemContext`, then the support's options. `view` also gets the
+`ViewLimits`. Any method may raise `FormatSupport.NotSupported` for an item, and the next support is tried.
+
+Supports never check their packages: the chain calls only installed ones. They take no `__init__` arguments.
+
+#### The support chain
+
+The explorer's `SupportChain`, in `_explorer/supports.py`, holds its supports in order:
+
+1. the explorer's `supports=`;
+2. the plugins' supports;
+3. `DEFAULT_SUPPORTS`, the core's.
+
+Its formats are an object of each support's format, in that order, then the defaults' and the plugins' own formats.
+The explorer has no `formats=` argument.
+
+The chain answers:
+
+- `of(fmt, capability)`: the installed supports of a format with a capability;
+- `engines`: the installed engines with a view support, the preferred first;
+- `viewers(fmt)`: the engines that can view a format, then None for the built-in views;
+- `engine_for(fmt, engine)`: the engine chosen if it handles the format, else the built-in views;
+- `view(...)`, with one engine's supports;
+- `recipes(...)`: the first support with "recipe" of each library, installed or not, as the code may run elsewhere.
+
+`engine_for` never falls back to another engine. If the chosen engine's support is not installed, it raises
+`LookupError`.
+
+#### Views
+
+`view` returns one `View`, from `view.py`:
+
+- A `QueryView` opens the data browser. Its `data` is any dataframe narwhals supports, best lazy. `more` is eager data
+  of the first rows only, such as pandas' `max_memory_rows`.
+- A `TableSetView` offers several tables, such as Excel's sheets, on a tree or on tabs. Choosing one opens the data
+  browser on it.
+- The others, `TableView`, `TextView`, `TreeView`, `MarkdownView` and `MediaView`, are sent to the frontend as a
+  section, which it renders by kind.
+
+Whether an item opens in the data browser is known only once viewed. So the menu offers "Preview" and "View in a new
+tab" for anything with a format.
+
+A reload views the item again, with a context read again without fsspec's cache. If its format no longer matches, the
+reload is an error.
+
+Functions given to a view's `on_close` are called once, when the explorer no longer shows the view:
+
+- another preview replaces it, the panel closes, or the storage changes;
+- its view tab closes;
+- the explorer closes, or the kernel exits.
+
+A `QueryView`'s `DataQuery` owns it. A reload's view replaces it, and the previous one is closed.
+
+#### The data browser
+
+`DataQuery`, in `_query/data_query.py`, filters, sorts and pages as narwhals expressions. It works in one of two modes:
+
+- **Live**, on the data itself.
+- **In memory**, on rows read into memory. They are queried in the data's own library: eager data as it is, lazy data
+  in the library narwhals collects it into, e.g. PyArrow for DuckDB and Spark.
+
+So behaviour such as regular expressions follows the data's library. The core needs no engine: polars is optional.
+
+`ViewLimits` sets the browser's page size, `max_display_rows`, and its limits for live and memory modes.
+
+#### Recipes
+
+`recipe` returns the code of "Python code", by title, such as "Load as LazyFrame". The code runs as it is in a new
+notebook, with its imports and, for Spark, its session.
+
+- Titles never name the library. The chain adds the support's requirements, and the frontend groups the code by library.
+- Supports fill class attributes `*_template` with `str.format`: `{url}`, a repr, and `{kwargs}`, the options.
+- Installing packages and configuring access to the storage depend on the environment, so they are left to the user.
+
+### Plugins
+
+A plugin is a `StorageExplorerPlugin` subclass, in `plugin.py`. It is registered as an entry point of
+`jupyter_storage_explorer.plugins`, named by its `key`.
+
+Each explorer creates each plugin with its options. The options model is a frozen dataclass subclassing
+`StorageExplorerPluginOptions`, which has `enabled` and `priority`. The plugin's properties give its components, made
+with those options:
+
+- `format_supports` and `formats`;
+- `filesystem_operations` and `filesystem_mappers`.
+
+`load_plugins`, in `_plugins.py`, loads every plugin installed, highest priority first, then by key.
+
+- A disabled plugin is not even imported. A plugin may default to disabled, to be opt-in.
+- An option the model lacks is a `ValueError`.
+- A plugin that fails is left out with a `RuntimeWarning`: it fails to import or be created, is no plugin class, or
+  clashes with another's name or key.
+
+The explorer uses each kind of component as given in its arguments, then the plugins', then its defaults.
+
+A plugin's name, description, version, authors, license and URLs are its package's metadata. About shows them, also for
+plugins not loaded. Plugins never depend on their libraries: their `full` extra installs them.
+
+Tests fake entry points to `tests/plugin_samples.py`. `tests/all_supports.py` has the supports of this repository's
+plugins, which the other tests use, and `NO_PLUGINS`, options disabling them all.
+
+### Engines in the explorer
+
+`engine_preference=` orders the engines users can choose. The one chosen is the user's last, if still offered, else the
+first. The status bar's engine button chooses it, and the states remember it.
+
+The preview and "View in a new tab" take an optional engine: a key, or None for the built-in views. The preview's badge
+shows the format and the engine, e.g. "Parquet · Polars".
+
+The right-click menu has, in groups:
+
+- the view: Preview, View in new tab as, Preview as, Python code;
+- the clipboard: Copy, Cut, Copy URL or path, Paste;
+- editing: Edit, Rename, Create a folder, Delete;
+- downloads;
+- Properties, and the bookmark.
+
+Separators left without visible rows around them are hidden.
+
+### Format options
+
+`format_options` is `{library: {format name or "*": {option: value}}}`. A support gets its library's options for "*",
+then for its format's name. It gets only those its options model has, as an object of that model.
+
+- An entry may instead be a function of the item's `Location`, returning the dict. It gives options per storage, e.g.
+  by account. It is called at each view and recipe.
+- The launcher merges its layers option by option, even for such functions.
+- Unknown libraries, formats and options are `ValueError`s.
+
+Secrets are declared on the options' fields, with `secret_field` and `secret_dict_field`. Generated code gets options
+only through `SupportOptions.code_value`. It drops secret fields and secret keys, and also keys that look like
+credentials, as a safety net.
+
+Spark reads with its own storage settings. PySpark's supports take `session_options`, for the session, and
+`reader_options`, for `spark.read.option`. A subclass per format has Spark's documented reader options, in snake case.
+
+The options of each library are listed in its plugin's README only.
 
 ## Design
 
