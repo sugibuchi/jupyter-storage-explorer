@@ -106,39 +106,64 @@ the code. The traps:
 
 ## Conventions
 
-- Comments and docstrings are written in full sentences explaining *why*; keep that density and tone.
-- Write docs (this file, DEVELOPMENT.md, `docs/`, READMEs) so that people can review them:
-  - One idea per sentence: about 30 words, never more than 50.
-  - At most one parenthesis per sentence, never nested.
-  - Three or more items make a list.
-  - Add a new fact as its own sentence or bullet where it belongs. Never append it to an existing sentence.
-  - Name an identifier only when the reader needs it to find the code. A function's details belong in its docstring.
-  - Describe what is, not what was: git keeps the history.
-  - When editing a passage that breaks these rules, rewrite it.
-- Docstrings of the public API, what users construct, call, subclass or override (`StorageExplorer`, `DataExplorer`,
-  `fetch_rows` (the `fetch_rows=` default of both), `QuerySettings`, `ExplorerStates` (with `Bookmark`,
-  `QueryState`), `FileSystemOperations` and its subclasses (with `_copy_file`, `_move_file`), `Measurement`,
-  `Progress`, `DataFormat`, `FormatSupport`, `View`, `Location` and its subclasses, `FileSystemMapper` and its subclasses, `MapperChain`, `same_filesystem`), are in numpy style:
-  `Parameters`, `Returns`, `Raises`, `Attributes`, `See Also`, `Examples`. Internal ones (underscore names,
-  `DataQuery`, `FileTasks`, `JobRunner`, the mixins, ...) stay prose.
-- `from __future__ import annotations` everywhere, with type-only imports under `TYPE_CHECKING` (ruff `TC` rules).
-- A new feature of the storage explorer is a mixin in `_explorer/` (Python) and a part in `static/storage_explorer/`
-  (JavaScript), each one feature; its tests go in a `tests/explorer/test_explorer_*.py` and, for what users do, a check in
-  `tests/browser/smoke.py`.
-- The root README is the quick start and highlights only; user-facing details are in `docs/storage-explorer.md`
-  ("Installation", the extras of both kinds; "Using the explorer", "Unsafe operations", "Transfer policy", "Supported formats", "Format options",
-  "StorageExplorer options", grouped by use, and last "Extensions" with "File operation extensions" (a table: add new
-  ones there)) and `docs/data-explorer.md` (the data
-  browser, `result()`, `on_change()`, `QuerySettings`, "DataExplorer options"). Custom icons (CSS) are in
-  DEVELOPMENT.md's "Customizing"; extending the explorer in Python (formats, engines, supports with their options and
-  secrets, file operations, filesystem mappers) and packaging plugins, with the conventions, in docs/development-plugin.md. Update them when operations, formats or options change, and the README's
-  highlights for new features. Keep them short: what users do, not how it works. `supports`, `operations` and
-  `filesystem_mappers` are for development: last in the docs, the options tables and the launcher's template.
-- Images and links to other files in the READMEs are absolute URLs (`raw.githubusercontent.com/.../main/...` for
-  images, `github.com/.../blob/main/...` for files): PyPI shows the README but cannot resolve relative paths. `docs/`
-  is read on GitHub only, so it uses relative paths. Screenshots are in `docs/figs/` (the launcher's in
-  `launcher/figs/`), taken at 2× and shown at their CSS size with `<img width="...">`. They and the demo GIFs are made
-  by `docs/scripts/` (`uv run --group docs docs/scripts/make_all.py`, or one script; see its README): each starts
-  JupyterLab in a temporary folder with its own settings, and explorers show a made-up data lake in fsspec's memory
-  filesystem (`demo_data.py`), so no local path appears. Change or add a script there rather than taking pictures by
-  hand.
+### Code
+
+- Comments and docstrings are written in full sentences explaining *why*. Keep that density and tone.
+- `from __future__ import annotations` everywhere, with type-only imports under `TYPE_CHECKING`: ruff's `TC` rules.
+- A new feature of the storage explorer is one mixin in `_explorer/` and one part in `static/storage_explorer/`. Its
+  tests go in a `tests/explorer/test_explorer_*.py`. What users do also gets a check in `tests/browser/smoke.py`.
+
+### Docstrings
+
+Docstrings of the public API are in numpy style: `Parameters`, `Returns`, `Raises`, `Attributes`, `See Also`,
+`Examples`. The public API is what users construct, call, subclass or override:
+
+- `StorageExplorer`, `DataExplorer`, `fetch_rows` and `QuerySettings`;
+- `ExplorerStates`, with `Bookmark` and `QueryState`;
+- `FileSystemOperations` and its subclasses, with `_copy_file` and `_move_file`, and `Measurement` and `Progress`;
+- `DataFormat`, `FormatSupport` and `View`;
+- `Location`, `FileSystemMapper` and their subclasses, `MapperChain` and `same_filesystem`.
+
+Internal docstrings stay prose: underscore names, `DataQuery`, `FileTasks`, `JobRunner`, the mixins and the like.
+
+### Writing docs
+
+Write docs so that people can review them. That covers this file, DEVELOPMENT.md, `docs/` and the READMEs.
+
+- One idea per sentence: about 30 words, never more than 50.
+- At most one parenthesis per sentence, never nested.
+- Three or more items make a list.
+- Add a new fact as its own sentence or bullet where it belongs. Never append it to an existing sentence.
+- Name an identifier only when the reader needs it to find the code. A function's details belong in its docstring.
+- Describe what is, not what was: git keeps the history.
+- When editing a passage that breaks these rules, rewrite it.
+
+### Where docs go
+
+- The root README is the quick start and the highlights. Update its highlights for new features.
+- `docs/storage-explorer.md` has the user-facing details: installation, using the explorer, unsafe operations, the
+  transfer policy, formats, format options and the explorer's options.
+- Its last section, "Extensions", has the table of file operation extensions. Add new ones there.
+- `docs/data-explorer.md` covers the data browser, `result()`, `on_change()`, `QuerySettings` and `DataExplorer`'s
+  options.
+- DEVELOPMENT.md has custom icons, in "Customizing", and how the code fits together, in "Architecture".
+- docs/development-plugin.md covers extending the explorer in Python and packaging plugins, with the conventions.
+
+Update the docs when operations, formats or options change. Keep user docs short: what users do, not how it works.
+
+`supports`, `operations` and `filesystem_mappers` are for development. They come last in the docs, the options tables
+and the launcher's template.
+
+### Links and images
+
+- The READMEs use absolute URLs for images and links to files, as PyPI shows them but cannot resolve relative paths.
+  Images are `raw.githubusercontent.com/.../main/...`, files `github.com/.../blob/main/...`.
+- `docs/` is read on GitHub only, so it uses relative paths.
+- Screenshots are in `docs/figs/`, and the launcher's in `launcher/figs/`. They are taken at 2× and shown at their CSS
+  size, with `<img width="...">`.
+
+The screenshots and the demo GIFs are made by the scripts in `docs/scripts/`: `uv run --group docs
+docs/scripts/make_all.py`, or one script. Change or add a script there rather than taking pictures by hand.
+
+- Each script starts JupyterLab in a temporary folder, with its own settings.
+- Explorers show a made-up data lake in fsspec's memory filesystem, from `demo_data.py`, so no local path appears.
