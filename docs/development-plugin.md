@@ -611,7 +611,13 @@ lists the plugin with its version.
 - [ ] Operations raise `NotSupported` for what they do not do, report progress and call `progress.check()`.
 - [ ] Locations: frozen keyword-only dataclasses, normalized, without credentials.
 - [ ] Tests in the plugin's `tests/`, of its own code, run with `uv run pytest`; the plugin loads from its entry point.
-- [ ] README: what it adds, `pip install "<package>[full]"`, its options.
+- [ ] README, as this repository's plugins' are:
+  - what it adds;
+  - "Installation": the `pip install` commands, and a table of the `full` extra's libraries with what each is needed
+    for, the engine's marked mandatory;
+  - "Prerequisites": what the environment must already provide, e.g. the library's access to storage, with links to
+    the storage options of libraries that do not use fsspec;
+  - "Plugin options", with an example for `StorageExplorer` and one for `launcher.py`, then the format options.
 
 ## Plugins of this repository
 

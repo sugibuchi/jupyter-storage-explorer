@@ -5,20 +5,44 @@ the [Jupyter Storage Explorer](https://github.com/sugibuchi/jupyter-storage-expl
 pandas as an engine: the data browser on the first rows of Parquet, CSV, JSON Lines and Excel files, and code loading
 them.
 
+## Installation
+
 ```bash
 pip install "jupyter-storage-explorer[pandas]"          # the plugin and its libraries
 pip install "jupyter-storage-explorer[pandas-support]"  # the plugin only, with the libraries you have
 ```
 
-Its libraries (`pandas`, `pyarrow`, `openpyxl`) are not its dependencies, so that installing it never
-changes those of a shared environment: the first command (or `jupyter-storage-explorer-pandas-support[full]`) installs
-them too.
-Explorers use every plugin installed, unless their `plugin_options` disable it: `{"pandas-support": {"enabled": False}}`
-(see [Plugins](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#plugins)).
+The libraries are not the plugin's dependencies, so that installing it never changes those of a shared environment.
+The first command installs them, as does `jupyter-storage-explorer-pandas-support[full]`:
+
+| Library    | Needed for                            |
+|------------|---------------------------------------|
+| `pandas`   | Mandatory: the engine                 |
+| `pyarrow`  | Parquet files, read by pandas         |
+| `openpyxl` | Excel workbooks (`.xlsx`), read by pandas |
+
+Without `pyarrow` or `openpyxl`, the other formats still work.
+
+### Prerequisites
+
+- The plugin expects pandas to reach your storage already, as configured in the environment: pandas reads the data
+  without options. You can still give options in [Format options](#format-options).
+- pandas reads cloud storage through fsspec, with the storage's package, e.g. `s3fs` or `adlfs`, and its credentials.
 
 ## Plugin options
 
-`plugin_options={"pandas-support": {...}}` (in the launcher's tabs, `plugin_options()` in `launcher.py`):
+`plugin_options` gives the plugin's options:
+
+```python
+StorageExplorer("s3://my-bucket/lake", plugin_options={"pandas-support": {"priority": 10}})
+```
+
+In the launcher's tabs, `plugin_options()` in `launcher.py` gives them:
+
+```python
+def plugin_options():
+    return {"pandas-support": {"enabled": False}}
+```
 
 | Option     | Default | Meaning                                                                                                  |
 |------------|---------|----------------------------------------------------------------------------------------------------------|

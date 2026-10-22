@@ -4,20 +4,49 @@ Polars support for Storage Explorer,
 the [Jupyter Storage Explorer](https://github.com/sugibuchi/jupyter-storage-explorer) plugin for
 Polars as an engine: the data browser on Delta Lake tables, Parquet, CSV, JSON Lines and Excel, and code loading them.
 
+## Installation
+
 ```bash
 pip install "jupyter-storage-explorer[polars]"          # the plugin and its libraries
 pip install "jupyter-storage-explorer[polars-support]"  # the plugin only, with the libraries you have
 ```
 
-Its libraries (`polars`, `deltalake`, `fastexcel`) are not its dependencies, so that installing it never
-changes those of a shared environment: the first command (or `jupyter-storage-explorer-polars-support[full]`) installs
-them too.
-Explorers use every plugin installed, unless their `plugin_options` disable it: `{"polars-support": {"enabled": False}}`
-(see [Plugins](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#plugins)).
+The libraries are not the plugin's dependencies, so that installing it never changes those of a shared environment.
+The first command installs them, as does `jupyter-storage-explorer-polars-support[full]`:
+
+| Library     | Needed for                                 |
+|-------------|--------------------------------------------|
+| `polars`    | Mandatory: the engine                      |
+| `deltalake` | Delta Lake tables                          |
+| `fastexcel` | Excel workbooks, read by polars' `calamine` |
+
+Without `deltalake` or `fastexcel`, the other formats still work.
+
+### Prerequisites
+
+- The plugin expects polars to reach your storage already, as configured in the environment: polars reads the data
+  without options. You can still give options in [Format options](#format-options).
+- polars and deltalake do not use fsspec: they read cloud storage with Rust's object_store. Its configuration keys,
+  which it also reads from environment variables, are listed for
+  [AWS](https://docs.rs/object_store/latest/object_store/aws/enum.AmazonS3ConfigKey.html),
+  [GCP](https://docs.rs/object_store/latest/object_store/gcp/enum.GoogleConfigKey.html) and
+  [Azure](https://docs.rs/object_store/latest/object_store/azure/enum.AzureConfigKey.html). For Delta Lake tables, see
+  [delta-rs' storage options](https://delta-io.github.io/delta-rs/usage/loading-table/).
 
 ## Plugin options
 
-`plugin_options={"polars-support": {...}}` (in the launcher's tabs, `plugin_options()` in `launcher.py`):
+`plugin_options` gives the plugin's options:
+
+```python
+StorageExplorer("s3://my-bucket/lake", plugin_options={"polars-support": {"priority": 10}})
+```
+
+In the launcher's tabs, `plugin_options()` in `launcher.py` gives them:
+
+```python
+def plugin_options():
+    return {"polars-support": {"enabled": False}}
+```
 
 | Option     | Default | Meaning                                                                                                  |
 |------------|---------|----------------------------------------------------------------------------------------------------------|
