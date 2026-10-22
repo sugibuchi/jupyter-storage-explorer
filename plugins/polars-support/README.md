@@ -31,7 +31,7 @@ Without `deltalake` or `fastexcel`, the other formats still work.
   [AWS](https://docs.rs/object_store/latest/object_store/aws/enum.AmazonS3ConfigKey.html),
   [GCP](https://docs.rs/object_store/latest/object_store/gcp/enum.GoogleConfigKey.html) and
   [Azure](https://docs.rs/object_store/latest/object_store/azure/enum.AzureConfigKey.html). For Delta Lake tables, see
-  [delta-rs' storage options](https://delta-io.github.io/delta-rs/usage/loading-table/).
+  [delta-rs' storage options](https://delta-io.github.io/delta-rs/latest/usage/loading-table/).
 
 ## Plugin options
 
@@ -74,7 +74,7 @@ Every format but JSON and Excel takes:
 
 | Option                | Default  | Meaning                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 |-----------------------|----------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `storage_options`     | `None`   | polars' `storage_options`: object_store's keys, not fsspec's ([AWS](https://docs.rs/object_store/latest/object_store/aws/enum.AmazonS3ConfigKey.html), [GCP](https://docs.rs/object_store/latest/object_store/gcp/enum.GoogleConfigKey.html), [Azure](https://docs.rs/object_store/latest/object_store/azure/enum.AzureConfigKey.html); Delta Lake's are [delta-rs'](https://delta-io.github.io/delta-rs/usage/loading-table/)). Without them, polars reads credentials from the environment. |
+| `storage_options`     | `None`   | polars' `storage_options`: object_store's keys, not fsspec's ([AWS](https://docs.rs/object_store/latest/object_store/aws/enum.AmazonS3ConfigKey.html), [GCP](https://docs.rs/object_store/latest/object_store/gcp/enum.GoogleConfigKey.html), [Azure](https://docs.rs/object_store/latest/object_store/azure/enum.AzureConfigKey.html); Delta Lake's are [delta-rs'](https://delta-io.github.io/delta-rs/latest/usage/loading-table/)). Without them, polars reads credentials from the environment. |
 | `credential_provider` | `"auto"` | polars' `credential_provider`: a function giving cloud storage credentials, in the data browser only (never in the code).                                                                                                                                                                                                                                                                                                                                                                     |
 
 The other options are each format's reader's arguments, of the same names, with their descriptions from polars' API
