@@ -7,7 +7,7 @@ the data is ``FormatSupport``'s (support.py)."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from jupyter_storage_explorer import _paths
@@ -69,6 +69,11 @@ class ItemContext:
     path: str
     info: Mapping[str, Any]
     children: Sequence[Mapping[str, Any]] | None
+    # What ``head`` read: not a field of the item, and not copied by
+    # ``dataclasses.replace``, whose context is read again.
+    _heads: dict[str, Any] = field(
+        default_factory=dict, init=False, repr=False, compare=False
+    )
 
     @property
     def is_dir(self) -> bool:
@@ -92,9 +97,18 @@ class ItemContext:
         return location.path if isinstance(location, LocalLocation) else location.url
 
     def head(self, size: int) -> bytes:
-        """The first ``size`` bytes of the file, without reading the rest."""
+        """The first ``size`` bytes of the file, without reading the rest.
+
+        Read once for each context: detection and the supports often ask for
+        the same beginning (a signature, a CSV file's separator in each
+        engine's code), and on cloud storages each read is a round trip."""
+        read = self._heads.get("bytes")
+        if read is not None and (len(read) >= size or self._heads["whole"]):
+            return read[:size]
         with self.fs.open(self.path, "rb") as f:
-            return f.read(size)
+            data = f.read(size)
+        self._heads.update(bytes=data, whole=len(data) < size)
+        return data
 
     def head_text(self, size: int) -> tuple[str, bool]:
         """The first ``size`` bytes decoded as UTF-8, and whether the file is

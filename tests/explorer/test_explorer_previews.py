@@ -188,6 +188,57 @@ class DuckdbByPython(FormatSupport):
         return {"Connect": "import duckdb"}
 
 
+class TestClickDetectsOnce:
+    """A click's selection, menu and preview share one detection of the item
+    (``_detect``), until a refresh, a job's changes, another storage, or a
+    few seconds later."""
+
+    @pytest.fixture
+    def infos(self, mem_explorer, monkeypatch):
+        """The paths the storage was asked the info of."""
+        asked = []
+        info = mem_explorer._fs.info
+
+        def counted(path, **kwargs):
+            asked.append(path)
+            return info(path, **kwargs)
+
+        monkeypatch.setattr(mem_explorer._fs, "info", counted)
+        return asked
+
+    def click(self, explorer, path):
+        explorer._selected = [path]
+        explorer.request({"type": "menu_info", "rid": 1, "path": path})
+        explorer.message({"type": "preview", "path": path})
+
+    def test_one_detection(self, mem_explorer, infos):
+        self.click(mem_explorer, "/data/a.csv")
+        assert infos == ["/data/a.csv"]
+        assert mem_explorer._preview["format"] == "csv"
+
+    def test_forgotten_on_refresh(self, mem_explorer, infos):
+        self.click(mem_explorer, "/data/a.csv")
+        mem_explorer._invalidate_cache()
+        self.click(mem_explorer, "/data/a.csv")
+        assert len(infos) == 2
+
+    def test_forgotten_after_a_while(self, mem_explorer, infos, monkeypatch):
+        monkeypatch.setattr(previews, "_DETECTED_SECONDS", 0)
+        self.click(mem_explorer, "/data/a.csv")
+        assert len(infos) == 3
+
+    def test_saved_file_detected_again(self, mem_explorer, infos):
+        self.click(mem_explorer, "/data/a.csv")
+        mem_explorer._write_bytes("/data/a.csv", b"x;y\n1;2\n")
+        self.click(mem_explorer, "/data/a.csv")
+        assert len(infos) == 2
+
+    def test_other_items_detected(self, mem_explorer, infos):
+        self.click(mem_explorer, "/data/a.csv")
+        self.click(mem_explorer, "/data/notes.md")
+        assert infos == ["/data/a.csv", "/data/notes.md"]
+
+
 def test_signatures_decide_formats_once_clicked(memfs):
     # Two ".db" files: the listing reads neither, the menu reads each.
     memfs.pipe_file("/dbs/a.db", SQLITE_BYTES)

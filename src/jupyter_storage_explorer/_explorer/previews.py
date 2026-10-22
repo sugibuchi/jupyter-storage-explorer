@@ -7,6 +7,7 @@ import atexit
 import base64
 import dataclasses
 import logging
+import time
 from typing import TYPE_CHECKING, Any, NamedTuple
 
 from jupyter_storage_explorer import _paths
@@ -33,6 +34,11 @@ if TYPE_CHECKING:
     from types import EllipsisType
 
 log = logging.getLogger(__name__)
+
+
+# How long a click's detection is reused: long enough for its menu or preview,
+# short enough that files changed elsewhere show on the next click.
+_DETECTED_SECONDS = 5.0
 
 
 class _Detected(NamedTuple):
@@ -92,7 +98,25 @@ class PreviewsMixin:
     def _detect(self, path: str) -> _Detected | None:
         """The item at ``path`` of the storage shown, and the formats
         matching it. None if it has no location: it is then not treated as
-        data."""
+        data.
+
+        A click asks for the same item several times: its selection, then
+        its menu or preview. On cloud storages each detection costs round
+        trips (its info, a folder's listings, a file's first bytes). So the
+        last item detected is kept for ``_DETECTED_SECONDS``, for the storage
+        shown. Refreshing, or a job's changes, forget it
+        (``_invalidate_cache``)."""
+        key = (id(self._fs), path)
+        now = time.monotonic()
+        if self._detected is not None:
+            detected_key, when, item = self._detected
+            if detected_key == key and now - when < _DETECTED_SECONDS:
+                return item
+        item = self._detect_now(path)
+        self._detected = (key, now, item)
+        return item
+
+    def _detect_now(self, path: str) -> _Detected | None:
         location = self._location_of(path)
         if location is None:
             return None
