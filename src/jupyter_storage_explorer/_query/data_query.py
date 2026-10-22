@@ -214,6 +214,7 @@ class DataQuery:
         self.schema = self.lf.collect_schema()
         self.memory = {"rows": len(df), "cut": cut}
         self.fixed = ""
+        self._forget_result()
 
     def _go_live(self) -> None:
         self.mode = "live"
@@ -221,6 +222,13 @@ class DataQuery:
         self.schema = self.lf.collect_schema()
         self.memory = None
         self.fixed = ""
+        self._forget_result()
+
+    def _forget_result(self) -> None:
+        """Drop the result kept for scrolling (``_memory_result``): the rows
+        it came from are gone."""
+        self._result: nw.DataFrame | None = None
+        self._result_key: str | None = None
 
     @property
     def live_limit(self) -> int | None:
@@ -325,6 +333,18 @@ class DataQuery:
         settings and the mode."""
         return self._view({"settings": self._remembered()})
 
+    def _memory_result(self, settings: dict[str, Any]) -> nw.DataFrame:
+        """The rows in memory with ``settings`` applied, computed once for
+        each filters, sort and hidden columns: scrolling asks for many pages
+        of one result, and sorting them all again for each page would make
+        each scroll as slow as the first page (pandas sorts a million rows in
+        a quarter of a second). It holds at most the rows in memory."""
+        key = repr([settings[name] for name in ("filters", "sort", "hidden")])
+        if self._result_key != key:
+            self._result = build_query(self.lf, self.schema, settings).collect()
+            self._result_key = key
+        return self._result
+
     def rows(self, content: dict[str, Any]) -> dict[str, Any]:
         """Rows ``offset`` to ``offset + window`` of the data, with the frontend's
         settings applied; also remembers those settings.
@@ -344,17 +364,18 @@ class DataQuery:
             window = max(0, min(window, limit - offset))
         try:
             # One extra row tells whether there are more.
-            query = build_query(self.lf, self.schema, settings)
-            # ``fetch`` is for the data's library: lazy data's rows in memory
-            # may be in another. It returns None to leave a page to the default.
-            df = None
-            if self.mode == "live" and self.fetch is not None:
-                df = self.fetch(query, offset, window + 1)
-            if df is None:
-                df = fetch_rows(query, offset, window + 1)
             total = None
             if self.mode == "memory":
-                total = query.select(nw.len()).collect().item()
+                result = self._memory_result(settings)
+                df = result[offset : offset + window + 1]
+                total = len(result)
+            else:
+                query = build_query(self.lf, self.schema, settings)
+                # ``fetch`` is for the data's library. It returns None to leave
+                # a page to the default.
+                df = self.fetch(query, offset, window + 1) if self.fetch else None
+                if df is None:
+                    df = fetch_rows(query, offset, window + 1)
         except Exception as exc:
             return {"error": f"{type(exc).__name__}: {exc}", "settings": settings}
         beyond = len(df) > window
