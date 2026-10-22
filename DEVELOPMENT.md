@@ -113,7 +113,8 @@ uv pip install --python ../lab40 -e launcher --reinstall-package jupyter-storage
   it alone.
 - **Formats**, in `formats/`, detect each kind of file. Supports preview, query and load it, one library each.
 
-The sections below describe the widgets, the frontend and the storages. CLAUDE.md describes the other parts.
+The sections below describe the widgets, the frontend, the storages and the file operations. CLAUDE.md describes the
+other parts.
 
 ### Widgets
 
@@ -290,6 +291,131 @@ URL could make the kernel connect anywhere.
 
 File operations need to know whether two filesystems are the same. `FileTasks` passes the explorer's chain to `move`
 and `copy`, as their keyword `same`.
+
+### File operations
+
+`StorageExplorer` lists, reads and writes the storage shown through its own methods only, such as `_ls` and
+`_read_bytes`. They are the last block of the class, *File operations*.
+
+Moving, copying, deleting, downloading and creating folders go through operations objects instead, in
+`filesystems/operation.py`. They form a chain of `FileSystemOperations`:
+
+- Each method is tried on each object in order, until one does not raise `FileSystemOperations.NotSupported`.
+- A library's own `NotImplementedError` is an error, not a refusal. That is why the chain has an exception of its own.
+- The explorer's `operations=` come first, then `StorageExplorer.default_operations()`.
+
+The default operations, in `filesystems/operations.py`:
+
+| Operations              | Does                                                                                     |
+|-------------------------|------------------------------------------------------------------------------------------|
+| `AtomicMoveOperation`   | Moves within a filesystem whose `mv` renames a folder in one step: local and memory.     |
+| `AsyncFsspecOperations` | Everything on async filesystems, such as s3fs, with up to 32 files running at a time.    |
+| `FsspecOperations`      | Everything else, one file at a time.                                                     |
+
+`AtomicMoveOperation` also takes a `DirFileSystem` over local or memory filesystems. The other two walk folders
+themselves, moves included, so that they can report progress file by file. Their shared helpers are in
+`filesystems/_common.py`.
+
+`move` and `copy` take a source and a target filesystem, the same one or not. Between filesystems, each file goes
+through `_copy_file` and `_move_file`, which subclasses can override.
+
+- By default, a copy goes through a temporary file, so a failure leaves no partial file.
+- A move copies, then deletes each file, so a cancel leaves each file in one place.
+- The async class has `_copy_file_async` and `_move_file_async` instead.
+
+A folder copy is refused before anything is written if a file's path in it has `.` or `..` parts. Object stores keep
+such keys, and on a local disk they would land outside the target folder.
+
+Object stores, such as S3 and GCS, have no empty folders. That matters when creating folders.
+
+abfs-support adds `AzureDataLakeGen2Operation`, in `plugins/abfs-support`. On accounts with a hierarchical namespace,
+it renames and creates folders with the Data Lake SDK. Within an account, it copies on the server with Copy Blob. Its
+tests fake the SDK and adlfs, which the plugin imports on first use.
+
+Tests use fsspec's `AsyncFileSystemWrapper` around a memory filesystem as an async filesystem.
+
+### Jobs
+
+These run in the background, as jobs:
+
+- move, rename, delete and paste;
+- uploads, from JupyterLab's file browser or from the user's computer;
+- both downloads to JupyterLab.
+
+A job goes through three steps:
+
+1. **Planning**, on the main thread: a `FileTasks` method, in `_jobs/tasks.py`, checks the request without the widget.
+   It returns the conflicts to ask the user about, or a `Task`.
+2. **Work**, in the worker thread of a `JobRunner`, in `_jobs/runner.py`: the task's `work(progress)`. The runner runs
+   one job at a time. The task records what it changes as each item is done.
+3. **Showing the changes**, on the main thread: `JobsMixin` follows them as the job goes, and shows them all once it
+   ends.
+
+While the job goes, items gone are dropped from the list and the tree without listing, at most once a second. Folders
+with new items are listed again, at most every 3 seconds, keeping the selection.
+
+Work functions must not touch traits or call `send`. They report to the `Progress`, and stop when `progress.check()`
+raises `OperationCancelled`.
+
+The public `Progress`, in `filesystems/operation.py`, has only what operations use. The runner's `JobProgress`, in
+`_jobs/progress.py`, adds the job's bookkeeping, such as totals, items and cancelling.
+
+The main thread is reached through the kernel's asyncio loop. Without a running loop, as in tests, jobs run at once, so
+tests see their result immediately.
+
+A request answers `{"job": id}`. The kernel then sends `{"type": "job", ...}` messages as the job runs, and one with the
+result when it ends. The frontend's `x.jobs.result()` waits for that one.
+
+Uploads come in two kinds:
+
+- A drop from JupyterLab's file browser is a copy from the kernel's local disk: `FileTasks.upload`.
+- Files from the user's computer arrive in pieces, in `_jobs/incoming.py`. The last piece starts
+  `FileTasks.upload_file`.
+
+### Properties
+
+Properties of one file are its fsspec info, answered at once. For folders or several items, `FileTasks.properties`
+adds up the operations' `measure` of each item, as a job.
+
+That job runs on a `JobRunner` of its own, so it never waits for a move. The frontend shows it in a dialog with
+Cancel, not with the jobs above the status bar. It is not an operation, so it does not turn off unsafe mode.
+
+`FileSystemOperations.measure` returns a `Measurement`: files, bytes, folders, oldest and newest files, errors, and
+whether it is complete. The defaults measure in two ways:
+
+- Without a `Progress`, for a job's progress bar, they make one recursive `find`.
+- With one, they list folder by folder, reporting the files found. Unlistable folders go in `errors`. A cancel returns
+  what was found, not complete.
+
+They do not use `fs.walk`, whose `on_error` misses subfolders.
+
+### Unsafe mode
+
+Folder operations are offered only while the toolbar's "Unsafe mode" slider is on. They are move, copy, cut and paste,
+rename and delete.
+
+- In the frontend, every operation calls `x.unsafe.take()` as it starts, which turns the mode off. So it allows one
+  operation at a time.
+- The request says whether the mode was on, and the kernel refuses folders without it.
+
+### Transfer policy
+
+A `TransferPolicy`, in `_jobs/transfer_policy.py`, applies to every copy and move. That includes those within a
+filesystem.
+
+- Its rules are tried in order. The first whose `src` and `dest` patterns both match decides.
+- A rule's patterns must have the same named groups, and they must capture the same text on both sides.
+- Without a matching rule, the transfer is allowed.
+
+The kernel checks it per item, as it plans. Refused items become errors, and the others go on.
+
+The policy compares URLs: the item's location's, else fsspec's. Files pasted keep the URL of the location they were
+copied with. Two other sides have URLs of their own:
+
+- the user's computer, `browser:///<name>`;
+- JupyterLab's file browser, `jupyterlab://<absolute path>`, unlike the explorer's own local storage, `file:///`.
+
+The policy prevents mistakes. It is not a security boundary.
 
 ## Design
 

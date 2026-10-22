@@ -133,8 +133,8 @@ plugin alone (`all` and `all-supports`: every plugin so); the launcher's `pyproj
 
 ## Architecture
 
-DEVELOPMENT.md's Architecture section describes the widgets, the frontend and the storages. Read it before changing
-them. The traps there:
+DEVELOPMENT.md's Architecture section describes the widgets, the frontend, the storages and the file operations,
+with jobs, properties, unsafe mode and the transfer policy. Read it before changing them. The traps there:
 
 - Traits are underscore-prefixed in every widget: a public trait would be public API.
 - Traitlets observers must be on `StorageExplorer` itself. The mixins in `_explorer/` hold only methods.
@@ -147,61 +147,14 @@ them. The traps there:
 - Mappers match classes by qualified name: never import an optional package to map it.
 - `MapperChain.locate` never opens an `FsspecLocation`'s URL.
 - Outside an explorer, callers of `move` and `copy` pass `same` themselves, e.g. the module-level `same_filesystem`.
-
-**File operations.** `StorageExplorer` ends with a *File operations* block: the only methods that call fsspec on the
-filesystem shown (`self._fs`) for listing, reading and writing (`_ls`, `_info`, `_exists`, `_isdir`, `_read_bytes`,
-`_write_bytes`); other methods go through them. Moving, copying, deleting, downloading and creating folders go through
-the operations objects instead (`filesystems/operation.py`, the `operations=` argument): a chain of `FileSystemOperations`, each
-method tried in order until one does not raise `FileSystemOperations.NotSupported` (its own exception, so that a
-library's `NotImplementedError` is reported as an error). `operations=` are tried before
-`StorageExplorer.default_operations()` (`default_operations()` of `operations.py`, with them): `AtomicMoveOperation` (only moves within a
-filesystem whose `mv` renames a folder in one step: local, memory, or a `DirFileSystem` over them), then
-`AsyncFsspecOperations` (async filesystems such as s3fs, their coroutines, many files at a time), then
-`FsspecOperations`. Both of the latter walk folders themselves, moves included, to report progress
-file by file (helpers in `filesystems/_common.py`). `prepare_folder_copy` refuses a folder whose files' paths in it have `.` or `..` parts (object stores keep
-such keys; written to a local disk they would leave the target folder), before writing anything. A plugin's, not a default: `AzureDataLakeGen2Operation` (abfs-support,
-`plugins/abfs-support`), which moves (renames) and creates folders on accounts with a hierarchical namespace with the async
-Data Lake SDK, and copies within an account on the server (Copy Blob, `start_copy_from_url`, with a Blob client made from
-the Data Lake client's `url` and `credential`, polled until it ends; a folder's files at once, in a `TaskGroup`, at most `concurrency` at a time;
-a failed or cancelled copy aborted and deleted), connected from the adlfs filesystem's settings and run on its loop with `fsspec.asyn.sync`; tested with
-a fake client (`plugins/abfs-support/tests/test_abfs_operation.py`, faking `_azure.py`'s names: the SDK and adlfs, imported on first use, so that the plugin
-loads without them; an operation without them raises `NotSupported`). `move` and `copy` take a source
-and a target filesystem, the same one or not (keyword `same`, see Storage).
-Between filesystems, single files go through `FileSystemOperations._copy_file` and `_move_file`
-(`_copy_file_async`/`_move_file_async` in the async class), overridable: by default through a temporary file, so a
-failure leaves no partial file, and a move copies then deletes each file, so a cancel leaves each file in one place.
-Tests use fsspec's `AsyncFileSystemWrapper` around a memory filesystem as an async one. Object stores (S3, GCS) have
-no empty folders, which matters for creating folders.
-
-**Jobs.** Move, rename (a move within the folder), delete, paste, uploads (from JupyterLab's file browser, and the
-storage half of uploads from the computer) and both downloads to JupyterLab run in the background (`_jobs/runner.py`).
-Each is planned by a `FileTasks` method (`_jobs/tasks.py`, no widget involved) on the main thread: checks, conflicts to
-ask about (returned as a dict), else a `Task` whose `work(progress)` runs in the `JobRunner`'s worker thread (one job at
-a time) and records what it changed as each item is done (`Task.record`, under a lock). `JobsMixin` starts it
-(`_plan_request`, `_start`) and shows those changes on the main thread: as the job goes (`_follow`, before progress
-reports: items gone are dropped from the list and tree without listing, at most every `_FOLLOW_INTERVAL`; folders with
-new items are listed again, keeping the selection, at most every `_RELIST_INTERVAL`), and all of them once it has ended
-(`_finish`). Work functions must not touch traits or `send`; they report to the `Progress` and stop when
-`progress.check()` raises `OperationCancelled`. The runner's is a `JobProgress` (`_jobs/progress.py`): the public
-`Progress` (filesystems/operation.py) has only what operations do (`advance`, `working_on`, `check`, `callback`,
-`cancelled`); the subclass adds the job's bookkeeping (`add_total`, `begin_item`/`end_item`, `cancel`, `snapshot`,
-`on_change`). A drop from JupyterLab's file browser is a copy from the kernel's local
-disk (`FileTasks.upload`); files from the computer arrive in pieces (`_jobs/incoming.py`), and the last piece starts
-`FileTasks.upload_file`. Requests answer `{"job": id}`; the kernel sends `{"type": "job", ...}` as the job runs and with
-its result when it ends, which the frontend's `x.jobs.result()` waits for. The main thread is reached through the
-kernel's asyncio loop (`call_soon_threadsafe`); without a running loop (tests), jobs run synchronously, so tests see the
-result at once. Path helpers are in `_paths.py`.
-
-**Properties** (`_jobs/properties.py`). One file: its fsspec info, answered at once. Folders or several items:
-`FileTasks.properties` adds up the operations' `measure` of each item (`properties.scan`), as a job on a `JobRunner`
-of its own (`_scans`, ids `scan-N`), so it never waits for a move; the frontend shows it in a blocking dialog with
-Cancel (not in the jobs above the status bar). It is not an operation: it does not take unsafe mode.
-`FileSystemOperations.measure(fs, path, progress=None)` returns a `Measurement` (files, bytes, folders, oldest and
-newest files, errors, `complete`): without `progress` (before a job's work, for its progress bar) the defaults make one
-recursive `find`; with it, they list folder by folder (`_common.measure_by_folder`; async: `concurrency` folders at a
-time), reporting files found, leaving unlistable folders in `errors` (not `fs.walk`, whose `on_error` misses
-subfolders) and returning what was found, `complete` False, on a cancel. `_infos.mtime` gives the modification time
-whichever key a filesystem uses.
+- An operation that cannot handle a call raises `FileSystemOperations.NotSupported`, never `NotImplementedError`,
+  which the chain reports as an error.
+- Work functions of jobs run in a worker thread: never touch traits or call `send` there. Call `progress.check()`
+  between items, so a cancel stops them.
+- Without a running asyncio loop, as in tests, jobs run synchronously.
+- Measuring with a `Progress` lists folder by folder, never with `fs.walk`: its `on_error` misses subfolders.
+- The transfer policy is checked per item in the kernel, from `FileTasks._refused`. A new kind of transfer must call
+  it there.
 
 **Layout.** `tree_view` (trait `_tree_view`: `"open"`, `"closed"`, set by the toolbar's tree button, or
 `"disabled"`, fixed at creation, `_tree_disabled`), `preview_panel` (`_preview_panel`: `"open"` starts with
@@ -214,23 +167,6 @@ cleared when hidden), as JupyterLab's file browser's; the list; the pager below 
 remembered by layout (`ExplorerStates.columns(layout)`, JSON "columns"); the kernel's `Listing` sorts by each, Format by
 label, as the browser does. Otherwise the storage chooser sits above the tree
 while it shows, else first in the list's bar (`placeStorages`). `open_preview` is deprecated (DeprecationWarning).
-
-**Unsafe mode.** Folder operations (move, copy or cut and paste, rename, delete) are offered only while the "Unsafe
-mode" slider in the toolbar is on (trait `_unsafe_mode`). In the frontend, every operation calls `x.unsafe.take()` as
-it starts, which turns it off (one operation at a time), and sends whether it was on with its request (`"unsafe"`);
-the kernel refuses folders without it (the methods' `folders=` parameter).
-
-**Transfer policy** (`_jobs/transfer_policy.py`). `transfer_policy=` rules (`TransferPolicy`: the first rule whose `src`
-and `dest` both `fullmatch`, with their named groups capturing the same text in both, decides; default allow; a rule's
-patterns must have the same group names) apply to every copy and move, within a filesystem as well as between
-filesystems. They are checked in the kernel only, per item as it is planned: `FileTasks._refused` calls its `check`
-(the explorer's `_transfer_error`) from `_plan_moves`, `rename`, `_plan_copies` and `download`, and refused items
-become errors while the others go on. URLs come from `_policy_url` (the location's, else fsspec's; files pasted keep
-the URL of the location they were copied with, from `_paste_sources`). Transfers with the user's computer use `computer_url(name)`
-(`browser:///<name>`): checked in `_download` and `_upload_chunk`. Transfers with JupyterLab's file browser (uploads
-from it, both downloads to the server) pass filesystem None to `check` for that side, which `_policy_url` makes
-`jupyterlab_url(path)` (`jupyterlab://<absolute path>`), unlike the explorer's own local storage (`file:///`). Not a
-security boundary.
 
 **Between explorers and with JupyterLab.** Drags of items from the list carry one type,
 `application/x-jupyter-storage-explorer-items`, its value a random id of the drag and nothing else; the drag itself
