@@ -1207,6 +1207,41 @@ def storage_levels(lab: Lab, page: Page) -> None:
     expect(x.node("landing")).to_have_attribute("data-fs-level", "bucket")
 
 
+# A support taking seconds to view text files, as a Spark session starting.
+SLOW_PREVIEW = """\
+import time
+import fsspec
+from jupyter_storage_explorer import StorageExplorer
+from jupyter_storage_explorer.formats import FormatSupport, Text, TextView
+
+class SlowText(FormatSupport):
+    format = Text
+    capabilities = ("view",)
+
+    def view(self, fmt, ctx, options, limits):
+        time.sleep(4)
+        return TextView(text=ctx.fs.cat_file(ctx.path).decode())
+
+memory = fsspec.filesystem("memory")
+memory.pipe_file("/slow/notes.txt", b"read slowly")
+memory.pipe_file("/slow/inner/other.txt", b"x")
+StorageExplorer("/slow", fs=memory, supports=[SlowText], preview_panel="open")"""
+
+
+@lab_check
+def slow_preview(lab: Lab, page: Page) -> None:
+    # A slow view loads in the background: the panel says so at once, and
+    # the explorer answers meanwhile, e.g. showing another folder.
+    x = Explorer(lab, page, SLOW_PREVIEW)
+    x.row("notes.txt").click()
+    expect(x.preview.locator(".jse-placeholder")).to_have_text("Loading…")
+    x.row("inner").dblclick()
+    expect(x.el.locator(".jse-crumb").last).to_have_text("inner", timeout=2_000)
+    expect(x.preview.locator(".jse-text")).to_contain_text(
+        "read slowly", timeout=10_000
+    )
+
+
 @check
 def excel_sheets(x: Explorer) -> None:
     # A workbook's sheets on tabs below the data browser (a table set, from

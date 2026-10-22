@@ -410,6 +410,11 @@ class FormatSupport:
         (``ctx.head_text``, ``ctx.read_whole``), so any storage the explorer
         reaches can be viewed.
 
+        The explorer calls it in a worker thread, so that a slow view (e.g.
+        a Spark session starting) leaves the kernel free; meanwhile the
+        preview or tab shows that it is loading. Views of other items may be
+        made at the same time. It never touches widgets or displays anything.
+
         Parameters
         ----------
         fmt : DataFormat

@@ -134,6 +134,10 @@ The widget tests subclass the widget to capture `send()`. They drive it through 
 would. `StorageExplorer`'s are in `tests/explorer/test_explorer_*.py`, a file per feature, on the harness of
 `tests/explorers.py`.
 
+Without a running asyncio loop, jobs and loads run at once, so most tests need no threads. Tests of the worker threads
+run in `asyncio.run`, as code runs in a kernel. `until`, in `tests/in_a_kernel.py`, lets the loop run until a
+condition holds.
+
 Plugins' tests cover their own code: supports, options, engine, operations and entry point. The explorer's tests use
 the plugins' supports as material, from `tests/all_supports.py`. The plugins' test dependencies are in each one's
 `dev` group.
@@ -922,6 +926,23 @@ Functions given to a view's `on_close` are called once, when the explorer no lon
 - the explorer closes, or the kernel exits.
 
 A `QueryView`'s `DataQuery` owns it. A reload's view replaces it, and the previous one is closed.
+
+#### Loading views
+
+A preview's reads can take minutes, e.g. while a Spark session starts. So they run in a worker thread of a `Loader`, in
+`_jobs/loader.py`:
+
+1. On the main thread, the panel is set to "loading". What the reads need of the explorer is taken now: the storage
+   shown and the engine chosen.
+2. In the worker: the item's detection, unless a recent one is kept, then `view`, then the data browser's query or
+   tables. A `DataQuery` reads its first rows when it is made, so it is made here.
+3. On the main thread: the previous preview is closed, and the new one shown, or its error.
+
+Loads run apart from jobs, up to 4 at a time. Their work must not touch traits or call `send`, as jobs' work. Another
+preview, closing the panel or another storage cancels a load: what it read is closed instead of shown. Without a
+running loop, as in tests, loads run at once.
+
+View tabs, the data browser's requests and the selection's detection still run on the main thread.
 
 #### The data browser
 

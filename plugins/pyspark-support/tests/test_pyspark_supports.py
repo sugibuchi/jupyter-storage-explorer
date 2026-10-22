@@ -5,6 +5,7 @@ session's builder, faked; its engine and entry point."""
 
 from __future__ import annotations
 
+import concurrent.futures
 import os
 import shutil
 from dataclasses import fields
@@ -151,6 +152,18 @@ def test_csv_with_its_separator(tmp_path, session):
     view = CsvByPySpark().view(Csv(), local_item(path), CsvByPySparkOptions(), LIMITS)
     assert view.data.columns == ["x", "y"]
     assert rows(view) == [(1, 2), (3, 4)]
+
+
+def test_viewed_in_a_worker_read_on_the_main_thread(tmp_path, session):
+    # The explorer makes views in a worker thread, so that a session starting
+    # leaves the kernel free, then reads their data on its main thread.
+    path = tmp_path / "a.csv"
+    path.write_text("x\n1\n2\n")
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as worker:
+        view = worker.submit(
+            CsvByPySpark().view, Csv(), local_item(path), CsvByPySparkOptions(), LIMITS
+        ).result()
+    assert rows(view) == [(1,), (2,)]
 
 
 def test_json_lines(tmp_path, session):
