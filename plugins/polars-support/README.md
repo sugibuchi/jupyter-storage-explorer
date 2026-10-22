@@ -38,7 +38,9 @@ Without `deltalake` or `fastexcel`, the other formats still work.
 `plugin_options` gives the plugin's options:
 
 ```python
-StorageExplorer("s3://my-bucket/lake", plugin_options={"polars-support": {"priority": 10}})
+StorageExplorer(
+    "s3://my-bucket/lake", plugin_options={"polars-support": {"priority": 10}}
+)
 ```
 
 In the launcher's tabs, `plugin_options()` in `launcher.py` gives them:

@@ -561,7 +561,9 @@ The first command installs them:
 `plugin_options` gives the plugin's options:
 
 ```python
-StorageExplorer("s3://my-bucket/lake", plugin_options={"duckdb-support": {"priority": 10}})
+StorageExplorer(
+    "s3://my-bucket/lake", plugin_options={"duckdb-support": {"priority": 10}}
+)
 ```
 
 In the launcher's tabs, `plugin_options()` in `launcher.py` gives them:
@@ -587,6 +589,7 @@ format: each option, its default and its meaning, from the library's documentati
 - **Prerequisites** say what the environment must already provide, e.g. the library's access to storage. Link the
   configuration reference of a library that does not use fsspec, as polars-support links object_store's.
 - **Plugin options** shows one example for `StorageExplorer` and one for `launcher.py`, then the options' table.
+- Code blocks are formatted as ruff formats Python: CI checks those in this repository's READMEs.
 
 This repository's plugins publish the extras through the explorer, e.g. `jupyter-storage-explorer[polars]`. Their
 READMEs show those commands instead. `tests/test_plugin_readmes.py` checks this layout for them, and that the table

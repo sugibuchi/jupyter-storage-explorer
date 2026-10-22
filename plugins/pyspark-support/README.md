@@ -36,7 +36,10 @@ installed beside it. Without `delta-spark`, the other formats still work.
 `plugin_options` gives the plugin's options:
 
 ```python
-StorageExplorer("abfs://lake@myaccount.dfs.core.windows.net/raw", plugin_options={"pyspark-support": {"priority": 10}})
+StorageExplorer(
+    "abfs://lake@myaccount.dfs.core.windows.net/raw",
+    plugin_options={"pyspark-support": {"priority": 10}},
+)
 ```
 
 In the launcher's tabs, `plugin_options()` in `launcher.py` gives them:
