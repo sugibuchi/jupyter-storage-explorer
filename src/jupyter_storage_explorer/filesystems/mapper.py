@@ -33,7 +33,7 @@ from jupyter_storage_explorer import _paths
 from jupyter_storage_explorer.filesystems.locations import FsspecLocation
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Callable, Sequence
 
     from fsspec import AbstractFileSystem
 
@@ -233,9 +233,23 @@ class MapperChain:
     def location_of(self, fs: AbstractFileSystem, path: str) -> Location | None:
         """The location of ``path`` of ``fs``, from the mapper of the
         filesystem it is in; None if it has none."""
+        return self._locator(fs)(path)
+
+    def _locator(self, fs: AbstractFileSystem) -> Callable[[str], Location | None]:
+        """``location_of`` for many paths of ``fs``, e.g. a folder's items:
+        the filesystem is unwrapped and its mapper found once."""
+        dirs = []
         while isinstance(fs, DirFileSystem):
-            path, fs = fs._join(path), fs.fs
-        return self.mapper_of(fs).to_location(fs, path)
+            dirs.append(fs)
+            fs = fs.fs
+        mapper = self.mapper_of(fs)
+
+        def locate(path: str) -> Location | None:
+            for dir_fs in dirs:
+                path = dir_fs._join(path)
+            return mapper.to_location(fs, path)
+
+        return locate
 
     def level_of(self, fs: AbstractFileSystem, path: str) -> str | None:
         """The level of folder ``path`` of ``fs`` (``FileSystemMapper.level``),
