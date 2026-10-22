@@ -133,84 +133,20 @@ plugin alone (`all` and `all-supports`: every plugin so); the launcher's `pyproj
 
 ## Architecture
 
-**Widgets.** `storage_explorer.py` and `data_explorer.py` (and the private `_view_tab.py`) are
-`anywidget.AnyWidget` subclasses. State shared with the
-browser is in `traitlets` tagged `sync=True` (underscore-prefixed, in every widget: a public trait would be public
-API). Everything else is custom messages, dispatched by
-`type` in `_on_custom_msg`: requests (`{"type": ..., "rid": ...}`, handled by `_requests()`) are answered with
-`{"type": "reply", "rid": ..., ...}`; notices (`_notices()`) are not, their effects showing in the traits (or, for
-"download", in a message per file, its bytes attached). Uploads carry file pieces in binary `buffers`. A reply's
-error is `{"error": text}` (`error_text`: the explorer's own refusals, ValueErrors, without their type), except for
-file operations, whose results have lists, `{"errors": [...]}`, as jobs' do. Values sent go through
-`_json.jsonable`. Users' functions (`on_change`; `StorageExplorer.on_query_change`) are kept in `_callbacks.Callbacks`
-and called once per change, compared with what they last heard of (`_changed`: storage, folder and selection, from
-the traits' observers; `_query_changed`: the query shown in the preview panel and its `result_settings()`, after the
-data browser's replies and on `_preview` changes, not while one loads).
+DEVELOPMENT.md's Architecture section describes the widgets, the frontend and the storages. Read it before changing
+them. The traps there:
 
-`StorageExplorer` keeps its state (set up in `__init__`), the messages' routing, the traitlets observers (they must be
-on the class itself), the locations of paths (`_location_of`, from its `MapperChain`; `_url`, its URL; `_location_reply`, what the
-frontend gets) and the fsspec calls. Its features are mixins in `_explorer/`,
-listed before `AnyWidget` in its bases, which only hold methods: `FoldersMixin` (`folders.py`: the list and the tree),
-`PreviewsMixin` (`previews.py`: previews, the data browser, view tabs, the right-click menu's formats),
-`BookmarksMixin`, `JupyterLabFilesMixin` (`jupyterlab.py`), `JobsMixin` (`jobs.py`: running file operations as jobs,
-following what they change) and `FileRequestsMixin` (`requests.py`: the requests for file operations). What they share
-is in `_explorer/common.py` (`Storage`, `open_storage`, `within_top`, `error_text`, `explorers`).
-
-**Frontend.** Plain ES modules in `static/`, no bundler. anywidget cannot import neighbouring files, so `_static.esm()`
-concatenates `icons.js` + `common.js` + `query.js` + `sections.js` (views' sections, for the preview panel and
-view tabs) + the widget's parts (`static/<widget>/*.js`, if any) + `<widget>.js` (all but the last only define
-functions and constants; the widget's file has `render` and the `export`), and likewise for CSS (`sections.css`;
-without parts). The storage explorer's parts are a feature each (`tree.js`,
-`list.js`, `preview.js`, `item_menu.js`, `operations.js` with the clipboard, `transfers.js` (drag and drop, uploads,
-downloads), `jupyterlab.js`, `properties.js`, `toolbar.js` with unsafe mode and bookmarks, `engine.js` (the engine chosen, in the status bar), `about.js` (the settings menu's About), `shortcuts.js` (the list's keys, on its pane, focusable: Ctrl/⌘+C, X, V,
-F2, Delete, Enter, calling what the menu's rows do, whose `shortcut` shows the key), `jobs.js`, `overlays.js`
-(busy screen, modal, menus), `util.js`): a `createX(x)` returning its elements and
-functions. `x` is the explorer, made in `render()`: what the features share (`model`, `el`, `request`, `ask`,
-`flash`, `navigate`, ...) and the features themselves (`x.list`, `x.preview`, ...), used when needed, not when made,
-so their order rarely matters. Third-party code is vendored in `static/vendor/`. File names, paths and messages naming files are shown through
-`visible()` (`common.js`: control, bidi and invisible characters as `\uXXXX`), never as they are. The anywidget `model` only supports
-`get`/`set`/`save_changes`/`on`/`off`/`send`; Backbone methods like `previous()` throw inside `set` and silently break
-sync.
-
-**Storage.** Everything is an fsspec filesystem; `StorageExplorer` can hold several named ones (`filesystems=`).
-Where files are is a `Location` (`location.py`): independent of fsspec's implementations, so it travels to other
-kernels, files and libraries doing their own I/O. A frozen, keyword-only dataclass, normalized when made (hosts and
-accounts in lower case, endpoints as origins, no trailing "/"; whether it is a folder is not part of it), so equal
-locations name the same item and are dict keys. A subclass gives only its fields, `kind` and `url` (the common form,
-which the fsspec implementation also reads); `protocol` comes from the URL, and `to_json()`/`Location.from_json()`
-(`{"kind", "url", ...fields}`; subclasses register by `kind`; an unknown kind becomes an `FsspecLocation`, the URL in
-the JSON being ignored for known kinds). Locations do not say which storage they are on: what one fsspec instance
-reaches depends on the implementation (adlfs reaches an account's containers; Azure has a file system per
-container), so only mappers tell it (`path_of`). The
-predefined ones are in `filesystems/locations.py`: `AbfsLocation` (account, container, path, endpoint suffix:
-`abfs://container@account.dfs.core.windows.net/path`; adlfs's `abfs://container/path` with an emulator),
-`S3Location` (bucket, key, endpoint or AWS partition: `s3://bucket/key`), `GcsLocation`, `SftpLocation` (host, port,
-user, path), `LocalLocation` (`path` as fsspec names it, "C:/x" on Windows, `os_path` the system's form, hostname
-and machine id: `file:///...`), `MemoryLocation` (path, process), `FsspecLocation` (fsspec's URL, for filesystems
-no mapper knows). Locations come from mappers (`filesystems/mapper.py`, the `filesystem_mappers=` argument,
-then `default_mappers()` of `mappers.py`): a `FileSystemMapper` per fsspec implementation, matched by qualified class names through the MRO
-(so optional packages are not imported; tests fake s3fs, gcsfs, fsspec's SFTP, sshfs and fsspec-databricks classes by
-`__module__`; `DatabricksMapper` maps fsspec-databricks' and fsspec's own DBFS classes, URLs `dbfs://Volumes/...`, the
-form both read through fsspec; pyspark-support's `spark_url` makes them Databricks' `dbfs:/Volumes/...`). It gives
-`to_location(fs, path)` (no credentials; locations are defined per kind of storage, so implementations of one agree:
-SFTP's from fsspec's and from sshfs's `fs.storage_args`/`storage_options`; "" gives the top folder; None for items
-without one) and `path_of(fs, location)`, the reverse, None unless `fs` reaches it, which each concrete mapper decides
-from the location's fields and the instance's settings (the account and cloud, the endpoint or partition, the
-server, port and user, the machine, the process). `MapperChain` (`mapper.py`, the explorer's `_mappers`: its mappers
-then the defaults) asks them: `location_of`, `path_in`, `same_filesystem` (each reaches the other's top folder, so
-the same storage opened with other credentials is one; unknown filesystems, `FsspecMapper`, compare as fsspec does) and
-`locate(location, filesystems)`, for files pasted from another kernel: the first of the explorer's storages that
-reaches it, else, for kinds other than `FsspecLocation` (never those: the kernel would connect wherever a dropped
-URL points), `url_to_fs(location.url)` if it reaches it, else refused (so another kernel's memory or another
-machine's disk is never read). `DirFileSystem`s are not mapped: the chain unwraps them, so
-their locations are those of the filesystem they wrap, and `same_filesystem` also compares their folders. A mapper's
-`level(fs, path)` (by default its `levels` by depth from the filesystem's top folder, e.g. adlfs's `("account",
-"container")`; `DatabricksMapper`'s by path) gives folders their icons (`LEVEL_ICONS` in `icons.js`) and rows
-`data-fs-level`: `MapperChain.level_of` (through `DirFileSystem`s), the explorer's `_level_of`, sent with the tree's
-entries ("level"), the listing ("levels", "level", as "formats" and "format") and `_root_level`; the explorer gets
-`data-fs-protocol` (`_fs_protocol`). File operations
-are told by `FileTasks` with `move`'s and `copy`'s required keyword `same` (the explorer's chain); outside an
-explorer, callers pass it themselves (e.g. the module-level `same_filesystem`, of the default mappers).
+- Traits are underscore-prefixed in every widget: a public trait would be public API.
+- Traitlets observers must be on `StorageExplorer` itself. The mixins in `_explorer/` hold only methods.
+- Only `StorageExplorer`'s *File operations* block calls fsspec on the storage shown.
+- In JavaScript, file names, paths and messages naming files go through `visible()`, never as they are.
+- anywidget's `model` has only `get`, `set`, `save_changes`, `on`, `off` and `send`. Backbone methods such as
+  `previous()` throw inside `set` and silently break syncing.
+- A new frontend file in `static/` is joined into the module only if `_static.esm` names it. A part in
+  `static/<widget>/` is joined automatically.
+- Mappers match classes by qualified name: never import an optional package to map it.
+- `MapperChain.locate` never opens an `FsspecLocation`'s URL.
+- Outside an explorer, callers of `move` and `copy` pass `same` themselves, e.g. the module-level `same_filesystem`.
 
 **File operations.** `StorageExplorer` ends with a *File operations* block: the only methods that call fsspec on the
 filesystem shown (`self._fs`) for listing, reading and writing (`_ls`, `_info`, `_exists`, `_isdir`, `_read_bytes`,
