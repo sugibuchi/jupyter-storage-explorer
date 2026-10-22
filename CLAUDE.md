@@ -82,7 +82,10 @@ the code. The traps:
   which the chain reports as an error.
 - Work functions of jobs run in a worker thread: never touch traits or call `send` there. Call `progress.check()`
   between items, so a cancel stops them.
-- Without a running asyncio loop, as in tests, jobs run synchronously.
+- A preview's reads run in a worker thread too, as a load (`_jobs/loader.py`). Take what they need of the explorer,
+  such as `_fs` and `_engine`, on the main thread before, and show the result in the load's `done`.
+- Without a running asyncio loop, as in tests, jobs and loads run synchronously. Tests of the threaded path run in
+  `asyncio.run`, with `until` from `tests/in_a_kernel.py`.
 - Measuring with a `Progress` lists folder by folder, never with `fs.walk`: its `on_error` misses subfolders.
 - The transfer policy is checked per item in the kernel, from `FileTasks._refused`. A new kind of transfer must call
   it there.

@@ -33,6 +33,8 @@ if TYPE_CHECKING:
     from collections.abc import Callable
     from types import EllipsisType
 
+    from fsspec import AbstractFileSystem
+
 log = logging.getLogger(__name__)
 
 
@@ -48,6 +50,16 @@ class _Detected(NamedTuple):
 
     ctx: ItemContext
     formats: list[DataFormat]
+
+
+class _Loaded(NamedTuple):
+    """What a preview's load read (see ``PreviewsMixin._open_preview``): the
+    item detected (... if its detection failed), what shows it (None if
+    nothing does) and the ``_preview`` to show."""
+
+    item: _Detected | EllipsisType | None
+    shown: View | DataQuery | TableSet | None
+    preview: dict[str, Any]
 
 
 def _close_views_at_exit() -> None:
@@ -106,24 +118,50 @@ class PreviewsMixin:
         last item detected is kept for ``_DETECTED_SECONDS``, for the storage
         shown. Refreshing, or a job's changes, forget it
         (``_invalidate_cache``)."""
-        key = (id(self._fs), path)
-        now = time.monotonic()
-        if self._detected is not None:
-            detected_key, when, item = self._detected
-            if detected_key == key and now - when < _DETECTED_SECONDS:
-                return item
-        item = self._detect_now(path)
-        self._detected = (key, now, item)
+        recent = self._recent_detection(path, self._fs)
+        if recent is not ...:
+            return recent
+        detecting = self._detecting(path, self._fs)
+        item = self._detect_now(path, self._fs)
+        self._keep_detection(detecting, item)
         return item
 
-    def _detect_now(self, path: str) -> _Detected | None:
-        location = self._location_of(path)
+    def _recent_detection(
+        self, path: str, fs: AbstractFileSystem
+    ) -> _Detected | EllipsisType | None:
+        """The item at ``path`` of ``fs`` if detected less than
+        ``_DETECTED_SECONDS`` ago, else ...: on the main thread."""
+        if self._detected is not None:
+            key, when, item = self._detected
+            if key == (id(fs), path) and time.monotonic() - when < _DETECTED_SECONDS:
+                return item
+        return ...
+
+    def _detecting(self, path: str, fs: AbstractFileSystem) -> tuple[Any, ...]:
+        """What ``_keep_detection`` needs of a detection starting now: on the
+        main thread."""
+        return (id(fs), path), time.monotonic(), self._detections_forgotten
+
+    def _keep_detection(
+        self, detecting: tuple[Any, ...], item: _Detected | None
+    ) -> None:
+        """Keep ``item``, detected since ``detecting``, for the next requests:
+        on the main thread, unless the detections were forgotten meanwhile
+        (e.g. a job changed the files)."""
+        key, when, forgotten = detecting
+        if forgotten == self._detections_forgotten:
+            self._detected = (key, when, item)
+
+    def _detect_now(self, path: str, fs: AbstractFileSystem) -> _Detected | None:
+        """The item at ``path`` of ``fs`` and its formats, read now: safe in
+        a worker thread, as it touches no trait."""
+        location = self._mappers.location_of(fs, path)
         if location is None:
             return None
-        info = self._info(path)
-        children = self._ls(path) if info.get("type") == "directory" else None
+        info = self._info(path, fs)
+        children = self._ls(path, fs) if info.get("type") == "directory" else None
         ctx = ItemContext(
-            location=location, fs=self._fs, path=path, info=info, children=children
+            location=location, fs=fs, path=path, info=info, children=children
         )
         return _Detected(ctx, matching_formats(ctx, formats=self._formats))
 
@@ -136,19 +174,24 @@ class PreviewsMixin:
         return engine.label if engine is not None else key
 
     def _view_engine(
-        self, fmt: DataFormat, name: str, engine: str | EllipsisType | None = ...
+        self,
+        fmt: DataFormat,
+        name: str,
+        engine: str | EllipsisType | None,
+        chosen: str | None,
     ) -> str | None:
         """The engine viewing an item named ``name`` as ``fmt``: ``engine``
         (a key; None for the built-in views) if given, "Preview as"; by
-        default (...), the one chosen (``_engine``), or the built-in views
-        for formats it does not handle. ValueError if that cannot view it."""
+        default (...), the one chosen (``chosen``, ``_engine`` when the view
+        was asked for), or the built-in views for formats it does not handle.
+        ValueError if that cannot view it. Safe in a worker thread."""
         if engine is not ...:
             if engine not in self._supports.viewers(fmt):
                 with_ = self._engine_label(engine) or "the built-in views"
                 raise ValueError(f"{name} cannot be viewed as {fmt.label} with {with_}")
             return engine
         try:
-            return self._supports.engine_for(fmt, self._engine or None)
+            return self._supports.engine_for(fmt, chosen)
         except LookupError:
             if not self._supports.viewers(fmt):
                 # Nothing installed views it: the engines come with plugins.
@@ -159,7 +202,7 @@ class PreviewsMixin:
                 ) from None
             raise ValueError(
                 f"{name} cannot be viewed as {fmt.label} with "
-                f"{self._engine_label(self._engine)}: choose another engine in "
+                f"{self._engine_label(chosen)}: choose another engine in "
                 f'"Preview as"'
             ) from None
 
@@ -241,7 +284,14 @@ class PreviewsMixin:
         file); by default the best match is used. ``engine`` (a key; None for
         the built-in views) views it instead of the one chosen (see
         ``_view_engine``).
+
+        The reads (the item's detection, its view, the data browser's first
+        rows) run in a worker thread (``_loader``): the panel shows "loading"
+        meanwhile, and the kernel stays free. Another preview, or closing the
+        panel, cancels a preview still loading: what it read is closed.
         """
+        if self._preview_load is not None:
+            self._preview_load.cancel()
         base = {
             "path": path,
             "name": _paths.basename(path),
@@ -251,12 +301,63 @@ class PreviewsMixin:
             "sections": [],
             "error": "",
         }
-        # Shown while the (possibly remote) reads below run.
+        # Shown while the (possibly remote) reads run.
         self._preview = {**base, "loading": True}
+        # What the worker needs of the explorer, as it is now: the storage
+        # shown and the engine chosen may change while it reads.
+        fs, chosen = self._fs, self._engine or None
+        recent = self._recent_detection(path, fs)
+        detecting = self._detecting(path, fs)
+
+        def work() -> _Loaded:
+            return self._read_preview(
+                dict(base),
+                item=recent,
+                fs=fs,
+                format=format,
+                engine=engine,
+                chosen=chosen,
+            )
+
+        def done(loaded: _Loaded) -> None:
+            if recent is ... and loaded.item is not ...:
+                self._keep_detection(detecting, loaded.item)
+            # The previous preview's, closed once the new one is open.
+            self._release_preview()
+            shown = loaded.shown
+            if isinstance(shown, DataQuery):
+                self._queries[path] = shown
+            elif isinstance(shown, TableSet):
+                self._table_sets[path] = shown
+            else:
+                self._preview_view = shown
+            self._preview = loaded.preview
+
+        def discard(loaded: _Loaded) -> None:
+            if loaded.shown is not None:
+                loaded.shown.close()
+
+        self._preview_load = self._loader.submit(work, done, discard)
+
+    def _read_preview(
+        self,
+        preview: dict[str, Any],
+        *,
+        item: _Detected | EllipsisType | None,
+        fs: AbstractFileSystem,
+        format: str | None,
+        engine: str | EllipsisType | None,
+        chosen: str | None,
+    ) -> _Loaded:
+        """In a worker thread, touching no trait: fill ``preview`` (see
+        ``_open_preview``) with the item at its path of ``fs``, detected now
+        unless given as ``item``, viewed with ``chosen`` the engine chosen."""
+        path = preview["path"]
         # What shows it: the view, else its query or tables, which own it.
         shown: View | DataQuery | TableSet | None = None
         try:
-            item = self._detect(path)
+            if item is ...:
+                item = self._detect_now(path, fs)
             if item is None:
                 raise ValueError(f"{path} has no URL, so it cannot be previewed")
             formats = item.formats
@@ -266,27 +367,20 @@ class PreviewsMixin:
                     raise ValueError(f"{path} cannot be previewed as {format}")
             if formats:
                 fmt = formats[0]
-                base["format"] = fmt.name
-                key = self._view_engine(fmt, item.ctx.name, engine)
-                base["engine"], base["engine_label"] = key, self._engine_label(key)
+                preview["format"] = fmt.name
+                key = self._view_engine(fmt, item.ctx.name, engine, chosen)
+                preview["engine"] = key
+                preview["engine_label"] = self._engine_label(key)
                 viewer = self._viewer(fmt, item, key)
                 shown = viewer()
-                shown = self._show(shown, viewer, item, base)
+                shown = self._show(shown, viewer, item, preview)
         except Exception as exc:
-            base["error"] = error_text(exc)
+            preview["error"] = error_text(exc)
             # Nothing shows it: released at once.
             if shown is not None:
                 shown.close()
             shown = None
-        # The previous preview's, closed once the new one is open.
-        self._release_preview()
-        if isinstance(shown, DataQuery):
-            self._queries[path] = shown
-        elif isinstance(shown, TableSet):
-            self._table_sets[path] = shown
-        else:
-            self._preview_view = shown
-        self._preview = base
+        return _Loaded(item, shown, preview)
 
     def _show(
         self,
@@ -322,7 +416,10 @@ class PreviewsMixin:
     def _release_preview(self) -> None:
         """Close what the preview panel shows: the data browser's query (and
         so the view its data came from), a table set (its table's query, then
-        its view), or the view shown."""
+        its view), or the view shown; a preview still loading is cancelled."""
+        load, self._preview_load = self._preview_load, None
+        if load is not None:
+            load.cancel()
         queries, self._queries = list(self._queries.values()), {}
         table_sets, self._table_sets = list(self._table_sets.values()), {}
         view, self._preview_view = self._preview_view, None
@@ -506,7 +603,7 @@ class PreviewsMixin:
         try:
             item, fmt = self._formats_of(path, content.get("format") or None)
             engine = content.get("engine", ...)
-            key = self._view_engine(fmt, item.ctx.name, engine)
+            key = self._view_engine(fmt, item.ctx.name, engine, self._engine or None)
             viewer = self._viewer(fmt, item, key)
             view = viewer()
             title = _paths.basename(path)

@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 import itertools
+import threading
 
 import pytest
 from explorers import entries, make, path_of
 from format_samples import DUCKDB_BYTES, SQLITE_BYTES, DuckDB, SQLite
+from in_a_kernel import until
 from jupyter_storage_explorer_pandas_support import CsvByPandas
 from jupyter_storage_explorer_polars_support import CsvByPolars
 
@@ -20,6 +23,7 @@ from jupyter_storage_explorer.formats import (
     FormatSupport,
     PythonPackage,
     TableView,
+    Text,
     TextView,
     ViewLimits,
 )
@@ -186,6 +190,98 @@ class DuckdbByPython(FormatSupport):
 
     def recipe(self, fmt, ctx, options):
         return {"Connect": "import duckdb"}
+
+
+class HeldText(FormatSupport):
+    """Views text files once ``release`` is set, as a Spark session starting
+    holds a view up; before the built-in views, as it is given first."""
+
+    format = Text
+    capabilities = ("view",)
+    release = threading.Event()
+
+    def view(self, fmt, ctx, options, limits):
+        assert self.release.wait(5)
+        return TextView(text=ctx.name)
+
+
+class TestPreviewLoadsInTheBackground:
+    """In a kernel, a preview's reads run in a worker thread: the panel shows
+    "loading", and the explorer answers other messages meanwhile."""
+
+    @pytest.fixture(autouse=True)
+    def held(self):
+        HeldText.release = threading.Event()
+        yield
+        HeldText.release.set()  # never leave a worker waiting
+
+    @staticmethod
+    def run(memfs, test):
+        """Run ``test(explorer)`` in a running loop, as in a kernel."""
+        memfs.pipe_file("/data/a.txt", b"a")
+        memfs.pipe_file("/data/b.txt", b"b")
+
+        async def main():
+            return await test(make("/data", fs=memfs, supports=[HeldText]))
+
+        return asyncio.run(main())
+
+    def test_loading_then_the_view(self, memfs):
+        async def test(explorer):
+            explorer.message({"type": "preview", "path": "/data/a.txt"})
+            assert explorer._preview["loading"]
+            # The kernel is free: the explorer still lists folders.
+            assert "error" not in explorer.request({"type": "list", "rid": 1})
+            HeldText.release.set()
+            await until(lambda: not explorer._preview.get("loading"))
+            return explorer._preview
+
+        preview = self.run(memfs, test)
+        assert preview["format"] == "text"
+        assert preview["sections"][0]["text"] == "a.txt"
+
+    def test_the_latest_preview_wins(self, memfs, monkeypatch):
+        closed = []
+        monkeypatch.setattr(TextView, "close", lambda view: closed.append(view.text))
+
+        async def test(explorer):
+            explorer.message({"type": "preview", "path": "/data/a.txt"})
+            explorer.message({"type": "preview", "path": "/data/b.txt"})
+            HeldText.release.set()
+            await until(lambda: not explorer._preview.get("loading"))
+            await until(lambda: closed)
+            return explorer._preview
+
+        preview = self.run(memfs, test)
+        assert preview["path"] == "/data/b.txt"
+        assert closed == ["a.txt"]  # read, then closed: never shown
+
+    def test_closing_the_panel_cancels_it(self, memfs, monkeypatch):
+        closed = []
+        monkeypatch.setattr(TextView, "close", lambda view: closed.append(view.text))
+
+        async def test(explorer):
+            explorer.message({"type": "preview", "path": "/data/a.txt"})
+            explorer._preview = {}  # the frontend's close button
+            HeldText.release.set()
+            await until(lambda: closed)
+            return explorer._preview
+
+        assert self.run(memfs, test) == {}
+        assert closed == ["a.txt"]
+
+    def test_an_error_shows_in_the_panel(self, memfs, monkeypatch):
+        def failing(self, fmt, ctx, options, limits):
+            raise ValueError("no Spark")
+
+        monkeypatch.setattr(HeldText, "view", failing)
+
+        async def test(explorer):
+            explorer.message({"type": "preview", "path": "/data/a.txt"})
+            await until(lambda: not explorer._preview.get("loading"))
+            return explorer._preview
+
+        assert "no Spark" in self.run(memfs, test)["error"]
 
 
 class TestClickDetectsOnce:

@@ -220,6 +220,14 @@ view = TableSetView(
 view.on_close(lambda view: con.close())
 ```
 
+`view` runs in a worker thread, so that a slow view leaves the kernel free:
+
+- The preview or tab shows "Loading…" until it returns.
+- Views of other items may be made at the same time.
+- It never touches widgets or displays anything.
+- What the view holds is read later on the kernel's main thread. A connection opened in `view` must allow that, e.g.
+  `sqlite3.connect(path, check_same_thread=False)`.
+
 ### `recipe(fmt, ctx, options)`
 
 Returns code by title, e.g. `{"Load as DataFrame": "import duckdb\n..."}`, shown in the right-click menu's **Python

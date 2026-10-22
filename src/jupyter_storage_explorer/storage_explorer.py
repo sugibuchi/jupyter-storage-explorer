@@ -29,6 +29,7 @@ from jupyter_storage_explorer._explorer.requests import FileRequestsMixin
 from jupyter_storage_explorer._explorer.states import ExplorerStates, explorer_states
 from jupyter_storage_explorer._explorer.supports import SupportChain
 from jupyter_storage_explorer._jobs.incoming import IncomingFiles
+from jupyter_storage_explorer._jobs.loader import Loader
 from jupyter_storage_explorer._jobs.operation_chain import OperationChain
 from jupyter_storage_explorer._jobs.runner import JobRunner
 from jupyter_storage_explorer._jobs.transfer_policy import TransferPolicy
@@ -57,6 +58,7 @@ if TYPE_CHECKING:
     from fsspec import AbstractFileSystem
 
     from jupyter_storage_explorer._explorer.previews import _Detected
+    from jupyter_storage_explorer._jobs.loader import Load
     from jupyter_storage_explorer._query.data_query import DataQuery
     from jupyter_storage_explorer._query.table_set import TableSet
     from jupyter_storage_explorer._table_set_tab import TableSetTab
@@ -483,12 +485,21 @@ class StorageExplorer(
         # "Properties" counts files with jobs of its own: it changes nothing,
         # so it need not wait for a move or a copy to end.
         self._scans = JobRunner(self._send_job, prefix="scan")
+        # The reads behind previews, in threads of their own: a view taking
+        # minutes (e.g. a Spark session starting) leaves the kernel free and
+        # waits for no job (see _jobs/loader.py).
+        self._loader = Loader()
+        # The preview loading, if any: cancelled by the next one.
+        self._preview_load: Load[Any] | None = None
         # The current directory's items, kept for "list" requests (and paths).
         self._full_listing = Listing(self._make_listing("", []))
         self._listing_version = 0
         # The item detected last, shared by a click's selection, menu and
         # preview (see PreviewsMixin._detect).
         self._detected: tuple[tuple[int, str], float, _Detected | None] | None = None
+        # How many times _detected was forgotten: a detection made in a
+        # worker is kept only if it was not forgotten meanwhile.
+        self._detections_forgotten = 0
         # Data browser: path -> the data being queried.
         self._queries: dict[str, DataQuery] = {}
         # A table set previewed (TableSetView): path -> its tables.
@@ -1097,8 +1108,9 @@ class StorageExplorer(
             self._states.remember_engine(change["new"])
         self._selected_format = self._format_of_selection(self._selected)
         self._show_current_format()
+        # A preview still loading is loaded again, with the new engine.
         preview = self._preview
-        if preview.get("path") and not preview.get("loading"):
+        if preview.get("path"):
             self._open_preview(preview["path"], preview.get("format"))
 
     @traitlets.observe("_preview")
@@ -1180,4 +1192,5 @@ class StorageExplorer(
         """Forget cached listings (of ``path``, else all), so changes made elsewhere show.
         The item detected last is forgotten too, whatever ``path`` is."""
         self._detected = None
+        self._detections_forgotten += 1
         (fs or self._fs).invalidate_cache(path)
