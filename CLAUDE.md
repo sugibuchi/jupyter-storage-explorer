@@ -17,6 +17,7 @@ uvx ruff format src launcher/src plugins tests docs/scripts # format
 uv run npx --yes prettier@3.3.3 --write .           # format static/ and the extension's src/ (.prettierignore)
 uv run tests/browser/check_js.py                    # the joined JS modules: syntax, names undefined or unused
 uv run --group docs tests/browser/smoke.py          # the widgets in a real JupyterLab (see below)
+uv run tests/performance/benchmark.py               # timings on a storage with latency: before and after a change
 uv run jupyter lab                                  # try the widgets in a browser (see notebooks/)
 uv run notebooks/make_samples.py                    # regenerate the sample data the notebooks use
 ```
