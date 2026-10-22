@@ -686,7 +686,7 @@ lists the plugin with its version.
 
 ## Plugins of this repository
 
-The plugins in [`plugins/`](../plugins) (polars, pandas, pyspark, abfs) follow these conventions and are released with the
+The plugins in [`plugins/`](../plugins) (polars, pandas, pyspark, abfs, databricks) follow these conventions and are released with the
 explorer, at its version: each requires the explorer of exactly its own version (its `hatch_build.py`: the version comes from git), and the
 explorer's extras install them (`polars`: with its libraries; `polars-support`: alone). To add one:
 

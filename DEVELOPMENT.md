@@ -15,7 +15,7 @@ explorer exactly, so an extra always installs the plugin of the explorer's versi
 |-------------------------------------------|---------------------------|-------------------------------------------------------------------------------------------------------|
 | `jupyter-storage-explorer`                | `.`                       | The widgets `StorageExplorer` and `DataExplorer`; pure Python, no build.                              |
 | `jupyter-storage-explorer-launcher`       | `launcher/`               | The JupyterLab launcher item, and `launch()` run in the tab it opens.                                 |
-| `jupyter-storage-explorer-<name>-support` | `plugins/<name>-support/` | The plugins: `polars`, `pandas`, `pyspark` (engines) and `abfs` (Azure Data Lake Storage operations). |
+| `jupyter-storage-explorer-<name>-support` | `plugins/<name>-support/` | The plugins: `polars`, `pandas`, `pyspark` (engines), `abfs` (Azure Data Lake Storage operations) and `databricks` (Databricks locations, experimental). |
 
 | Path                                                           | Contents                                                                                             |
 |----------------------------------------------------------------|------------------------------------------------------------------------------------------------------|
@@ -651,6 +651,13 @@ such keys, and on a local disk they would land outside the target folder.
 
 Object stores, such as S3 and GCS, have no empty folders. That matters when creating folders.
 
+databricks-support, in `plugins/databricks-support`, adds `DatabricksWorkspaceMapper`, for fsspec-databricks'
+filesystems. Its `DatabricksLocation`s keep the workspace's host besides the path, so that workspaces are told apart and
+files pasted from another kernel are found in theirs. The host is the filesystem's Databricks SDK configuration's,
+which fsspec-databricks makes once. The mapper does not subclass `DatabricksMapper`: the chain takes `FsspecMapper` subclasses to know
+nothing of what an instance reaches. The plugin is experimental, as fsspec-databricks is, and stays out of `all` and
+`all-supports`.
+
 abfs-support adds `AzureDataLakeGen2Operation`, in `plugins/abfs-support`. On accounts with a hierarchical namespace,
 it renames and creates folders with the Data Lake SDK. Within an account, it copies on the server with Copy Blob. Its
 tests fake the SDK and adlfs, which the plugin imports on first use.
@@ -1182,6 +1189,7 @@ The workflows publish with PyPI's [trusted publishing](https://docs.pypi.org/tru
    | `jupyter-storage-explorer`                 | `release-explorer.yaml`        |
    | `jupyter-storage-explorer-launcher`        | `release-launcher.yaml`        |
    | `jupyter-storage-explorer-abfs-support`    | `release-abfs-support.yaml`    |
+   | `jupyter-storage-explorer-databricks-support` | `release-databricks-support.yaml` |
    | `jupyter-storage-explorer-pandas-support`  | `release-pandas-support.yaml`  |
    | `jupyter-storage-explorer-polars-support`  | `release-polars-support.yaml`  |
    | `jupyter-storage-explorer-pyspark-support` | `release-pyspark-support.yaml` |

@@ -44,7 +44,8 @@ The launcher has the same extras as `jupyter-storage-explorer`
 | `pandas`   | `pandas-support`   | pandas: Parquet, CSV, JSON Lines, Excel                             |
 | `pyspark`  | `pyspark-support`  | PySpark or Databricks Connect: Delta Lake, Parquet, CSV, JSON Lines |
 | `abfs`     | `abfs-support`     | Azure Data Lake Storage Gen2                                        |
-| `all`      | `all-supports`     | All of the above                                                    |
+| `databricks` | `databricks-support` | Databricks volumes and workspace files (experimental)           |
+| `all`      | `all-supports`     | All of the above, but the experimental ones                         |
 
 Full extras are handy for a quick try. **Support-only extras are highly recommended for an IPython kernel whose data
 access packages are carefully installed and configured** (e.g. a shared JupyterHub image): the plugins use what is

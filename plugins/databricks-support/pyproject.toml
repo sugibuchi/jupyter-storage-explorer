@@ -1,0 +1,67 @@
+[project]
+name = "jupyter-storage-explorer-databricks-support"
+dynamic = ["version", "dependencies"]
+description = "Databricks support for Storage Explorer"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Tsuyoshi SUGIBUCHI" }]
+keywords = ["jupyter", "jupyter-storage-explorer", "databricks", "unity catalog", "volumes", "fsspec-databricks"]
+classifiers = [
+    # Experimental, as fsspec-databricks is.
+    "Development Status :: 3 - Alpha",
+    "Framework :: Jupyter",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Scientific/Engineering",
+]
+requires-python = ">=3.11"
+
+[project.urls]
+Homepage = "https://github.com/sugibuchi/jupyter-storage-explorer/tree/main/plugins/databricks-support"
+Source = "https://github.com/sugibuchi/jupyter-storage-explorer"
+Issues = "https://github.com/sugibuchi/jupyter-storage-explorer/issues"
+
+# Explorers load the plugin by this entry point, named by its key.
+[project.entry-points."jupyter_storage_explorer.plugins"]
+databricks-support = "jupyter_storage_explorer_databricks_support:DatabricksSupport"
+
+# The libraries the plugin uses: not dependencies, so that installing the
+# plugin never changes those of a shared environment; "full" installs them.
+[project.optional-dependencies]
+full = [
+    "fsspec-databricks>=0.1.10",
+]
+
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+# The same version as jupyter-storage-explorer: from the repository's git tags.
+[tool.hatch.version]
+source = "vcs"
+raw-options = { root = "../..", version_scheme = "post-release" }
+
+# The dependencies, set by hatch_build.py: jupyter-storage-explorer at the
+# plugin's own version.
+[tool.hatch.metadata.hooks.custom]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/jupyter_storage_explorer_databricks_support"]
+
+[dependency-groups]
+dev = [
+    # The tests (tests/) fake fsspec-databricks' filesystem, which needs a
+    # workspace: the library itself is not needed to run them.
+    "pytest>=9.1.1",
+]
+
+[tool.uv]
+cache-keys = [{ file = "pyproject.toml" }, { file = "hatch_build.py" }, { git = { commit = true, tags = true } }]
+
+[tool.uv.sources]
+jupyter-storage-explorer = { workspace = true }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

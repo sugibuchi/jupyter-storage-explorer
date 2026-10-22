@@ -45,6 +45,9 @@ requires-python = ">=3.11"
 [project.optional-dependencies]
 abfs = ["jupyter-storage-explorer[abfs]"]
 abfs-support = ["jupyter-storage-explorer[abfs-support]"]
+# Experimental: not in "all" or "all-supports".
+databricks = ["jupyter-storage-explorer[databricks]"]
+databricks-support = ["jupyter-storage-explorer[databricks-support]"]
 pandas = ["jupyter-storage-explorer[pandas]"]
 pandas-support = ["jupyter-storage-explorer[pandas-support]"]
 polars = ["jupyter-storage-explorer[polars]"]
