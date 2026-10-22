@@ -1,6 +1,10 @@
-# Dependabot keeps the workflows' actions, pinned to commit SHAs, and the
-# launcher extension's npm packages (launcher/labextension/yarn.lock) up to
-# date: a pull request a month for each, its updates grouped. The Python
+# Dependabot keeps the workflows' actions, pinned to commit SHAs, up to date:
+# a pull request a month, its updates grouped.
+#
+# Not the launcher extension's npm packages: Dependabot writes
+# launcher/labextension/yarn.lock in a format jlpm's Yarn does not, which CI's
+# `jlpm install --immutable` refuses. Dependabot alerts still cover
+# yarn.lock; update its packages with jlpm (see DEVELOPMENT.md). The Python
 # dependencies are ranges in the pyproject.toml files, and uv.lock is not
 # committed, so it has nothing to update there.
 version: 2
@@ -11,12 +15,4 @@ updates:
       interval: monthly
     groups:
       actions:
-        patterns: ["*"]
-
-  - package-ecosystem: npm
-    directory: /launcher/labextension
-    schedule:
-      interval: monthly
-    groups:
-      labextension:
         patterns: ["*"]
