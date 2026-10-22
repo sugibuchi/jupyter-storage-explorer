@@ -133,8 +133,8 @@ plugin alone (`all` and `all-supports`: every plugin so); the launcher's `pyproj
 
 ## Architecture
 
-DEVELOPMENT.md's Architecture section describes the widgets, the frontend, the storages and the file operations,
-with jobs, properties, unsafe mode and the transfer policy. Read it before changing them. The traps there:
+DEVELOPMENT.md's Architecture section describes every part but the formats, the plugins and the engines, below. Read
+it before changing them. The traps there:
 
 - Traits are underscore-prefixed in every widget: a public trait would be public API.
 - Traitlets observers must be on `StorageExplorer` itself. The mixins in `_explorer/` hold only methods.
@@ -155,63 +155,12 @@ with jobs, properties, unsafe mode and the transfer policy. Read it before chang
 - Measuring with a `Progress` lists folder by folder, never with `fs.walk`: its `on_error` misses subfolders.
 - The transfer policy is checked per item in the kernel, from `FileTasks._refused`. A new kind of transfer must call
   it there.
-
-**Layout.** `tree_view` (trait `_tree_view`: `"open"`, `"closed"`, set by the toolbar's tree button, or
-`"disabled"`, fixed at creation, `_tree_disabled`), `preview_panel` (`_preview_panel`: `"open"` starts with
-`_preview` `{"empty": true}`; `"disabled"`: no Preview rows, the `"preview"` notice ignored, items viewed in new
-tabs, `x.preview.view`, and the Preview button is View, a tab of the same target, hidden without the extension) and `layout` (`_layout`: `"sidebar"`, class `jse-sidebar`: a bar of the storage chooser,
-bookmarks, Refresh, the filter button and ⚙, whose menu has Unsafe mode first (the button red while on,
-`renderUnsafe`); a bar of Up and the path; the filter, hidden until its button shows it (`x.list.showFilter`,
-cleared when hidden), as JupyterLab's file browser's; the list; the pager below it). The list's columns besides Name (`_columns`: `"size"`, `"mtime"`,
-`"ctime"`, `"format"`, `_LIST_COLUMNS`; default Size and Modified, the sidebar's Size) are chosen in ⚙ → Columns and
-remembered by layout (`ExplorerStates.columns(layout)`, JSON "columns"); the kernel's `Listing` sorts by each, Format by
-label, as the browser does. Otherwise the storage chooser sits above the tree
-while it shows, else first in the list's bar (`placeStorages`). `open_preview` is deprecated (DeprecationWarning).
-
-**Between explorers and with JupyterLab.** Drags of items from the list carry one type,
-`application/x-jupyter-storage-explorer-items`, its value a random id of the drag and nothing else; the drag itself
-is kept in the page, and a drop is taken only if it carries that id, so drags from other pages (tabs, windows, sites)
-can never name files: a drop on the same explorer moves them, on another of the page copies them as Paste does.
-Objects are shared page-wide under `Symbol.for(...)` keys on `globalThis`: `"jupyter-storage-explorer.clipboard"`
-(Copy or Cut, for Paste in any explorer), `"jupyter-storage-explorer.drag"` (the drag of items running, `{id,
-explorer, unsafe, items}`, the items as the clipboard's: set as it starts, cleared as it ends; targets tell their own
-drags from others' before the drop by `explorer`) and
-`"jupyter-storage-explorer.explorers"` (the explorers on the page by id, with the `download` the launcher's
-`download.ts` calls on a drop onto JupyterLab's file browser); the launcher's `files.ts` and `queryTabs.ts` put their
-functions (`canOpen`, `open`,
-`openWidget`) under `"jupyter-storage-explorer.jupyterlab"`, which the explorer offers ("Open in JupyterLab", "View
-in a new tab") only when they are there. Explorers on a page may be in different kernels (notebooks). The
-clipboard names the explorer and storage copied from (`{name}`), and each file's path and location (its JSON, from
-the `"locations"` request: `_location_reply`): an explorer of the same kernel is found in `explorers` (by
-`_explorer_id`) and its filesystem object used as it is (`_paste_sources`); otherwise the files' locations are found
-with `MapperChain.locate`. Copy also puts local items' plain paths (`os_path`), others' URLs, on the system clipboard;
-"Copy path" (and the bookmarks menu's) is offered on local storages (trait `_local_paths`). After pasting files cut in another explorer, the frontend dispatches a
-`"jupyter-storage-explorer:changed"` event on `globalThis`, so that explorer asks its kernel to show what is left
-(`"changed"`, `_sources_changed`).
-
-**States** (`_explorer/states.py`). `ExplorerStates` keeps what explorers remember: bookmarks (storage name, folder, and
-its location when bookmarked, as `_location_of` only resolves the storage shown) and the data browser's queries
-(keyed by location, or a string such as `DataExplorer`'s; URL, location JSON, settings, mode chosen), the most recent
-first, at most `max_queries`. Entries with a URL only (from strings, or written before locations, when local files'
-URLs were plain paths) still match a location of that URL or plain path (`_is_query_of`), and are rewritten with
-the location at their next change. One in memory (`default_states`) is shared by the kernel's
-explorers unless `states=` gives another, or a file's path (`explorer_states`: one object per file in the kernel). With
-a path it is a JSON file shared with other kernels (each launcher tab is one; the launcher defaults to
-`<jupyter_config_dir>/storage-explorer/states.json`): read again when an explorer is created and before each change,
-then written whole, so kernels do not undo each other's changes; a file that cannot be read is never written over.
-`DataQuery` remembers through it; `DataExplorer` uses a private one. The frontend asks for the bookmarks when the
-bookmarks (star) menu opens (`"bookmarks"`, ...), as other explorers may have changed them.
-
-**Lists.** The file list is filtered (by name), sorted and paged (100 per page) in the browser, from the full listing
-the kernel sends; the selection survives filtering and paging. Folders can hold tens of thousands of items, so the
-listing (`_listing`, see `_make_listing`) is sent as columns, without paths or URLs: the frontend joins paths and asks
-for locations (`"locations"`) when copying and for tooltips, and sorts once per listing, not per keystroke. Folders of more than
-`max_browser_items` are handled by the kernel instead (`_explorer/listing.py`): `_listing` then only gives their size
-and a version, and the frontend asks for pages (`"list"`), filtering the rows shown while it waits; sorting and filters
-there follow the browser's as closely as Python allows (natural order ignoring case and accents; Python's `re`). Filters
-(the list's; *Select columns*) use `createFilter` in `common.js`: text or a regular expression, always case-insensitive.
-The list's is cleared when another folder's listing arrives, not on the click, so the previous folder's items never show
-unfiltered.
+- A drop is taken only if it carries the id of the drag kept in the page. Never let a drag's data name files.
+- `ExplorerStates` with a file reads it again before each change and writes it whole. Never write over a file that
+  could not be read.
+- The listing is sent as columns, without paths or URLs: folders may hold tens of thousands of items. The kernel's
+  sorting and filters in `_explorer/listing.py` must follow the browser's.
+- `open_preview` is deprecated, with a `DeprecationWarning`.
 
 **Formats** (`formats/`). Laid out as `filesystems/`: the interfaces `DataFormat` (`base.py`, with
 `ItemContext`, which reads the item for formats and supports (`head`, `head_text`, `read_whole`; `name`, `size`,
