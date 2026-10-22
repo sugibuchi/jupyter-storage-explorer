@@ -20,9 +20,15 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false  # no job pushes: the token is not left in .git/config
 
-      - uses: astral-sh/setup-uv@v10.3.0  # no major-version tags (e.g. v10) since v8
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
+
+        with:
+
+          version: "0.12.22"  # not the latest uv: the same in every run
 
       - name: Ruff check
         run: uvx ruff check src launcher/src plugins tests docs/scripts
@@ -36,28 +42,40 @@ jobs:
 
   # The launcher's JupyterLab extension, type-checked and compiled (tsc), installed
   # as the release workflow does (Node.js from nodejs-wheel); yarn.lock must be up to date.
+  # jupyterlab and nodejs-wheel at exact versions, the release's: raise them
+  # with the dev group's.
   extension:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false  # no job pushes: the token is not left in .git/config
 
-      - uses: astral-sh/setup-uv@v10.3.0  # no major-version tags (e.g. v10) since v8
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
+
+        with:
+
+          version: "0.12.22"  # not the latest uv: the same in every run
 
       - name: Compile the JupyterLab extension
         working-directory: launcher/labextension
         run: |
-          uv run --no-project --with "jupyterlab>=4.6.4,<5" --with nodejs-wheel jlpm install --immutable
-          uv run --no-project --with "jupyterlab>=4.6.4,<5" --with nodejs-wheel jlpm build:lib
+          uv run --no-project --with jupyterlab==4.6.4 --with nodejs-wheel==24.19.0 jlpm install --immutable
+          uv run --no-project --with jupyterlab==4.6.4 --with nodejs-wheel==24.19.0 jlpm build:lib
 
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
+          persist-credentials: false  # no job pushes: the token is not left in .git/config
           fetch-depth: 0  # the version comes from the git tags (hatch-vcs)
 
-      - uses: astral-sh/setup-uv@v10.3.0  # no major-version tags (e.g. v10) since v8
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
+
         with:
+
+          version: "0.12.22"  # not the latest uv: the same in every run
           python-version: "3.14"
 
       # The launcher is left out: its JupyterLab extension is not built here.
@@ -76,7 +94,7 @@ jobs:
 
       - name: Upload coverage to Codecov
         if: ${{ !cancelled() }}
-        uses: codecov/codecov-action@v7
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5  # v7.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.xml
@@ -87,17 +105,21 @@ jobs:
   spark:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
+          persist-credentials: false  # no job pushes: the token is not left in .git/config
           fetch-depth: 0  # the version comes from the git tags (hatch-vcs)
 
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961  # v5.7.0
         with:
           distribution: temurin
           java-version: "17"
 
-      - uses: astral-sh/setup-uv@v10.3.0  # no major-version tags (e.g. v10) since v8
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
+
         with:
+
+          version: "0.12.22"  # not the latest uv: the same in every run
           python-version: "3.12"
 
       - name: Test pyspark-support on Spark

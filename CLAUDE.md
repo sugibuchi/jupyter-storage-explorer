@@ -30,8 +30,14 @@ CI, in `.github/workflows/ci.yaml`, runs on pull requests and pushes to `main`:
 - a compile of the launcher's extension with `jlpm build:lib`, which needs `yarn.lock` up to date.
 
 Releases are GitHub Actions run by a version tag, which the maintainer pushes. DEVELOPMENT.md describes them, with
-the release notes' sections. In the workflows, pin `astral-sh/setup-uv` to a full version, e.g. `@v10.3.0`: since v8
-it publishes no major-version tags.
+the release notes' sections. In the workflows:
+
+- Pin every action to a full commit SHA, with its version in a comment, e.g. `@<sha>  # v7.0.1`. Dependabot updates
+  them. Also pin uv's `version` and the tools run with `--with`.
+- Check out with `persist-credentials: false`: no job pushes.
+- The workflows started by `workflow_run` keep their `if`, which refuses runs not from a tag pushed to this
+  repository, e.g. a fork's workflow of the same name.
+- Check changes with `uvx zizmor --offline .github/workflows` and `uvx --from actionlint-py actionlint`.
 
 Python and `static/` changes need no build: restart the kernel. The launcher's extension, in `launcher/labextension/`,
 is built by hand: `uv run jlpm install` and `uv run jlpm build` there, then `uv sync` at the root. Then restart

@@ -1140,6 +1140,18 @@ The workflows, in `.github/workflows/`:
 
 To retry the launcher's or a plugin's, run it by hand for the tag: *Actions ▸ Release launcher ▸ Run workflow*.
 
+The workflows are kept safe for a public repository:
+
+- Each action is pinned to a commit SHA, and Dependabot (`.github/dependabot.yml`) updates them monthly.
+- Jobs get only the permissions they need: `contents: write` to add files to the release, `id-token: write` to
+  publish. No token is kept in the checkout.
+- The workflows started by `workflow_run` run only for a successful "Release explorer" run on a tag pushed to this
+  repository. A fork's pull request could otherwise run a workflow of that name, and start them.
+- The release builds the extension with `jlpm install --immutable`, and the build tools at exact versions.
+
+`uvx zizmor --offline .github/workflows` audits them, and `uvx --from actionlint-py actionlint` checks their syntax.
+SECURITY.md says how to report a vulnerability.
+
 ### Release notes
 
 Once all the workflows have succeeded, replace the generated notes (`gh release edit vX.Y.Z --notes-file notes.md`).
