@@ -113,8 +113,7 @@ uv pip install --python ../lab40 -e launcher --reinstall-package jupyter-storage
   it alone.
 - **Formats**, in `formats/`, detect each kind of file. Supports preview, query and load it, one library each.
 
-The sections below describe the widgets, the frontend, the storages and the file operations. CLAUDE.md describes the
-other parts.
+The sections below describe every part but the formats, the plugins and the engines, which CLAUDE.md describes.
 
 ### Widgets
 
@@ -416,6 +415,112 @@ copied with. Two other sides have URLs of their own:
 - JupyterLab's file browser, `jupyterlab://<absolute path>`, unlike the explorer's own local storage, `file:///`.
 
 The policy prevents mistakes. It is not a security boundary.
+
+### Layout
+
+Three options of `StorageExplorer` set its layout. Each has a private trait of the same name, e.g. `_tree_view`.
+
+- `tree_view`: "open" or "closed", which the toolbar's tree button switches. "disabled" removes the tree for good.
+- `preview_panel`: "open" or "closed", or "disabled". Without the panel, items are viewed in new tabs, and the Preview
+  button becomes View.
+- `layout`: "standard", or "sidebar" for JupyterLab's side bar, a narrow layout described below.
+
+The sidebar layout, with the class `jse-sidebar`, has:
+
+- a bar of the storage chooser, bookmarks, Refresh, the filter button and ⚙;
+- a bar of Up and the path;
+- the filter, hidden until its button shows it, as in JupyterLab's file browser;
+- the list, and its pager.
+
+In the sidebar, ⚙'s menu has Unsafe mode first, and the button turns red while it is on.
+
+The list's columns besides Name are chosen in ⚙ → Columns: Size, Modified, Created and Format. They are remembered by
+layout. The defaults are Size and Modified, and the sidebar's is Size.
+
+In the other layouts, the storage chooser sits above the tree while the tree shows. Otherwise it comes first in the
+list's bar.
+
+### Between explorers and with JupyterLab
+
+Explorers on a page may be in different kernels, one per notebook. They share objects under `Symbol.for(...)` keys on
+`globalThis`:
+
+| Key                                      | Holds                                                                       |
+|------------------------------------------|-----------------------------------------------------------------------------|
+| `"jupyter-storage-explorer.clipboard"`   | Items copied or cut, for Paste in any explorer.                             |
+| `"jupyter-storage-explorer.drag"`        | The drag of items running, from its start to its end.                       |
+| `"jupyter-storage-explorer.explorers"`   | The explorers on the page by id, each with its `download`.                  |
+| `"jupyter-storage-explorer.jupyterlab"`  | The launcher extension's functions, such as `open` and `openWidget`.        |
+
+The explorer offers "Open in JupyterLab" and "View in a new tab" only when the launcher extension's functions are there.
+The extension's `download.ts` calls an explorer's `download` on a drop onto JupyterLab's file browser.
+
+A drag of items carries one type, `application/x-jupyter-storage-explorer-items`. Its value is a random id, and nothing
+else.
+
+- The drag itself is kept in the page, and a drop is taken only if it carries that id. So drags from other tabs,
+  windows or sites can never name files.
+- A drop on the same explorer moves the items. A drop on another explorer of the page copies them, as Paste does.
+
+The clipboard names the explorer and the storage copied from, and each file's path and location. Paste finds the files
+in one of two ways:
+
+- An explorer of the same kernel is found in the registry of explorers, and its filesystem object is used as it is.
+- Otherwise, the files' locations are found with `MapperChain.locate`.
+
+Copy also puts the items on the system clipboard: local items' plain paths, and other items' URLs. "Copy path" is
+offered on local storages.
+
+After pasting files cut in another explorer, the frontend dispatches a `"jupyter-storage-explorer:changed"` event on
+`globalThis`. That explorer then asks its kernel to show what is left.
+
+### States
+
+An `ExplorerStates`, in `_explorer/states.py`, keeps what explorers remember:
+
+- bookmarks: the storage name, the folder, and its location when bookmarked;
+- the data browser's queries, by location: settings, and the mode chosen;
+- the engine chosen, and the list's columns by layout.
+
+Queries are kept most recent first, at most `max_queries`. `DataQuery` remembers through the states, and
+`DataExplorer` has a private one.
+
+The kernel's explorers share one in memory, unless `states=` gives another or a file's path. With a path, it is a JSON
+file shared with other kernels: each launcher tab is a kernel. The launcher's file is
+`<jupyter_config_dir>/storage-explorer/states.json`.
+
+Kernels sharing a file must not undo each other's changes:
+
+- The file is read again when an explorer is created, and before each change. Then it is written whole.
+- A file that cannot be read is never written over.
+- The frontend asks for the bookmarks each time their menu opens, as other kernels may have changed them.
+
+Older entries have a URL only, without a location. They still match a location of that URL or plain path, and are
+rewritten with the location at their next change.
+
+### Lists
+
+The browser filters, sorts and pages the file list, 100 items per page, from the full listing the kernel sends. The
+selection survives filtering and paging.
+
+Folders can hold tens of thousands of items, so the listing is sent as columns, without paths or URLs.
+
+- The frontend joins the paths itself.
+- It asks for locations only when it needs them: to copy, and for tooltips.
+- It sorts once per listing, not per keystroke.
+
+Folders of more than `max_browser_items`, 20,000 by default, are handled by the kernel instead, in
+`_explorer/listing.py`. The kernel then sends only their size and a version, and the frontend asks for pages. While it
+waits, it filters the rows shown.
+
+The kernel's sorting and filters follow the browser's as closely as Python allows: natural order ignoring case and
+accents, and Python's `re`.
+
+The list's filter and the one in *Select columns* use `createFilter` in `common.js`. A filter is text or a
+regular expression, always case-insensitive.
+
+The list's filter is cleared when another folder's listing arrives, not on the click. So the previous folder's items
+never show unfiltered.
 
 ## Design
 
