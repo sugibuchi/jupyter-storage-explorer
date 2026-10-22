@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import itertools
 import os
 import uuid
 import warnings
@@ -510,6 +511,9 @@ class StorageExplorer(
         # Views in tabs of their own ("view_tab"): model id -> widget,
         # kept here while the tab is open.
         self._view_tabs: dict[str, DataExplorer | TableSetTab | ViewTab] = {}
+        # Their loads still running, by "load_id": cancelled if the tab closes.
+        self._view_tab_loads: dict[str, Load[Any]] = {}
+        self._view_tab_ids = itertools.count(1)
         # The launcher's settings file and the function creating it (see
         # _offer_settings); None in notebooks.
         self._settings_file: tuple[str, Callable[[], Any]] | None = None
@@ -931,6 +935,7 @@ class StorageExplorer(
         # Also called on deletion, of explorers whose __init__ failed too.
         if hasattr(self, "_view_tabs"):
             self._release_preview()
+            self._cancel_view_tab_loads()
             tabs, self._view_tabs = list(self._view_tabs.values()), {}
             for widget in tabs:
                 widget.close()
@@ -1026,7 +1031,7 @@ class StorageExplorer(
             "job_cancel": self._cancel_job,
             # Files cut here were pasted in another explorer (told by its frontend).
             "changed": lambda c: self._sources_changed(c["filesystem"], c["paths"]),
-            "view_tab_closed": lambda c: self._view_tab_closed(c["model_id"]),
+            "view_tab_closed": self._view_tab_closed,
         }
 
     def _preview_notice(self, content: dict[str, Any]) -> None:

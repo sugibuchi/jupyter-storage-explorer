@@ -33,10 +33,13 @@ WORKERS = 4
 
 class Load(Generic[T]):
     """A load submitted to a ``Loader``: ``cancel()`` it to have its result
-    closed instead of shown. Cancelling a load that has ended does nothing."""
+    closed instead of shown. Cancelling a load that has ended does nothing.
+    ``ended``: its result was shown or closed (or its work failed), which,
+    without a loop, is before ``submit`` returns."""
 
     def __init__(self) -> None:
         self.cancelled = False
+        self.ended = False
 
     def cancel(self) -> None:
         self.cancelled = True
@@ -79,6 +82,7 @@ class Loader:
                 result = work()
             except Exception:
                 log.exception("a load failed")
+                self._main(functools.partial(setattr, load, "ended", True))
                 return
             self._main(functools.partial(self._end, load, result, done, discard))
 
@@ -92,6 +96,7 @@ class Loader:
         done: Callable[[T], None],
         discard: Callable[[T], None],
     ) -> None:
+        load.ended = True
         try:
             (discard if load.cancelled else done)(result)
         except Exception:

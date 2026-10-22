@@ -75,7 +75,7 @@ class TestPreviewDisabled:
     def test_items_are_still_viewed_in_tabs(self, memfs):
         memfs.pipe_file("/a.txt", b"hello")
         explorer = make("/", fs=memfs, preview_panel="disabled")
-        reply = explorer.request({"type": "view_tab", "rid": 1, "path": "/a.txt"})
+        reply = explorer.view_tab("/a.txt")
         assert "error" not in reply
         assert reply["model_id"] in explorer._view_tabs
 

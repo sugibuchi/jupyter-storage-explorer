@@ -74,6 +74,18 @@
   border-radius: 0;
 }
 
+/* "Loading…" while the kernel reads the view, then why it failed, if it did. */
+.jse-view-tab-message {
+  padding: 16px;
+  color: var(--jp-ui-font-color2);
+  font-size: var(--jp-ui-font-size1);
+}
+
+.jse-view-tab-message.jse-mod-error {
+  color: var(--jp-error-color1);
+  white-space: pre-wrap;
+}
+
 /* The output of launcher.py's style(): a <style> element, which applies even
    when hidden. */
 .jse-launcher-panel .jp-OutputArea-child:has(.jp-RenderedHTMLCommon > style:only-child) {

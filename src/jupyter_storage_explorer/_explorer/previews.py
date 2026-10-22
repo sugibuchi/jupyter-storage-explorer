@@ -348,10 +348,12 @@ class PreviewsMixin:
         format: str | None,
         engine: str | EllipsisType | None,
         chosen: str | None,
+        verb: str = "previewed",
     ) -> _Loaded:
         """In a worker thread, touching no trait: fill ``preview`` (see
         ``_open_preview``) with the item at its path of ``fs``, detected now
-        unless given as ``item``, viewed with ``chosen`` the engine chosen."""
+        unless given as ``item``, viewed with ``chosen`` the engine chosen.
+        Its errors say it cannot be ``verb``."""
         path = preview["path"]
         # What shows it: the view, else its query or tables, which own it.
         shown: View | DataQuery | TableSet | None = None
@@ -359,12 +361,12 @@ class PreviewsMixin:
             if item is ...:
                 item = self._detect_now(path, fs)
             if item is None:
-                raise ValueError(f"{path} has no URL, so it cannot be previewed")
+                raise ValueError(f"{path} has no URL, so it cannot be {verb}")
             formats = item.formats
             if format is not None:
                 formats = [f for f in formats if f.name == format]
                 if not formats:
-                    raise ValueError(f"{path} cannot be previewed as {format}")
+                    raise ValueError(f"{preview['name']} cannot be {verb} as {format}")
             if formats:
                 fmt = formats[0]
                 preview["format"] = fmt.name
@@ -435,8 +437,16 @@ class PreviewsMixin:
         tabs', without closing any widget: at the kernel's exit
         (``_close_views_at_exit``), when no message reaches the page."""
         self._release_preview()
+        self._cancel_view_tab_loads()
         for widget in list(self._view_tabs.values()):
             widget._release()
+
+    def _cancel_view_tab_loads(self) -> None:
+        """Cancel the view tabs' loads still running: what they read is
+        closed when they end."""
+        loads, self._view_tab_loads = list(self._view_tab_loads.values()), {}
+        for load in loads:
+            load.cancel()
 
     # --- The query in the preview panel, for query_result() and
     # on_query_change() ---
@@ -593,57 +603,105 @@ class PreviewsMixin:
 
     def _view_tab_request(self, content: dict[str, Any]) -> dict[str, Any]:
         """Answer "view_tab": view ``path`` (as ``format``, else its best
-        format) in a new widget, a ``DataExplorer`` or a ``ViewTab``, kept
-        until the tab closes ("view_tab_closed"). {"model_id", "title",
-        "url"} or {"error"}."""
-        path = content.get("path")
-        view: View | None = None
-        data: DataQuery | None = None
-        tables: TableSet | None = None
-        try:
-            item, fmt = self._formats_of(path, content.get("format") or None)
-            engine = content.get("engine", ...)
-            key = self._view_engine(fmt, item.ctx.name, engine, self._engine or None)
-            viewer = self._viewer(fmt, item, key)
-            view = viewer()
-            title = _paths.basename(path)
-            label = " · ".join(filter(None, [fmt.label, self._engine_label(key)]))
-            if isinstance(view, QueryView):
-                data = self._new_query(view, viewer, item)
-                widget: DataExplorer | TableSetTab | ViewTab = DataExplorer._of_query(
-                    data,
-                    self._states,
-                    data.key,
-                    title=title,
-                    label=label,
-                    height="fill",
-                )
-            elif isinstance(view, TableSetView):
-                tables = self._table_set(view, viewer, item)
-                widget = TableSetTab(tables, title=title, label=label)
-            else:
-                widget = ViewTab(
-                    section(view), title=title, label=label, on_close=view.close
-                )
-        except Exception as exc:
-            if data is not None:
-                data.close()
-            if tables is not None:
-                tables.close()
-            if view is not None:
-                view.close()
-            return {"error": error_text(exc)}
-        self._view_tabs[widget.model_id] = widget
-        return {
-            "model_id": widget.model_id,
-            "title": title,
-            "url": item.ctx.location.url,
-        }
+        format) in a new widget, a ``DataExplorer``, a ``TableSetTab`` or a
+        ``ViewTab``, kept until the tab closes ("view_tab_closed").
 
-    def _view_tab_closed(self, model_id: str) -> None:
-        """The tab of a "view_tab" closed: its widget is no longer kept, and
-        closing it closes its view."""
-        widget = self._view_tabs.pop(model_id, None)
+        Answers at once, {"load_id", "title", "url"} or {"error"}, so that
+        the tab opens showing that it loads. The reads run in a worker thread
+        (``_loader``), as a preview's; then {"type": "view_tab", "load_id"}
+        is sent, with the widget's "model_id" or an "error". Closing the tab
+        before cancels the load: what it read is closed.
+        """
+        path = content.get("path")
+        location = self._location_of(path)
+        if location is None:
+            return {"error": f"{path} has no URL, so it cannot be viewed"}
+        load_id = f"view-{next(self._view_tab_ids)}"
+        title = _paths.basename(path)
+        base = {
+            "path": path,
+            "name": title,
+            "format": None,
+            "engine": None,
+            "engine_label": "",
+            "sections": [],
+            "error": "",
+        }
+        format, engine = content.get("format") or None, content.get("engine", ...)
+        # As for a preview: what the worker needs of the explorer, as it is now.
+        fs, chosen = self._fs, self._engine or None
+        recent = self._recent_detection(path, fs)
+        detecting = self._detecting(path, fs)
+
+        def work() -> _Loaded:
+            return self._read_preview(
+                dict(base),
+                item=recent,
+                fs=fs,
+                format=format,
+                engine=engine,
+                chosen=chosen,
+                verb="viewed",
+            )
+
+        def done(loaded: _Loaded) -> None:
+            self._view_tab_loads.pop(load_id, None)
+            if recent is ... and loaded.item is not ...:
+                self._keep_detection(detecting, loaded.item)
+            try:
+                widget = self._view_tab_widget(loaded, title)
+            except Exception as exc:
+                discard(loaded, popped=True)
+                self.send(
+                    {"type": "view_tab", "load_id": load_id, "error": error_text(exc)}
+                )
+                return
+            self._view_tabs[widget.model_id] = widget
+            self.send(
+                {"type": "view_tab", "load_id": load_id, "model_id": widget.model_id}
+            )
+
+        def discard(loaded: _Loaded, popped: bool = False) -> None:
+            if not popped:
+                self._view_tab_loads.pop(load_id, None)
+            if loaded.shown is not None:
+                loaded.shown.close()
+
+        load = self._loader.submit(work, done, discard)
+        if not load.ended:  # without a loop, it has ended already
+            self._view_tab_loads[load_id] = load
+        return {"load_id": load_id, "title": title, "url": location.url}
+
+    def _view_tab_widget(
+        self, loaded: _Loaded, title: str
+    ) -> DataExplorer | TableSetTab | ViewTab:
+        """The widget of a view tab's load (see ``_view_tab_request``), on
+        the main thread; ValueError if the item could not be viewed."""
+        preview, shown = loaded.preview, loaded.shown
+        if preview["error"]:
+            raise ValueError(preview["error"])
+        if shown is None:
+            raise ValueError(f"{title} cannot be viewed in any format")
+        fmt = next(f for f in self._formats if f.name == preview["format"])
+        label = " · ".join(filter(None, [fmt.label, preview["engine_label"]]))
+        if isinstance(shown, DataQuery):
+            return DataExplorer._of_query(
+                shown, self._states, shown.key, title=title, label=label, height="fill"
+            )
+        if isinstance(shown, TableSet):
+            return TableSetTab(shown, title=title, label=label)
+        return ViewTab(
+            preview["sections"][0], title=title, label=label, on_close=shown.close
+        )
+
+    def _view_tab_closed(self, content: dict[str, Any]) -> None:
+        """The tab of a "view_tab" closed: its widget ("model_id") is no
+        longer kept, and closing it closes its view; a load still running
+        ("load_id") is cancelled."""
+        load = self._view_tab_loads.pop(content.get("load_id"), None)
+        if load is not None:
+            load.cancel()
+        widget = self._view_tabs.pop(content.get("model_id"), None)
         if widget is not None:
             widget.close()
 

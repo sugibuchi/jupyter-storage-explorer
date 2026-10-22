@@ -298,9 +298,7 @@ def test_excel_sheet_reloaded_from_the_file_as_it_is_now(tmp_path):
 class TestViewTab:
     @pytest.fixture
     def tab(self, local, tables, monkeypatch):
-        reply = local.request(
-            {"type": "view_tab", "rid": 1, "path": path_of(local, "db.txt")}
-        )
+        reply = local.view_tab(path_of(local, "db.txt"))
         tab = local._view_tabs[reply["model_id"]]
         tab.sent = []
         monkeypatch.setattr(tab, "send", tab.sent.append)

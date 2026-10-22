@@ -36,6 +36,21 @@ class Explorer(StorageExplorer):
             }
         return reply
 
+    def view_tab(self, path: str, **content: Any) -> dict[str, Any]:
+        """Ask for "View in a new tab" of ``path``: the reply, with the
+        "view_tab" message sent once the view has loaded ({"model_id"} or
+        {"error"}). Without a kernel loop, loads run at once (see
+        _jobs/loader.py), so it has been sent by then."""
+        reply = self.request({"type": "view_tab", "rid": 1, "path": path, **content})
+        if "load_id" not in reply:
+            return reply
+        [loaded] = [
+            c
+            for c, _ in self.sent
+            if c.get("type") == "view_tab" and c["load_id"] == reply["load_id"]
+        ]
+        return {**reply, **loaded}
+
     def job(self, job_id: str) -> dict[str, Any]:
         """The last message about job ``job_id``."""
         return [
