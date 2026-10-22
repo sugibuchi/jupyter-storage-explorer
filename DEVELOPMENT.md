@@ -493,6 +493,12 @@ Each tab's view, its storage and folders, is restored with the workspace:
 2. The tab keeps it in JupyterLab's state database, which is saved with the workspace.
 3. A restored tab passes it back as `launch(view=...)`.
 
+A page reload keeps the tab's kernel, and runs `launch()` in it again. `launch()` then shows the explorer it made
+before, as it was: its folder, selection and preview. It makes a new one only if the `launcher.py` files changed, so
+that a reload still applies new settings, or if the explorer was closed. The view tabs it had went with the page, so
+their widgets are released. The side panel's console works the same way. The saved view serves new kernels, e.g.
+after a server restart.
+
 **The side panel** holds such a console too, under a session name of its own. The command "Show Storage Explorer in
 the Side Bar" shows it.
 

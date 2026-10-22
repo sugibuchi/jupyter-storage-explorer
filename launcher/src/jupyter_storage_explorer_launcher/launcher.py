@@ -97,6 +97,7 @@ from __future__ import annotations
 
 import contextlib
 import dataclasses
+import hashlib
 import importlib.resources
 import importlib.util
 import inspect
@@ -541,6 +542,23 @@ def create_widget(sidebar: bool = False) -> Any:
     return load_settings().create_widget(sidebar)
 
 
+@dataclasses.dataclass
+class _Launched:
+    """An explorer ``launch()`` showed in this kernel, with what it was made
+    from: the launcher.py files' fingerprint, and the warnings shown above it."""
+
+    explorer: Any
+    fingerprint: str
+    warnings: list[str]
+
+
+# The explorers launch() showed in this kernel, by kind: the side panel's
+# (True) or a tab's (False); each has a kernel of its own. A page reload runs
+# launch() again in the same kernel (see the extension's index.ts), which
+# shows the same explorer again, as it was, unless the files changed.
+_launched: dict[bool, _Launched] = {}
+
+
 def launch(view: str | None = None, sidebar: bool = False) -> None:
     """Run by the launcher's tab or side panel: show the layers' warnings,
     and the explorer.
@@ -549,22 +567,57 @@ def launch(view: str | None = None, sidebar: bool = False) -> None:
     name, "folders": {name: folder}}), saved by the tab (see the extension's
     index.ts): the explorer reopens there. A view that cannot be used is
     ignored. ``sidebar``: the explorer of the side panel (``SIDEBAR``).
+
+    Run again in the same kernel, after a page reload, it shows the explorer
+    it made before, as it was (its folder, selection, preview), unless the
+    launcher.py files have changed since: those apply then, in a new one.
     """
     from IPython.display import display  # noqa: PLC0415
 
+    files = find_launcher_files()
+    fingerprint = _fingerprint(files)
+    previous = _launched.pop(sidebar, None)
+    if previous is not None:
+        if previous.fingerprint == fingerprint and _open(previous.explorer):
+            # Its tabs went with the page: their views are released.
+            previous.explorer._release_view_tabs()
+            for warning in previous.warnings:
+                print(warning, file=sys.stderr)
+            display(previous.explorer)
+            _launched[sidebar] = previous
+            return
+        previous.explorer.close()
     try:
-        settings = load_settings()
+        settings = load_settings(files)
         explorer = _create_explorer(settings, view, sidebar)
     except LauncherError as exc:
         # In a system file, or the explorer cannot be created even without
         # the user's: the tab cannot open. Said plainly, not as a traceback.
         print(f"Storage Explorer cannot open: {exc}", file=sys.stderr)
         return
-    for warning in settings.warnings:
-        print(warning, file=sys.stderr)
+    warnings = list(settings.warnings)
     if settings.user_error:
-        print(_left_out(settings.user_error), file=sys.stderr)
+        warnings.append(_left_out(settings.user_error))
+    for warning in warnings:
+        print(warning, file=sys.stderr)
     display(explorer)
+    _launched[sidebar] = _Launched(explorer, fingerprint, warnings)
+
+
+def _fingerprint(files: Sequence[pathlib.Path]) -> str:
+    """What launcher.py ``files`` hold: their paths and contents, so that a
+    change to any, or a file added or removed, gives another."""
+    digest = hashlib.sha256()
+    for path in files:
+        digest.update(str(path).encode())
+        with contextlib.suppress(OSError):
+            digest.update(path.read_bytes())
+    return digest.hexdigest()
+
+
+def _open(explorer: Any) -> bool:
+    """Whether ``explorer`` can still be shown: not closed (its comm gone)."""
+    return getattr(explorer, "comm", None) is not None
 
 
 def _left_out(error: str) -> str:

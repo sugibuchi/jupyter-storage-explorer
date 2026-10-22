@@ -429,6 +429,15 @@ class PreviewsMixin:
         for widget in list(self._view_tabs.values()):
             widget._release(now=True)
 
+    def _release_view_tabs(self) -> None:
+        """Close the widgets of the explorer's view tabs, and cancel those
+        loading: when it closes, and when the launcher shows it again after a
+        page reload, which closed the tabs without telling the kernel."""
+        self._cancel_view_tab_loads()
+        tabs, self._view_tabs = list(self._view_tabs.values()), {}
+        for widget in tabs:
+            widget.close()
+
     def _cancel_view_tab_loads(self) -> None:
         """Cancel the view tabs' loads still running: what they read is
         closed when they end."""
