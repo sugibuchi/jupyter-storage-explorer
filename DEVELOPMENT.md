@@ -189,6 +189,126 @@ After rebuilding the extension, install it there again:
 uv pip install --python ../lab40 -e launcher --reinstall-package jupyter-storage-explorer-launcher
 ```
 
+## Design
+
+The choices below shape the whole project. Keep to them, or change them on purpose.
+
+### Everything runs in the kernel
+
+The explorer is a widget in the user's kernel, as their code is. It adds nothing to the Jupyter server: no server
+extension, and no endpoints reaching storages.
+
+- The kernel reaches storages with the user's credentials and libraries, as a notebook would.
+- The launcher's JupyterLab extension only shows explorers, and passes the frontend's requests to their kernels.
+- Explorers in different kernels work together through the page: the clipboard, drags and locations.
+
+So the explorer works wherever widgets work: JupyterLab, notebooks, consoles and IntelliJ.
+
+### The kernel decides, the browser shows
+
+The browser holds no authority. Every check is made in the kernel, as it plans each item.
+
+- Unsafe mode, the transfer policy and conflicts are checked there.
+- The browser names files only by the paths the kernel sent. A drop from another page carries no file names at all.
+- File names are shown through `visible()`, so a name cannot pretend to be another.
+
+The browser does what needs no round trip: filtering, sorting and paging a listing, and the menus.
+
+### Security
+
+The explorer can do what the user's code can, and no more. Keep it so.
+
+Credentials come from the environment, as each storage's library finds them. Examples are an AWS profile, an Azure CLI
+login or managed identity, and Google's default credentials. Options given to a storage work too.
+
+The explorer never asks for secrets, and never reads them from environment variables.
+
+- Asking would happen in every kernel: each launcher tab and each notebook.
+- Secrets in environment variables are a practice we do not support.
+
+"Python code" leaves out credentials. It drops options declared secret, and options whose names look like credentials.
+
+Unsafe mode and the transfer policy prevent mistakes. They are not a security boundary: code in the kernel can do
+whatever its credentials allow.
+
+What storages hold is shown, never run:
+
+- Names show control and invisible characters as `\uXXXX`.
+- Markdown is sanitized.
+- A format's own icon is shown as an image, in which scripts do not run.
+- Notebooks opened with Edit are untrusted unless signed, as JupyterLab's own are. The kernel checks signatures with
+  nbformat's notary, and signs a notebook saved while trusted.
+
+Files pasted from another kernel are read with one of the explorer's storages. For the kinds of storage the mappers
+know, the explorer may also open one with the user's credentials. It never opens an unknown URL.
+
+### Extended by chains, users first
+
+Formats, supports, file operations and mappers are each a chain of objects, tried in order:
+
+1. what the explorer's arguments give;
+2. what the plugins give;
+3. the defaults.
+
+The first that takes an item handles it:
+
+- A support or an operation refuses an item by raising its class's `NotSupported`, and the next one is tried.
+- A mapper takes the filesystems it matches. The highest priority among matching formats wins.
+
+So a plugin or a user adds or replaces behaviour without changing the core.
+
+A format only detects, and a support handles one format with one library. So a new library for a format needs only a
+support.
+
+### Optional libraries, probed at run time
+
+The core needs only anywidget, fsspec, narwhals, pygments and traitlets. Every other library is optional.
+
+- Supports import their libraries inside methods, and the chain calls only those whose packages are installed.
+- Mappers match filesystems by class name, so they never import a storage's library.
+- Plugins never depend on their libraries: their `full` extra installs them.
+
+So installing a plugin never changes the libraries of a shared environment.
+
+### Locations, not fsspec objects
+
+Items travel between kernels, to generated code and to the transfer policy as `Location`s. A location describes the
+storage, not the fsspec implementation, so two implementations of one storage agree. It never holds credentials.
+
+### Few round trips to storages
+
+Cloud storages answer each call in tens of milliseconds, and folders hold tens of thousands of items. So:
+
+- A listing makes one `ls`, and reads no file. Formats that need a file's first bytes wait for a click.
+- The listing goes to the browser as columns, without paths or URLs.
+- A click detects its item once, for the selection, the menu and the preview.
+- The data browser queries lazy data where it is, rather than reading it all.
+
+`tests/performance/benchmark.py` counts the calls of each scenario. A change should not add calls.
+
+### Written for AI to extend
+
+Users are expected to generate formats, supports and plugins with AI. So the rules are written where AI reads them:
+in docstrings and in docs/development-plugin.md.
+
+- The explorer does not check at run time that a support keeps them, by design.
+- Tests keep the rules true of the defaults, so the examples AI learns from stay right.
+
+### Known limits
+
+These follow from the choices above. Users may meet them.
+
+- **One job at a time.** A kernel runs file operations one after another, so a long copy delays a delete. Properties
+  run apart.
+- **Copies between storages go through the kernel.** Each file is copied to a temporary file on the kernel's disk,
+  then up. Bandwidth and disk space are the kernel's.
+- **Synchronous filesystems copy one file at a time.** Only async filesystems, such as s3fs and adlfs, run files in
+  parallel.
+- **A click may show a file as it was up to 5 seconds before.** The detection is reused for a few seconds. Refresh
+  and the explorer's own writes clear it.
+- **Kernels sharing a states file do not lock it.** Each re-reads the file before a change and replaces it atomically.
+  Two changes in the same instant can still lose one.
+
 ## Architecture
 
 - **`StorageExplorer`** holds the widget's state and routes the frontend's messages. Each of its features is a mixin,
@@ -887,33 +1007,6 @@ Spark reads with its own storage settings. PySpark's supports take `session_opti
 `reader_options`, for `spark.read.option`. A subclass per format has Spark's documented reader options, in snake case.
 
 The options of each library are listed in its plugin's README only.
-
-## Design
-
-### Security
-
-The explorer runs in the user's kernel, as their code does: it can do what their code can, and no more. Keep it so.
-
-- **Credentials** come from the environment, as each storage's library finds them: an AWS profile, an Azure CLI login
-  or managed identity, Google's default credentials. Options given to a storage work too.
-- **The explorer never asks for secrets**, and never reads them from environment variables. Asking would happen in
-  every kernel: each launcher tab, each notebook. Secrets in environment variables are a practice we do not support.
-- **"Python code" leaves out credentials**: options declared secret, and options whose names look like credentials.
-- **Nothing is added to the Jupyter server**: no server extension, no endpoints reaching storages. The launcher's
-  JupyterLab extension only shows explorers and passes the frontend's requests to their kernels.
-- **Unsafe mode and the transfer policy prevent mistakes**; they are not a security boundary: code in the kernel can
-  do whatever its credentials allow.
-- **Notebooks opened from a storage** (Edit) are untrusted unless signed, as JupyterLab's own are. Their outputs' HTML
-  and scripts do not run until the user trusts them. The kernel checks signatures with nbformat's notary, as
-  jupyter_server does, and signs a notebook saved while trusted.
-- **What storages hold is shown, never run**:
-  - names show control and invisible characters as `\uXXXX` (`visible()`);
-  - Markdown is sanitized;
-  - a format's own icon is shown as an image, in which scripts do not run.
-- **Pages cannot name files**: drags carry only a random id, so drags from other browser tabs or sites are refused.
-- **Files pasted from another kernel** are read with one of the explorer's storages. For the kinds of storage the
-  mappers know (Azure, S3, Google Cloud Storage, SFTP), the explorer may also open one with the user's credentials.
-  An unknown URL is never opened (`MapperChain.locate`).
 
 ## The JupyterLab extension
 
