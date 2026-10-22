@@ -942,10 +942,7 @@ class StorageExplorer(
         # Also called on deletion, of explorers whose __init__ failed too.
         if hasattr(self, "_view_tabs"):
             self._release_preview()
-            self._cancel_view_tab_loads()
-            tabs, self._view_tabs = list(self._view_tabs.values()), {}
-            for widget in tabs:
-                widget.close()
+            self._release_view_tabs()
         super().close()
 
     def _changed(self) -> None:

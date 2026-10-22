@@ -34,6 +34,12 @@ def config_dir(tmp_path, monkeypatch) -> pathlib.Path:
     return path
 
 
+@pytest.fixture(autouse=True)
+def no_launched(monkeypatch):
+    """No explorer launched in this "kernel" yet (see launch()'s reuse)."""
+    monkeypatch.setattr(launcher, "_launched", {})
+
+
 def defaults() -> tuple:
     """The arguments of a tab's explorer without any launcher.py."""
     return (".",), {"height": "fill", "states": launcher.states_file()}
@@ -523,6 +529,76 @@ class TestUserErrors:
         err = capsys.readouterr().err
         assert err.startswith(f"Storage Explorer cannot open: {system}")
         assert "Traceback" not in err
+
+
+class TestRelaunch:
+    """A page reload runs launch() again in the same kernel: it shows the
+    explorer it made before, as it was, unless the launcher.py files changed."""
+
+    @pytest.fixture
+    def shown(self, monkeypatch):
+        shown = []
+        monkeypatch.setattr("IPython.display.display", shown.append)
+        return shown
+
+    @pytest.fixture
+    def files(self, tmp_path, monkeypatch):
+        system = layer(tmp_path, "system", "def filesystems():\n    return {}")
+        monkeypatch.setattr(launcher, "find_launcher_files", lambda: [system])
+        return system
+
+    def test_the_same_explorer_as_it_was(self, files, shown, capsys):
+        launcher.launch()
+        explorer = shown[0]
+        explorer._selected = [explorer._root]
+        launcher.launch()
+        assert shown == [explorer, explorer]
+        assert explorer._selected == [explorer._root]
+
+    def test_a_new_one_once_the_files_changed(self, files, shown):
+        launcher.launch()
+        files.write_text("def parameters():\n    return {'height': '300px'}")
+        launcher.launch()
+        first, second = shown
+        assert second is not first
+        assert second._height == "300px"
+        assert first.comm is None  # closed
+
+    def test_a_new_one_if_it_was_closed(self, files, shown):
+        launcher.launch()
+        shown[0].close()
+        launcher.launch()
+        assert shown[1] is not shown[0]
+
+    def test_the_side_panels_apart_from_a_tabs(self, files, shown):
+        launcher.launch()
+        launcher.launch(sidebar=True)
+        launcher.launch()
+        tab, side, again = shown
+        assert side is not tab and again is tab
+        assert side._layout == "sidebar"
+
+    def test_its_view_tabs_released(self, files, shown, monkeypatch):
+        launcher.launch()
+        explorer = shown[0]
+        closed = []
+
+        class Tab:
+            def close(self):
+                closed.append(self)
+
+        tab = Tab()
+        explorer._view_tabs["model"] = tab
+        launcher.launch()
+        assert closed == [tab]
+        assert explorer._view_tabs == {}
+
+    def test_its_warnings_shown_again(self, tmp_path, monkeypatch, shown, capsys):
+        user = layer(tmp_path, "user", "def launch():\n    return None")
+        monkeypatch.setattr(launcher, "find_launcher_files", lambda: [user])
+        launcher.launch()
+        launcher.launch()
+        assert capsys.readouterr().err.count("launch() is no longer used") == 2
 
 
 def test_old_launch_function_is_reported(tmp_path):

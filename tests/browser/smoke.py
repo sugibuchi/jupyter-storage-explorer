@@ -28,6 +28,7 @@ import re
 import sys
 import time
 import traceback
+import urllib.request
 from typing import TYPE_CHECKING
 
 HERE = pathlib.Path(__file__).resolve().parent
@@ -1691,16 +1692,34 @@ def side_panel(lab: Lab, page: Page) -> None:
     # buttons hidden.
     expect(side.locator(".jse-tree-btn")).to_be_hidden()
     # After a page reload, the panel is open again, with its console (not a
-    # tab of the main area), where it was.
+    # tab of the main area), where it was: the same explorer, in the same
+    # kernel, its selection kept.
+    expect(row.filter(has_text="orders.parquet")).to_have_class(
+        re.compile(r"\bjse-selected\b")
+    )
+    kernels = side_panel_kernels(lab)
     page.wait_for_timeout(3000)  # the workspace saved
     page.goto(re.sub(r"([?&])reset&?", r"\1", page.url))
     side = open_side_panel(page, click=False)
     expect(side.locator(".jse-crumb").last).to_have_text("curated")
     expect(page.locator(".jse-launcher-panel")).to_have_count(1)
     expect(page.locator(".jse-side-panel .jse-launcher-panel")).to_have_count(1)
+    row = side.locator(".jse-list tbody tr")
+    expect(row.filter(has_text="orders.parquet")).to_have_class(
+        re.compile(r"\bjse-selected\b")
+    )
+    assert side_panel_kernels(lab) == kernels
 
 
 # --- Helpers ---
+
+
+def side_panel_kernels(lab: Lab) -> list[str]:
+    """The ids of the side panel's kernels, from the server's sessions."""
+    url = f"{lab.base}/api/sessions?token={_lab.TOKEN}"
+    with urllib.request.urlopen(url) as response:
+        sessions = json.load(response)
+    return [s["kernel"]["id"] for s in sessions if "side panel" in s["name"]]
 
 
 def paste_from_lake(x: Explorer, name: str, folder: str | None = None) -> None:
