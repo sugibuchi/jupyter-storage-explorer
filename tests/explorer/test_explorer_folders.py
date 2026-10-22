@@ -9,7 +9,11 @@ from fsspec.implementations.dirfs import DirFileSystem
 
 from jupyter_storage_explorer import Location
 from jupyter_storage_explorer._explorer.states import ExplorerStates
-from jupyter_storage_explorer.filesystems import AbfsLocation, FileSystemMapper
+from jupyter_storage_explorer.filesystems import (
+    AbfsLocation,
+    FileSystemMapper,
+    MemoryMapper,
+)
 
 
 class AzureLike(FileSystemMapper):
@@ -150,16 +154,16 @@ class TestListing:
         assert reply["url"].startswith("file:///")
 
     def test_items_without_url(self, memfs):
-        class NoCsvUrls(Explorer):
-            def _location_of(self, path):
+        class NoCsvUrls(MemoryMapper):
+            def to_location(self, fs, path):
                 if path.endswith((".csv", "/sub")):
                     return None
-                return super()._location_of(path)
+                return super().to_location(fs, path)
 
         memfs.pipe_file("/d/a.csv", b"x")
         memfs.pipe_file("/d/b.txt", b"x")
         memfs.pipe_file("/d/sub/c.txt", b"x")
-        explorer = NoCsvUrls("/d", fs=memfs, states=ExplorerStates())
+        explorer = make("/d", fs=memfs, filesystem_mappers=[NoCsvUrls()])
         assert {e["name"] for e in entries(explorer) if e["no_url"]} == {"a.csv", "sub"}
         assert explorer._tree["/d"] == [
             {"name": "sub", "path": "/d/sub", "no_url": True}

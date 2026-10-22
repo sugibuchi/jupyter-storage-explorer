@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from jupyter_storage_explorer import _infos, _paths
 from jupyter_storage_explorer._explorer.listing import Listing
 from jupyter_storage_explorer.formats import DataFormat, ItemContext
 from jupyter_storage_explorer.formats.base import detect as detect_format
+
+if TYPE_CHECKING:
+    from jupyter_storage_explorer.location import Location
 
 
 def _entry(info: dict[str, Any]) -> dict[str, Any]:
@@ -107,9 +110,14 @@ class FoldersMixin:
         }
         format_index, level_index = {"": 0}, {"": 0}
         paths = []
+        # Folders can hold tens of thousands of items: their filesystem's
+        # mapper is found once, and each item's location computed once. (Not
+        # for no items: __init__ makes such a listing before choosing a storage.)
+        locate = self._mappers._locator(self._fs) if infos else None
         for i, info in enumerate(infos):
             entry = _entry(info)
-            fmt = self._file_format(info)
+            location = locate(entry["path"])
+            fmt = self._file_format(info, location)
             if fmt not in format_index:
                 format_index[fmt] = len(listing["formats"])
                 listing["formats"].append(fmt)
@@ -128,7 +136,7 @@ class FoldersMixin:
                 listing["levels"].append(level)
             listing["level"].append(level_index[level])
             paths.append(entry["path"])
-            if self._location_of(entry["path"]) is None:
+            if location is None:
                 listing["no_url"].append(i)
         if any(
             p != _paths.join(path, n)
@@ -225,18 +233,17 @@ class FoldersMixin:
             self._full_listing.update(paths.index(path), entry["size"], mtime)
             self._send_listing()
 
-    def _file_format(self, info: dict[str, Any]) -> str:
-        """The format name of a listed file, e.g. "json-lines".
+    def _file_format(self, info: dict[str, Any], location: Location | None) -> str:
+        """The format name of a listed file at ``location``, e.g. "json-lines".
 
         Shown as the row's ``data-file-format``. Empty for folders (detecting
         them would mean listing each one), files without a URL, unrecognised
         files and files a format would confirm by their contents (reading
         each would be too slow).
         """
-        path = _paths.norm(info["name"])
-        location = self._location_of(path)
         if info.get("type") == "directory" or location is None:
             return ""
+        path = _paths.norm(info["name"])
         ctx = ItemContext(
             location=location, fs=self._fs, path=path, info=info, children=None
         )
