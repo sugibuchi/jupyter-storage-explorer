@@ -188,7 +188,7 @@ function createTransfers(x) {
     const folders = x.unsafe.take();
     const root = serverRoot();
     if (root == null) {
-      x.flash("Cannot upload: JupyterLab did not say where its files are");
+      x.flash("Cannot upload: JupyterLab did not say where its files are", { error: true });
       return;
     }
     const names = paths.map(basename);
@@ -200,7 +200,7 @@ function createTransfers(x) {
       dest,
       noun: "Upload",
     });
-    if (result) x.flash(uploadMessage(result, result.copied));
+    if (result) x.flash(uploadMessage(result, result.copied), { error: resultFailed(result) });
   }
 
   // From the computer (native drag and drop): the browser sends each file in
@@ -218,7 +218,7 @@ function createTransfers(x) {
       else files.push(file);
     }
     if (!files.length) {
-      x.flash(uploadMessage({ errors }, []));
+      x.flash(uploadMessage({ errors }, []), { error: true });
       return;
     }
     if (uploading) {
@@ -275,7 +275,7 @@ function createTransfers(x) {
     } finally {
       uploading = false;
     }
-    x.flash(uploadMessage({ skipped, errors }, copied));
+    x.flash(uploadMessage({ skipped, errors }, copied), { error: errors.length > 0 });
   }
 
   // --- Drags out of the list ---
@@ -373,7 +373,7 @@ function createTransfers(x) {
     if (downloads.pending > 0) return;
     const { done, errors } = downloads;
     const summary = done ? `Downloaded ${done === 1 ? "1 file" : `${done} files`} to local` : "";
-    x.flash([summary, ...errors.map((e) => `Failed: ${e}`)].filter(Boolean).join("; "));
+    x.flash([summary, ...errors.map((e) => `Failed: ${e}`)].filter(Boolean).join("; "), { error: errors.length > 0 });
     Object.assign(downloads, { done: 0, errors: [] });
   }
 
@@ -394,7 +394,9 @@ function createTransfers(x) {
     });
     if (!result) return;
     const copied = result.copied ?? [];
-    x.flash(resultMessage(result, { verb: "Downloaded", noun: "Download", done: copied, doneText: `Downloaded ${describeFiles(copied)} to ${dest}` }));
+    x.flash(resultMessage(result, { verb: "Downloaded", noun: "Download", done: copied, doneText: `Downloaded ${describeFiles(copied)} to ${dest}` }), {
+      error: resultFailed(result),
+    });
   }
 
   return {

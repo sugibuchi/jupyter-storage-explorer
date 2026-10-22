@@ -25,6 +25,20 @@ const REGISTRY = Symbol.for('jupyter-storage-explorer.jupyterlab');
 const WIDGET_MIME = 'application/vnd.jupyter.widget-view+json';
 const TAB_CLASS = 'jse-query-tab';
 
+// Characters that change how the text around them reads, or are not seen, as
+// the explorer's `visible()` shows them (static/common.js): an error naming a
+// file cannot then pass for another.
+const HIDDEN_CHARACTERS =
+  // eslint-disable-next-line no-control-regex
+  /[\u0000-\u001f\u007f-\u009f­؜᠎​-‏‪-‮⁠-⁯﻿￹-￻]/g;
+
+function visible(text: string): string {
+  return text.replace(
+    HIDDEN_CHARACTERS,
+    c => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`
+  );
+}
+
 // A tab an explorer asks for.
 interface IViewTab {
   title: string;
@@ -124,10 +138,25 @@ function openTab(app: JupyterFrontEnd, tab: IViewTab): IViewTabHandle {
       BoxPanel.setStretch(renderer, 1);
     },
     fail(error: string): void {
-      if (!message.isDisposed) {
-        message.node.textContent = error;
-        message.addClass('jse-mod-error');
+      if (message.isDisposed) {
+        return;
       }
+      // Its first line says what went wrong (see error_text in the
+      // explorer's _explorer/common.py); the rest, e.g. a Java stack trace,
+      // is folded under "Details".
+      const [summary, ...rest] = error.replace(/\t/g, '    ').split(/\r?\n/).map(visible);
+      message.node.textContent = summary;
+      const more = rest.join('\n').trim();
+      if (more) {
+        const details = document.createElement('details');
+        const label = document.createElement('summary');
+        label.textContent = 'Details';
+        const pre = document.createElement('pre');
+        pre.textContent = more;
+        details.append(label, pre);
+        message.node.append(details);
+      }
+      message.addClass('jse-mod-error');
     }
   };
 }

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 import narwhals as nw
 
+from jupyter_storage_explorer._explorer.common import error_text
 from jupyter_storage_explorer._json import jsonable
 from jupyter_storage_explorer._query.filters import (
     build_query,
@@ -268,7 +269,7 @@ class DataQuery:
             elif mode == "live" and self.mode != "live":
                 self._go_live()
         except Exception as exc:
-            return {"error": f"{type(exc).__name__}: {exc}", **self._view(content)}
+            return {"error": error_text(exc), **self._view(content)}
         self.requested = mode
         view = self._view(content)
         self._remember(view["settings"])
@@ -305,7 +306,7 @@ class DataQuery:
         try:
             self._open(self.requested)
         except Exception as exc:
-            return {"error": f"{type(exc).__name__}: {exc}"}
+            return {"error": error_text(exc)}
         return self._view(content)
 
     def result(self, *, all_columns: bool = False) -> Any:
@@ -382,7 +383,7 @@ class DataQuery:
                 if df is None:
                     df = fetch_rows(query, offset, window + 1)
         except Exception as exc:
-            return {"error": f"{type(exc).__name__}: {exc}", "settings": settings}
+            return {"error": error_text(exc), "settings": settings}
         beyond = len(df) > window
         limited = beyond and limit is not None and offset + window >= limit
         df = df.head(window)

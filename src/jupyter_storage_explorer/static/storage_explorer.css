@@ -531,6 +531,11 @@
   border-top: none;
 }
 
+/* An error flashed: it stays until clicked (list.js, flash). */
+.jse-status.jse-dismissable {
+  cursor: pointer;
+}
+
 /* Borderless buttons, an icon and a label, the height of the bar. */
 .jse-status-bar > .jse-engine-btn,
 .jse-status-bar > .jse-preview-btn {

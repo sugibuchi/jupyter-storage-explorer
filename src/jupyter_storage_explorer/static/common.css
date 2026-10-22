@@ -336,6 +336,24 @@
   white-space: pre-wrap;
 }
 
+/* The rest of an error, e.g. a Java stack trace: folded, scrolled within. */
+.jse-error-details {
+  margin-top: 6px;
+  color: var(--jse-fg-muted);
+}
+
+.jse-error-details > summary {
+  cursor: pointer;
+}
+
+.jse-error-details > pre {
+  max-height: 20em;
+  margin: 4px 0 0;
+  overflow: auto;
+  font-size: 0.9em;
+  white-space: pre;
+}
+
 .jse-section-title.jse-error-text {
   color: var(--jse-error);
 }

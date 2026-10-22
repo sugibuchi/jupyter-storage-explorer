@@ -86,6 +86,22 @@
   white-space: pre-wrap;
 }
 
+.jse-view-tab-message details {
+  margin-top: 8px;
+  color: var(--jp-ui-font-color2);
+}
+
+.jse-view-tab-message summary {
+  cursor: pointer;
+}
+
+.jse-view-tab-message pre {
+  max-height: 60vh;
+  margin: 4px 0 0;
+  overflow: auto;
+  white-space: pre;
+}
+
 /* The output of launcher.py's style(): a <style> element, which applies even
    when hidden. */
 .jse-launcher-panel .jp-OutputArea-child:has(.jp-RenderedHTMLCommon > style:only-child) {

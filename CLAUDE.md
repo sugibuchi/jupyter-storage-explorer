@@ -71,6 +71,8 @@ the code. The traps:
 - Traitlets observers must be on `StorageExplorer` itself. The mixins in `_explorer/` hold only methods.
 - Only `StorageExplorer`'s *File operations* block calls fsspec on the storage shown.
 - In JavaScript, file names, paths and messages naming files go through `visible()`, never as they are.
+- Show the kernel's errors with `errorBlock()`, and flash them with `x.flash(message, { error: true })`: a plain flash
+  is gone after 1.5 seconds.
 - anywidget's `model` has only `get`, `set`, `save_changes`, `on`, `off` and `send`. Backbone methods such as
   `previous()` throw inside `set` and silently break syncing.
 - A new frontend file in `static/` is joined into the module only if `_static.esm` names it. A part in

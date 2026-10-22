@@ -255,7 +255,7 @@ function createQueryPanel(host, path, data) {
     const tableEl = h("table", { className: "jse-data" }, h("thead", {}, head), h("tbody", {}, ...body));
     wireColumnResizers(tableEl, columns);
     const parts = [toolbar];
-    if (view.error) parts.push(h("div", { className: "jse-preview-error", textContent: view.error }));
+    if (view.error) parts.push(errorBlock(view.error));
     parts.push(h("div", { className: "jse-table-wrap" }, tableEl));
     view.el.replaceChildren(...parts);
   }
@@ -637,7 +637,7 @@ function createTableSetPanel(host, path, data) {
     table = state.table;
     mark();
     if (state.error) {
-      body.replaceChildren(h("div", { className: "jse-preview-error", textContent: state.error }));
+      body.replaceChildren(errorBlock(state.error));
     } else {
       panel = createQueryPanel(host, `${path}\u0000${state.table}`, state.query);
       body.replaceChildren(panel.el);

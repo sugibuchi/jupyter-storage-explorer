@@ -1286,6 +1286,68 @@ def slow_preview(lab: Lab, page: Page) -> None:
     expect(x.preview.locator(".jse-query tbody tr")).to_have_count(3, timeout=10_000)
 
 
+# A support failing as Spark does, with the Java stack trace, and a file whose
+# info cannot be read.
+ERRORS = """\
+from fsspec.implementations.memory import MemoryFileSystem
+from jupyter_storage_explorer import StorageExplorer
+from jupyter_storage_explorer.formats import FormatSupport, Text
+
+class Py4JJavaError(Exception):
+    pass
+
+class SparkLike(FormatSupport):
+    format = Text
+    capabilities = ("view",)
+
+    def view(self, fmt, ctx, options, limits):
+        raise Py4JJavaError(
+            "An error occurred while calling o57.parquet.\\n"
+            ": java.lang.ClassNotFoundException: Class AzureBlobFileSystem not found\\n"
+            "\\tat org.apache.hadoop.conf.Configuration.getClass(Configuration.java:2688)\\n"
+        )
+
+class Locked(MemoryFileSystem):
+    store, pseudo_dirs = {}, [""]
+
+    def info(self, path, **kwargs):
+        if path.endswith("locked.txt"):
+            raise PermissionError("locked.txt is not yours")
+        return super().info(path, **kwargs)
+
+fs = Locked()
+fs.pipe_file("/errors/data.txt", b"x")
+fs.pipe_file("/errors/locked.txt", b"x")
+StorageExplorer("/errors", fs=fs, supports=[SparkLike], preview_panel="open")"""
+
+
+@lab_check
+def readable_errors(lab: Lab, page: Page) -> None:
+    # A long error shows its first line, the Java exception for Spark's, and
+    # the rest under "Details", in the preview and in a tab; an error in the
+    # status bar stays until clicked.
+    x = Explorer(lab, page, ERRORS)
+    java = "java.lang.ClassNotFoundException: Class AzureBlobFileSystem not found"
+    x.row("data.txt").click()
+    error = x.preview.locator(".jse-preview-error")
+    expect(error.locator(".jse-error-summary")).to_have_text(java)
+    stack = error.locator(".jse-error-details pre")
+    expect(stack).to_be_hidden()
+    error.locator(".jse-error-details summary").click()
+    expect(stack).to_contain_text("at org.apache.hadoop.conf.Configuration")
+    x.menu(x.row("data.txt"), "View Text in new tab")
+    message = page.locator(".jse-query-tab .jse-view-tab-message.jse-mod-error")
+    expect(message).to_contain_text(java)
+    expect(message.locator("pre")).to_be_hidden()
+    x.back_to_notebook()
+    x.menu(x.row("locked.txt"), "Properties")
+    expect(x.status).to_contain_text("locked.txt is not yours")
+    page.wait_for_timeout(2_500)  # longer than a notice stays
+    expect(x.status).to_contain_text("locked.txt is not yours")
+    x.status.click()
+    expect(x.status).not_to_contain_text("locked.txt is not yours")
+
+
 @check
 def excel_sheets(x: Explorer) -> None:
     # A workbook's sheets on tabs below the data browser (a table set, from

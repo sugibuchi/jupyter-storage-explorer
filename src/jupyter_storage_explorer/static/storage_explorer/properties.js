@@ -35,7 +35,7 @@ function createProperties(x) {
     const what = paths.length === 1 ? name(paths[0]) : `${paths.length} items`;
     const reply = await x.busy.run(`Reading the properties of ${what}…`, () => request({ type: "properties", paths }));
     if (reply.error) {
-      x.flash(`Properties: ${reply.error}`);
+      x.flash(`Properties: ${reply.error}`, { error: true });
       return;
     }
     if (reply.file) {
@@ -87,7 +87,7 @@ function createProperties(x) {
     }
     x.jobs.unwatch(reply.job);
     if (result.state === "failed") {
-      x.flash(`Properties: ${result.error}`);
+      x.flash(`Properties: ${result.error}`, { error: true });
       return null;
     }
     return result;
