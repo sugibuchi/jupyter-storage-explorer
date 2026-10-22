@@ -151,9 +151,7 @@ class TestPreview:
             "a.csv cannot be viewed as CSV: no library viewing it is installed, "
             'e.g. pip install "jupyter-storage-explorer[polars]"'
         )
-        reply = mem_explorer.request(
-            {"type": "view_tab", "rid": 1, "path": "/data/a.csv"}
-        )
+        reply = mem_explorer.view_tab("/data/a.csv")
         assert "no library viewing it is installed" in reply["error"]
 
     def test_query_after_close(self, local):
@@ -283,6 +281,61 @@ class TestPreviewLoadsInTheBackground:
 
         assert "no Spark" in self.run(memfs, test)["error"]
 
+    @staticmethod
+    def loaded(explorer):
+        """The "view_tab" messages sent: views of tabs loaded, or failed."""
+        return [c for c, _ in explorer.sent if c.get("type") == "view_tab"]
+
+    def test_a_view_tab_opens_at_once(self, memfs):
+        async def test(explorer):
+            reply = explorer.request(
+                {"type": "view_tab", "rid": 1, "path": "/data/a.txt"}
+            )
+            assert (reply["title"], reply["url"]) == ("a.txt", "memory:///data/a.txt")
+            assert not self.loaded(explorer)  # still loading
+            HeldText.release.set()
+            await until(lambda: self.loaded(explorer))
+            [loaded] = self.loaded(explorer)
+            assert loaded["load_id"] == reply["load_id"]
+            return explorer._view_tabs[loaded["model_id"]]
+
+        tab = self.run(memfs, test)
+        assert (tab.title, tab.view["text"]) == ("a.txt", "a.txt")
+
+    def test_a_view_tab_closed_while_loading(self, memfs, monkeypatch):
+        closed = []
+        monkeypatch.setattr(TextView, "close", lambda view: closed.append(view.text))
+
+        async def test(explorer):
+            reply = explorer.request(
+                {"type": "view_tab", "rid": 1, "path": "/data/a.txt"}
+            )
+            explorer.message({"type": "view_tab_closed", "load_id": reply["load_id"]})
+            HeldText.release.set()
+            await until(lambda: closed)
+            return explorer
+
+        explorer = self.run(memfs, test)
+        assert closed == ["a.txt"]
+        assert not self.loaded(explorer)
+        assert not explorer._view_tabs
+
+    def test_a_view_tab_failing(self, memfs, monkeypatch):
+        def failing(self, fmt, ctx, options, limits):
+            raise ValueError("no Spark")
+
+        monkeypatch.setattr(HeldText, "view", failing)
+
+        async def test(explorer):
+            explorer.request({"type": "view_tab", "rid": 1, "path": "/data/a.txt"})
+            await until(lambda: self.loaded(explorer))
+            return explorer
+
+        explorer = self.run(memfs, test)
+        [loaded] = self.loaded(explorer)
+        assert "no Spark" in loaded["error"]
+        assert not explorer._view_tabs
+
 
 class TestClickDetectsOnce:
     """A click's selection, menu and preview share one detection of the item
@@ -361,7 +414,7 @@ class TestViewTab:
         local._states.remember_query(
             local._location_of(path), QuerySettings(sort="a", descending=True)
         )
-        reply = local.request({"type": "view_tab", "rid": 1, "path": path})
+        reply = local.view_tab(path)
         assert reply["title"] == "data.parquet" and reply["url"] == url
         tab = local._view_tabs[reply["model_id"]]
         assert isinstance(tab, DataExplorer)
@@ -382,7 +435,7 @@ class TestViewTab:
 
     def test_other_views_in_a_view_tab(self, local):
         path = path_of(local, "notes.txt")
-        reply = local.request({"type": "view_tab", "rid": 1, "path": path})
+        reply = local.view_tab(path)
         tab = local._view_tabs[reply["model_id"]]
         assert isinstance(tab, ViewTab)
         assert (tab.title, tab.label) == ("notes.txt", "Text")
@@ -404,9 +457,7 @@ class TestViewTab:
     def test_refused_without_a_format(self, local):
         (local._fs).pipe_file(f"{local._root}/x.bin", b"\0")
         local._list(local._current_dir)
-        reply = local.request(
-            {"type": "view_tab", "rid": 1, "path": path_of(local, "x.bin")}
-        )
+        reply = local.view_tab(path_of(local, "x.bin"))
         assert reply["error"] == "x.bin cannot be viewed in any format"
         assert not local._view_tabs
 
@@ -465,17 +516,13 @@ class TestClose:
 
     def test_view_tabs(self, local, closed):
         for name in ("notes.txt", "data.parquet"):
-            reply = local.request(
-                {"type": "view_tab", "rid": 1, "path": path_of(local, name)}
-            )
+            reply = local.view_tab(path_of(local, name))
             local.message({"type": "view_tab_closed", "model_id": reply["model_id"]})
         assert closed == ["1", "2"]
 
     def test_explorer_closed(self, local, closed):
         local.message({"type": "preview", "path": path_of(local, "notes.txt")})
-        local.request(
-            {"type": "view_tab", "rid": 1, "path": path_of(local, "data.parquet")}
-        )
+        local.view_tab(path_of(local, "data.parquet"))
         local.close()
         assert sorted(closed) == ["1", "2"]
         assert not local._view_tabs
@@ -486,7 +533,7 @@ class TestClose:
         # no message reaches the page then.
         local.message({"type": "preview", "path": path_of(local, "notes.txt")})
         for name in ("data.parquet", "notes.txt"):
-            local.request({"type": "view_tab", "rid": 1, "path": path_of(local, name)})
+            local.view_tab(path_of(local, name))
         failing = make(local._root)
         failing.message({"type": "preview", "path": path_of(failing, "notes.txt")})
         monkeypatch.setattr(failing, "_release_preview", lambda: 1 / 0, raising=False)

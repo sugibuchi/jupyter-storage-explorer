@@ -1219,11 +1219,14 @@ class SlowText(FormatSupport):
     capabilities = ("view",)
 
     def view(self, fmt, ctx, options, limits):
+        if ctx.name == "broken.txt":
+            raise ValueError("cannot read broken.txt")
         time.sleep(4)
         return TextView(text=ctx.fs.cat_file(ctx.path).decode())
 
 memory = fsspec.filesystem("memory")
 memory.pipe_file("/slow/notes.txt", b"read slowly")
+memory.pipe_file("/slow/broken.txt", b"x")
 memory.pipe_file("/slow/inner/other.txt", b"x")
 StorageExplorer("/slow", fs=memory, supports=[SlowText], preview_panel="open")"""
 
@@ -1240,6 +1243,18 @@ def slow_preview(lab: Lab, page: Page) -> None:
     expect(x.preview.locator(".jse-text")).to_contain_text(
         "read slowly", timeout=10_000
     )
+    # A view tab opens at once too, saying it loads, then shows the view.
+    x.el.locator(".jse-crumb").first.click()
+    x.menu(x.row("notes.txt"), "View Text in new tab")
+    tab = x.page.locator(".jse-query-tab")
+    expect(tab.locator(".jse-view-tab-message")).to_have_text("Loading…")
+    expect(tab.locator(".jse-text")).to_contain_text("read slowly", timeout=10_000)
+    expect(tab.locator(".jse-view-tab-message")).to_have_count(0)
+    x.back_to_notebook()
+    # A view failing: its tab says why.
+    x.menu(x.row("broken.txt"), "View Text in new tab")
+    message = x.page.locator(".jse-query-tab .jse-view-tab-message.jse-mod-error")
+    expect(message).to_contain_text("cannot read broken.txt")
 
 
 @check

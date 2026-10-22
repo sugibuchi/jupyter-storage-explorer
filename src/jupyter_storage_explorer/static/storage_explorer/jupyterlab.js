@@ -4,7 +4,7 @@
 // key: open(file) (launcher/labextension/src/files.ts), which shows the file
 // through a drive of its own, reading and saving it with `get` and `save`
 // below, through this widget's kernel ("jupyterlab_get", "jupyterlab_save");
-// and openWidget(tab) (queryTabs.ts). Without the extension, neither is
+// and openViewTab(tab) (queryTabs.ts). Without the extension, neither is
 // offered.
 const JUPYTERLAB = Symbol.for("jupyter-storage-explorer.jupyterlab");
 // A kernel that stopped never answers: JupyterLab then shows this error.
@@ -81,11 +81,16 @@ function createJupyterLab(x) {
     }).catch((err) => x.flash(`Cannot open the settings: ${err.message ?? err}`));
   }
 
-  // "View in a new tab": the kernel views the item and opens a widget of the
-  // view ("view_tab"), a DataExplorer for data to query, else a ViewTab; the
-  // extension shows it with this widget's kernel connection (`openWidget`),
-  // and the kernel lets it go when the tab closes.
-  const canOpenViewTab = () => Boolean(globalThis[JUPYTERLAB]?.openWidget);
+  // "View in a new tab": the kernel answers at once ("view_tab"), and the
+  // extension opens the tab, showing that the view loads (`openViewTab`).
+  // The kernel reads it in a worker thread, then sends a "view_tab" message
+  // with the model id of a widget of the view (a DataExplorer for data to
+  // query, a TableSetTab, else a ViewTab), which the tab shows with this
+  // widget's kernel connection, or with the error. Closing the tab lets the
+  // widget go, or drops the view still loading.
+  const canOpenViewTab = () => Boolean(globalThis[JUPYTERLAB]?.openViewTab);
+  // The tabs waiting for their view: load id -> the extension's handle.
+  const loadingTabs = new Map();
 
   // `format` and `engine` as for the preview (preview.js's open).
   async function openViewTab(path, format = null, engine = undefined) {
@@ -94,14 +99,39 @@ function createJupyterLab(x) {
       x.flash(`Cannot open a tab: ${reply.error}`);
       return;
     }
-    const closed = () => model.send({ type: "view_tab_closed", model_id: reply.model_id });
+    const loadId = reply.load_id;
+    let modelId = null;
+    const closed = () => {
+      loadingTabs.delete(loadId);
+      model.send({ type: "view_tab_closed", load_id: loadId, model_id: modelId });
+    };
     try {
-      await globalThis[JUPYTERLAB].openWidget({ modelId: reply.model_id, title: reply.title, caption: reply.url, owner: x.el, onClose: closed });
+      const tab = globalThis[JUPYTERLAB].openViewTab({ title: reply.title, caption: reply.url, owner: x.el, onClose: closed });
+      loadingTabs.set(loadId, {
+        show: (id) => {
+          modelId = id;
+          return tab.show(id);
+        },
+        fail: tab.fail,
+      });
     } catch (err) {
       closed();
       x.flash(`Cannot open a tab: ${err.message ?? err}`);
     }
   }
 
-  return { canOpen, open, canOpenSettings, openSettings, canOpenViewTab, openViewTab };
+  // The kernel's "view_tab" message: the view of a tab has loaded, or failed.
+  function onViewTab(msg) {
+    const tab = loadingTabs.get(msg.load_id);
+    if (!tab) {
+      // Closed meanwhile: the kernel lets the widget go.
+      if (msg.model_id) model.send({ type: "view_tab_closed", model_id: msg.model_id });
+      return;
+    }
+    loadingTabs.delete(msg.load_id);
+    if (msg.error) tab.fail(msg.error);
+    else tab.show(msg.model_id).catch((err) => tab.fail(`Cannot show the view: ${err.message ?? err}`));
+  }
+
+  return { canOpen, open, canOpenSettings, openSettings, canOpenViewTab, openViewTab, onViewTab };
 }

@@ -12,8 +12,9 @@ from jupyter_storage_explorer._jobs.loader import Loader
 
 def test_without_a_loop_loads_run_at_once():
     shown = []
-    Loader().submit(lambda: 1, shown.append, lambda _: None)
+    load = Loader().submit(lambda: 1, shown.append, lambda _: None)
     assert shown == [1]
+    assert load.ended
 
 
 def test_work_runs_in_a_worker_and_ends_on_the_main_thread():

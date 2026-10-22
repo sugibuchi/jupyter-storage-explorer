@@ -194,6 +194,7 @@ function render({ model, el }) {
     if (msg.type === "download") x.transfers.onDownload(msg, buffers);
     else if (msg.type === "reply") onReply(msg);
     else if (msg.type === "job") x.jobs.onJob(msg);
+    else if (msg.type === "view_tab") x.jupyterlab.onViewTab(msg);
   }
 
   const handlers = {

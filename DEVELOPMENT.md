@@ -483,12 +483,15 @@ browser.
 - Notebooks are trusted as jupyter_server trusts them, with nbformat's notary in the kernel. Tests get their own
   `JUPYTER_DATA_DIR`.
 
-**View in a new tab.** The kernel views the item and opens a widget of the view:
+**View in a new tab.** The kernel answers at once with a load id, and the tab opens showing "Loading…". The kernel
+reads the view in a worker thread, as a preview's (see "Loading views"). It then sends a "view_tab" message with
+the model id of a widget of the view, or the error, which the tab shows. The widget is:
 
 - a `DataExplorer` of the same query, for a `QueryView`;
+- a `TableSetTab`, for a `TableSetView`;
 - else a `ViewTab`, which renders the view's section with the shared `sections.js`.
 
-The explorer keeps the widget until its tab closes. The tab renders it with the output renderers of the notebook or
+Closing the tab while the view loads cancels the load. The explorer keeps the widget until its tab closes. The tab renders it with the output renderers of the notebook or
 console holding the explorer, as ipywidgets ties widgets to that kernel connection. The tab closes with the explorer or
 a kernel restart.
 
@@ -737,7 +740,7 @@ Explorers on a page may be in different kernels, one per notebook. They share ob
 | `"jupyter-storage-explorer.clipboard"`   | Items copied or cut, for Paste in any explorer.                             |
 | `"jupyter-storage-explorer.drag"`        | The drag of items running, from its start to its end.                       |
 | `"jupyter-storage-explorer.explorers"`   | The explorers on the page by id, each with its `download`.                  |
-| `"jupyter-storage-explorer.jupyterlab"`  | The launcher extension's functions, such as `open` and `openWidget`.        |
+| `"jupyter-storage-explorer.jupyterlab"`  | The launcher extension's functions, such as `open` and `openViewTab`.       |
 
 The explorer offers "Open in JupyterLab" and "View in a new tab" only when the launcher extension's functions are there.
 The extension's `download.ts` calls an explorer's `download` on a drop onto JupyterLab's file browser.
@@ -942,7 +945,7 @@ Loads run apart from jobs, up to 4 at a time. Their work must not touch traits o
 preview, closing the panel or another storage cancels a load: what it read is closed instead of shown. Without a
 running loop, as in tests, loads run at once.
 
-View tabs, the data browser's requests and the selection's detection still run on the main thread.
+View tabs load the same way. The data browser's requests and the selection's detection still run on the main thread.
 
 #### The data browser
 
