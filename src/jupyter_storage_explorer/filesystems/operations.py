@@ -227,10 +227,10 @@ class AsyncFsspecOperations(FileSystemOperations):
     """Every operation on asynchronous fsspec filesystems (s3fs, gcsfs, adlfs,
     HTTP, ...), many files at a time: their coroutine methods (``_cp_file``,
     ``_mv_file``, ``_rm``, ``_get_file``, ...) run on the filesystem's event
-    loop with ``fsspec.asyn.sync``, in batches of ``concurrency`` files.
-    Object stores take about as long for a small file as for none, so moving,
-    copying and deleting folders of many files is much faster than one file
-    at a time.
+    loop with ``fsspec.asyn.sync``, ``concurrency`` files at a time, each
+    starting as soon as another ends. Object stores take about as long for a
+    small file as for none, so moving, copying and deleting folders of many
+    files is much faster than one file at a time.
 
     Other filesystems (and async ones made for use within a running event
     loop, ``asynchronous=True``) raise ``FileSystemOperations.NotSupported``,
@@ -238,8 +238,8 @@ class AsyncFsspecOperations(FileSystemOperations):
     filesystems run on different event loops. Storages that rename a folder
     in one step are better moved by ``AtomicMoveOperation``, put before.
 
-    A cancel takes effect between batches, and within a batch for files not
-    yet started and transfers under way.
+    A cancel stops files from starting, and transfers under way. Files being
+    moved or copied within a filesystem finish first.
 
     Parameters
     ----------
@@ -441,27 +441,48 @@ class AsyncFsspecOperations(FileSystemOperations):
         progress: Progress,
         items: Sequence[Any],
         act: Callable[[Any], Awaitable[None]],
-        batch: int,
+        concurrency: int,
     ) -> None:
-        """Run ``act(item)`` for all ``items``, ``batch`` at a time, on ``loop``.
+        """Run ``act(item)`` for all ``items`` on ``loop``, ``concurrency`` at a
+        time. Each item starts as soon as another ends, so a large file never
+        holds up the small ones.
 
-        Each batch is awaited whole, so nothing runs on after a cancel or a
-        failure, which are then raised (a cancel first).
+        After a cancel or a failure, no item starts, and those running are
+        awaited. Then the failure is raised, a cancel first.
         """
-        for start in range(0, len(items), batch):
-            progress.check()
-            coros = [act(item) for item in items[start : start + batch]]
-            results = sync(loop, _gather, coros)
-            failures = [r for r in results if isinstance(r, BaseException)]
-            for failure in failures:
-                if isinstance(failure, OperationCancelled):
-                    raise failure
-            if failures:
-                raise failures[0]
+        progress.check()
+        sync(loop, _sliding_window, items, act, concurrency)
 
 
-async def _gather(coros: list[Awaitable[None]]) -> list[Any]:
-    return await asyncio.gather(*coros, return_exceptions=True)
+async def _sliding_window(
+    items: Iterable[Any], act: Callable[[Any], Awaitable[None]], concurrency: int
+) -> None:
+    """``AsyncFsspecOperations._each``'s work, on the filesystem's loop."""
+    pending = iter(items)
+    running: set[asyncio.Future[None]] = set()
+    failures: list[BaseException] = []
+
+    def fill() -> None:
+        while not failures and len(running) < concurrency:
+            item = next(pending, _END)
+            if item is _END:
+                return
+            running.add(asyncio.ensure_future(act(item)))
+
+    fill()
+    while running:
+        done, _ = await asyncio.wait(running, return_when=asyncio.FIRST_COMPLETED)
+        running.difference_update(done)
+        failures.extend(e for task in done if (e := task.exception()) is not None)
+        fill()
+    for failure in failures:
+        if isinstance(failure, OperationCancelled):
+            raise failure
+    if failures:
+        raise failures[0]
+
+
+_END = object()
 
 
 def _loop_of(fs: AbstractFileSystem) -> asyncio.AbstractEventLoop:

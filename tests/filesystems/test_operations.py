@@ -344,7 +344,39 @@ class TestAsyncFsspecOperations:
         assert sorted(progress.names) == ["a.txt", "b.txt", "c.txt"]
         assert (progress.files_done, progress.bytes_done) == (3, 7)
 
-    def test_copy_cancelled_in_a_batch(self, tree, async_tree, monkeypatch):
+    def test_slow_file_holds_up_no_other(self, tree, async_tree, monkeypatch):
+        # Two at a time: the first file waits until the others are copied,
+        # which only happens if each starts as soon as one ends.
+        original = async_tree._cp_file
+        copied = []
+        others_done = asyncio.Event()
+
+        async def cp(path1: str, path2: str, **kwargs: Any) -> None:
+            if not copied and not others_done.is_set() and path1.endswith("a.txt"):
+                await asyncio.wait_for(others_done.wait(), timeout=5)
+            await original(path1, path2, **kwargs)
+            copied.append(path1.rsplit("/", 1)[-1])
+            if len(copied) == 2:
+                others_done.set()
+
+        monkeypatch.setattr(async_tree, "_cp_file", cp)
+        self.ops.copy(async_tree, "/src", async_tree, "/dst", JobProgress(), same=True)
+        assert copied == ["b.txt", "c.txt", "a.txt"]
+
+    def test_nothing_starts_after_a_failure(self, async_tree, monkeypatch):
+        ops = AsyncFsspecOperations(concurrency=1)
+        started = []
+
+        async def failing(path1: str, path2: str, **kwargs: Any) -> None:
+            started.append(path1)
+            raise OSError("denied")
+
+        monkeypatch.setattr(async_tree, "_cp_file", failing)
+        with pytest.raises(OSError, match="denied"):
+            ops.copy(async_tree, "/src", async_tree, "/dst", JobProgress(), same=True)
+        assert len(started) == 1
+
+    def test_copy_cancelled_between_files(self, tree, async_tree, monkeypatch):
         ops = AsyncFsspecOperations(concurrency=1)
         progress = JobProgress()
         original = async_tree._cp_file
