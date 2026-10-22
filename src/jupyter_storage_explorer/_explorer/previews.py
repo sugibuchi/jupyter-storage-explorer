@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import atexit
 import base64
+import concurrent.futures
 import dataclasses
 import logging
 import time
@@ -35,6 +36,8 @@ if TYPE_CHECKING:
 
     from fsspec import AbstractFileSystem
 
+    from jupyter_storage_explorer._explorer.supports import Recipe
+
 log = logging.getLogger(__name__)
 
 
@@ -46,18 +49,16 @@ _DETECTED_SECONDS = 5.0
 class _Detected(NamedTuple):
     """An item of the storage shown with a location, as formats and supports
     are given it, and the formats it matches, best first (see
-    ``PreviewsMixin._detect``)."""
+    ``PreviewsMixin._detection``)."""
 
     ctx: ItemContext
     formats: list[DataFormat]
 
 
 class _Loaded(NamedTuple):
-    """What a preview's load read (see ``PreviewsMixin._open_preview``): the
-    item detected (... if its detection failed), what shows it (None if
-    nothing does) and the ``_preview`` to show."""
+    """What a preview's load read (see ``PreviewsMixin._open_preview``): what
+    shows it (None if nothing does) and the ``_preview`` to show."""
 
-    item: _Detected | EllipsisType | None
     shown: View | DataQuery | TableSet | None
     preview: dict[str, Any]
 
@@ -107,50 +108,54 @@ class PreviewsMixin:
     browser for a ``QueryView``; views in tabs of their own ("View in a new
     tab"); and the right-click menu's formats and code."""
 
-    def _detect(self, path: str) -> _Detected | None:
-        """The item at ``path`` of the storage shown, and the formats
-        matching it. None if it has no location: it is then not treated as
-        data.
-
-        A click asks for the same item several times: its selection, then
-        its menu or preview. On cloud storages each detection costs round
-        trips (its info, a folder's listings, a file's first bytes). So the
-        last item detected is kept for ``_DETECTED_SECONDS``, for the storage
-        shown. Refreshing, or a job's changes, forget it
-        (``_invalidate_cache``)."""
-        recent = self._recent_detection(path, self._fs)
-        if recent is not ...:
-            return recent
-        detecting = self._detecting(path, self._fs)
-        item = self._detect_now(path, self._fs)
-        self._keep_detection(detecting, item)
-        return item
-
-    def _recent_detection(
+    def _detection(
         self, path: str, fs: AbstractFileSystem
-    ) -> _Detected | EllipsisType | None:
-        """The item at ``path`` of ``fs`` if detected less than
-        ``_DETECTED_SECONDS`` ago, else ...: on the main thread."""
+    ) -> concurrent.futures.Future[_Detected | None]:
+        """The item at ``path`` of ``fs`` and the formats matching it, as a
+        future: None if it has no location, as it is then not treated as
+        data. Called on the main thread; its result is waited for in a load's
+        work (without a loop, it is there at once).
+
+        A click asks for the same item several times, at once: its
+        selection, its menu or its preview. On cloud storages each detection
+        costs round trips (its info, a folder's listings, a file's first
+        bytes). So a detection still running is shared, and the last item
+        detected is kept for ``_DETECTED_SECONDS``. Refreshing, or a job's
+        changes, forget both (``_invalidate_cache``). Otherwise the detection
+        runs as a load (``_loader``)."""
+        future: concurrent.futures.Future[_Detected | None] = (
+            concurrent.futures.Future()
+        )
+        key = (id(fs), path)
         if self._detected is not None:
-            key, when, item = self._detected
-            if key == (id(fs), path) and time.monotonic() - when < _DETECTED_SECONDS:
-                return item
-        return ...
+            detected_key, when, item = self._detected
+            if detected_key == key and time.monotonic() - when < _DETECTED_SECONDS:
+                future.set_result(item)
+                return future
+        running = self._detections_running.get(key)
+        if running is not None:
+            return running
+        self._detections_running[key] = future
+        detecting = (time.monotonic(), self._detections_forgotten)
 
-    def _detecting(self, path: str, fs: AbstractFileSystem) -> tuple[Any, ...]:
-        """What ``_keep_detection`` needs of a detection starting now: on the
-        main thread."""
-        return (id(fs), path), time.monotonic(), self._detections_forgotten
+        def work() -> _Detected | EllipsisType | None:
+            try:
+                item = self._detect_now(path, fs)
+            except Exception as exc:
+                future.set_exception(exc)
+                return ...
+            future.set_result(item)
+            return item
 
-    def _keep_detection(
-        self, detecting: tuple[Any, ...], item: _Detected | None
-    ) -> None:
-        """Keep ``item``, detected since ``detecting``, for the next requests:
-        on the main thread, unless the detections were forgotten meanwhile
-        (e.g. a job changed the files)."""
-        key, when, forgotten = detecting
-        if forgotten == self._detections_forgotten:
-            self._detected = (key, when, item)
+        def done(item: _Detected | EllipsisType | None) -> None:
+            if self._detections_running.get(key) is future:
+                del self._detections_running[key]
+            # Kept unless it failed, or the detections were forgotten meanwhile.
+            if item is not ... and detecting[1] == self._detections_forgotten:
+                self._detected = (key, detecting[0], item)
+
+        self._loader.submit(work, done, done)
+        return future
 
     def _detect_now(self, path: str, fs: AbstractFileSystem) -> _Detected | None:
         """The item at ``path`` of ``fs`` and its formats, read now: safe in
@@ -254,23 +259,6 @@ class PreviewsMixin:
             raise ValueError(f"{ctx.name} no longer matches {fmt.label}")
         return fresh
 
-    def _formats_of(
-        self, path: str, format: str | None
-    ) -> tuple[_Detected, DataFormat]:
-        """The item at ``path`` and the format to view it as: ``format`` if
-        given (e.g. "text" for a JSON file), else its best. ValueError if it
-        has no location or no such format."""
-        item = self._detect(path)
-        if item is None:
-            raise ValueError(f"{path} has no URL, so it cannot be viewed")
-        formats = item.formats
-        if format is not None:
-            formats = [f for f in formats if f.name == format]
-        if not formats:
-            what = f"as {format}" if format is not None else "in any format"
-            raise ValueError(f"{_paths.basename(path)} cannot be viewed {what}")
-        return item, formats[0]
-
     def _open_preview(
         self,
         path: str,
@@ -306,23 +294,19 @@ class PreviewsMixin:
         self._preview = {**base, "loading": True}
         # What the worker needs of the explorer, as it is now: the storage
         # shown and the engine chosen may change while it reads.
-        fs, chosen = self._fs, self._engine or None
-        recent = self._recent_detection(path, fs)
-        detecting = self._detecting(path, fs)
+        chosen = self._engine or None
+        detection = self._detection(path, self._fs)
 
         def work() -> _Loaded:
             return self._read_preview(
                 dict(base),
-                item=recent,
-                fs=fs,
+                detection=detection,
                 format=format,
                 engine=engine,
                 chosen=chosen,
             )
 
         def done(loaded: _Loaded) -> None:
-            if recent is ... and loaded.item is not ...:
-                self._keep_detection(detecting, loaded.item)
             # The previous preview's, closed once the new one is open.
             self._release_preview()
             shown = loaded.shown
@@ -344,23 +328,21 @@ class PreviewsMixin:
         self,
         preview: dict[str, Any],
         *,
-        item: _Detected | EllipsisType | None,
-        fs: AbstractFileSystem,
+        detection: concurrent.futures.Future[_Detected | None],
         format: str | None,
         engine: str | EllipsisType | None,
         chosen: str | None,
         verb: str = "previewed",
     ) -> _Loaded:
         """In a worker thread, touching no trait: fill ``preview`` (see
-        ``_open_preview``) with the item at its path of ``fs``, detected now
-        unless given as ``item``, viewed with ``chosen`` the engine chosen.
-        Its errors say it cannot be ``verb``."""
+        ``_open_preview``) with the item of ``detection`` (``_detection``'s),
+        viewed with ``chosen`` the engine chosen. Its errors say it cannot be
+        ``verb``."""
         path = preview["path"]
         # What shows it: the view, else its query or tables, which own it.
         shown: View | DataQuery | TableSet | None = None
         try:
-            if item is ...:
-                item = self._detect_now(path, fs)
+            item = detection.result()
             if item is None:
                 raise ValueError(f"{path} has no URL, so it cannot be {verb}")
             formats = item.formats
@@ -383,7 +365,7 @@ class PreviewsMixin:
             if shown is not None:
                 shown.close()
             shown = None
-        return _Loaded(item, shown, preview)
+        return _Loaded(shown, preview)
 
     def _show(
         self,
@@ -627,15 +609,13 @@ class PreviewsMixin:
         }
         format, engine = content.get("format") or None, content.get("engine", ...)
         # As for a preview: what the worker needs of the explorer, as it is now.
-        fs, chosen = self._fs, self._engine or None
-        recent = self._recent_detection(path, fs)
-        detecting = self._detecting(path, fs)
+        chosen = self._engine or None
+        detection = self._detection(path, self._fs)
 
         def work() -> _Loaded:
             return self._read_preview(
                 dict(base),
-                item=recent,
-                fs=fs,
+                detection=detection,
                 format=format,
                 engine=engine,
                 chosen=chosen,
@@ -644,8 +624,6 @@ class PreviewsMixin:
 
         def done(loaded: _Loaded) -> None:
             self._view_tab_loads.pop(load_id, None)
-            if recent is ... and loaded.item is not ...:
-                self._keep_detection(detecting, loaded.item)
             try:
                 widget = self._view_tab_widget(loaded, title)
             except Exception as exc:
@@ -741,19 +719,40 @@ class PreviewsMixin:
         else:
             self._loader.answer(data, lambda: data.handle(content) or {}, reply)
 
-    def _menu_info(self, path: str) -> dict[str, Any]:
-        """Answer "menu_info", the right-click menu's, or {"error"}:
-        "formats", the names of those matching; "view", the best format and
-        the engine viewing it ("Preview", "View in a new tab"; None if the
-        engine chosen cannot); "views", each format and engine that can
-        ("Preview as", "View in new tab as"); "recipes", the best format's
-        load code ("Python code"), with their engine's label."""
-        try:
-            item = self._detect(path)
-            formats = item.formats if item is not None else []
-            recipes = self._supports.recipes(formats[0], item.ctx) if formats else []
-        except Exception as exc:
-            return {"error": error_text(exc)}
+    def _answer_menu_info(self, content: dict[str, Any]) -> None:
+        """Answer "menu_info", the right-click menu's (see ``_menu_info``).
+        The item's detection and its recipes may read it (e.g. a CSV file's
+        separator), so they run as a load (``_loader``), sharing the click's
+        detection (``_detection``); the reply is made on the main thread."""
+        detection = self._detection(content["path"], self._fs)
+
+        def work() -> tuple[list[DataFormat], list[Recipe]] | dict[str, Any]:
+            try:
+                item = detection.result()
+                formats = item.formats if item is not None else []
+                recipes = (
+                    self._supports.recipes(formats[0], item.ctx) if formats else []
+                )
+            except Exception as exc:
+                return {"error": error_text(exc)}
+            return formats, recipes
+
+        def reply(read: tuple[list[DataFormat], list[Recipe]] | dict[str, Any]) -> None:
+            answer = read if isinstance(read, dict) else self._menu_info(*read)
+            self.send({"type": "reply", "rid": content["rid"], **answer})
+
+        self._loader.submit(work, reply, reply)
+
+    def _menu_info(
+        self, formats: list[DataFormat], recipes: list[Recipe]
+    ) -> dict[str, Any]:
+        """The reply to "menu_info" for an item matching ``formats``, best
+        first, with ``recipes`` the best format's: "formats", the names of
+        those matching; "view", the best format and the engine viewing it
+        ("Preview", "View in a new tab"; None if the engine chosen cannot);
+        "views", each format and engine that can ("Preview as", "View in new
+        tab as"); "recipes", the load code ("Python code"), with their
+        engine's label."""
         view = None
         if formats and self._viewable(formats[0]):
             key = self._supports.engine_for(formats[0], self._engine or None)

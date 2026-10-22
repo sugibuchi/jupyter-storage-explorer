@@ -54,6 +54,7 @@ from jupyter_storage_explorer.formats.defaults import DEFAULT_FORMATS, DEFAULT_S
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
+    from concurrent.futures import Future
 
     import narwhals as nw
     from fsspec import AbstractFileSystem
@@ -497,11 +498,16 @@ class StorageExplorer(
         self._full_listing = Listing(self._make_listing("", []))
         self._listing_version = 0
         # The item detected last, shared by a click's selection, menu and
-        # preview (see PreviewsMixin._detect).
+        # preview (see PreviewsMixin._detection).
         self._detected: tuple[tuple[int, str], float, _Detected | None] | None = None
         # How many times _detected was forgotten: a detection made in a
         # worker is kept only if it was not forgotten meanwhile.
         self._detections_forgotten = 0
+        # The detections running, by (id(fs), path): shared by a click's
+        # selection, menu and preview (see PreviewsMixin._detection).
+        self._detections_running: dict[tuple[int, str], Future[Any]] = {}
+        # The selection's detection, if running: cancelled by the next one.
+        self._selection_load: Load[Any] | None = None
         # Data browser: path -> the data being queried.
         self._queries: dict[str, DataQuery] = {}
         # A table set previewed (TableSetView): path -> its tables.
@@ -967,6 +973,9 @@ class StorageExplorer(
         if kind in _QUERY_REQUESTS:
             # In a worker thread, as they may read the data (see _answer_query).
             self._answer_query(content)
+        elif kind == "menu_info":
+            # In a worker thread too, as detecting the item reads it.
+            self._answer_menu_info(content)
         elif (request := self._requests(buffers or []).get(kind)) is not None:
             reply = request(content)
             self.send({"type": "reply", "rid": content["rid"], **reply})
@@ -977,7 +986,6 @@ class StorageExplorer(
         """Request type -> handler(content), giving the reply. ``buffers``: the
         message's binary pieces (a file's piece, for "upload_chunk")."""
         return {
-            "menu_info": lambda c: self._menu_info(c["path"]),
             "vendor": lambda c: _static.vendor_source(c["name"]),
             # The listing has no locations (see _make_listing): asked for
             # when copying, and for the list's tooltips.
@@ -1044,25 +1052,41 @@ class StorageExplorer(
 
     @traitlets.observe("_selected")
     def _on_selected(self, change: dict[str, Any]) -> None:
-        self._selected_format = self._format_of_selection(change["new"])
+        self._show_selected_format()
         self._changed()
 
-    def _format_of_selection(self, selected: list[str]) -> dict[str, Any]:
-        """``_selected_format`` for the items selected: the item's best
-        format, if the engine chosen can view it."""
+    def _show_selected_format(self) -> None:
+        """Set ``_selected_format`` for the items selected: the item's best
+        format, if the engine chosen can view it (the Preview button).
+
+        The item's detection may read it, so it runs as a load, sharing the
+        click's detection (``_detection``): until it ends, the frontend
+        offers no Preview for the item. A later selection cancels it."""
+        if self._selection_load is not None:
+            self._selection_load.cancel()
+            self._selection_load = None
+        selected = list(self._selected)
         if len(selected) != 1:
-            return {}
+            self._selected_format = {}
+            return
         path = selected[0]
-        try:
-            item = self._detect(path)
-            formats = item.formats if item is not None else []
-        except Exception:
-            formats = []  # detection is best-effort; a failure just means no preview
-        viewable = bool(formats) and self._viewable(formats[0])
-        return {
-            "path": path,
-            "format": formats[0].name if viewable else "",
-        }
+        detection = self._detection(path, self._fs)
+
+        def work() -> list[DataFormat]:
+            try:
+                item = detection.result()
+            except Exception:
+                return []  # detection is best-effort; a failure just means no preview
+            return item.formats if item is not None else []
+
+        def done(formats: list[DataFormat]) -> None:
+            viewable = bool(formats) and self._viewable(formats[0])
+            self._selected_format = {
+                "path": path,
+                "format": formats[0].name if viewable else "",
+            }
+
+        self._selection_load = self._loader.submit(work, done, lambda _: None)
 
     @traitlets.validate("_engine")
     def _validate_engine(self, proposal: dict[str, Any]) -> str:
@@ -1103,7 +1127,7 @@ class StorageExplorer(
             return  # set up by __init__
         if change["new"] and change["new"] != self._states.engine:
             self._states.remember_engine(change["new"])
-        self._selected_format = self._format_of_selection(self._selected)
+        self._show_selected_format()
         self._show_current_format()
         # A preview still loading is loaded again, with the new engine.
         preview = self._preview
@@ -1190,4 +1214,5 @@ class StorageExplorer(
         The item detected last is forgotten too, whatever ``path`` is."""
         self._detected = None
         self._detections_forgotten += 1
+        self._detections_running.clear()
         (fs or self._fs).invalidate_cache(path)
