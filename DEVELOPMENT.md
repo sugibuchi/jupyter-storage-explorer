@@ -77,6 +77,10 @@ the main features in the installed Microsoft Edge: browsing, previews, the data 
 the launcher's tab. Give check names to run only those. A failed check leaves a screenshot,
 `tests/browser/smoke-<check>.png`.
 
+For performance, `uv run tests/performance/benchmark.py` times what users wait for: opening large folders, clicks,
+copies and scrolling the data browser. It runs on a memory filesystem with a latency per call, so that round trips
+count as on cloud storages. Compare its timings before and after a change, on the same machine.
+
 The packages support JupyterLab 4.0 or later, but the development environment has the latest. To run the smoke test on
 an older JupyterLab, make an environment of its own, outside the repository. `uv run --with` would not do, as it does
 not see the extensions installed in `.venv`.
