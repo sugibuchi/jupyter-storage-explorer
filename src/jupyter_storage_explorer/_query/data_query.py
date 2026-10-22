@@ -25,6 +25,11 @@ if TYPE_CHECKING:
 
 MODES = ("auto", "live", "memory")
 
+# The data browser's requests, by "type" (see DataQuery.handle).
+REQUESTS = frozenset(
+    {"query_rows", "query_check", "query_save", "query_reload", "query_mode"}
+)
+
 
 def _is_nan(value: Any) -> bool:
     return isinstance(value, float) and math.isnan(value)
@@ -427,7 +432,8 @@ class DataQuery:
         return {}
 
     def handle(self, content: dict[str, Any]) -> dict[str, Any] | None:
-        """The reply to a request by its "type", or None if it is not a query request."""
+        """The reply to a request by its "type", or None if it is not a query
+        request (one of ``REQUESTS``)."""
         handler = {
             "query_rows": self.rows,
             "query_check": self.check,

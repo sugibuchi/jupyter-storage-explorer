@@ -73,7 +73,8 @@ if TYPE_CHECKING:
     # A request's handler: the reply to its content (see _requests).
     _Handler = Callable[[dict[str, Any]], dict[str, Any]]
 
-# The data browser's requests, after which query_result() may have changed.
+# The data browser's requests (see DataQuery.handle), and a table set's to
+# choose a table (see TableSet), after which query_result() may have changed.
 _QUERY_REQUESTS = frozenset(
     {
         "query_rows",
@@ -963,13 +964,12 @@ class StorageExplorer(
         is answered with a "reply" of the same "rid", or a notice, which is
         not (its effects show in the traits, or in messages of their own)."""
         kind = content.get("type")
-        if (request := self._requests(buffers or []).get(kind)) is not None:
+        if kind in _QUERY_REQUESTS:
+            # In a worker thread, as they may read the data (see _answer_query).
+            self._answer_query(content)
+        elif (request := self._requests(buffers or []).get(kind)) is not None:
             reply = request(content)
             self.send({"type": "reply", "rid": content["rid"], **reply})
-            if kind in _QUERY_REQUESTS:
-                # After the reply, so the widget does not wait for the functions.
-                reloaded = kind == "query_reload" and "error" not in reply
-                self._query_changed(reloaded=reloaded)
         elif (notice := self._notices().get(kind)) is not None:
             notice(content)
 
@@ -985,14 +985,6 @@ class StorageExplorer(
                 "locations": [self._location_reply(p) for p in c["paths"]]
             },
             "list": self._list_page,
-            # The data browser (see DataQuery.handle).
-            "query_rows": self._query_request,
-            "query_check": self._query_request,
-            "query_save": self._query_request,
-            "query_reload": self._query_request,
-            "query_mode": self._query_request,
-            # A table set's: the table chosen (see TableSet).
-            "table_set_open": self._table_set_request,
             "view_tab": self._view_tab_request,
             # Bookmarks.
             "bookmarks": lambda c: self._bookmark_list(),

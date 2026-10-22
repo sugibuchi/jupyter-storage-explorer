@@ -337,6 +337,46 @@ class TestPreviewLoadsInTheBackground:
         assert not explorer._view_tabs
 
 
+class TestQueriesInTheBackground:
+    """In a kernel, the data browser's requests run in a worker thread, one
+    at a time on the same data; closing the data waits for them."""
+
+    def test_closing_waits_for_the_request_reading(self, local, monkeypatch):
+        release = threading.Event()
+        closed = []
+        view = SupportChain.view
+
+        def closing(self, *args, **kwargs):
+            viewed = view(self, *args, **kwargs)
+            viewed.on_close(lambda v: closed.append(release.is_set()))
+            return viewed
+
+        monkeypatch.setattr(SupportChain, "view", closing)
+
+        def held(lf, offset, length):
+            assert release.wait(5)
+
+        async def main():
+            explorer = make(
+                local._root, fetch_rows=held, view_limits=ViewLimits(max_live_rows=1)
+            )
+            path = path_of(explorer, "data.parquet")
+            explorer.message({"type": "preview", "path": path})
+            await until(lambda: not explorer._preview.get("loading"))
+            explorer.sent = []
+            request = {"type": "query_rows", "rid": 5, "path": path, "window": 2}
+            explorer.message(request)
+            explorer._preview = {}  # closed while the page is read
+            assert (explorer.sent, closed) == ([], [])
+            release.set()
+            await until(lambda: closed and explorer.sent)
+            return explorer.sent
+
+        [(reply, _)] = asyncio.run(main())
+        assert (reply["rid"], reply["rows"]) == (5, [[1], [2]])
+        assert closed == [True]  # closed once the page was read
+
+
 class TestClickDetectsOnce:
     """A click's selection, menu and preview share one detection of the item
     (``_detect``), until a refresh, a job's changes, another storage, or a

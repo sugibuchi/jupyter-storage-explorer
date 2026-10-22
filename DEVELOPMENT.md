@@ -941,11 +941,25 @@ A preview's reads can take minutes, e.g. while a Spark session starts. So they r
    tables. A `DataQuery` reads its first rows when it is made, so it is made here.
 3. On the main thread: the previous preview is closed, and the new one shown, or its error.
 
-Loads run apart from jobs, up to 4 at a time. Their work must not touch traits or call `send`, as jobs' work. Another
+Loads run apart from jobs, up to 8 at a time in the kernel. Their work must not touch traits or call `send`, as jobs' work. Another
 preview, closing the panel or another storage cancels a load: what it read is closed instead of shown. Without a
 running loop, as in tests, loads run at once.
 
-View tabs load the same way. The data browser's requests and the selection's detection still run on the main thread.
+View tabs load the same way.
+
+The data browser's requests may read the data too, e.g. a Spark job for each page. They run as loads in the lane of
+their `DataQuery` or `TableSet`:
+
+- Loads of one lane run one at a time, in order, as a query is not safe to use from two threads at once.
+- Lanes of other data run side by side.
+- Closing a query or table set goes through its lane, after the requests still reading it.
+- The reply is sent on the main thread, then `on_change` and `on_query_change` functions are told.
+
+This holds in the preview panel, in view tabs and in a `DataExplorer` of its own. The selection's detection and the
+right-click menu still run on the main thread.
+
+`PythonPackage.is_installed` probes one package at a time. Two threads clearing the import caches at once can raise a
+`KeyError` in one of them.
 
 #### The data browser
 

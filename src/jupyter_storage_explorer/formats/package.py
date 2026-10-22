@@ -5,10 +5,14 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
+import threading
 from typing import TYPE_CHECKING, ClassVar
 
 if TYPE_CHECKING:
     import types
+
+# Held while a package is probed (see PythonPackage.is_installed).
+_probing = threading.Lock()
 
 
 class PythonPackage:
@@ -28,11 +32,15 @@ class PythonPackage:
     def is_installed(self) -> bool:
         # The import system caches directory listings, so a package installed
         # with %pip in the running kernel would otherwise still look missing.
-        importlib.invalidate_caches()
-        try:
-            return importlib.util.find_spec(self.import_name) is not None
-        except ModuleNotFoundError:  # "a" of "a.b" missing
-            return False
+        # One probe at a time: invalidating the caches while another thread
+        # looks a package up can make an installed one look missing (the
+        # explorer reads views in worker threads).
+        with _probing:
+            importlib.invalidate_caches()
+            try:
+                return importlib.util.find_spec(self.import_name) is not None
+            except ModuleNotFoundError:  # "a" of "a.b" missing
+                return False
 
     def load(self, submodule: str | None = None) -> types.ModuleType:
         """Import the package, or one of its submodules (e.g. ``"dataset"`` for pyarrow.dataset)."""

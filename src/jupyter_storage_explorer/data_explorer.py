@@ -11,7 +11,8 @@ import traitlets
 from jupyter_storage_explorer import _static
 from jupyter_storage_explorer._callbacks import Callbacks
 from jupyter_storage_explorer._explorer.states import ExplorerStates
-from jupyter_storage_explorer._query.data_query import DataQuery
+from jupyter_storage_explorer._jobs.loader import Loader
+from jupyter_storage_explorer._query.data_query import REQUESTS, DataQuery
 from jupyter_storage_explorer._query.filters import normalize_settings
 from jupyter_storage_explorer._query.settings import QuerySettings
 
@@ -208,6 +209,8 @@ class DataExplorer(anywidget.AnyWidget):
             _height=height,
         )
         self._change_callbacks = Callbacks()
+        # Answers the data browser's requests in worker threads.
+        self._loader = Loader()
         # What result() was built from when on_change's functions last heard of it.
         self._result_basis = self._data.result_settings()
         self.on_msg(self._on_custom_msg)
@@ -311,27 +314,40 @@ class DataExplorer(anywidget.AnyWidget):
         self._release()
         super().close()
 
-    def _release(self) -> None:
+    def _release(self, *, now: bool = False) -> None:
         """Close the view the data came from, if any, without closing the
-        widget: when it closes, and at the kernel's exit (its comm is gone
-        then)."""
+        widget: when it closes, after the requests still reading it, and at
+        the kernel's exit (``now``: its comm is gone then)."""
         # Also called on deletion, of explorers whose __init__ failed too.
         data = getattr(self, "_data", None)
-        if data is not None:
+        loader = getattr(self, "_loader", None)
+        if data is None:
+            return
+        if now or loader is None:
             data.close()
+        else:
+            loader.close_in_lane(data, data.close)
 
     def _on_custom_msg(
         self, _widget: Any, content: dict[str, Any], _buffers: Any
     ) -> None:
         """Answer the data browser's requests, matched by their "rid", then
         tell the ``on_change`` functions if ``result()`` changed: the reply
-        goes first, so the widget does not wait for them to show its rows."""
-        reply = self._data.handle(content)
-        if reply is None:
+        goes first, so the widget does not wait for them to show its rows.
+
+        They may read the data (e.g. a Spark job for each page), so they run
+        in a worker thread, one at a time (see _jobs/loader.py): the kernel
+        stays free meanwhile."""
+        if content.get("type") not in REQUESTS:
             return
-        self.send({"type": "reply", "rid": content["rid"], **reply})
-        basis = self._data.result_settings()
-        reloaded = content.get("type") == "query_reload" and "error" not in reply
-        if basis != self._result_basis or reloaded:
-            self._result_basis = basis
-            self._change_callbacks(self)
+        data = self._data
+
+        def reply(answer: dict[str, Any]) -> None:
+            self.send({"type": "reply", "rid": content["rid"], **answer})
+            basis = data.result_settings()
+            reloaded = content.get("type") == "query_reload" and "error" not in answer
+            if basis != self._result_basis or reloaded:
+                self._result_basis = basis
+                self._change_callbacks(self)
+
+        self._loader.answer(data, lambda: data.handle(content) or {}, reply)

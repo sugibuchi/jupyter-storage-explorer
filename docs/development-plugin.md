@@ -225,8 +225,8 @@ view.on_close(lambda view: con.close())
 - The preview or tab shows "Loading…" until it returns.
 - Views of other items may be made at the same time.
 - It never touches widgets or displays anything.
-- What the view holds is read later on the kernel's main thread. A connection opened in `view` must allow that, e.g.
-  `sqlite3.connect(path, check_same_thread=False)`.
+- What the view holds is read later in other threads, one request at a time: the data browser's pages, a table chosen.
+  A connection opened in `view` must allow that, e.g. `sqlite3.connect(path, check_same_thread=False)`.
 
 ### `recipe(fmt, ctx, options)`
 

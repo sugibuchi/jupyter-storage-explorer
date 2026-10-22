@@ -239,8 +239,9 @@ class PreviewsMixin:
         filesystem, without fsspec's cached listings: what a reload views. Its
         format is checked again (which refreshes what ``fmt`` keeps of it, e.g.
         a Parquet dataset's layout); ValueError if it no longer matches, or
-        the item is gone."""
-        self._invalidate_cache(ctx.path, ctx.fs)
+        the item is gone. Safe in a worker thread: it leaves the explorer's
+        detections (``_detected``) to the main thread."""
+        ctx.fs.invalidate_cache(ctx.path)
         try:
             info = self._info(ctx.path, ctx.fs)
         except FileNotFoundError:
@@ -415,20 +416,25 @@ class PreviewsMixin:
         self._release_preview()
         self._preview = {}
 
-    def _release_preview(self) -> None:
+    def _release_preview(self, *, now: bool = False) -> None:
         """Close what the preview panel shows: the data browser's query (and
         so the view its data came from), a table set (its table's query, then
-        its view), or the view shown; a preview still loading is cancelled."""
+        its view), or the view shown; a preview still loading is cancelled.
+
+        A query or table set is closed in its lane, after the requests still
+        reading it (see ``_answer_query``); ``now``, at once, as the kernel
+        exits."""
         load, self._preview_load = self._preview_load, None
         if load is not None:
             load.cancel()
         queries, self._queries = list(self._queries.values()), {}
         table_sets, self._table_sets = list(self._table_sets.values()), {}
         view, self._preview_view = self._preview_view, None
-        for data in queries:
-            data.close()
-        for tables in table_sets:
-            tables.close()
+        for shown in [*queries, *table_sets]:
+            if now:
+                shown.close()
+            else:
+                self._loader.close_in_lane(shown, shown.close)
         if view is not None:
             view.close()
 
@@ -436,10 +442,10 @@ class PreviewsMixin:
         """Close the views the explorer shows, the preview panel's and its
         tabs', without closing any widget: at the kernel's exit
         (``_close_views_at_exit``), when no message reaches the page."""
-        self._release_preview()
+        self._release_preview(now=True)
         self._cancel_view_tab_loads()
         for widget in list(self._view_tabs.values()):
-            widget._release()
+            widget._release(now=True)
 
     def _cancel_view_tab_loads(self) -> None:
         """Cancel the view tabs' loads still running: what they read is
@@ -589,14 +595,6 @@ class PreviewsMixin:
 
         return TableSet(view, make_query, viewer)
 
-    def _table_set_request(self, content: dict[str, Any]) -> dict[str, Any]:
-        """Answer "table_set_open": show another table of the table set
-        previewed (``TableSet.choose``)."""
-        tables = self._table_sets.get(content.get("path"))
-        if tables is None:
-            return {"error": "the tables are no longer open; preview them again"}
-        return tables.choose(content)
-
     # --- Views in tabs of their own ("View in a new tab"), which the
     # launcher's JupyterLab extension shows: a DataExplorer of the data for
     # a QueryView, else a ViewTab of the view ---
@@ -705,21 +703,43 @@ class PreviewsMixin:
         if widget is not None:
             widget.close()
 
-    def _query_request(self, content: dict[str, Any]) -> dict[str, Any]:
+    def _answer_query(self, content: dict[str, Any]) -> None:
         """Answer the data browser's requests ("query_rows", "query_check",
-        "query_save", "query_reload", "query_mode") on the data previewed;
-        for a table set's table, "path" also names the table (see
-        ``table_set.query_path``)."""
+        "query_save", "query_reload", "query_mode") on the data previewed,
+        and "table_set_open" (``TableSet.choose``); for a table set's table,
+        "path" also names the table (see ``table_set.query_path``).
+
+        They may read the data (e.g. a Spark job for each page), so they run
+        in a worker thread (``_loader``), in the lane of their query or
+        tables: in order, never two at once on the same data. Then, on the
+        main thread, the reply is sent, and the ``on_query_change`` functions
+        are told if ``query_result()`` changed: after the reply, so the
+        widget does not wait for them."""
+        kind = content["type"]
+
+        def reply(answer: dict[str, Any]) -> None:
+            self.send({"type": "reply", "rid": content["rid"], **answer})
+            self._query_changed(
+                reloaded=kind == "query_reload" and "error" not in answer
+            )
+
         path, separator, table = content["path"].partition(SEPARATOR)
-        if separator:
+        if kind == "table_set_open" or separator:
             tables = self._table_sets.get(path)
             if tables is None:
-                return {"error": "the tables are no longer open; preview them again"}
-            return tables.handle(content, table)
-        data = self._queries.get(content["path"])
+                reply({"error": "the tables are no longer open; preview them again"})
+            elif kind == "table_set_open":
+                self._loader.answer(tables, lambda: tables.choose(content), reply)
+            else:
+                self._loader.answer(
+                    tables, lambda: tables.handle(content, table), reply
+                )
+            return
+        data = self._queries.get(path)
         if data is None:
-            return {"error": "the data is no longer open; preview it again"}
-        return data.handle(content) or {}
+            reply({"error": "the data is no longer open; preview it again"})
+        else:
+            self._loader.answer(data, lambda: data.handle(content) or {}, reply)
 
     def _menu_info(self, path: str) -> dict[str, Any]:
         """Answer "menu_info", the right-click menu's, or {"error"}:

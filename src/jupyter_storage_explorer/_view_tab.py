@@ -47,9 +47,10 @@ class ViewTab(anywidget.AnyWidget):
         self._release()
         super().close()
 
-    def _release(self) -> None:
+    def _release(self, *, now: bool = False) -> None:
         """Close the view, without closing the widget: when it closes, and at
-        the kernel's exit."""
+        the kernel's exit (``now``, which changes nothing here: no request
+        reads the view)."""
         on_close, self._on_close = getattr(self, "_on_close", None), None
         if on_close is not None:
             on_close()
