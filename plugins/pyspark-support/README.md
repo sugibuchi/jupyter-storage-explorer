@@ -25,17 +25,11 @@ installed beside it. Without `delta-spark`, the other formats still work.
 
 ### Prerequisites
 
-- The plugin expects Spark to reach your storage already, as configured in the environment, e.g. by a Databricks
-  cluster or Databricks Connect. Spark reads the data without options. You can still give the readers' options in
-  [Format options](#format-options).
-- Elsewhere, the storage's connector and credentials are Spark properties, usually in `spark-defaults.conf`, in
-  `$SPARK_HOME/conf` (or the folder `SPARK_CONF_DIR` names). Every Spark session started in the kernel reads it, the
-  plugin's too. In local, client and cluster mode alike, Spark passes them on to the executors that read the data. See
-  Spark's
-  [Overriding configuration directory](https://spark.apache.org/docs/latest/configuration.html#overriding-configuration-directory).
-- `session_options`, in [Format options](#format-options), gives Spark properties too. They apply in full when the
-  plugin starts the kernel's session. With a session already running, the plugin uses that one, and only the
-  properties Spark can change at run time apply: set the connector and credentials in `spark-defaults.conf` instead.
+- The plugin expects Spark to reach your storage already, e.g. through
+  [`spark-defaults.conf`](https://spark.apache.org/docs/latest/configuration.html#overriding-configuration-directory)
+  or a Databricks cluster.
+- `session_options` in [Format options](#format-options) can add Spark properties. With a session already running,
+  only those Spark can change at run time apply.
 
 ## Plugin options
 
