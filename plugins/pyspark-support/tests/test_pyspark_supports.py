@@ -156,7 +156,7 @@ def test_csv_with_its_separator(tmp_path, session):
 
 def test_viewed_in_a_worker_read_on_the_main_thread(tmp_path, session):
     # The explorer makes views in a worker thread, so that a session starting
-    # leaves the kernel free, then reads their data on its main thread.
+    # leaves the kernel free, then reads their data in other threads.
     path = tmp_path / "a.csv"
     path.write_text("x\n1\n2\n")
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as worker:

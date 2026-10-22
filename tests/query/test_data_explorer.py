@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
+import threading
 from typing import Any
 
 import duckdb
 import polars as pl
 import pytest
+from in_a_kernel import until
 from sqlframe.duckdb import DuckDBSession
 
 from jupyter_storage_explorer import DataExplorer, QuerySettings, fetch_rows
@@ -287,6 +290,34 @@ class TestOnChange:
         explorer.request({"type": "query_rows", "settings": {}})
         assert shown == [1]
         assert calls == [[3, 1, 2]]
+
+
+def test_requests_in_a_worker_in_order():
+    # In a kernel, a page read slowly (e.g. a Spark job) leaves the kernel
+    # free; the replies come in the order asked, one request at a time.
+    release = threading.Event()
+    threads = []
+
+    def held(lf, offset, length):
+        threads.append(threading.current_thread())
+        assert release.wait(5)
+
+    async def main():
+        explorer = Explorer(DF.lazy(), mode="live", fetch_rows=held)
+        explorer.sent = []
+        for rid in (1, 2):
+            explorer._on_custom_msg(
+                explorer, {"type": "query_rows", "rid": rid, "window": 2}, None
+            )
+        assert explorer.sent == []  # still reading
+        release.set()
+        await until(lambda: len(explorer.sent) == 2)
+        return explorer.sent
+
+    sent = asyncio.run(main())
+    assert [reply["rid"] for reply in sent] == [1, 2]
+    assert sent[0]["rows"] == [[3, "x"], [1, "y"]]
+    assert threading.main_thread() not in threads
 
 
 def test_not_a_dataframe():

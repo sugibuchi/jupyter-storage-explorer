@@ -414,6 +414,8 @@ class FormatSupport:
         a Spark session starting) leaves the kernel free; meanwhile the
         preview or tab shows that it is loading. Views of other items may be
         made at the same time. It never touches widgets or displays anything.
+        What the view holds is read later in other threads, one request at a
+        time (e.g. the data browser's pages).
 
         Parameters
         ----------

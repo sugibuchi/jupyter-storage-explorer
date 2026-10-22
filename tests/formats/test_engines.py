@@ -3,6 +3,8 @@ which views an item, and the explorer's choice of one."""
 
 from __future__ import annotations
 
+import importlib
+
 import pytest
 import traitlets
 from all_supports import all_supports
@@ -20,6 +22,7 @@ from jupyter_storage_explorer.formats import (
     Markdown,
     Parquet,
     PythonPackage,
+    package,
 )
 
 
@@ -69,6 +72,19 @@ class TestEngine:
     def test_dotted_import_names(self):
         # "databricks.connect": a missing parent is not installed, not an error.
         assert DatabricksConnect().is_installed() in (True, False)
+
+    def test_one_probe_at_a_time(self, monkeypatch):
+        # Views are read in worker threads, and two threads clearing the
+        # import caches at once can raise a KeyError in one of them: probes
+        # clear them holding a lock.
+        held = []
+        monkeypatch.setattr(
+            importlib,
+            "invalidate_caches",
+            lambda: held.append(package._probing.locked()),
+        )
+        assert Installed().is_installed()
+        assert held == [True]
 
 
 class TestOrder:

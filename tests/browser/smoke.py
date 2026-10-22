@@ -1209,10 +1209,13 @@ def storage_levels(lab: Lab, page: Page) -> None:
 
 # A support taking seconds to view text files, as a Spark session starting.
 SLOW_PREVIEW = """\
+import io
 import time
 import fsspec
+import polars as pl
 from jupyter_storage_explorer import StorageExplorer
-from jupyter_storage_explorer.formats import FormatSupport, Text, TextView
+from jupyter_storage_explorer.formats import Csv, FormatSupport, QueryView, Text, TextView, ViewLimits
+from jupyter_storage_explorer_polars_support import PolarsEngine
 
 class SlowText(FormatSupport):
     format = Text
@@ -1224,11 +1227,30 @@ class SlowText(FormatSupport):
         time.sleep(4)
         return TextView(text=ctx.fs.cat_file(ctx.path).decode())
 
+class CsvInMemory(FormatSupport):
+    format = Csv
+    engine = PolarsEngine
+    capabilities = ("view",)
+
+    def view(self, fmt, ctx, options, limits):
+        return QueryView(data=pl.read_csv(io.BytesIO(ctx.fs.cat_file(ctx.path))).lazy())
+
+def slow_page(lf, offset, length):
+    time.sleep(3)  # as a Spark job for each page; then polars reads it
+
 memory = fsspec.filesystem("memory")
 memory.pipe_file("/slow/notes.txt", b"read slowly")
 memory.pipe_file("/slow/broken.txt", b"x")
+memory.pipe_file("/slow/table.csv", b"a\\n1\\n2\\n3\\n")
 memory.pipe_file("/slow/inner/other.txt", b"x")
-StorageExplorer("/slow", fs=memory, supports=[SlowText], preview_panel="open")"""
+StorageExplorer(
+    "/slow",
+    fs=memory,
+    supports=[SlowText, CsvInMemory],
+    preview_panel="open",
+    fetch_rows=slow_page,
+    view_limits=ViewLimits(max_live_rows=1),  # live queries: each page fetched
+)"""
 
 
 @lab_check
@@ -1255,6 +1277,13 @@ def slow_preview(lab: Lab, page: Page) -> None:
     x.menu(x.row("broken.txt"), "View Text in new tab")
     message = x.page.locator(".jse-query-tab .jse-view-tab-message.jse-mod-error")
     expect(message).to_contain_text("cannot read broken.txt")
+    x.back_to_notebook()
+    # The data browser's pages too: the explorer answers while one is read.
+    x.row("table.csv").click()
+    expect(x.preview.locator(".jse-query-status")).to_have_text("Loading…")
+    x.row("inner").dblclick()
+    expect(x.el.locator(".jse-crumb").last).to_have_text("inner", timeout=2_000)
+    expect(x.preview.locator(".jse-query tbody tr")).to_have_count(3, timeout=10_000)
 
 
 @check

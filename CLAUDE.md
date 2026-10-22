@@ -84,6 +84,8 @@ the code. The traps:
   between items, so a cancel stops them.
 - The reads of a preview or a view tab run in a worker thread too, as a load (`_jobs/loader.py`). Take what they need of the explorer,
   such as `_fs` and `_engine`, on the main thread before, and show the result in the load's `done`.
+- The data browser's requests run in the lane of their query (`Loader.answer`). Close a query or table set with
+  `close_in_lane`, never directly, except at the kernel's exit (`now=True`).
 - Without a running asyncio loop, as in tests, jobs and loads run synchronously. Tests of the threaded path run in
   `asyncio.run`, with `until` from `tests/in_a_kernel.py`.
 - Measuring with a `Progress` lists folder by folder, never with `fs.walk`: its `on_error` misses subfolders.
