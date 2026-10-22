@@ -366,6 +366,35 @@ class TestModes:
     def test_explicit_live_on_small_data_too(self):
         assert mode_query(BIG.head(5).lazy, mode="live").mode == "memory"
 
+    def test_memory_pages_share_one_result(self, monkeypatch):
+        # Scrolling: pages of the same filters, sort and hidden columns are
+        # cut from one result; other settings, or the data read again, make
+        # a new one.
+        built = []
+        original = data_query.build_query
+
+        def counted(*args):
+            built.append(1)
+            return original(*args)
+
+        monkeypatch.setattr(data_query, "build_query", counted)
+        query = mode_query(mode="memory")
+        down = {"sort": {"column": "n", "descending": True}}
+        pages = [rows_of(query, settings=down, offset=o, window=5) for o in (0, 5, 15)]
+        assert [p["rows"][0] for p in pages] == [[19], [14], [4]]
+        assert [p["more"] for p in pages] == [True, True, False]
+        assert {p["total"] for p in pages} == {20}
+        assert len(built) == 1
+        rows_of(query, settings={**down, "widths": {"n": 80}})  # widths: same rows
+        assert len(built) == 1
+        filtered = rows_of(
+            query, settings={"filters": {"n": {"op": "range", "max": 4}}}
+        )
+        assert (filtered["total"], len(built)) == (5, 2)
+        query.reload({})
+        rows_of(query, settings={"filters": {"n": {"op": "range", "max": 4}}})
+        assert len(built) == 3
+
     def test_memory_mode_reads_the_first_rows(self):
         query = mode_query(mode="memory")
         assert query.mode_state()["memory"] == {"rows": 20, "cut": True}
