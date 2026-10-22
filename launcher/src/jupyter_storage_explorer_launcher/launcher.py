@@ -85,6 +85,12 @@ and ``~/.jupyter/storage-explorer/launcher.py``::
 
 The tab's settings button (in its toolbar) opens the user's file in
 JupyterLab's editor, created from ``launcher_template.py`` if it is missing.
+
+A user's file with an error is left out, with a warning: the tab opens
+without it, so that the user can fix it with that button. The explorer is
+also created again without it if it cannot be with it (e.g. a parameter's
+value it refuses). An error in another file, an administrator's, stops the
+tab, which then shows the error only.
 """
 
 from __future__ import annotations
@@ -157,7 +163,9 @@ class Settings:
 
     ``warnings`` are the changes ignored because an earlier layer made the
     setting final, and the functions no longer used (see ``RETIRED``), shown
-    in the tab.
+    in the tab. ``files`` are the layers applied, in the order applied.
+    ``user_error`` says why the user's launcher.py was left out, if it was
+    (see ``load_settings``).
     """
 
     filesystems: dict[str, Any] = dataclasses.field(default_factory=dict)
@@ -171,6 +179,8 @@ class Settings:
     transfer_policy: list[Any] = dataclasses.field(default_factory=list)
     parameters: dict[str, Any] = dataclasses.field(default_factory=dict)
     warnings: list[str] = dataclasses.field(default_factory=list)
+    files: list[pathlib.Path] = dataclasses.field(default_factory=list)
+    user_error: str = ""
 
     def explorer_arguments(
         self, sidebar: bool = False
@@ -266,38 +276,81 @@ def find_launcher_files() -> list[pathlib.Path]:
     return files
 
 
-def load_settings(files: Sequence[pathlib.Path] | None = None) -> Settings:
+def load_settings(
+    files: Sequence[pathlib.Path] | None = None,
+    *,
+    user_file: pathlib.Path | None = None,
+) -> Settings:
     """Merge the settings of ``files`` (default: ``find_launcher_files()``),
     applied from the last (the system's) to the first (the user's).
 
     Raises LauncherError if a file cannot be loaded, a function fails, or
-    returns names that do not exist.
+    returns names that do not exist. Except the user's file, ``user_file``
+    (default: ``user_launcher_file()``): it is left out instead, with its
+    error in ``Settings.user_error``, so that the tab still opens and the
+    user can fix it with the settings button.
     """
     files = find_launcher_files() if files is None else list(files)
+    user_file = user_launcher_file() if user_file is None else user_file
     settings = Settings()
     # Name -> the file that made it final.
     final: dict[str, pathlib.Path] = {}
     for path in reversed(files):
-        module = _load(path)
-        if callable(getattr(module, "launch", None)):
-            # The launcher's configuration before 0.6.0: now ignored.
-            settings.warnings.append(
-                f"{path}: launch() is no longer used; set filesystems(), "
-                f"parameters() etc. instead (see the launcher's README)"
-            )
-        for name, instead in RETIRED.items():
-            if callable(getattr(module, name, None)):
-                settings.warnings.append(
-                    f"{path}: {name}() is no longer used and is ignored; {instead}"
-                )
-        values = {name: _call(module, path, name) for name in (*HOOKS, "final")}
+        try:
+            values, warnings = _read_layer(path)
+            _check_layer(values, path, final)
+        except LauncherError as exc:
+            if not _same_file(path, user_file):
+                raise
+            settings.user_error = str(exc)
+            continue
+        settings.warnings += warnings
         _apply(settings, values, path, final)
         for name in values["final"] or ():
-            if name in RETIRED:
-                continue  # its function is ignored anyway
-            _check_final_name(name, path)
-            final.setdefault(name, path)
+            if name not in RETIRED:  # its function is ignored anyway
+                final.setdefault(name, path)
+        settings.files.append(path)
     return settings
+
+
+def _read_layer(path: pathlib.Path) -> tuple[dict[str, Any], list[str]]:
+    """What the functions of launcher.py ``path`` return, by name, and the
+    warnings of the functions no longer used. LauncherError if it cannot be
+    loaded, or a function fails."""
+    module = _load(path)
+    warnings = []
+    if callable(getattr(module, "launch", None)):
+        # The launcher's configuration before 0.6.0: now ignored.
+        warnings.append(
+            f"{path}: launch() is no longer used; set filesystems(), "
+            f"parameters() etc. instead (see the launcher's README)"
+        )
+    for name, instead in RETIRED.items():
+        if callable(getattr(module, name, None)):
+            warnings.append(
+                f"{path}: {name}() is no longer used and is ignored; {instead}"
+            )
+    return {name: _call(module, path, name) for name in (*HOOKS, "final")}, warnings
+
+
+def _check_layer(
+    values: dict[str, Any], path: pathlib.Path, final: dict[str, pathlib.Path]
+) -> None:
+    """LauncherError if a layer's ``values`` cannot be applied: checked before
+    applying them, so that a layer with an error leaves the settings as they
+    were. Its checks are those of ``_apply`` (applied to settings of their own
+    here), and the names given to ``final()``."""
+    _apply(Settings(), values, path, dict(final))
+    for name in values["final"] or ():
+        if name not in RETIRED:
+            _check_final_name(name, path)
+
+
+def _same_file(path: pathlib.Path, other: pathlib.Path) -> bool:
+    try:
+        return path.resolve() == other.resolve()
+    except OSError:
+        return path == other
 
 
 def _apply(
@@ -499,18 +552,60 @@ def launch(view: str | None = None, sidebar: bool = False) -> None:
     """
     from IPython.display import display  # noqa: PLC0415
 
-    settings = load_settings()
+    try:
+        settings = load_settings()
+        explorer = _create_explorer(settings, view, sidebar)
+    except LauncherError as exc:
+        # In a system file, or the explorer cannot be created even without
+        # the user's: the tab cannot open. Said plainly, not as a traceback.
+        print(f"Storage Explorer cannot open: {exc}", file=sys.stderr)
+        return
     for warning in settings.warnings:
         print(warning, file=sys.stderr)
-    display(_create_explorer(settings, view, sidebar))
+    if settings.user_error:
+        print(_left_out(settings.user_error), file=sys.stderr)
+    display(explorer)
+
+
+def _left_out(error: str) -> str:
+    """The warning of a user's launcher.py left out because of ``error``."""
+    return (
+        f"Your launcher settings were left out: {error}. Fix them with the "
+        f"settings button in the toolbar, then open the tab again."
+    )
 
 
 def _create_explorer(
     settings: Settings, view: str | None, sidebar: bool = False
 ) -> Any:
-    """The explorer ``settings`` describe, showing ``view`` (see ``launch``)."""
-    explorer = settings.create_widget(sidebar)
+    """The explorer ``settings`` describe, showing ``view`` (see ``launch``).
+
+    If it cannot be created with them, e.g. for a parameter's value, it is
+    created again without the user's launcher.py, whose error then goes in
+    ``settings.user_error``; LauncherError if it still cannot be."""
+    try:
+        explorer = settings.create_widget(sidebar)
+    except Exception as exc:
+        error = f"{type(exc).__name__}: {exc}"
+        user = user_launcher_file()
+        if not any(_same_file(path, user) for path in settings.files):
+            raise LauncherError(f"the explorer cannot be created: {error}") from exc
+        others = [path for path in settings.files if not _same_file(path, user)]
+        # Applied from the last: back in Jupyter's order, the user's first.
+        without = load_settings(others[::-1], user_file=user)
+        try:
+            explorer = without.create_widget(sidebar)
+        except Exception as again:
+            raise LauncherError(
+                f"the explorer cannot be created: {type(again).__name__}: {again}"
+            ) from again
+        # The settings the explorer has, for the warnings launch() shows.
+        settings.__dict__.update(without.__dict__)
+        settings.user_error = f"{user}: the explorer cannot be created with it: {error}"
     explorer._offer_settings(user_launcher_file(), create_user_launcher_file)
+    if settings.user_error:
+        # Also in the explorer, until it lists another folder.
+        explorer._error = _left_out(settings.user_error)
     if view:
         # Else (e.g. a storage unreachable now) the explorer as it starts.
         with contextlib.suppress(Exception):
