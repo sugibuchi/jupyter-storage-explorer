@@ -112,6 +112,8 @@ the code. The traps:
 - Plugins never depend on their libraries: their `full` extra installs them. A new dependency of a plugin goes in its
   `hatch_build.py`.
 - Each library's options are listed in its plugin's README only. Update it when an options model changes.
+- A plugin's README follows "The README" in docs/development-plugin.md, which `tests/test_plugin_readmes.py` checks.
+  Its Installation table lists exactly the `full` extra's libraries.
 
 ## Conventions
 

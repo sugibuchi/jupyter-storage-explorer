@@ -525,6 +525,73 @@ __all__ = ["DuckDBEngine", "DuckDBOptions", "DuckDBSupport", "DuckDBSupportOptio
 - `name`, `description` and `version` come from the package's metadata (`[project]`): the class does not repeat them.
 - A plugin that cannot be imported or created is left out with a warning, and greyed out in "About".
 
+### The README
+
+Write the README in this layout, as this repository's plugins' are. Keep each part short: what users need to install
+and configure, with links to the libraries' own documentation for the rest.
+
+````markdown
+# jupyter-storage-explorer-duckdb-support
+
+DuckDB support for Storage Explorer,
+the [Jupyter Storage Explorer](https://github.com/sugibuchi/jupyter-storage-explorer) plugin for
+DuckDB as an engine: the data browser on Parquet files and DuckDB databases, and code loading them.
+
+## Installation
+
+```bash
+pip install "jupyter-storage-explorer-duckdb-support[full]"  # the plugin and its libraries
+pip install "jupyter-storage-explorer-duckdb-support"        # the plugin only, with the libraries you have
+```
+
+The libraries are not the plugin's dependencies, so that installing it never changes those of a shared environment.
+The first command installs them:
+
+| Library  | Needed for            |
+|----------|-----------------------|
+| `duckdb` | Mandatory: the engine |
+
+### Prerequisites
+
+- The plugin expects DuckDB to reach your storage already, as configured in the environment: DuckDB reads the data
+  without options. You can still give options in [Format options](#format-options).
+
+## Plugin options
+
+`plugin_options` gives the plugin's options:
+
+```python
+StorageExplorer("s3://my-bucket/lake", plugin_options={"duckdb-support": {"priority": 10}})
+```
+
+In the launcher's tabs, `plugin_options()` in `launcher.py` gives them:
+
+```python
+def plugin_options():
+    return {"duckdb-support": {"enabled": False}}
+```
+
+| Option     | Default | Meaning                                                                                                  |
+|------------|---------|----------------------------------------------------------------------------------------------------------|
+| `enabled`  | `True`  | Whether explorers use the plugin. `False`: not even imported.                                            |
+| `priority` | lowest  | Plugins of a higher priority come first: their supports are tried before the others'. Equal ones by key. |
+
+## Format options
+
+The supports' options, in `format_options["duckdb"]` (by format, or `"*"` for all), with an example, then a table per
+format: each option, its default and its meaning, from the library's documentation.
+````
+
+- **Installation** tables every library of the `full` extra, with what it is needed for. The engine's comes first,
+  marked "Mandatory"; for a storage plugin, the storage's packages are.
+- **Prerequisites** say what the environment must already provide, e.g. the library's access to storage. Link the
+  configuration reference of a library that does not use fsspec, as polars-support links object_store's.
+- **Plugin options** shows one example for `StorageExplorer` and one for `launcher.py`, then the options' table.
+
+This repository's plugins publish the extras through the explorer, e.g. `jupyter-storage-explorer[polars]`. Their
+READMEs show those commands instead. `tests/test_plugin_readmes.py` checks this layout for them, and that the table
+lists exactly the `full` extra's libraries.
+
 ### Develop and install
 
 ```bash
@@ -611,13 +678,8 @@ lists the plugin with its version.
 - [ ] Operations raise `NotSupported` for what they do not do, report progress and call `progress.check()`.
 - [ ] Locations: frozen keyword-only dataclasses, normalized, without credentials.
 - [ ] Tests in the plugin's `tests/`, of its own code, run with `uv run pytest`; the plugin loads from its entry point.
-- [ ] README, as this repository's plugins' are:
-  - what it adds;
-  - "Installation": the `pip install` commands, and a table of the `full` extra's libraries with what each is needed
-    for, the engine's marked mandatory;
-  - "Prerequisites": what the environment must already provide, e.g. the library's access to storage, with links to
-    the storage options of libraries that do not use fsspec;
-  - "Plugin options", with an example for `StorageExplorer` and one for `launcher.py`, then the format options.
+- [ ] README in the layout of [The README](#the-readme): Installation with the `full` extra's libraries,
+  Prerequisites, Plugin options with both examples, and the format options' tables.
 
 ## Plugins of this repository
 
@@ -634,3 +696,5 @@ explorer's extras install them (`polars`: with its libraries; `polars-support`: 
 3. Give it a release workflow, `.github/workflows/release-<plugin>.yaml` (a copy of another's), and its PyPI project a
    trusted publisher for it (see [One-time setup for PyPI](../DEVELOPMENT.md#one-time-setup-for-pypi)).
 4. List it in [docs/storage-explorer.md](storage-explorer.md#plugins)'s table and the README's extras.
+5. Write its README as [The README](#the-readme) says, with the explorer's extras in its commands.
+   `tests/test_plugin_readmes.py` checks it with the others.
