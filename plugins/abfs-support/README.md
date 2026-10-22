@@ -4,16 +4,28 @@ Azure Data Lake Storage support for Storage Explorer,
 the [Jupyter Storage Explorer](https://github.com/sugibuchi/jupyter-storage-explorer) plugin for
 Azure Data Lake Storage Gen2: folders moved in one step, copies within an account on the server, empty folders.
 
+## Installation
+
 ```bash
 pip install "jupyter-storage-explorer[abfs]"          # the plugin and its libraries
 pip install "jupyter-storage-explorer[abfs-support]"  # the plugin only, with the libraries you have
 ```
 
-Its libraries (`adlfs`, `azure-storage-file-datalake`) are not its dependencies, so that installing it never
-changes those of a shared environment: the first command (or `jupyter-storage-explorer-abfs-support[full]`) installs
-them too.
-Explorers use every plugin installed, unless their `plugin_options` disable it: `{"abfs-support": {"enabled": False}}`
-(see [Plugins](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#plugins)).
+The libraries are not the plugin's dependencies, so that installing it never changes those of a shared environment.
+The first command installs them, as does `jupyter-storage-explorer-abfs-support[full]`:
+
+| Library                       | Needed for                                              |
+|-------------------------------|---------------------------------------------------------|
+| `adlfs`                       | Mandatory: the `abfs://` storage the plugin works on    |
+| `azure-storage-file-datalake` | Mandatory: the Data Lake SDK doing the plugin's work    |
+
+Without either, the explorer's default operations do everything, file by file.
+
+### Prerequisites
+
+- The storage account has a hierarchical namespace (Data Lake Storage Gen2). On other accounts, the default
+  operations take over.
+- The plugin uses the explorer's adlfs storage with its own account and credential: it needs no settings of its own.
 
 ## What it does
 
@@ -31,13 +43,20 @@ explorer's other operations.
 
 ## Plugin options
 
-`plugin_options={"abfs-support": {...}}` (in the launcher's tabs, `plugin_options()` in `launcher.py`):
+`plugin_options` gives the plugin's options:
 
 ```python
 StorageExplorer(
     "abfs://lake@myaccount.dfs.core.windows.net/raw",
     plugin_options={"abfs-support": {"concurrency": 16}},
 )
+```
+
+In the launcher's tabs, `plugin_options()` in `launcher.py` gives them:
+
+```python
+def plugin_options():
+    return {"abfs-support": {"concurrency": 16}}
 ```
 
 | Option        | Default | Meaning                                                                                                    |

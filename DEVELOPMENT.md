@@ -81,13 +81,14 @@ IntelliJ's notebook view runs the widgets too, but dragging files in or out of t
 
 ```bash
 uv run pytest                                        # the Python side
-uvx ruff check src launcher/src plugins tests docs/scripts   # lint
+uvx ruff check src launcher/src plugins tests docs/scripts           # lint
+uvx ruff format --check src launcher/src plugins tests docs/scripts  # formatting of the Python
 uv run npx --yes prettier@3.3.3 --check .            # formatting: the widgets' JS and CSS, the extension's TS
 uv run tests/browser/check_js.py                     # their JavaScript: syntax, names undefined or unused
 uv run --group docs tests/browser/smoke.py           # the widgets in a real JupyterLab
 ```
 
-CI runs the first four and compiles the extension's TypeScript. It does not run the smoke test: run it yourself after
+CI runs all but the last, and compiles the extension's TypeScript. It does not run the smoke test: run it yourself after
 changing `static/` or the extension.
 
 ### Python tests
@@ -310,6 +311,8 @@ These follow from the choices above. Users may meet them.
   parallel.
 - **A click may show a file as it was up to 5 seconds before.** The detection is reused for a few seconds. Refresh
   and the explorer's own writes clear it.
+- **Listing a folder holds the kernel.** Previews, the data browser and clicks load in worker threads, but a listing
+  runs on the main thread: a slow one delays the explorer's other answers.
 - **Kernels sharing a states file do not lock it.** Each re-reads the file before a change and replaces it atomically.
   Two changes in the same instant can still lose one.
 
@@ -346,10 +349,13 @@ They talk to the frontend in two ways:
 
 A message is a request or a notice:
 
-- A **request** carries an id, `rid`. Its handler is listed in `_requests()`. Its answer is a message of type `"reply"`
-  with the same `rid`.
+- A **request** carries an id, `rid`. Its answer is a message of type `"reply"` with the same `rid`.
 - A **notice** gets no answer, and its effects show in the traits. The exception is "download", answered by a message
   per file with the file's bytes attached.
+
+Most requests are answered at once, by their handler in `_requests()`. Those that read data are answered by a load
+later (see "Loading views"): the data browser's, and the right-click menu's. "view_tab" is answered at once, then
+followed by a "view_tab" message once its view has loaded.
 
 Uploads carry the pieces of files in the messages' binary buffers. Values sent go through `_json.jsonable`.
 
@@ -512,9 +518,10 @@ the model id of a widget of the view, or the error, which the tab shows. The wid
 - a `TableSetTab`, for a `TableSetView`;
 - else a `ViewTab`, which renders the view's section with the shared `sections.js`.
 
-Closing the tab while the view loads cancels the load. The explorer keeps the widget until its tab closes. The tab renders it with the output renderers of the notebook or
-console holding the explorer, as ipywidgets ties widgets to that kernel connection. The tab closes with the explorer or
-a kernel restart.
+Closing the tab while the view loads cancels the load. The explorer keeps the widget until its tab closes.
+
+The tab renders the widget with the output renderers of the notebook or console holding the explorer, as ipywidgets
+ties widgets to that kernel connection. The tab closes with the explorer or a kernel restart.
 
 ### Storages
 
@@ -612,7 +619,7 @@ Moving, copying, deleting, downloading and creating folders go through operation
 
 - Each method is tried on each object in order, until one does not raise `FileSystemOperations.NotSupported`.
 - A library's own `NotImplementedError` is an error, not a refusal. That is why the chain has an exception of its own.
-- The explorer's `operations=` come first, then `StorageExplorer.default_operations()`.
+- The explorer's `operations=` come first, then the plugins', then `StorageExplorer.default_operations()`.
 
 The default operations, in `filesystems/operations.py`:
 
@@ -911,7 +918,7 @@ The explorer's `SupportChain`, in `_explorer/supports.py`, holds its supports in
 2. the plugins' supports;
 3. `DEFAULT_SUPPORTS`, the core's.
 
-Its formats are an object of each support's format, in that order, then the defaults' and the plugins' own formats.
+Its formats are an object of each support's format, in that order, then the plugins' own formats and the defaults.
 The explorer has no `formats=` argument.
 
 The chain answers:
@@ -958,13 +965,13 @@ A preview's reads can take minutes, e.g. while a Spark session starts. So they r
 
 1. On the main thread, the panel is set to "loading". What the reads need of the explorer is taken now: the storage
    shown and the engine chosen.
-2. In the worker: the item's detection, unless a recent one is kept, then `view`, then the data browser's query or
-   tables. A `DataQuery` reads its first rows when it is made, so it is made here.
+2. In the worker: the item's detection, shared with the click's (see below), then `view`, then the data browser's
+   query or tables. A `DataQuery` reads its first rows when it is made, so it is made here.
 3. On the main thread: the previous preview is closed, and the new one shown, or its error.
 
-Loads run apart from jobs, up to 8 at a time in the kernel. Their work must not touch traits or call `send`, as jobs' work. Another
-preview, closing the panel or another storage cancels a load: what it read is closed instead of shown. Without a
-running loop, as in tests, loads run at once.
+Loads run apart from jobs, up to 8 at a time in the kernel. Their work must not touch traits or call `send`, as jobs'
+work. Another preview, closing the panel or another storage cancels a load: what it read is closed instead of shown.
+Without a running loop, as in tests, loads run at once.
 
 View tabs load the same way.
 
@@ -1048,7 +1055,7 @@ shows the format and the engine, e.g. "Parquet · Polars".
 
 The right-click menu has, in groups:
 
-- the view: Preview, View in new tab as, Preview as, Python code;
+- the view: View in new tab and Preview, with the engine chosen; View in new tab as and Preview as; Python code;
 - the clipboard: Copy, Cut, Copy URL or path, Paste;
 - editing: Edit, Rename, Create a folder, Delete;
 - downloads;

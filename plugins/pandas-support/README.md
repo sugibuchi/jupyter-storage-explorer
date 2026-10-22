@@ -5,20 +5,46 @@ the [Jupyter Storage Explorer](https://github.com/sugibuchi/jupyter-storage-expl
 pandas as an engine: the data browser on the first rows of Parquet, CSV, JSON Lines and Excel files, and code loading
 them.
 
+## Installation
+
 ```bash
 pip install "jupyter-storage-explorer[pandas]"          # the plugin and its libraries
 pip install "jupyter-storage-explorer[pandas-support]"  # the plugin only, with the libraries you have
 ```
 
-Its libraries (`pandas`, `pyarrow`, `openpyxl`) are not its dependencies, so that installing it never
-changes those of a shared environment: the first command (or `jupyter-storage-explorer-pandas-support[full]`) installs
-them too.
-Explorers use every plugin installed, unless their `plugin_options` disable it: `{"pandas-support": {"enabled": False}}`
-(see [Plugins](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#plugins)).
+The libraries are not the plugin's dependencies, so that installing it never changes those of a shared environment.
+The first command installs them, as does `jupyter-storage-explorer-pandas-support[full]`:
+
+| Library    | Needed for                            |
+|------------|---------------------------------------|
+| `pandas`   | Mandatory: the engine                 |
+| `pyarrow`  | Parquet files, read by pandas         |
+| `openpyxl` | Excel workbooks (`.xlsx`), read by pandas |
+
+Without `pyarrow` or `openpyxl`, the other formats still work.
+
+### Prerequisites
+
+- The plugin expects pandas to reach your storage already, as configured in the environment: pandas reads the data
+  without options. You can still give options in [Format options](#format-options).
+- pandas reads cloud storage through fsspec, with the storage's package, e.g. `s3fs` or `adlfs`, and its credentials.
 
 ## Plugin options
 
-`plugin_options={"pandas-support": {...}}` (in the launcher's tabs, `plugin_options()` in `launcher.py`):
+`plugin_options` gives the plugin's options:
+
+```python
+StorageExplorer(
+    "s3://my-bucket/lake", plugin_options={"pandas-support": {"priority": 10}}
+)
+```
+
+In the launcher's tabs, `plugin_options()` in `launcher.py` gives them:
+
+```python
+def plugin_options():
+    return {"pandas-support": {"enabled": False}}
+```
 
 | Option     | Default | Meaning                                                                                                  |
 |------------|---------|----------------------------------------------------------------------------------------------------------|
@@ -49,11 +75,10 @@ Every format takes:
 | `storage_options` | `None`  | pandas' `storage_options`, `fsspec.open`'s keyword arguments, in the code. The data browser reads through the explorer's filesystem, with its own credentials. |
 
 The other options are each format's reader's arguments, of the same names, with their descriptions from pandas' API
-documentation. Those not set are not passed: pandas' defaults, shown, apply, but where the explorer gives its own. The
-data browser reads at most `max_memory_rows` rows (see `view_limits`), of each sheet of a workbook. Values that are
-Python objects (e.g. data types such as `np.float64` in `dtype`; strings such as `"Int64"` are fine) are used in the
-data
-browser but left out of the code, as are options that look like credentials.
+documentation. Those not set are not passed, so pandas' defaults, shown below, apply, except where the explorer sets
+its own. The data browser reads at most `max_memory_rows` rows (see `view_limits`), of each sheet of a workbook.
+Values that are Python objects are used in the data browser but left out of the code, as are options that look like
+credentials. Data types such as `np.float64` in `dtype` are such objects; strings such as `"Int64"` are fine.
 
 ### CSV (`csv`)
 

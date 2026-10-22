@@ -23,7 +23,7 @@ the pictures are taken at 2× (`data-explorer.png`, `launcher.png` and the GIFs 
 | `launcher_side_panel.py`  | `launcher/figs/side-panel.png` (the side panel, and a tab from View)  |
 | `storage_explorer_gif.py` | `docs/figs/storage-explorer.gif`                                      |
 | `data_explorer_gif.py`    | `docs/figs/data-explorer.gif`                                         |
-| `file_transfer_gif.py`    | `docs/figs/file-transfer.gif` ("File transfer between file systems")  |
+| `file_transfer_gif.py`    | `docs/figs/file-transfer.gif` ("File transfers between storages")     |
 | `make_all.py`             | All of the above, on one server                                       |
 | `_lab.py`                 | The server (in a temporary folder, with its own settings) and helpers |
 | `_film.py`                | The GIFs' frames, and a mouse pointer drawn in the page               |

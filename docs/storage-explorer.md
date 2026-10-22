@@ -9,6 +9,8 @@ edit files.
 - [Storages](#storages)
 - [Using the explorer](#using-the-explorer)
 - [Unsafe operations](#unsafe-operations)
+- [File transfers between storages](#file-transfers-between-storages)
+- [Large files](#large-files)
 - [Transfer policy](#transfer-policy)
 - [Data browser and view tabs](#data-browser-and-view-tabs)
 - [Remembered states](#remembered-states)
@@ -192,17 +194,16 @@ Folder operations need **Unsafe mode**, turned on with the slider at the right o
 
 | Operation              | How                                                                                          |
 |------------------------|----------------------------------------------------------------------------------------------|
-| Move folders           | Drag a folder onto another folder, or right-click → **Cut**, then **Move here** on a folder. |
-| Copy and paste folders | Right-click → **Copy**, then **Paste** on a folder.                                          |
+| Move folders           | Drag a folder onto another folder, or right-click → **Cut**, then **Move** … **here** on a folder. |
+| Copy and paste folders | Right-click → **Copy**, then **Paste** … on a folder.                                              |
 | Rename folders         | Right-click → **Rename** (on most storages, a move of everything in it).                     |
 | Delete folders         | Right-click → **Delete** (with everything in it).                                            |
 
-## File transfer between file systems
+## File transfers between storages
 
-Files are moved and copied within a storage by the storage itself where it can (a rename, a copy on the server); between
-storages, the kernel copies them file by file, through a temporary file:
-
-- A failed or cancelled copy leaves no partial file, and a move deletes each file only once its copy is complete.
+Within a storage, files are moved and copied by the storage itself where it can, e.g. with a rename or a copy on the
+server. Between storages, the kernel copies them file by file, through a temporary file. A failed or cancelled copy
+leaves no partial file, and a move deletes each file only once its copy is complete.
 
 When files are copied or dragged from one explorer to another, **the destination explorer reads them with a file
 system of its own** for the source storage. If it has none for that storage, e.g. one in another kernel's memory or on another
@@ -237,7 +238,7 @@ copy them from there, or download them to JupyterLab, then from its file browser
 
 `transfer_policy=[...]` limits where files may be copied or moved: within a storage (moves onto a folder, renames, copy
 or cut and paste), between storages, to or from JupyterLab's file browser, and to or from your computer. The first rule
-whose `src` and `dest` regular expressions match the whole URLs decides; without one, files go:
+whose `src` and `dest` regular expressions match the whole URLs decides. If no rule matches, the transfer is allowed:
 
 ```python
 StorageExplorer(filesystems={...}, transfer_policy=[
@@ -249,7 +250,7 @@ StorageExplorer(filesystems={...}, transfer_policy=[
 
 URLs are those of "Copy URL" (`file:///...` for local files); files through JupyterLab's file browser are `jupyterlab://<absolute path>`, e.g.
 `jupyterlab:///home/jovyan/x.csv`, and files on your computer `browser:///<name>`. A pattern left out matches any URL.
-A folder is checked as one item, by its own URL. It prevents mistakes; it is not a security boundary. For the launcher's
+A folder is checked as one item, by its own URL. The policy prevents mistakes; it is not a security boundary. For the launcher's
 tabs, use `transfer_policy()` in [its configuration](../launcher/README.md#configuration).
 
 **Named groups** tie the two URLs together: `(?P<name>...)` in both patterns, and the rule matches only if each group
@@ -308,9 +309,9 @@ StorageExplorer("s3://my-bucket/lake", fetch_rows=streaming_pages)
 
 ## Remembered states
 
-Bookmarks, the data browser's settings and the engine chosen are shared by the explorers in the kernel. To keep them in a file, shared
-with other kernels and [the launcher](../launcher/README.md)'s tabs, give its path, or an `ExplorerStates` for other
-options:
+Bookmarks, the data browser's settings, the engine chosen and the list's columns are shared by the explorers in the
+kernel. To keep them in a file, shared with other kernels and [the launcher](../launcher/README.md)'s tabs, give its
+path, or an `ExplorerStates` for other options:
 
 ```python
 from jupyter_storage_explorer import ExplorerStates, StorageExplorer
@@ -336,8 +337,8 @@ StorageExplorer("s3://my-bucket/data", states=ExplorerStates("states.json", max_
 Folders of Parquet files written by Spark or Hive, partitioned or not, are supported; folders written by other tools
 may work, but are not guaranteed to.
 
-Each format's view (the preview, the data browser) is the [engine](#engines) chosen's, and its code is shown for
-every engine in **Python code**, each recipe with its engine (a support given for an engine replaces the default one's).
+The preview and the data browser use the [engine](#engines) chosen. **Python code** shows the code of every engine,
+each recipe under its engine; a support given for an engine replaces that engine's default one.
 The name identifies the format in CSS (see [Icons](../DEVELOPMENT.md#icons)) and in [Format options](#format-options).
 To handle a format with another library, see [Format supports](development-plugin.md#format-supports).
 
