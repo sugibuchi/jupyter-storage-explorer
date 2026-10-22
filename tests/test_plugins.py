@@ -57,6 +57,7 @@ def test_the_repository_plugins():
     # Installed for development: each loads, under its key.
     assert keys(PLUGINS) == [
         "abfs-support",
+        "databricks-support",
         "pandas-support",
         "polars-support",
         "pyspark-support",

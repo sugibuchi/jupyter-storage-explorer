@@ -32,7 +32,7 @@ for all you can do with it.
 - **Previews** of Delta Lake, Parquet, CSV, JSON, Excel, text and images, with code to load them.
 - **Your engine**: query data with Polars, pandas or PySpark (also Databricks Connect), chosen from the status bar.
 - **Plugins** for engines and storages: install one, and every explorer uses it; they never change the data libraries
-  of a shared environment.
+  of a shared environment. Databricks volumes come with an experimental one.
 - **Background file operations** with progress and Cancel; folder operations only in Unsafe mode, or always, or never.
 - **Work in JupyterLab**: open storage files in JupyterLab's own editors and viewers, and save them back; view tables
   and files in tabs of their own.

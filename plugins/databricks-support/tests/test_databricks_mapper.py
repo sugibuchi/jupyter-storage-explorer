@@ -1,0 +1,155 @@
+"""databricks-support: locations naming the workspace, on a fake of
+fsspec-databricks' filesystem (the real one needs a workspace); its entry
+point."""
+
+from __future__ import annotations
+
+import logging
+from importlib.metadata import entry_points
+from types import SimpleNamespace
+
+import pytest
+from fsspec import AbstractFileSystem
+from jupyter_storage_explorer_databricks_support import (
+    DatabricksLocation,
+    DatabricksSupport,
+    DatabricksWorkspaceMapper,
+)
+
+from jupyter_storage_explorer import Location
+from jupyter_storage_explorer.filesystems import (
+    FsspecLocation,
+    MapperChain,
+    default_mappers,
+)
+
+HOST = "https://ADB-1234567890123456.7.azuredatabricks.net/"
+
+
+class DatabricksFileSystem(AbstractFileSystem):
+    """As fsspec-databricks' (matched by its qualified name): ``config.host``
+    is the workspace's, as the Databricks SDK's configuration gives it."""
+
+    cachable = False  # each test's own instances
+    protocol = "dbfs"
+
+    def __init__(self, host=HOST, **kwargs):
+        super().__init__(**kwargs)
+        self.host_reads = 0
+        self._host = host
+
+    @property
+    def config(self):
+        self.host_reads += 1
+        if isinstance(self._host, Exception):
+            raise self._host
+        return SimpleNamespace(host=self._host)
+
+
+DatabricksFileSystem.__module__ = "fsspec_databricks.spec"
+
+
+@pytest.fixture
+def chain():
+    """The mappers of an explorer with the plugin: its first."""
+    return MapperChain([*DatabricksSupport().filesystem_mappers, *default_mappers()])
+
+
+class TestLocations:
+    def test_with_the_workspaces_host(self, chain):
+        location = chain.location_of(
+            DatabricksFileSystem(), "/Volumes/main/sales/raw/a.csv"
+        )
+        assert location == DatabricksLocation(
+            host="adb-1234567890123456.7.azuredatabricks.net",
+            path="/Volumes/main/sales/raw/a.csv",
+        )
+        # The URL libraries read, as the explorer's own mapper gives it.
+        assert location.url == "dbfs://Volumes/main/sales/raw/a.csv"
+
+    @pytest.mark.parametrize(
+        ("path", "level"),
+        [
+            ("", "workspace"),
+            ("/Volumes/main", "catalog"),
+            ("/Workspace/Repos", "repos"),
+        ],
+    )
+    def test_the_explorers_levels(self, chain, path, level):
+        assert chain.level_of(DatabricksFileSystem(), path) == level
+
+    def test_the_top(self, chain):
+        location = chain.location_of(DatabricksFileSystem(), "")
+        assert (location.path, location.url) == ("/", "dbfs://")
+
+    def test_through_json(self, chain):
+        location = chain.location_of(DatabricksFileSystem(), "/Workspace/Shared/x.py")
+        assert Location.from_json(location.to_json()) == location
+
+    def test_the_host_read_once(self, chain):
+        fs = DatabricksFileSystem()
+        for name in ("a", "b", "c"):
+            chain.location_of(fs, f"/Volumes/main/s/v/{name}")
+        assert fs.host_reads == 1
+
+    def test_without_a_host_the_explorers_own(self, chain, caplog):
+        fs = DatabricksFileSystem(host=RuntimeError("no configuration"))
+        with caplog.at_level(logging.WARNING):
+            location = chain.location_of(fs, "/Volumes/main/s/v/a.csv")
+        assert location == FsspecLocation(url="dbfs://Volumes/main/s/v/a.csv")
+        assert "cannot read the Databricks workspace's host" in caplog.text
+
+
+class TestWorkspacesToldApart:
+    def test_files_of_the_same_workspace(self, chain):
+        here, there = DatabricksFileSystem(), DatabricksFileSystem(host=HOST.lower())
+        location = chain.location_of(there, "/Volumes/main/s/v/a.csv")
+        assert chain.path_in(here, location) == "/Volumes/main/s/v/a.csv"
+        assert chain.same_filesystem(here, there)
+
+    def test_files_of_another_workspace(self, chain):
+        here = DatabricksFileSystem()
+        there = DatabricksFileSystem(host="https://dbc-other.cloud.databricks.com")
+        location = chain.location_of(there, "/Volumes/main/s/v/a.csv")
+        assert chain.path_in(here, location) is None
+        assert not chain.same_filesystem(here, there)
+
+    def test_files_pasted_from_another_kernel_found(self, chain, memfs):
+        # A location from JSON, as another kernel's explorer copied it: found
+        # on the storage of its workspace among the explorer's.
+        location = Location.from_json(
+            DatabricksLocation(host=HOST, path="/Volumes/main/s/v/a.csv").to_json()
+        )
+        fs = DatabricksFileSystem()
+        assert chain.locate(location, [memfs, fs]) == (fs, "/Volumes/main/s/v/a.csv")
+
+    def test_fsspecs_urls_still_reached(self, chain):
+        # From a kernel without the plugin: the explorer's own form.
+        location = FsspecLocation(url="dbfs://Volumes/main/s/v/a.csv")
+        assert (
+            chain.path_in(DatabricksFileSystem(), location) == "/Volumes/main/s/v/a.csv"
+        )
+
+
+@pytest.mark.parametrize(
+    ("given", "host"),
+    [
+        ("https://ADB-1.azuredatabricks.net/", "adb-1.azuredatabricks.net"),
+        ("adb-1.azuredatabricks.net", "adb-1.azuredatabricks.net"),
+        ("https://dbc-x.cloud.databricks.com:443/", "dbc-x.cloud.databricks.com"),
+    ],
+)
+def test_hosts_normalized(given, host):
+    assert DatabricksLocation(host=given, path="Volumes/x/").host == host
+    assert DatabricksLocation(host=given, path="Volumes/x/").path == "/Volumes/x"
+
+
+def test_plugin_registered():
+    [entry_point] = entry_points(
+        group="jupyter_storage_explorer.plugins", name="databricks-support"
+    )
+    plugin = entry_point.load()()  # loads without fsspec-databricks
+    assert isinstance(plugin, DatabricksSupport)
+    assert plugin.description == "Databricks support for Storage Explorer"
+    [mapper] = plugin.filesystem_mappers
+    assert isinstance(mapper, DatabricksWorkspaceMapper)

@@ -38,7 +38,8 @@ Engines and storages come as plugins, installed with extras of two kinds:
 | `pandas`   | `pandas-support`   | pandas: Parquet, CSV, JSON Lines, Excel                                       | pandas, pyarrow, openpyxl          |
 | `pyspark`  | `pyspark-support`  | PySpark or Databricks Connect: Delta Lake, Parquet, CSV, JSON Lines           | pyspark, delta-spark               |
 | `abfs`     | `abfs-support`     | Azure Data Lake Storage Gen2: folders moved in one step, copies on the server | adlfs, azure-storage-file-datalake |
-| `all`      | `all-supports`     | All of the above                                                              | All of the above                   |
+| `databricks` | `databricks-support` | Databricks volumes and workspace files, by workspace (experimental)       | fsspec-databricks                  |
+| `all`      | `all-supports`     | All of the above, but the experimental ones                                   | All of the above, but the experimental ones |
 
 Full extras are handy for a quick try. **Support-only extras are highly recommended for an IPython kernel whose data
 access packages are carefully installed and configured** (e.g. a shared JupyterHub image, or Spark and Databricks
@@ -70,6 +71,7 @@ StorageExplorer("gs://my-bucket", token="google_default")  # Google Cloud
 | Amazon S3                      | `s3fs`     | `s3://bucket/path`                                   |
 | Azure Data Lake / Blob Storage | `adlfs`    | `abfs://container@account.dfs.core.windows.net/path` |
 | Google Cloud Storage           | `gcsfs`    | `gs://bucket/path`                                   |
+| Databricks (experimental)      | `fsspec-databricks`, with [databricks-support](../plugins/databricks-support/README.md) | `dbfs://Volumes/catalog/schema/volume/path` |
 | Local disk, in-memory          | (included) | `/path`, `memory://`                                 |
 
 ### Several storages in one explorer
@@ -540,11 +542,13 @@ StorageExplorer(
 | [`pandas-support`](../plugins/pandas-support/README.md)  | pandas: Parquet, CSV, JSON Lines, Excel                                                       | `pip install "jupyter-storage-explorer[pandas]"`  |
 | [`pyspark-support`](../plugins/pyspark-support/README.md) | PySpark or Databricks Connect: Delta Lake, Parquet, CSV, JSON Lines                           | `pip install "jupyter-storage-explorer[pyspark]"` |
 | [`abfs-support`](../plugins/abfs-support/README.md)    | Azure Data Lake Storage Gen2: folders moved in one step, copies within an account on the server (`concurrency`, default 64, at once), empty folders | `pip install "jupyter-storage-explorer[abfs]"`    |
+| [`databricks-support`](../plugins/databricks-support/README.md) | Databricks: Unity Catalog volumes, workspace files and legacy DBFS through fsspec-databricks, with locations naming the workspace. Experimental: not for production; feedback welcome | `pip install "jupyter-storage-explorer[databricks]"` |
 
 Each plugin's README has its options (`plugin_options`, and `format_options` for its engine).
 
-`[all]` installs every plugin with its libraries. `[<name>-support]` (`[all-supports]` for every plugin) installs a plugin alone, using the libraries already installed: plugins never install or upgrade
-them otherwise, so that a shared environment's stay as its administrators set them up.
+`[all]` installs every plugin with its libraries, but the experimental databricks-support. `[<name>-support]`
+(`[all-supports]` for those of `[all]`) installs a plugin alone, using the libraries already installed. Plugins never
+install or upgrade them otherwise, so that a shared environment's stay as its administrators set them up.
 
 ⚙ at the right of the toolbar → **About** shows the explorer's version and the plugins installed, those not used greyed
 out; hover over ⓘ for a plugin's description.
