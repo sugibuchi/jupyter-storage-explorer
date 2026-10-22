@@ -377,6 +377,73 @@ class TestQueriesInTheBackground:
         assert closed == [True]  # closed once the page was read
 
 
+class TestClicksInTheBackground:
+    """In a kernel, a click's detection runs in a worker thread, shared by
+    its selection, menu and preview."""
+
+    @staticmethod
+    def run(memfs, monkeypatch, test):
+        """Run ``test(explorer, asked, release)`` in a running loop: the
+        storage's info calls are held until ``release`` is set, and their
+        paths kept in ``asked``."""
+        memfs.pipe_file("/data/a.csv", b"x,y\n1,2\n")
+        memfs.pipe_file("/data/b.csv", b"x,y\n3,4\n")
+        release, asked = threading.Event(), []
+        info = memfs.info
+
+        def held(path, **kwargs):
+            if threading.current_thread() is not threading.main_thread():
+                asked.append(path)
+                assert release.wait(5)
+            return info(path, **kwargs)
+
+        monkeypatch.setattr(memfs, "info", held)
+
+        async def main():
+            try:
+                return await test(make("/data", fs=memfs), asked, release)
+            finally:
+                release.set()
+
+        return asyncio.run(main())
+
+    def test_one_detection_shared_while_the_kernel_is_free(self, memfs, monkeypatch):
+        async def test(explorer, asked, release):
+            explorer._selected = ["/data/a.csv"]
+            explorer.message({"type": "menu_info", "rid": 7, "path": "/data/a.csv"})
+            explorer.message({"type": "preview", "path": "/data/a.csv"})
+            # Still detecting: no Preview offered yet, and the kernel answers.
+            assert explorer._selected_format == {}
+            assert "error" not in explorer.request({"type": "list", "rid": 1})
+            release.set()
+            await until(lambda: explorer._selected_format)
+            await until(lambda: not explorer._preview.get("loading"))
+            await until(lambda: any(c.get("rid") == 7 for c, _ in explorer.sent))
+            menu = next(c for c, _ in explorer.sent if c.get("rid") == 7)
+            return explorer, asked, menu
+
+        explorer, asked, menu = self.run(memfs, monkeypatch, test)
+        assert asked == ["/data/a.csv"]  # one detection for the three
+        assert explorer._selected_format == {"path": "/data/a.csv", "format": "csv"}
+        assert explorer._preview["format"] == "csv"
+        assert menu["formats"][0] == "csv"
+
+    def test_the_latest_selection_wins(self, memfs, monkeypatch):
+        async def test(explorer, asked, release):
+            shown = []
+            explorer.observe(lambda c: shown.append(c["new"]), "_selected_format")
+            explorer._selected = ["/data/a.csv"]
+            explorer._selected = ["/data/b.csv"]
+            release.set()
+            await until(lambda: shown and shown[-1].get("path") == "/data/b.csv")
+            await until(lambda: len(asked) == 2 and not explorer._detections_running)
+            return shown
+
+        # a.csv's detection ended too, unshown.
+        shown = self.run(memfs, monkeypatch, test)
+        assert [s.get("path") for s in shown] == ["/data/b.csv"]
+
+
 class TestClickDetectsOnce:
     """A click's selection, menu and preview share one detection of the item
     (``_detect``), until a refresh, a job's changes, another storage, or a

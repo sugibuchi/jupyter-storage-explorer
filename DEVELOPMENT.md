@@ -955,8 +955,16 @@ their `DataQuery` or `TableSet`:
 - Closing a query or table set goes through its lane, after the requests still reading it.
 - The reply is sent on the main thread, then `on_change` and `on_query_change` functions are told.
 
-This holds in the preview panel, in view tabs and in a `DataExplorer` of its own. The selection's detection and the
-right-click menu still run on the main thread.
+This holds in the preview panel, in view tabs and in a `DataExplorer` of its own.
+
+A click asks for the item's detection three times at once: for the selection's Preview button, for the right-click
+menu, and for the preview. `_detection` gives each a future of the same detection, run as a load:
+
+- A detection still running for the item is shared, and the last one is kept for 5 seconds.
+- The selection's load waits for it, then sets the format on the main thread. A later selection cancels it.
+- The menu's load also builds the recipes, which may read the file.
+
+Listing folders still runs on the main thread.
 
 `PythonPackage.is_installed` probes one package at a time. Two threads clearing the import caches at once can raise a
 `KeyError` in one of them.
