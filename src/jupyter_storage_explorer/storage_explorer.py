@@ -56,6 +56,7 @@ if TYPE_CHECKING:
     import narwhals as nw
     from fsspec import AbstractFileSystem
 
+    from jupyter_storage_explorer._explorer.previews import _Detected
     from jupyter_storage_explorer._query.data_query import DataQuery
     from jupyter_storage_explorer._query.table_set import TableSet
     from jupyter_storage_explorer._table_set_tab import TableSetTab
@@ -485,6 +486,9 @@ class StorageExplorer(
         # The current directory's items, kept for "list" requests (and paths).
         self._full_listing = Listing(self._make_listing("", []))
         self._listing_version = 0
+        # The item detected last, shared by a click's selection, menu and
+        # preview (see PreviewsMixin._detect).
+        self._detected: tuple[tuple[int, str], float, _Detected | None] | None = None
         # Data browser: path -> the data being queried.
         self._queries: dict[str, DataQuery] = {}
         # A table set previewed (TableSetView): path -> its tables.
@@ -1168,10 +1172,12 @@ class StorageExplorer(
     ) -> None:
         fs = fs or self._fs
         fs.pipe_file(path, data)
-        fs.invalidate_cache(path)
+        self._invalidate_cache(path, fs)
 
     def _invalidate_cache(
         self, path: str | None = None, fs: AbstractFileSystem | None = None
     ) -> None:
-        """Forget cached listings (of ``path``, else all), so changes made elsewhere show."""
+        """Forget cached listings (of ``path``, else all), so changes made elsewhere show.
+        The item detected last is forgotten too, whatever ``path`` is."""
+        self._detected = None
         (fs or self._fs).invalidate_cache(path)

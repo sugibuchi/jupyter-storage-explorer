@@ -55,6 +55,26 @@ class TestReading:
     def test_head_text_drops_bom(self, make_item):
         assert make_item("/a.txt", b"\xef\xbb\xbfhi").head_text(100)[0] == "hi"
 
+    def test_head_read_once(self, make_item, monkeypatch):
+        # Detection and supports ask for the same beginning: one read each
+        # time more is needed, none for less, or for a file read whole.
+        item = make_item("/a.txt", b"0123456789")
+        opened = []
+        open_ = item.fs.open
+
+        def counted(*args, **kwargs):
+            opened.append(1)
+            return open_(*args, **kwargs)
+
+        monkeypatch.setattr(item.fs, "open", counted)
+        assert (item.head(4), item.head(2), len(opened)) == (b"0123", b"01", 1)
+        assert (item.head(6), len(opened)) == (b"012345", 2)
+        assert (item.head(100), item.head(200), len(opened)) == (b"0123456789",) * 2 + (
+            3,
+        )
+        fresh = dataclasses.replace(item)  # a context read again
+        assert (fresh.head(2), len(opened)) == (b"01", 4)
+
     def test_read_whole_within_the_limit(self, make_item):
         item = make_item("/a.bin", b"x" * 10)
         assert item.read_whole(ViewLimits()) == b"x" * 10
