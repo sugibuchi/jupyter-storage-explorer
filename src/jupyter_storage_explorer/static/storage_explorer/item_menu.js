@@ -24,6 +24,8 @@ function createItemMenu(x) {
   }
 
   const canTab = () => x.jupyterlab.canOpenViewTab();
+  // No "Python code" with code_snippet="disabled".
+  const hasCode = () => model.get("_code_snippet");
   // No "Preview" rows without a preview panel (preview_panel="disabled").
   const canPreview = () => x.preview.enabled();
 
@@ -50,7 +52,7 @@ function createItemMenu(x) {
     const { path } = info;
     // A folder's rows, hidden until now: shown if it has a format (an error
     // shows in "Python code").
-    if (msg.error || msg.formats.length) info.codeRow.hidden = false;
+    if ((msg.error || msg.formats.length) && hasCode()) info.codeRow.hidden = false;
     if (!msg.error && msg.formats.length) {
       // The best format's rows, now that the kernel says whether the engine
       // chosen can view it.
@@ -143,7 +145,7 @@ function createItemMenu(x) {
         {
           label: "Python code",
           icon: "code",
-          hidden: !hasFormat,
+          hidden: !hasFormat || !hasCode(),
           ref: (row) => (info.codeRow = row),
           submenu: (sub) => {
             sub.replaceChildren(...x.menu.rows([{ label: "Loading…", disabled: true }]));

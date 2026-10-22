@@ -584,6 +584,11 @@
   opacity: 1;
 }
 
+/* None with unsafe_mode "always" or "blocked". */
+.jse-unsafe[hidden] {
+  display: none;
+}
+
 /* At the toolbar's right end. */
 .jse-unsafe {
   display: flex;

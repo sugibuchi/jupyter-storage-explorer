@@ -93,6 +93,12 @@ def section(view: View) -> dict[str, Any]:
     return {"kind": view.kind, **jsonable(data)}
 
 
+def _recipe_engine(recipe: Recipe) -> str:
+    """The key of a recipe's engine, as ``code_snippet`` names it: "python"
+    for the code of the formats without one (``FormatSupport.library``)."""
+    return recipe.engine.key if recipe.engine is not None else "python"
+
+
 def _rows_note(table: TableView) -> str:
     """How many rows a table view shows, e.g. "First 100 of 1,234 rows"."""
     count, unit = len(table.rows), table.unit
@@ -734,16 +740,22 @@ class PreviewsMixin:
         separator), so they run as a load (``_loader``), sharing the click's
         detection (``_detection``); the reply is made on the main thread."""
         detection = self._detection(content["path"], self._fs)
+        engines = self._code_engines
 
         def work() -> tuple[list[DataFormat], list[Recipe]] | dict[str, Any]:
             try:
                 item = detection.result()
                 formats = item.formats if item is not None else []
                 recipes = (
-                    self._supports.recipes(formats[0], item.ctx) if formats else []
+                    self._supports.recipes(formats[0], item.ctx)
+                    if formats and engines != frozenset()
+                    else []
                 )
             except Exception as exc:
                 return {"error": error_text(exc)}
+            # Only the engines code_snippet names, if it names some.
+            if engines is not None:
+                recipes = [r for r in recipes if _recipe_engine(r) in engines]
             return formats, recipes
 
         def reply(read: tuple[list[DataFormat], list[Recipe]] | dict[str, Any]) -> None:

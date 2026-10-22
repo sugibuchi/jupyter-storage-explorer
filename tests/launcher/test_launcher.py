@@ -365,6 +365,30 @@ class TestFinal:
         assert warning.startswith(f"{path}: formats() is no longer used and is ignored")
         assert "supports()" in warning
 
+    def test_unsafe_mode_blocked_for_everyone(self, tmp_path):
+        # An administrator's layer blocks folder operations; a user's cannot
+        # turn them back on.
+        system = layer(
+            tmp_path,
+            "system",
+            """
+            def parameters():
+                return {"unsafe_mode": "blocked"}
+
+            def final():
+                return ["unsafe_mode"]
+            """,
+        )
+        user = layer(
+            tmp_path, "user", "def parameters():\n    return {'unsafe_mode': 'always'}"
+        )
+        settings = load_settings([user, system])
+        assert settings.parameters["unsafe_mode"] == "blocked"
+        assert settings.warnings == [
+            f"{user}: unsafe_mode is ignored: it is final in {system}"
+        ]
+        assert settings.create_widget()._unsafe_policy == "blocked"
+
     def test_final_applies_to_later_layers_only(self, tmp_path):
         path = layer(
             tmp_path,

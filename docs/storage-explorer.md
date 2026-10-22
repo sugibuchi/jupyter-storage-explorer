@@ -199,6 +199,10 @@ Folder operations need **Unsafe mode**, turned on with the slider at the right o
 | Rename folders         | Right-click → **Rename** (on most storages, a move of everything in it).                     |
 | Delete folders         | Right-click → **Delete** (with everything in it).                                            |
 
+`unsafe_mode` changes this, without the slider: `"always"` offers folder operations at all times, and `"blocked"`
+never does. With `"blocked"`, the kernel refuses them whatever the page asks. For the launcher's tabs, an
+administrator can make it final (see [Layers](../launcher/README.md#layers-of-the-configuration-file)).
+
 ## File transfers between storages
 
 Within a storage, files are moved and copied by the storage itself where it can, e.g. with a rename or a copy on the
@@ -499,11 +503,13 @@ Downloads and states:
 | `max_upload_bytes=10 * 1024 * 1024` | Largest file you can upload from your computer (default 10 MB; `None` for no limit).                                                  |
 | `states="states.json"`              | Where bookmarks, the data browser's settings and the engine chosen are kept (a path or an `ExplorerStates`); see [Remembered states](#remembered-states). |
 
-Transfers:
+Operations and transfers:
 
-| Option                  | Meaning                                                                         |
-|-------------------------|---------------------------------------------------------------------------------|
-| `transfer_policy=[...]` | Where files may be copied or moved; see [Transfer policy](#transfer-policy).    |
+| Option                      | Meaning                                                                                                     |
+|-----------------------------|-------------------------------------------------------------------------------------------------------------|
+| `unsafe_mode="on_demand"`   | Folder operations: with the Unsafe mode slider, `"always"` or `"blocked"`; see [Unsafe operations](#unsafe-operations). |
+| `code_snippet="enabled"`    | **Python code**: every engine's code, `"disabled"` (no such item), or the engines named, e.g. `["polars", "pyspark"]` (`"python"` for JSON, text and images). |
+| `transfer_policy=[...]`     | Where files may be copied or moved; see [Transfer policy](#transfer-policy).                                |
 
 For extending the explorer (see [Extensions](#extensions)), tried before the defaults:
 

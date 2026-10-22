@@ -721,6 +721,10 @@ rename and delete.
   operation at a time.
 - The request says whether the mode was on, and the kernel refuses folders without it.
 
+That is `unsafe_mode="on_demand"`, the default. With `"always"` or `"blocked"`, the slider is hidden. The kernel then
+decides from the argument, kept apart from the traits, which the page could set: folders are always allowed, or never.
+The frontend's `x.unsafe` follows `_unsafe_policy` for what it offers and says.
+
 ### Transfer policy
 
 A `TransferPolicy`, in `_jobs/transfer_policy.py`, applies to every copy and move. That includes those within a
@@ -1023,6 +1027,10 @@ notebook, with its imports and, for Spark, its session.
 - Titles never name the library. The chain adds the support's requirements, and the frontend groups the code by library.
 - Supports fill class attributes `*_template` with `str.format`: `{url}`, a repr, and `{kwargs}`, the options.
 - Installing packages and configuring access to the storage depend on the environment, so they are left to the user.
+
+`code_snippet` limits the recipes to some engines' keys, `"python"` for those without an engine, or turns "Python
+code" off. Unknown keys are left out with a warning, as one launcher configuration may serve environments with other
+plugins.
 
 ### Plugins
 

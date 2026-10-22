@@ -28,7 +28,7 @@ function createToolbar(x) {
   // In the sidebar layout, Unsafe mode is in the settings menu: while it is
   // on, the settings button is red, as the switch would be.
   function renderUnsafe() {
-    const on = sidebar && x.unsafe.on();
+    const on = sidebar && x.unsafe.switchable() && x.unsafe.on();
     settingsBtn.classList.toggle("jse-unsafe-on", on);
     settingsBtn.title = on ? "Settings (Unsafe mode is on)" : "Settings";
   }
@@ -82,7 +82,7 @@ function createToolbar(x) {
   // launcher's extension.
   function showSettingsMenu() {
     const items = [];
-    if (sidebar) {
+    if (sidebar && x.unsafe.switchable()) {
       const on = x.unsafe.on();
       items.push(
         {
@@ -124,7 +124,7 @@ function createToolbar(x) {
       items.push({
         label: "Edit configuration",
         icon: "edit",
-        title: `${visible(path)}\nReload the web browser, then open the explorer tab again to apply the changes.`,
+        title: `${visible(path)}\nOpen a new Storage Explorer tab, or reload the page, to apply the changes.`,
         action: () => void x.jupyterlab.openSettings(),
       });
     }
@@ -144,7 +144,9 @@ function createToolbar(x) {
 // copying, pasting, renaming and deleting folders). Any operation turns it
 // off as it starts, risky or not (take), so it allows one operation at a
 // time. The kernel refuses folders unless the request says it was on
-// ("unsafe").
+// ("unsafe"). That is the explorer's unsafe_mode "on_demand"
+// (_unsafe_policy); with "always" or "blocked", there is no switch, and
+// folder operations are offered at all times, or never (the kernel decides).
 function createUnsafe(x) {
   const { model } = x;
   // A slider at the right end of the toolbar. The checkbox is hidden but
@@ -163,7 +165,10 @@ function createUnsafe(x) {
     h("span", { textContent: "Unsafe mode" }), // grey, red while on
   );
 
-  const on = () => model.get("_unsafe_mode");
+  const policy = () => model.get("_unsafe_policy");
+  // Whether the user turns it on and off: else it is always on, or never.
+  const switchable = () => policy() === "on_demand";
+  const on = () => (switchable() ? model.get("_unsafe_mode") : policy() === "always");
 
   // Also from the settings menu, in the sidebar layout (no switch there).
   function set(value) {
@@ -177,18 +182,26 @@ function createUnsafe(x) {
     el,
     on,
     set,
+    switchable,
     render() {
+      el.hidden = !switchable();
       input.checked = on();
       el.classList.toggle("jse-on", on());
     },
-    // Whether the switch is on for an operation starting now; turns it off.
+    // Whether folder operations are allowed for an operation starting now;
+    // turns the switch off.
     take() {
       const was = on();
-      if (was) {
+      if (was && switchable()) {
         model.set("_unsafe_mode", false);
         model.save_changes();
       }
       return was;
+    },
+    // Why `action` (e.g. "move folders") is refused: the switch is off, or
+    // this explorer never does it.
+    refusal(action) {
+      return switchable() ? `Turn on unsafe mode to ${action}` : `This explorer does not ${action}`;
     },
   };
 }

@@ -171,8 +171,12 @@ def transfer_policy():
     ]
 
 
+def parameters():
+    return {"unsafe_mode": "blocked"}  # no folder operations
+
+
 def final():
-    return ["filesystems", "transfer_policy"]  # users cannot change these
+    return ["filesystems", "transfer_policy", "unsafe_mode"]  # users cannot change these
 ```
 
 Final settings are not a security boundary: users can still create explorers in notebooks.

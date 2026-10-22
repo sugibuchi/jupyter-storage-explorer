@@ -1349,6 +1349,46 @@ def readable_errors(lab: Lab, page: Page) -> None:
     expect(x.status).not_to_contain_text("locked.txt is not yours")
 
 
+# Explorers of the toggles: folder operations never or always, "Python code"
+# of no engine or one.
+TOGGLES = """\
+import fsspec
+from jupyter_storage_explorer import StorageExplorer
+
+memory = fsspec.filesystem("memory")
+memory.pipe_file("/toggles/a.csv", b"x,y\\n1,2\\n")
+memory.pipe_file("/toggles/folder/b.txt", b"b")
+StorageExplorer("/toggles", fs=memory, unsafe_mode={unsafe!r}, code_snippet={code!r})"""
+
+
+@lab_check
+def toggles(lab: Lab, page: Page) -> None:
+    # unsafe_mode="blocked": no switch, no folder operations; code_snippet
+    # "disabled": no "Python code".
+    x = Explorer(lab, page, TOGGLES.format(unsafe="blocked", code="disabled"))
+    expect(x.el.locator(".jse-unsafe")).to_be_hidden()
+    x.row("folder").click(button="right")
+    expect(x.menu_item("Rename")).to_have_count(0)
+    expect(x.menu_item("Delete")).to_have_count(0)
+    page.keyboard.press("Escape")
+    x.row("a.csv").click(button="right")
+    expect(x.menu_item("Preview")).to_be_visible()
+    expect(x.menu_item("Python code")).to_have_count(0)
+    page.keyboard.press("Escape")
+    # "always": no switch, folder operations at all times; one engine's code.
+    x = Explorer(lab, page, TOGGLES.format(unsafe="always", code=["pandas"]))
+    expect(x.el.locator(".jse-unsafe")).to_be_hidden()
+    x.row("folder").click(button="right")
+    expect(x.menu_item("Delete")).to_be_visible()
+    page.keyboard.press("Escape")
+    x.row("a.csv").click(button="right")
+    x.menu_item("Python code").hover()
+    code = x.el.locator(".jse-submenu .jse-menu-item:visible")
+    expect(code.first).to_contain_text("(pandas)")
+    expect(code.filter(has_text="(Polars)")).to_have_count(0)
+    page.keyboard.press("Escape")
+
+
 @check
 def excel_sheets(x: Explorer) -> None:
     # A workbook's sheets on tabs below the data browser (a table set, from

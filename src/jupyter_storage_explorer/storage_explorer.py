@@ -91,6 +91,40 @@ _QUERY_REQUESTS = frozenset(
 _PANEL_STATES = ("open", "closed", "disabled")
 _LAYOUTS = ("standard", "sidebar")
 
+# The values of unsafe_mode: offered by the user's switch, always, or never.
+_UNSAFE_MODES = ("on_demand", "always", "blocked")
+
+
+def _code_engines(
+    code_snippet: str | Sequence[str], supports: SupportChain
+) -> frozenset[str] | None:
+    """The engines' keys whose code "Python code" shows: None for all
+    ("enabled"), none for "disabled", else those named that a support has
+    (``FormatSupport.library()``, "python" for those without an engine);
+    names no support has are left out with a warning, as a launcher shared
+    by environments with other plugins may name them."""
+    if code_snippet == "enabled":
+        return None
+    if code_snippet == "disabled":
+        return frozenset()
+    if isinstance(code_snippet, str) or not all(
+        isinstance(key, str) for key in code_snippet
+    ):
+        raise ValueError(
+            f'code_snippet must be "enabled", "disabled" or a list of engine keys, '
+            f"not {code_snippet!r}"
+        )
+    known = {support.library() for support in supports.supports}
+    if unknown := sorted(set(code_snippet) - known):
+        warnings.warn(
+            f"code_snippet: no support of {', '.join(unknown)} (left out); "
+            f"engines: {', '.join(sorted(known))}",
+            RuntimeWarning,
+            stacklevel=3,
+        )
+    return frozenset(code_snippet) & known
+
+
 # The file list's columns the user can show besides Name (the settings menu's
 # Columns), in their order; and those shown by default, per layout.
 _LIST_COLUMNS = ("size", "mtime", "ctime", "format")
@@ -179,6 +213,18 @@ class StorageExplorer(
         status bar.
     open_preview : bool, optional
         Deprecated: ``preview_panel="open"`` instead.
+    unsafe_mode : {"on_demand", "always", "blocked"}, default "on_demand"
+        Folder operations (moving, copying, renaming and deleting folders):
+        "on_demand" offers them while the user's Unsafe mode switch is on,
+        for one operation; "always" offers them at all times, without the
+        switch; "blocked" never does, without the switch, and the kernel
+        refuses them whatever the page sends.
+    code_snippet : "enabled", "disabled" or sequence of str, default "enabled"
+        The right-click menu's "Python code": the code of every engine
+        ("enabled"), none and no such item ("disabled"), or that of the
+        engines named, by key, e.g. ``["polars", "pyspark"]`` (``"python"``
+        for the code of the formats without an engine, such as JSON). Names
+        that no support has are left out with a warning.
     plugin_options : mapping, optional
         The plugins' options, by key (``StorageExplorerPlugin.key``), e.g.
         ``{"pandas-support": {"enabled": False}, "abfs-support":
@@ -286,8 +332,8 @@ class StorageExplorer(
         options, or storage options with ``fs``.
     ValueError
         If ``filesystems`` is empty, ``transfer_policy`` has a rule that is not
-        of that form, or ``tree_view``, ``preview_panel`` or ``layout`` is
-        none of its values.
+        of that form, ``tree_view``, ``preview_panel``, ``layout``,
+        ``unsafe_mode`` or ``code_snippet`` is none of its values.
 
     See Also
     --------
@@ -395,6 +441,11 @@ class StorageExplorer(
     # frontend turns it off when any operation starts, and sends with each
     # request whether it was on ("unsafe").
     _unsafe_mode = traitlets.Bool(False).tag(sync=True)
+    # The unsafe_mode argument: "on_demand" (the switch above), "always" or
+    # "blocked" (no switch; the kernel decides, see _unsafe).
+    _unsafe_policy = traitlets.Unicode("on_demand").tag(sync=True)
+    # Whether the right-click menu has "Python code" (code_snippet).
+    _code_snippet = traitlets.Bool(True).tag(sync=True)
     # Identifies this explorer to "Paste" (see _paste_sources), and to the
     # page-wide "changed" events after its files were cut and pasted elsewhere.
     _explorer_id = traitlets.Unicode().tag(sync=True)
@@ -421,6 +472,8 @@ class StorageExplorer(
         preview_panel: str = "closed",
         layout: str = "standard",
         open_preview: bool | None = None,
+        unsafe_mode: str = "on_demand",
+        code_snippet: str | Sequence[str] = "enabled",
         plugin_options: Mapping[str, Mapping[str, Any]] | None = None,
         supports: Sequence[type[FormatSupport] | FormatSupport] | None = None,
         format_options: FormatOptions | None = None,
@@ -448,6 +501,7 @@ class StorageExplorer(
         _check_choice("tree_view", tree_view, _PANEL_STATES)
         _check_choice("preview_panel", preview_panel, _PANEL_STATES)
         _check_choice("layout", layout, _LAYOUTS)
+        _check_choice("unsafe_mode", unsafe_mode, _UNSAFE_MODES)
         # Fixed: the frontend only opens and closes the tree (_validate_tree_view).
         self._tree_disabled = tree_view == "disabled"
         # The functions given to on_change() and on_query_change(), and what
@@ -534,6 +588,11 @@ class StorageExplorer(
             engine_preference=engine_preference,
         )
         self._formats = self._supports.formats
+        # The engines whose code "Python code" shows (None: all).
+        self._code_engines = _code_engines(code_snippet, self._supports)
+        # unsafe_mode as given, which the kernel decides by (see _unsafe):
+        # not the trait, which the page could set.
+        self._unsafe_setting = unsafe_mode
         # The folder shown's format, if any (see _show_current_format).
         self._current_dir_format: DataFormat | None = None
         self._view_limits = view_limits or ViewLimits()
@@ -564,6 +623,8 @@ class StorageExplorer(
             _tree_view=tree_view,
             _preview_panel=preview_panel,
             _layout=layout,
+            _unsafe_policy=unsafe_mode,
+            _code_snippet=self._code_engines != frozenset(),
             # The user's last choice for this layout (the validator keeps the
             # columns the list has), else its default.
             _columns=_DEFAULT_COLUMNS[layout]

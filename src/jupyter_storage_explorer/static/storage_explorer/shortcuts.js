@@ -34,7 +34,7 @@ function createShortcuts(x) {
 
   function paste() {
     const item = x.clipboard.pasteItem(model.get("_current_dir"));
-    if (item == null) x.flash("Turn on unsafe mode to paste folders");
+    if (item == null) x.flash(x.unsafe.refusal("paste folders"));
     else if (item.disabled) x.flash("Nothing to paste: copy or cut files first");
     else item.action();
   }
