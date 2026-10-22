@@ -435,6 +435,16 @@ user. `load_settings` does the merging. Each file may define these functions:
 
 The retired `style()` and `formats()` are ignored with a warning.
 
+Errors are handled by whose file has them:
+
+- **The user's file** is left out, with a warning above the explorer and in its status bar, so that "Edit
+  configuration" can fix it. `load_settings` reads and checks each layer before applying it, so a bad file changes
+  nothing.
+- **Values the explorer refuses** show only when it is created. `_create_explorer` then creates it again without the
+  user's file.
+- **Another file's error**, or an explorer that cannot be created even then, stops the tab. `launch()` prints the error
+  alone, without a traceback.
+
 The settings menu, ⚙, is on every explorer. Its "About" shows the versions of the explorer and of the plugins
 installed, with plugins not loaded greyed out and why. Its icon, `static/storage-explorer.svg`, is a copy of the
 launcher's, which a test keeps the same.

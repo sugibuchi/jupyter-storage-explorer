@@ -1459,6 +1459,25 @@ def launcher_settings(lab: Lab, page: Page) -> None:
 
 
 @lab_check
+def launcher_settings_with_an_error(lab: Lab, page: Page) -> None:
+    # The user's launcher.py has an error: the tab opens without it, says so,
+    # and "Edit configuration" opens it to be fixed.
+    broken = _lab.LAUNCHER_PY + "\n\ndef parameters():\n    return {'hieght': 1}\n"
+    with lab.launcher_settings(broken):
+        tab = open_launcher_tab(lab, page)
+        warning = "Your launcher settings were left out"
+        expect(page.locator(".jse-launcher-panel").first).to_contain_text(warning)
+        expect(tab.locator(".jse-status")).to_contain_text("unknown parameter 'hieght'")
+        tab.locator(".jse-settings-btn").click()
+        tab.locator(
+            ".jse-menu:not(.jse-submenu) > .jse-menu-item:visible",
+            has_text="Edit configuration",
+        ).click()
+        editor = page.locator(".jp-FileEditor .cm-content").first
+        expect(editor).to_contain_text("hieght")
+
+
+@lab_check
 def launcher_tab_reload(lab: Lab, page: Page) -> None:
     # The tab reopens where it was after a page reload: the storage shown, and
     # each storage's folder (index.ts saves them with the workspace).

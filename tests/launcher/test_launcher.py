@@ -431,6 +431,100 @@ class TestErrors:
         assert str(info.value).startswith(str(path))
 
 
+def user_layer(config_dir: pathlib.Path, code: str) -> pathlib.Path:
+    """The user's launcher.py, the file the settings button opens, with ``code``."""
+    path = launcher.user_launcher_file()
+    assert path.parent.parent == config_dir
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(textwrap.dedent(code), encoding="utf-8")
+    return path
+
+
+class TestUserErrors:
+    """An error in the user's launcher.py leaves it out, so that the tab
+    opens and the user can fix it; one in another file stops the tab."""
+
+    def test_the_users_file_is_left_out(self, config_dir, system):
+        user = user_layer(
+            config_dir,
+            """
+            def filesystems():
+                return {"Mine": "memory://mine"}
+
+            def parameters():
+                return {"hieght": 1}
+            """,
+        )
+        settings = load_settings([user, system])
+        assert settings.user_error.startswith(str(user))
+        assert "unknown parameter 'hieght'" in settings.user_error
+        # None of it applied, its filesystems neither.
+        assert list(settings.filesystems) == ["Lake", "Scratch"]
+        assert settings.files == [system]
+
+    @pytest.mark.parametrize(
+        "code",
+        [
+            "import nonexistent_module",
+            "def filesystems():\n    raise KeyError('LAKE_URL')",
+            "def final():\n    return ['nonsense']",
+        ],
+    )
+    def test_any_error_of_the_users_file(self, config_dir, code):
+        user = user_layer(config_dir, code)
+        settings = load_settings([user])
+        assert settings.user_error.startswith(str(user))
+        assert settings.explorer_arguments() == defaults()
+
+    def test_another_files_error_stops(self, tmp_path, config_dir):
+        user = user_layer(config_dir, "")
+        system = layer(tmp_path, "system", "def parameters():\n    return {'x': 1}")
+        with pytest.raises(LauncherError, match="unknown parameter 'x'"):
+            load_settings([user, system])
+
+    def test_explorer_created_without_the_users_file(self, config_dir, system):
+        # A value the explorer refuses: only known when it is created.
+        user = user_layer(
+            config_dir, "def parameters():\n    return {'layout': 'wide'}"
+        )
+        settings = load_settings([user, system])
+        explorer = launcher._create_explorer(settings, None)
+        assert explorer._filesystem_names == ["Lake", "Scratch"]
+        assert settings.user_error.startswith(f"{user}: the explorer cannot be created")
+        assert "Your launcher settings were left out" in explorer._error
+        assert settings.files == [system]
+
+    def test_explorer_not_created_without_the_users_file_either(self, tmp_path):
+        system = layer(
+            tmp_path, "system", "def parameters():\n    return {'layout': 'wide'}"
+        )
+        with pytest.raises(LauncherError, match="the explorer cannot be created"):
+            launcher._create_explorer(load_settings([system]), None)
+
+    @pytest.fixture
+    def shown(self, monkeypatch):
+        """What launch() displays."""
+        shown = []
+        monkeypatch.setattr("IPython.display.display", shown.append)
+        return shown
+
+    def test_launch_warns_and_opens(self, config_dir, monkeypatch, capsys, shown):
+        user = user_layer(config_dir, "def parameters():\n    return {'hieght': 1}")
+        monkeypatch.setattr(launcher, "find_launcher_files", lambda: [user])
+        launcher.launch()
+        assert len(shown) == 1
+        assert "Your launcher settings were left out" in capsys.readouterr().err
+
+    def test_launch_stops_plainly(self, tmp_path, monkeypatch, capsys, shown):
+        system = layer(tmp_path, "system", "def parameters():\n    return {'x': 1}")
+        monkeypatch.setattr(launcher, "find_launcher_files", lambda: [system])
+        launcher.launch()
+        assert shown == []
+        err = capsys.readouterr().err
+        assert err.startswith(f"Storage Explorer cannot open: {system}")
+        assert "Traceback" not in err
+
+
 def test_old_launch_function_is_reported(tmp_path):
     path = layer(tmp_path, "user", "def launch():\n    return None")
     settings = load_settings([path])

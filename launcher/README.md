@@ -108,6 +108,10 @@ The file has some of these functions, all optional:
 The side panel uses the same settings, except its own layout: `height`, `tree_view`, `preview_panel` and `layout` are
 not taken from `parameters()` there.
 
+If your file has an error, the tab still opens, without your settings. The error shows above the explorer and in its
+status bar. Fix the file with the ⚙ button, then open the tab again. This covers errors raised by the file, settings
+that do not exist, and values the explorer refuses.
+
 For extending the explorer in Python
 ([Developing plugins](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/development-plugin.md)),
 tried before the defaults: `supports()` (`FormatSupport`: formats and the libraries handling them), `operations()`
@@ -171,3 +175,6 @@ def final():
 ```
 
 Final settings are not a security boundary: users can still create explorers in notebooks.
+
+An error in any file other than the user's stops the tab: it shows only the error, naming the file. Users' files are
+left out instead (see [Configuration](#configuration)).
