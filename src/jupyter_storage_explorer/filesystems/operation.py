@@ -21,16 +21,14 @@ user cancelled, which raises ``OperationCancelled``.
 
 from __future__ import annotations
 
-import contextlib
 import dataclasses
-import os
-import tempfile
 import threading
 from typing import TYPE_CHECKING, Any
 
 from fsspec.callbacks import Callback
 
 from jupyter_storage_explorer import _infos
+from jupyter_storage_explorer.filesystems import _streaming
 
 if TYPE_CHECKING:
     from fsspec import AbstractFileSystem
@@ -534,10 +532,13 @@ class FileSystemOperations:
     ) -> None:
         """Copy one file to another filesystem, for ``copy`` and ``_move_file``.
 
-        Through a local temporary file: read whole, then written, so a
-        failed (or cancelled) copy never leaves a partial file at ``target``.
-        Override it to copy files between two storages another way, e.g.
-        server-side between two accounts of one cloud.
+        Through the kernel, without a local temporary file. A file up to 8
+        MiB is read whole, then written in one call. A larger one streams:
+        its next blocks are read while the last is written. A failed or
+        cancelled copy leaves no partial file at ``target``, though a file
+        it was replacing on a local disk is spoiled. Override it to copy
+        files between two storages another way, e.g. server-side between two
+        accounts of one cloud.
 
         Parameters
         ----------
@@ -559,17 +560,7 @@ class FileSystemOperations:
         OperationCancelled
             From ``progress.check()``, once the user has cancelled.
         """
-        handle, temp_path = tempfile.mkstemp(prefix="jse-copy-")
-        os.close(handle)
-        try:
-            source_fs.get_file(path, temp_path, callback=progress.callback())
-            progress.check()
-            target_fs.put_file(
-                temp_path, target, callback=progress.callback(count=False)
-            )
-        finally:
-            with contextlib.suppress(FileNotFoundError):
-                os.unlink(temp_path)
+        _streaming.copy_file(source_fs, path, target_fs, target, progress)
 
     def _move_file(
         self,

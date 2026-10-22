@@ -8,15 +8,14 @@ filesystems (s3fs, gcsfs, adlfs, ...), many files at a time
 from __future__ import annotations
 
 import asyncio
-import contextlib
-import os
-import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING, Any
 
 from fsspec.asyn import AsyncFileSystem, sync
 from fsspec.implementations.dirfs import DirFileSystem
 
 from jupyter_storage_explorer import _paths
+from jupyter_storage_explorer.filesystems import _streaming
 from jupyter_storage_explorer.filesystems._common import (
     measure_by_folder,
     measure_file,
@@ -45,7 +44,7 @@ class FsspecOperations(FileSystemOperations):
     Within a filesystem, each file is moved with its ``mv`` (a rename where
     the storage has one; a copy then a delete on object stores) and copied
     with its ``cp_file``. Between filesystems, files go through ``_copy_file``
-    and ``_move_file`` (by default, through local temporary files), so a
+    and ``_move_file`` (by default, streamed through the kernel), so a
     cancel leaves each file in one place.
     """
 
@@ -248,11 +247,21 @@ class AsyncFsspecOperations(FileSystemOperations):
     delete_batch : int
         Files deleted per ``_rm`` call: object stores delete many in one
         request (S3: up to 1,000).
+    streams : int
+        Files larger than 8 MiB copied between filesystems at a time, of
+        ``concurrency``. Each holds up to about 40 MiB in memory, besides
+        the target filesystem's own buffer.
     """
 
-    def __init__(self, concurrency: int = 32, delete_batch: int = 1000) -> None:
+    def __init__(
+        self, concurrency: int = 32, delete_batch: int = 1000, streams: int = 4
+    ) -> None:
         self.concurrency = concurrency
         self.delete_batch = delete_batch
+        self.streams = streams
+        # Streams use fsspec's synchronous files, which cannot run on the
+        # filesystems' event loop; the pool's size bounds their memory.
+        self._streams = ThreadPoolExecutor(streams, thread_name_prefix="jse-stream")
 
     def measure(
         self, fs: AbstractFileSystem, path: str, progress: Progress | None = None
@@ -392,26 +401,34 @@ class AsyncFsspecOperations(FileSystemOperations):
         target: str,
         progress: Progress,
     ) -> None:
-        """``FileSystemOperations._copy_file``, with the filesystems'
-        coroutines, run on their event loop: override it to copy files
-        between two filesystems another way.
+        """``FileSystemOperations._copy_file``, run on the filesystems' event
+        loop: override it to copy files between two filesystems another way.
+
+        A file up to 8 MiB is read whole, then written, with the filesystems'
+        coroutines. A larger one streams as ``_copy_file`` does, in a thread,
+        at most ``streams`` at a time.
 
         Parameters
         ----------
         source_fs, path, target_fs, target, progress
             As for ``FileSystemOperations._copy_file``.
         """
-        handle, temp_path = tempfile.mkstemp(prefix="jse-copy-")
-        os.close(handle)
-        try:
-            await source_fs._get_file(path, temp_path, callback=progress.callback())
+        size = (await source_fs._info(path)).get("size")
+        if size is not None and size <= _streaming.SMALL:
+            data = await source_fs._cat_file(path)
             progress.check()
-            await target_fs._put_file(
-                temp_path, target, callback=progress.callback(count=False)
-            )
-        finally:
-            with contextlib.suppress(FileNotFoundError):
-                os.unlink(temp_path)
+            await target_fs._pipe_file(target, data)
+            progress.advance(bytes=len(data))
+            return
+        await asyncio.get_running_loop().run_in_executor(
+            self._streams,
+            _streaming.copy_file,
+            source_fs,
+            path,
+            target_fs,
+            target,
+            progress,
+        )
 
     async def _move_file_async(
         self,
