@@ -18,7 +18,8 @@ function render({ model, el }) {
     ask: confirm.ask,
     answer: confirm.answer,
     // A short message in the status bar, in place of the item count.
-    flash: (message) => x.list.flash(message),
+    // A short notice; with { error: true }, an error that stays until clicked.
+    flash: (message, options) => x.list.flash(message, options),
     // The kernel identifies formats by name (e.g. "delta"); users see their label.
     formatLabel: (name) => model.get("_format_labels")[name] ?? name,
     navigate(path) {
@@ -53,7 +54,7 @@ function render({ model, el }) {
         await navigator.clipboard.writeText(lines.join("\n"));
         x.flash(`Copied ${what}`);
       } catch {
-        x.flash("Copy failed: the browser denied clipboard access");
+        x.flash("Copy failed: the browser denied clipboard access", { error: true });
       }
     },
   };

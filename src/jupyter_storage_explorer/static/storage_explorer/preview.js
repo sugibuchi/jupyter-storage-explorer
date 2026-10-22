@@ -80,7 +80,7 @@ function createPreview(x) {
     if (preview.loading) {
       children = [h("div", { className: "jse-placeholder", textContent: "Loading…" })];
     } else if (preview.error) {
-      children = [h("div", { className: "jse-preview-error", textContent: preview.error })];
+      children = [errorBlock(preview.error)];
     } else if (!preview.format) {
       children = [h("div", { className: "jse-placeholder", textContent: "No preview for this kind of item" })];
     } else if (preview.query) {

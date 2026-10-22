@@ -205,7 +205,7 @@ function createBookmarks(x) {
 
   function set(reply) {
     if (reply.error) {
-      x.flash(reply.error);
+      x.flash(reply.error, { error: true });
       return;
     }
     bookmarks = reply.bookmarks;
@@ -231,7 +231,7 @@ function createBookmarks(x) {
 
   async function open({ filesystem, path }) {
     const reply = await request({ type: "bookmark_open", filesystem, path });
-    if (reply.error) x.flash(`Cannot open the bookmark: ${reply.error}`);
+    if (reply.error) x.flash(`Cannot open the bookmark: ${reply.error}`, { error: true });
   }
 
   // The menu item adding or removing the bookmark of folder `path` of the storage shown.

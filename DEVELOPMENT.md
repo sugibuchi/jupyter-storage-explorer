@@ -420,6 +420,17 @@ Two rules keep the frontend working:
 - anywidget's `model` has only `get`, `set`, `save_changes`, `on`, `off` and `send`. Backbone methods such as
   `previous()` throw inside `set`, which silently breaks syncing.
 
+Errors are made readable in two places:
+
+- **In the kernel**, `error_text` puts a line saying what went wrong first. For Spark's errors, that is the Java
+  exception, not the call that failed.
+- **In the frontend**, `errorBlock`, in `common.js`, shows that first line, and the rest, such as a Java stack trace,
+  under "Details". The launcher extension's view tabs show their errors the same way.
+
+`x.flash(message)` shows a notice in the status bar for 1.5 seconds. With `{ error: true }`, the message stays until
+clicked or replaced: an error may come long after the action, e.g. a job's. A job's result with failures is flashed
+that way, with `resultFailed`.
+
 ### The launcher
 
 The launcher, in `launcher/`, adds a JupyterLab launcher item. It opens a tab whose kernel runs `launch()`.

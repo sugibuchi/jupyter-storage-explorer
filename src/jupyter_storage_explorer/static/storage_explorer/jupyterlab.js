@@ -51,7 +51,7 @@ function createJupyterLab(x) {
       path,
       get: (options) => ask("jupyterlab_get", options),
       save: (options) => ask("jupyterlab_save", options),
-    }).catch((err) => x.flash(`Cannot open in JupyterLab: ${err.message ?? err}`));
+    }).catch((err) => x.flash(`Cannot open in JupyterLab: ${err.message ?? err}`, { error: true }));
   }
 
   // The launcher's settings file (the toolbar's settings button), created by
@@ -68,7 +68,7 @@ function createJupyterLab(x) {
       reply = await request({ type: "settings_open", create: true });
     }
     if (reply.error) {
-      x.flash(`Cannot open the settings: ${reply.error}`);
+      x.flash(`Cannot open the settings: ${reply.error}`, { error: true });
       return;
     }
     const ask = (type, options) => askKernel({ ...options, type, settings: true });
@@ -78,7 +78,7 @@ function createJupyterLab(x) {
       path: "launcher.py",
       get: (options) => ask("jupyterlab_get", options),
       save: (options) => ask("jupyterlab_save", options),
-    }).catch((err) => x.flash(`Cannot open the settings: ${err.message ?? err}`));
+    }).catch((err) => x.flash(`Cannot open the settings: ${err.message ?? err}`, { error: true }));
   }
 
   // "View in a new tab": the kernel answers at once ("view_tab"), and the
@@ -96,7 +96,7 @@ function createJupyterLab(x) {
   async function openViewTab(path, format = null, engine = undefined) {
     const reply = await request({ type: "view_tab", path, format, ...(engine === undefined ? {} : { engine }) });
     if (reply.error) {
-      x.flash(`Cannot open a tab: ${reply.error}`);
+      x.flash(`Cannot open a tab: ${reply.error}`, { error: true });
       return;
     }
     const loadId = reply.load_id;
@@ -116,7 +116,7 @@ function createJupyterLab(x) {
       });
     } catch (err) {
       closed();
-      x.flash(`Cannot open a tab: ${err.message ?? err}`);
+      x.flash(`Cannot open a tab: ${err.message ?? err}`, { error: true });
     }
   }
 

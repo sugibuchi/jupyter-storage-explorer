@@ -65,7 +65,7 @@ function createOperations(x) {
       dest,
       noun: "Move",
     });
-    if (result) x.flash(resultMessage(result, { verb: "Moved", noun: "Move", done: result.moved }));
+    if (result) x.flash(resultMessage(result, { verb: "Moved", noun: "Move", done: result.moved }), { error: resultFailed(result) });
   }
 
   // Deletes `targets` ([{path, type}]), files (and, in unsafe mode, folders).
@@ -85,7 +85,7 @@ function createOperations(x) {
       content: { type: "delete", paths, unsafe: folders },
       noun: "Delete",
     });
-    if (result) x.flash(resultMessage(result, { verb: "Deleted", noun: "Delete", done: result.deleted }));
+    if (result) x.flash(resultMessage(result, { verb: "Deleted", noun: "Delete", done: result.deleted }), { error: resultFailed(result) });
   }
 
   // Asks for a name (not a path) in a dialog of `lines` above the field,
@@ -152,7 +152,9 @@ function createOperations(x) {
         const reply = await x.busy.run(`Renaming ${old}…`, () => request({ type: "rename", path: target.path, name, unsafe: folders }));
         if (reply.error || reply.errors) return reply.error ?? reply.errors.join("; ");
         const result = await x.jobs.result(reply);
-        x.flash(resultMessage(result, { verb: "Renamed", noun: "Rename", done: result.renamed, doneText: `Renamed ${old} to ${name}` }));
+        x.flash(resultMessage(result, { verb: "Renamed", noun: "Rename", done: result.renamed, doneText: `Renamed ${old} to ${name}` }), {
+          error: resultFailed(result),
+        });
         return null;
       },
     });
@@ -234,7 +236,7 @@ function createClipboard(x) {
     });
     if (!result) return;
     if (clip.cut) cutPasted(clip, result);
-    x.flash(resultMessage(result, { verb, noun, done: clip.cut ? result.moved : result.pasted }));
+    x.flash(resultMessage(result, { verb, noun, done: clip.cut ? result.moved : result.pasted }), { error: resultFailed(result) });
   }
 
   // After pasting files cut: they are no longer where they were cut, so the

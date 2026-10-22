@@ -120,6 +120,12 @@ function jobOutcome(result, parts, what) {
   return out;
 }
 
+// Whether a job's result has failures: its message is then flashed as an
+// error, which stays until clicked.
+function resultFailed(result) {
+  return Boolean(result.errors?.length || result.state === "failed");
+}
+
 // The status bar's message about a job's result, e.g. "Moved 3 items;
 // skipped 1 existing; Failed: b.csv: ...", or "Nothing moved". `done`: the
 // names done, shown as one name or a count after `verb` ("Moved"), or as

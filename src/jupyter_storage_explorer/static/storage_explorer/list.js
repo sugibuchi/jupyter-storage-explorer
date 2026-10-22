@@ -431,22 +431,44 @@ function createList(x) {
   // selected; or an error, or a short message (flash) ---
 
   let flashTimer = null;
+  // An error flashed (flash(message, { error: true })): it stays, as it may
+  // come long after the action (e.g. a view loading for minutes), until
+  // clicked or replaced by another message.
+  let flashedError = "";
 
-  function flash(message) {
-    statusEl.textContent = visible(message);
+  function flash(message, { error = false } = {}) {
     clearTimeout(flashTimer);
+    flashTimer = null;
+    flashedError = error ? String(message) : "";
+    if (error) {
+      renderStatus();
+      return;
+    }
+    statusEl.classList.remove("jse-error");
+    statusEl.title = "";
+    statusEl.textContent = visible(message);
     flashTimer = setTimeout(() => {
       flashTimer = null;
       renderStatus();
     }, 1500);
   }
 
+  statusEl.addEventListener("click", () => {
+    if (!flashedError) return;
+    flashedError = "";
+    renderStatus();
+  });
+
   function renderStatus() {
     if (flashTimer) return; // a message is showing; it calls back when done
-    const error = model.get("_error");
+    const error = flashedError || model.get("_error");
     statusEl.classList.toggle("jse-error", Boolean(error));
+    statusEl.classList.toggle("jse-dismissable", Boolean(flashedError));
+    // The whole error, as the bar shows its first line only.
+    const whole = String(error).split("\n").map(visible).join("\n");
+    statusEl.title = error ? whole + (flashedError ? "\n\nClick to dismiss" : "") : "";
     if (error) {
-      statusEl.textContent = visible(error);
+      statusEl.textContent = visible(String(error).split("\n")[0]);
       return;
     }
     let total, matches;

@@ -37,7 +37,7 @@ function createAbout(x) {
   async function show() {
     const reply = await x.request({ type: "about" });
     if (reply.error) {
-      x.flash(`About: ${reply.error}`);
+      x.flash(`About: ${reply.error}`, { error: true });
       return;
     }
     const head = h(

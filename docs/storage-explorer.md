@@ -181,6 +181,9 @@ or windows are refused.
 Moving, renaming, deleting, pasting and downloading to JupyterLab run in the background, with progress and **Cancel** above the
 status bar.
 
+An error stays in the status bar until you click it; hover over it to read all of it. A preview or tab that cannot be
+shown says why, with the full error, e.g. Spark's stack trace, under **Details**.
+
 ## Unsafe operations
 
 Folder operations need **Unsafe mode**, turned on with the slider at the right of the toolbar, for one operation:
