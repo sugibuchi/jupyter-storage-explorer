@@ -5,10 +5,12 @@ and how to package them as a **plugin** that every explorer uses once installed.
 
 This guide is for developers, and is written to be followed by AI assistants generating plugin code and projects: the
 rules are stated explicitly, and the templates are complete. When generating a plugin, follow the
-[rules](#rules-for-generated-code) and the [checklist](#checklist).
+[rules](#rules-for-generated-code), [how to work](#writing-a-plugin-with-an-ai-assistant) and the
+[checklist](#checklist).
 
 - [What can be extended](#what-can-be-extended)
 - [Rules for generated code](#rules-for-generated-code)
+- [Writing a plugin with an AI assistant](#writing-a-plugin-with-an-ai-assistant)
 - [Formats](#formats)
 - [Engines and packages](#engines-and-packages)
 - [Format supports](#format-supports)
@@ -54,6 +56,43 @@ Each component can be tried in an explorer before packaging it: see
 9. **Read files through the item's context** (`ctx.head_text`, `ctx.read_whole`) unless the library reads by URL
    itself (`ctx.library_url`), so that any storage the explorer reaches works.
 10. **Write docstrings** for every public class and method, in numpy style (`Parameters`, `Returns`, `Raises`).
+
+## Writing a plugin with an AI assistant
+
+An AI assistant can write a plugin from this guide. Give it what a person would need:
+
+- this guide, and CLAUDE.md when it works in this repository;
+- the library, installed for development as [Packaging a plugin](#packaging-a-plugin) says;
+- read access to a real storage or real data, e.g. public datasets;
+- a scratch place it may write to, or none: then it must not write.
+
+Point it at the plugin of this repository closest to the task, to copy:
+
+| Plugin to write           | Closest example                                                                             |
+|---------------------------|---------------------------------------------------------------------------------------------|
+| An engine                 | [polars-support](../plugins/polars-support) or [pandas-support](../plugins/pandas-support)  |
+| An engine on a cluster    | [pyspark-support](../plugins/pyspark-support)                                               |
+| File operations           | [abfs-support](../plugins/abfs-support)                                                     |
+| A storage with locations  | [databricks-support](../plugins/databricks-support)                                         |
+
+A prompt can be as short as this:
+
+```text
+Write a <name>-support plugin for Storage Explorer, for <library>. Follow docs/development-plugin.md.
+You may read <storage or data>. Never write to it.
+```
+
+The assistant works in this order:
+
+1. **Probe the real library and storage** before writing code, as [Check the real filesystem first](#check-the-real-filesystem-first)
+   says for storages. Libraries and storages behave in ways no guide can list.
+2. **Write the components**, following the [rules](#rules-for-generated-code).
+3. **Test on fakes built from what the probes showed**, not from assumptions. A fake written from a guess only confirms
+   the guess.
+4. **Try it in an explorer**, as [Trying components in an explorer](#trying-components-in-an-explorer) says.
+5. **Go through the [checklist](#checklist)**, and report what it guessed and what it could not test.
+
+Review its result as any contribution. Look first at what it could not test, such as writes to a real storage.
 
 ## Formats
 
@@ -312,6 +351,17 @@ A `FileSystemOperations` does some operations for some storages and leaves the r
 
 `same` says whether the source and target are one storage, as the mappers tell.
 
+The explorer calls an operation once per item the user chose, a folder's path included. The default operations then
+work file by file:
+
+- within a storage, a folder is moved or copied with one `fs.mv` or `fs.cp_file` per file;
+- between storages, with one `_copy_file` or `_move_file` per file;
+- a folder is deleted by passing its files' paths to `fs.rm`, in batches;
+- uploads are one `fs.put_file` per file.
+
+Override the operations of a storage where each call is costly, e.g. a commit. Do a whole folder in one call when the
+library allows it.
+
 ```python
 from jupyter_storage_explorer.filesystems import FileSystemOperations
 
@@ -357,6 +407,21 @@ Storage Explorer handles this with two classes:
   bucket and the key, for example. Its `url` is the URL in its usual form, for libraries and users.
 - A `FileSystemMapper` maps between locations and an fsspec filesystem with its paths. It gives a path's location, and
   the path of a location in a filesystem, if that filesystem reaches it.
+
+### Check the real filesystem first
+
+Before writing a mapper or operations, try the filesystem on a real storage, reading only. Answer these questions:
+
+- **Can its top folder be listed?** Some cannot, e.g. a hub listing no repositories. Users then open the explorer
+  below it, and levels only apply from there.
+- **What do its paths hold besides folders?** Versions, revisions or encoded characters, e.g. `@refs%2Fpr%2F1`. Check
+  that each real path listed gives a location whose path is the same path again.
+- **Does one class reach several kinds of storage?** Then the location must tell them apart.
+- **What does each write cost?** It could be a request, or a commit. Look for the library's calls that do many at once.
+- **What does `info` give?** Note the names of the size, type and modified-time fields.
+- **Do the engines read its URLs?** Try each engine's reader on real URLs, including their unusual forms.
+
+Write the answers in the plugin's docstrings, and build the tests' fakes from them.
 
 ### Writing a mapper
 
@@ -656,7 +721,7 @@ format: each option, its default and its meaning, from the library's documentati
 - **Prerequisites** say what the environment must already provide, e.g. the library's access to storage. Link the
   configuration reference of a library that does not use fsspec, as polars-support links object_store's.
 - **Plugin options** shows one example for `StorageExplorer` and one for `launcher.py`, then the options' table.
-- Code blocks are formatted as ruff formats Python: CI checks those in this repository's READMEs.
+- Code blocks are formatted as ruff formats Python. Nothing checks this: format them by hand.
 
 This repository's plugins publish the extras through the explorer, e.g. `jupyter-storage-explorer[polars]`. Their
 READMEs show those commands instead. `tests/test_plugin_readmes.py` checks this layout for them, and that the table
@@ -728,8 +793,24 @@ def test_plugin_registered():
     assert plugin.description == "DuckDB support for Storage Explorer"
 ```
 
+A storage plugin's tests need no real storage either:
+
+- Mappers match classes by qualified name. So a fake filesystem only needs the real class's name and module, e.g. a
+  subclass of fsspec's `AbstractFileSystem` whose `__module__` is set to the real one. databricks-support's tests fake
+  fsspec-databricks this way.
+- Fake the library's calls that operations make, e.g. a client recording the batches it gets. Check that a folder takes
+  one call, and that a cancel stops between items.
+- Take the fakes' paths and answers from real listings, as [Check the real filesystem first](#check-the-real-filesystem-first)
+  says.
+
 Try it in a browser with `uv run jupyter lab`: the plugin's engine is in the status bar's engine menu, and ⚙ → **About**
 lists the plugin with its version.
+
+This repository's plugins also get a check in `tests/browser/smoke.py` for what users see, such as a storage's levels
+and icons. `storage_levels` there shows how, on a fake filesystem.
+
+Plugins outside this repository use only the public API: the top level, `filesystems`, `formats`, `formats.supports`
+and `testing`. This repository's plugins may also use the explorer's internals, as they are released with it.
 
 ### Trying components in an explorer
 
@@ -794,7 +875,10 @@ def filesystem_mappers():
 - [ ] README: the plugin's options (`enabled`, `priority`, its own) and its components' parameters.
 - [ ] Views holding resources release them with `on_close`.
 - [ ] Operations raise `NotSupported` for what they do not do, report progress and call `progress.check()`.
+- [ ] Operations do a folder in one call where each call of the library is costly.
 - [ ] Locations: frozen keyword-only dataclasses, normalized, without credentials.
+- [ ] Storage plugins: the questions of [Check the real filesystem first](#check-the-real-filesystem-first) answered on a
+  real storage; real paths give locations whose paths are the same again; the engines read the locations' URLs.
 - [ ] Tests in the plugin's `tests/`, of its own code, run with `uv run pytest`; the plugin loads from its entry point.
 - [ ] README in the layout of [The README](#the-readme): Installation with the `full` extra's libraries,
   Prerequisites, Plugin options with both examples, and the engine options' tables.
