@@ -36,14 +36,14 @@ pip install "jupyter-storage-explorer[polars]"          # the plugin and its lib
 pip install "jupyter-storage-explorer[polars-support]"  # the plugin only, with the libraries you have
 ```
 
-| Full extra   | Support-only extra   | Libraries of the full extra                     |
-|--------------|----------------------|-------------------------------------------------|
-| `polars`     | `polars-support`     | polars, deltalake, fastexcel                    |
-| `pandas`     | `pandas-support`     | pandas, pyarrow, openpyxl                       |
-| `pyspark`    | `pyspark-support`    | pyspark, delta-spark                            |
-| `abfs`       | `abfs-support`       | adlfs, azure-storage-file-datalake              |
-| `databricks` | `databricks-support` | fsspec-databricks, databricks-connect           |
-| `all`        | `all-supports`       | All of the above, but the experimental plugins' |
+| Plugin                                             | Full extra   | Support-only extra   | Libraries of the full extra                     |
+|----------------------------------------------------|--------------|----------------------|-------------------------------------------------|
+| [polars-support](polars-support/README.md)         | `polars`     | `polars-support`     | polars, deltalake, fastexcel                    |
+| [pandas-support](pandas-support/README.md)         | `pandas`     | `pandas-support`     | pandas, pyarrow, openpyxl                       |
+| [pyspark-support](pyspark-support/README.md)       | `pyspark`    | `pyspark-support`    | pyspark, delta-spark                            |
+| [abfs-support](abfs-support/README.md)             | `abfs`       | `abfs-support`       | adlfs, azure-storage-file-datalake              |
+| [databricks-support](databricks-support/README.md) | `databricks` | `databricks-support` | fsspec-databricks, databricks-connect           |
+| All but the experimental ones                      | `all`        | `all-supports`       | All of the above, but the experimental plugins' |
 
 [Installation](../docs/storage-explorer.md#installation) says when to choose each kind of extra. Each plugin's README
 has its options.
