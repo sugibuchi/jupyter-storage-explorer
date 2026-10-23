@@ -717,20 +717,31 @@ class TestJobRunner:
         async def main() -> list[tuple[str, str]]:
             done = asyncio.Event()
             seen = []
+            # Set by the main thread at each report of the job running.
+            running = threading.Semaphore(0)
 
             def notify(job):
                 seen.append((job.state, request.get()))
+                if job.state == "running":
+                    running.release()
                 if job.finished:
                     done.set()
 
             def work(progress):
+                # The job runs until its reports are shown: a report coming
+                # after the job's end is left out.
+                assert running.acquire(timeout=5)
                 progress.advance(files=1)
+                assert running.acquire(timeout=5)
                 return {}
 
             def submit():
                 request.set("paste")
                 JobRunner(notify).submit(
-                    "test", "Threaded", work, lambda job: request.get()
+                    "test",
+                    "Threaded",
+                    work,
+                    lambda job: seen.append(("finish", request.get())),
                 )
 
             contextvars.copy_context().run(submit)
@@ -738,5 +749,11 @@ class TestJobRunner:
             return seen
 
         seen = asyncio.run(main())
-        assert {state for state, _ in seen} == {"queued", "running", "done"}
+        assert [state for state, _ in seen] == [
+            "queued",
+            "running",
+            "running",
+            "finish",
+            "done",
+        ]
         assert {value for _, value in seen} == {"paste"}
