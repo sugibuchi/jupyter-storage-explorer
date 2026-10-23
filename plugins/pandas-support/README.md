@@ -26,7 +26,7 @@ Without `pyarrow` or `openpyxl`, the other formats still work.
 ### Prerequisites
 
 - The plugin expects pandas to reach your storage already, as configured in the environment: pandas reads the data
-  without options. You can still give options in [Format options](#format-options).
+  without options. You can still give options in [Engine options](#engine-options).
 - pandas reads cloud storage through fsspec, with the storage's package, e.g. `s3fs` or `adlfs`, and its credentials.
 
 ## Plugin options
@@ -51,14 +51,14 @@ def plugin_options():
 | `enabled`  | `True`  | Whether explorers use the plugin. `False`: not even imported.                                            |
 | `priority` | lowest  | Plugins of a higher priority come first: their supports are tried before the others'. Equal ones by key. |
 
-## Format options
+## Engine options
 
-The supports' options, in `format_options["pandas"]` (by format, or `"*"` for all), for the data browser and the code:
+The supports' options, in `engine_options["pandas"]` (by format, or `"*"` for all), for the data browser and the code:
 
 ```python
 StorageExplorer(
     "s3://my-bucket/lake",
-    format_options={
+    engine_options={
         "pandas": {
             "*": {"storage_options": {"anon": False}},
             "csv": {"na_values": ["NA"], "dtype_backend": "pyarrow"},

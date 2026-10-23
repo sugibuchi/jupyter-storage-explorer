@@ -355,12 +355,20 @@ class TestFilesystems:
             ({"filesystems": {}}, ValueError),
             ({"filesystems": {"a": "."}, "path": "."}, TypeError),
             ({"supports": [object()]}, TypeError),
-            ({"format_options": {"typo": 1}}, ValueError),
+            ({"engine_options": {"typo": 1}}, ValueError),
         ],
     )
     def test_invalid_arguments(self, kwargs, error):
         with pytest.raises(error):
             make(**kwargs)
+
+    def test_format_options_is_engine_options(self):
+        """format_options, engine_options' former name, is still taken."""
+        options = {"python": {"*": {"storage_options": {"anon": True}}}}
+        explorer = make(format_options=options)
+        assert explorer._supports.engine_options == options
+        with pytest.raises(ValueError, match="give engine_options only"):
+            make(engine_options=options, format_options=options)
 
     def test_storage_options_with_fs(self, memfs):
         with pytest.raises(TypeError, match="storage options"):

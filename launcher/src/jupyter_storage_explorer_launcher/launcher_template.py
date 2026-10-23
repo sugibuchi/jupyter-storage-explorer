@@ -31,11 +31,11 @@ def filesystems():
 #     }
 
 
-# Options of the libraries reading the data for previews, the data browser
-# and code, by library, then format ("*": all formats). See "Format options"
+# Options of the engines reading the data for previews, the data browser
+# and code, by engine, then format ("*": all formats). See "Engine options"
 # in docs/storage-explorer.md.
 #
-# def format_options():
+# def engine_options():
 #     return {
 #         "polars": {
 #             "*": {"storage_options": {"aws_region": "eu-west-1"}},

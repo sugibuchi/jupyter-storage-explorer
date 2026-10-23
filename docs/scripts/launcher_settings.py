@@ -51,7 +51,7 @@ def make(lab: Lab) -> None:
         page.locator(".jp-FileEditor .cm-content").first.wait_for(timeout=30000)
         page.wait_for_timeout(1500)
         _lab.calm(page)
-        # The tabs and editor, down to the end of format_options' example.
+        # The tabs and editor, down to the first line of engine_options' comment.
         x0, y0, x1, _ = box(page.locator("#jp-main-dock-panel"))
         last = box(page.locator(".jp-FileEditor .cm-line").nth(33))[3]
         area = (x0, y0, x1, last + 1)

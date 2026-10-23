@@ -159,8 +159,8 @@ Write docs so that people can review them. That covers this file, DEVELOPMENT.md
 
 - The root README is the quick start and the highlights. Update its highlights for new features.
 - `docs/storage-explorer.md` has the user-facing details: installation, using the explorer, unsafe operations, the
-  transfer policy, formats, format options and the explorer's options.
-- Its last section, "Extensions", has the table of plugins. Add new ones there.
+  transfer policy, formats, engine options and the explorer's options.
+- Its Installation table lists the plugins, by their extras. Add new ones there.
 - `docs/data-explorer.md` covers the data browser, `result()`, `on_change()`, `QuerySettings` and `DataExplorer`'s
   options.
 - DEVELOPMENT.md has custom icons, in "Customizing", and how the code fits together, in "Architecture".
@@ -168,8 +168,9 @@ Write docs so that people can review them. That covers this file, DEVELOPMENT.md
 
 Update the docs when operations, formats or options change. Keep user docs short: what users do, not how it works.
 
-`supports`, `operations` and `filesystem_mappers` are for development. They come last in the docs, the options tables
-and the launcher's template.
+`supports`, `operations` and `filesystem_mappers` are for development. They come last in the options table of
+docs/storage-explorer.md and in the launcher's template. Only docs/development-plugin.md explains them, in "Trying
+components in an explorer".
 
 ### Links and images
 

@@ -68,7 +68,7 @@ if TYPE_CHECKING:
     from jupyter_storage_explorer.data_explorer import DataExplorer
     from jupyter_storage_explorer.filesystems.mapper import FileSystemMapper
     from jupyter_storage_explorer.filesystems.operation import FileSystemOperations
-    from jupyter_storage_explorer.formats import FormatOptions, View
+    from jupyter_storage_explorer.formats import EngineOptions, View
     from jupyter_storage_explorer.location import Location
 
     # A request's handler: the reply to its content (see _requests).
@@ -142,6 +142,18 @@ def _check_choice(name: str, value: Any, choices: Sequence[str]) -> None:
         raise ValueError(
             f"{name} must be one of {', '.join(map(repr, choices))}, not {value!r}"
         )
+
+
+def _engine_options(
+    engine_options: EngineOptions | None, format_options: EngineOptions | None
+) -> EngineOptions | None:
+    """``engine_options``, or ``format_options``, its former name, given
+    instead. To be removed in the major release, with ``format_options``."""
+    if format_options is None:
+        return engine_options
+    if engine_options is not None:
+        raise ValueError("give engine_options only: format_options is its former name")
+    return format_options
 
 
 # Its features are mixins (in _explorer/), each a group of the methods below
@@ -246,12 +258,12 @@ class StorageExplorer(
         those of the supports (their ``format``, one object of each), and
         the standard ones. To change the defaults themselves, override
         ``default_supports`` in a subclass.
-    format_options : mapping, optional
+    engine_options : mapping, optional
         The supports' options, by engine key (``"python"`` for the supports
         without an engine), then format name or ``"*"`` for all formats,
         e.g. ``{"polars": {"*": {"storage_options": {...}}, "delta":
         {"use_pyarrow": True}}}``: each support gets those of its
-        engine that its ``options_model`` has (see "Format options" in
+        engine that its ``options_model`` has (see "Engine options" in
         docs/storage-explorer.md). Instead of a dict of options, a function
         of the item's ``Location`` returning one, for options depending on
         where the data is, e.g. ``{"polars": {"*": lambda location:
@@ -476,7 +488,7 @@ class StorageExplorer(
         code_snippet: str | Sequence[str] = "enabled",
         plugin_options: Mapping[str, Mapping[str, Any]] | None = None,
         supports: Sequence[type[FormatSupport] | FormatSupport] | None = None,
-        format_options: FormatOptions | None = None,
+        engine_options: EngineOptions | None = None,
         engine_preference: Sequence[str] | None = None,
         view_limits: ViewLimits | None = None,
         max_upload_bytes: int | None = 10 * 1024 * 1024,
@@ -488,8 +500,12 @@ class StorageExplorer(
         operations: Sequence[FileSystemOperations] | None = None,
         filesystem_mappers: Sequence[FileSystemMapper] | None = None,
         transfer_policy: Sequence[Mapping[str, str]] | None = None,
+        # The former name of engine_options, kept as an alias. To be removed
+        # in the major release.
+        format_options: EngineOptions | None = None,
         **storage_options: Any,
     ) -> None:
+        engine_options = _engine_options(engine_options, format_options)
         if open_preview is not None:
             warnings.warn(
                 'open_preview is deprecated: use preview_panel="open" (or "closed")',
@@ -583,7 +599,7 @@ class StorageExplorer(
         # files are detected as are the supports', and the standard ones.
         self._supports = SupportChain(
             [*(supports or ()), *components.supports, *self.default_supports()],
-            format_options,
+            engine_options,
             formats=[*components.formats, *DEFAULT_FORMATS],
             engine_preference=engine_preference,
         )
@@ -687,7 +703,7 @@ class StorageExplorer(
             ``jupyter_storage_explorer.formats.default_supports()``: those
             needing no engine (text, Markdown, JSON and images, and code
             reading them); the engines' come with their plugins. Each gets its
-            options from ``format_options``.
+            options from ``engine_options``.
         """
         return list(DEFAULT_SUPPORTS)
 

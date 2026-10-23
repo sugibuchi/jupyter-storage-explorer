@@ -1,5 +1,5 @@
 """formats/support.py: which support does what, and the supports' options
-(format_options)."""
+(engine_options)."""
 
 from __future__ import annotations
 
@@ -80,10 +80,10 @@ ACCOUNT_B = AbfsLocation(account_name="b", container_name="c", path="x")
 ACCOUNT_KEYS = {"a": "key-a", "b": "key-b"}
 
 
-def options_by_class(format_options=None, location=ACCOUNT_A):
+def options_by_class(engine_options=None, location=ACCOUNT_A):
     """The default supports' options for ``location``, by class, made from
-    ``format_options``."""
-    chain = SupportChain(ALL_SUPPORTS, format_options)
+    ``engine_options``."""
+    chain = SupportChain(ALL_SUPPORTS, engine_options)
     return {type(s): chain.options_of(s, location) for s in chain.supports}
 
 
@@ -223,7 +223,7 @@ class TestOptions:
 class TestOptionsByLocation:
     """Options may be a function of the item's location."""
 
-    def format_options(self):
+    def engine_options(self):
         return {
             "polars": {
                 "*": lambda location: {
@@ -237,7 +237,7 @@ class TestOptionsByLocation:
 
     def test_by_account(self):
         for location, key in ((ACCOUNT_A, "key-a"), (ACCOUNT_B, "key-b")):
-            options = options_by_class(self.format_options(), location)
+            options = options_by_class(self.engine_options(), location)
             assert options[CsvByPolars].storage_options == {"account_key": key}
             # A format's dict over the function for all formats.
             delta = options[DeltaLakeByPolars]
@@ -356,7 +356,7 @@ class TestSecrets:
         explorer = StorageExplorer(
             fs=None,
             supports=[support(avro)],
-            format_options={"python": {"avro": {}}},
+            engine_options={"python": {"avro": {}}},
         )
         assert explorer._formats[0].name == "avro"
 

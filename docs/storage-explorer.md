@@ -15,10 +15,9 @@ edit files.
 - [Data browser and view tabs](#data-browser-and-view-tabs)
 - [Remembered states](#remembered-states)
 - [Supported formats](#supported-formats)
-- [Format options](#format-options)
+- [Engine options](#engine-options)
 - [Working with the explorer from Python](#working-with-the-explorer-from-python)
 - [StorageExplorer options](#storageexplorer-options)
-- [Extensions](#extensions)
 
 ## Installation
 
@@ -34,11 +33,11 @@ Engines and storages come as plugins, installed with extras of two kinds:
 
 | Full extra | Support-only extra | Plugin                                                                        | Libraries of the full extra        |
 |------------|--------------------|-------------------------------------------------------------------------------|------------------------------------|
-| `polars`   | `polars-support`   | Polars: Delta Lake, Parquet, CSV, JSON Lines, Excel                           | polars, deltalake, fastexcel       |
-| `pandas`   | `pandas-support`   | pandas: Parquet, CSV, JSON Lines, Excel                                       | pandas, pyarrow, openpyxl          |
-| `pyspark`  | `pyspark-support`  | PySpark: Delta Lake, Parquet, CSV, JSON Lines                                 | pyspark, delta-spark               |
-| `abfs`     | `abfs-support`     | Azure Data Lake Storage Gen2: folders moved in one step, copies on the server | adlfs, azure-storage-file-datalake |
-| `databricks` | `databricks-support` | Databricks volumes and workspace files, by workspace; Databricks Connect (experimental) | fsspec-databricks, databricks-connect |
+| `polars`   | `polars-support`   | [Polars](../plugins/polars-support/README.md): Delta Lake, Parquet, CSV, JSON Lines, Excel | polars, deltalake, fastexcel |
+| `pandas`   | `pandas-support`   | [pandas](../plugins/pandas-support/README.md): Parquet, CSV, JSON Lines, Excel | pandas, pyarrow, openpyxl |
+| `pyspark`  | `pyspark-support`  | [PySpark](../plugins/pyspark-support/README.md): Delta Lake, Parquet, CSV, JSON Lines | pyspark, delta-spark |
+| `abfs`     | `abfs-support`     | [Azure Data Lake Storage Gen2](../plugins/abfs-support/README.md): folders moved in one step, copies on the server | adlfs, azure-storage-file-datalake |
+| `databricks` | `databricks-support` | [Databricks](../plugins/databricks-support/README.md) volumes and workspace files, by workspace; Databricks Connect (experimental) | fsspec-databricks, databricks-connect |
 | `all`      | `all-supports`     | All of the above, but the experimental ones                                   | All of the above, but the experimental ones |
 
 Full extras are handy for a quick try. **Support-only extras are highly recommended for an IPython kernel whose data
@@ -48,6 +47,8 @@ Connect set up for a cluster): the plugins use what is there and never change it
 ```bash
 pip install "jupyter-storage-explorer[all-supports]"  # every plugin, with the libraries you have
 ```
+
+Each plugin's README has its options: `plugin_options`, and `engine_options` for its engine.
 
 Install the package for your storage too, e.g. `s3fs` for Amazon S3 (see [Storages](#storages)). Without an engine
 plugin, the explorer still browses, moves and previews text, Markdown, JSON and images. For the JupyterLab launcher
@@ -285,12 +286,11 @@ tables side by side.
 
 ### Engines
 
-The engine is the library previews read data with: **Polars**, **pandas** or **PySpark**, each with its
-[plugin](#plugins). Engines read storage with their
-own settings, e.g. the environment's credential setup (an AWS profile, an Azure CLI login), not the explorer's: see
-[Format options](#format-options). Text,
-Markdown, JSON and images are shown by the explorer itself. When the engine chosen cannot view an item, use **Preview
-as**.
+The engine is the library previews read data with: **Polars**, **pandas** or **PySpark**, each with its plugin (see
+[Installation](#installation)). Engines read storage with their own settings, not the explorer's: e.g. the
+environment's credential setup, such as an AWS profile or an Azure CLI login. See [Engine options](#engine-options).
+Text, Markdown, JSON and images are shown by the explorer itself. When the engine chosen cannot view an item, use
+**Preview as**.
 
 `engine_preference` orders the engines offered; the first is chosen until the user chooses another:
 
@@ -349,18 +349,18 @@ may work, but are not guaranteed to.
 
 The preview and the data browser use the [engine](#engines) chosen. **Python code** shows the code of every engine,
 each recipe under its engine; a support given for an engine replaces that engine's default one.
-The name identifies the format in CSS (see [Icons](../DEVELOPMENT.md#icons)) and in [Format options](#format-options).
+The name identifies the format in CSS (see [Icons](../DEVELOPMENT.md#icons)) and in [Engine options](#engine-options).
 To handle a format with another library, see [Format supports](development-plugin.md#format-supports).
 
-## Format options
+## Engine options
 
-`format_options` gives the engines' options, by engine key (`"python"` for the explorer's own views and code), then
+`engine_options` gives the engines' options, by engine key (`"python"` for the explorer's own views and code), then
 format name, or `"*"` for all formats (a format's options override those for all):
 
 ```python
 StorageExplorer(
     "s3://my-bucket/lake",
-    format_options={
+    engine_options={
         "polars": {
             "*": {"storage_options": {"aws_region": "eu-west-1"}},
             "delta": {"use_pyarrow": True},
@@ -370,14 +370,14 @@ StorageExplorer(
 )
 ```
 
-| Library   | Options                                                                     | Formats                                                  | Meaning                                                                                      |
+| Engine    | Options                                                                     | Formats                                                  | Meaning                                                                                      |
 |-----------|-----------------------------------------------------------------------------|----------------------------------------------------------|----------------------------------------------------------------------------------------------|
-| `polars`  | each format's reader's arguments (e.g. `scan_csv`'s), and `storage_options`  | `delta`, `parquet`, `csv`, `json-lines`, `json`, `excel` | See polars-support's [Format options](../plugins/polars-support/README.md#format-options).   |
-| `pandas`  | each format's reader's arguments (e.g. `read_csv`'s), and `storage_options`  | `parquet`, `csv`, `json-lines`, `json`, `excel`          | See pandas-support's [Format options](../plugins/pandas-support/README.md#format-options).   |
-| `pyspark` | the session's and each format's reader options                             | `delta`, `parquet`, `csv`, `json-lines`                  | See pyspark-support's [Format options](../plugins/pyspark-support/README.md#format-options). |
+| `polars`  | each format's reader's arguments (e.g. `scan_csv`'s), and `storage_options`  | `delta`, `parquet`, `csv`, `json-lines`, `json`, `excel` | See polars-support's [Engine options](../plugins/polars-support/README.md#engine-options).   |
+| `pandas`  | each format's reader's arguments (e.g. `read_csv`'s), and `storage_options`  | `parquet`, `csv`, `json-lines`, `json`, `excel`          | See pandas-support's [Engine options](../plugins/pandas-support/README.md#engine-options).   |
+| `pyspark` | the session's and each format's reader options                             | `delta`, `parquet`, `csv`, `json-lines`                  | See pyspark-support's [Engine options](../plugins/pyspark-support/README.md#engine-options). |
 | `python`  | `storage_options`                                                           | `json`, `text` (also Markdown's code), `image`           | `fsspec.open`'s keyword arguments, in the code.                                              |
 
-Options that look like credentials are left out of the code. A library, format or option name that no support takes is
+Options that look like credentials are left out of the code. An engine, format or option name that no support takes is
 an error.
 
 Options that depend on where the data is, e.g. one key per Azure storage account, are given by a function of the item's
@@ -388,7 +388,7 @@ keys = {"sales": "...", "finance": "..."}
 
 StorageExplorer(
     filesystems={"Sales": "abfs://lake@sales.dfs.core.windows.net", "Finance": "abfs://lake@finance.dfs.core.windows.net"},
-    format_options={
+    engine_options={
         "polars": {"*": lambda location: {"storage_options": {"account_key": keys[location.account_name]}}},
     },
 )
@@ -485,8 +485,8 @@ Storages and data:
 | Option                    | Meaning                                                                                                    |
 |---------------------------|------------------------------------------------------------------------------------------------------------|
 | `filesystems={...}`       | Several named storages; see [Several storages in one explorer](#several-storages-in-one-explorer).         |
-| `plugin_options={...}`    | The plugins' options, by key, e.g. `{"pandas-support": {"enabled": False}}`; see [Plugins](#plugins). |
-| `format_options={...}`    | The engines' options; see [Format options](#format-options).                                               |
+| `plugin_options={...}`    | The plugins' options, by key, e.g. `{"pandas-support": {"enabled": False}}`; see each plugin's README. |
+| `engine_options={...}`    | The engines' options; see [Engine options](#engine-options).                                               |
 | `engine_preference=[...]` | The engines in the order they are offered, the first chosen until the user chooses; see [Engines](#engines). |
 
 Views:
@@ -517,49 +517,10 @@ Operations and transfers:
 | `code_snippet="enabled"`    | **Python code**: every engine's code, `"disabled"` (no such item), or the engines named, e.g. `["polars", "pyspark"]` (`"python"` for JSON, text and images). |
 | `transfer_policy=[...]`     | Where files may be copied or moved; see [Transfer policy](#transfer-policy).                                |
 
-For extending the explorer (see [Extensions](#extensions)), tried before the defaults:
+For extending the explorer, tried before the defaults:
 
 | Option                     | Meaning                                                                                                               |
 |----------------------------|-----------------------------------------------------------------------------------------------------------------------|
 | `operations=[...]`         | File operations; see [File operations](development-plugin.md#file-operations).                                     |
 | `supports=[...]`           | Formats and the libraries handling them; see [Format supports](development-plugin.md#format-supports).            |
 | `filesystem_mappers=[...]` | How storages are told apart; see [Filesystem mappers](development-plugin.md#filesystem-mappers).                   |
-
-## Extensions
-
-### Plugins
-
-Plugins add engines and storages. Explorers use every plugin installed; `plugin_options` gives their options by key:
-`enabled` (False: not used), `priority` (higher first) and the plugin's own (in the launcher's tabs,
-`plugin_options()` in [its configuration](../launcher/README.md#configuration)):
-
-```python
-StorageExplorer(
-    "abfs://lake@myaccount.dfs.core.windows.net/raw",
-    plugin_options={"pandas-support": {"enabled": False}, "abfs-support": {"concurrency": 16}},
-)
-```
-
-| Plugin            | Adds                                                                                          | Install                                          |
-|-------------------|-----------------------------------------------------------------------------------------------|--------------------------------------------------|
-| [`polars-support`](../plugins/polars-support/README.md)  | Polars: Delta Lake, Parquet, CSV, JSON Lines, Excel                                           | `pip install "jupyter-storage-explorer[polars]"`  |
-| [`pandas-support`](../plugins/pandas-support/README.md)  | pandas: Parquet, CSV, JSON Lines, Excel                                                       | `pip install "jupyter-storage-explorer[pandas]"`  |
-| [`pyspark-support`](../plugins/pyspark-support/README.md) | PySpark: Delta Lake, Parquet, CSV, JSON Lines                                                 | `pip install "jupyter-storage-explorer[pyspark]"` |
-| [`abfs-support`](../plugins/abfs-support/README.md)    | Azure Data Lake Storage Gen2: folders moved in one step, copies within an account on the server (`concurrency`, default 64, at once), empty folders | `pip install "jupyter-storage-explorer[abfs]"`    |
-| [`databricks-support`](../plugins/databricks-support/README.md) | Databricks: Unity Catalog volumes, workspace files and legacy DBFS through fsspec-databricks, with locations naming the workspace; Databricks Connect as an engine. Experimental: not for production; feedback welcome | `pip install "jupyter-storage-explorer[databricks]"` |
-
-Each plugin's README has its options (`plugin_options`, and `format_options` for its engine).
-
-`[all]` installs every plugin with its libraries, but the experimental databricks-support. `[<name>-support]`
-(`[all-supports]` for those of `[all]`) installs a plugin alone, using the libraries already installed. Plugins never
-install or upgrade them otherwise, so that a shared environment's stay as its administrators set them up.
-
-⚙ at the right of the toolbar → **About** shows the explorer's version and the plugins installed, those not used greyed
-out; hover over ⓘ for a plugin's description.
-
-<img src="figs/using-about.png" width="642" alt="The About dialog: Storage Explorer's version and its plugins">
-
-### Writing your own
-
-Plugins, and formats, file operations or storages given to one explorer (`supports`, `operations`,
-`filesystem_mappers`): see [development-plugin.md](development-plugin.md).

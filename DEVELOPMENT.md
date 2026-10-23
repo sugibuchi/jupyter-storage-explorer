@@ -446,7 +446,7 @@ user. `load_settings` does the merging. Each file may define these functions:
 
 - `filesystems()`, `operations()`, `filesystem_mappers()` and `transfer_policy()`;
 - `plugin_options()`, merged by plugin, then option;
-- `supports()`, and `format_options()`, merged by library, format, then option;
+- `supports()`, and `engine_options()`, merged by engine, format, then option;
 - `parameters()`, the explorer's other arguments;
 - `final()`, which names what later layers cannot change.
 
@@ -1110,15 +1110,15 @@ The right-click menu has, in groups:
 
 Separators left without visible rows around them are hidden.
 
-### Format options
+### Engine options
 
-`format_options` is `{library: {format name or "*": {option: value}}}`. A support gets its library's options for "*",
+`engine_options` is `{engine key: {format name or "*": {option: value}}}`. A support gets its engine's options for "*",
 then for its format's name. It gets only those its options model has, as an object of that model.
 
 - An entry may instead be a function of the item's `Location`, returning the dict. It gives options per storage, e.g.
   by account. It is called at each view and recipe.
 - The launcher merges its layers option by option, even for such functions.
-- Unknown libraries, formats and options are `ValueError`s.
+- Unknown engines, formats and options are `ValueError`s.
 
 Secrets are declared on the options' fields, with `secret_field` and `secret_dict_field`. Generated code gets options
 only through `SupportOptions.code_value`. It drops secret fields and secret keys, and also keys that look like

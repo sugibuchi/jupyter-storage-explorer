@@ -29,7 +29,7 @@ instead: with Databricks Connect installed, this plugin's engine is not offered.
 - The plugin expects Spark to reach your storage already, e.g. through
   [`spark-defaults.conf`](https://spark.apache.org/docs/latest/configuration.html#overriding-configuration-directory)
   or a Databricks cluster's notebook.
-- `session_options` in [Format options](#format-options) can add Spark properties. With a session already running,
+- `session_options` in [Engine options](#engine-options) can add Spark properties. With a session already running,
   only those Spark can change at run time apply.
 
 ## Plugin options
@@ -55,15 +55,15 @@ def plugin_options():
 | `enabled`  | `True`  | Whether explorers use the plugin. `False`: not even imported.                                            |
 | `priority` | lowest  | Plugins of a higher priority come first: their supports are tried before the others'. Equal ones by key. |
 
-## Format options
+## Engine options
 
-The supports' options, in `format_options["pyspark"]` (by format, or `"*"` for all), configure the Spark session and
+The supports' options, in `engine_options["pyspark"]` (by format, or `"*"` for all), configure the Spark session and
 the reader, for the data browser and the code:
 
 ```python
 StorageExplorer(
     "abfs://lake@myaccount.dfs.core.windows.net/raw",
-    format_options={
+    engine_options={
         "pyspark": {
             "*": {
                 "session_options": {

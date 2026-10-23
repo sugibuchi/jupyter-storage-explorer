@@ -54,7 +54,7 @@ def system(tmp_path):
         def filesystems():
             return {"Lake": "memory://lake", "Scratch": "memory://scratch"}
 
-        def format_options():
+        def engine_options():
             return {
                 "polars": {
                     "*": {"storage_options": {"a": 1}},
@@ -81,7 +81,7 @@ class TestMerging:
             def filesystems():
                 return {"Mine": "memory://mine", "Scratch": None, "Lake": "memory://other"}
 
-            def format_options():
+            def engine_options():
                 return {
                     "polars": {"*": {"storage_options": {"b": 2}}},
                     "pandas": {"csv": {"storage_options": {"c": 3}}},
@@ -101,14 +101,14 @@ class TestMerging:
         }
         # Option by option, a value replaced whole (the user's storage
         # options replace the system's dict).
-        assert settings.format_options == {
+        assert settings.engine_options == {
             "polars": {
                 "*": {"storage_options": {"b": 2}},
                 "delta": {"use_pyarrow": True},
             },
             "pandas": {"csv": {"storage_options": {"c": 3}}},
         }
-        assert kwargs["format_options"] == settings.format_options
+        assert kwargs["engine_options"] == settings.engine_options
         assert kwargs["max_upload_bytes"] == 1000 and kwargs["height"] == "fill"
         assert settings.warnings == []
 
@@ -120,7 +120,7 @@ class TestMerging:
             tmp_path,
             "team",
             """
-            def format_options():
+            def engine_options():
                 return {
                     "polars": {
                         "*": lambda location: {"storage_options": {"at": location}},
@@ -132,17 +132,17 @@ class TestMerging:
             tmp_path,
             "user",
             """
-            def format_options():
+            def engine_options():
                 return {"polars": {"*": {"credential_provider": None}}}
             """,
         )
         settings = load_settings([user, team, system])
-        merged = settings.format_options["polars"]["*"]
+        merged = settings.engine_options["polars"]["*"]
         assert merged("here") == {
             "storage_options": {"at": "here"},
             "credential_provider": None,
         }
-        assert settings.format_options["polars"]["delta"] == {"use_pyarrow": True}
+        assert settings.engine_options["polars"]["delta"] == {"use_pyarrow": True}
 
     def test_lists_come_first_then_the_defaults(self, tmp_path):
         system = layer(
@@ -365,6 +365,51 @@ class TestFinal:
         assert warning.startswith(f"{path}: formats() is no longer used and is ignored")
         assert "supports()" in warning
 
+    def test_format_options_is_engine_options(self, tmp_path):
+        """format_options(), engine_options()' former name, is still taken,
+        also in final()."""
+        system = layer(
+            tmp_path,
+            "system",
+            """
+            def format_options():
+                return {"polars": {"*": {"storage_options": {"a": 1}}}}
+
+            def final():
+                return ["format_options"]
+            """,
+        )
+        user = layer(
+            tmp_path,
+            "user",
+            """
+            def engine_options():
+                return {"polars": {"*": {"storage_options": {"b": 2}}}}
+            """,
+        )
+        settings = load_settings([user, system])
+        assert settings.engine_options == {
+            "polars": {"*": {"storage_options": {"a": 1}}}
+        }
+        assert settings.warnings == [
+            f"{user}: engine_options is ignored: it is final in {system}"
+        ]
+
+    def test_engine_options_and_format_options_in_one_file(self, tmp_path):
+        path = layer(
+            tmp_path,
+            "system",
+            """
+            def engine_options():
+                return {}
+
+            def format_options():
+                return {}
+            """,
+        )
+        with pytest.raises(LauncherError, match="give engine_options\\(\\) only"):
+            load_settings([path])
+
     def test_unsafe_mode_blocked_for_everyone(self, tmp_path):
         # An administrator's layer blocks folder operations; a user's cannot
         # turn them back on.
@@ -442,7 +487,7 @@ class TestErrors:
             ),
             (
                 # The flat options of versions before 0.14.
-                "def format_options():\n"
+                "def engine_options():\n"
                 "    return {'polars_storage_options': {'anon': True}}",
                 "'polars_storage_options' must map format names",
             ),

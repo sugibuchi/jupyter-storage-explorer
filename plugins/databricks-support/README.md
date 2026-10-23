@@ -96,14 +96,14 @@ def plugin_options():
 | `enabled`  | `True`  | Whether explorers use the plugin. `False`: not even imported.                                           |
 | `priority` | lowest  | Plugins of a higher priority come first: their mappers are tried before the others'. Equal ones by key. |
 
-## Format options
+## Engine options
 
-The Databricks Connect engine's options are pyspark-support's, in `format_options["databricks-connect"]`:
+The Databricks Connect engine's options are pyspark-support's, in `engine_options["databricks-connect"]`:
 
 ```python
 StorageExplorer(
     filesystems={"Databricks": DatabricksFileSystem()},
-    format_options={
+    engine_options={
         "databricks-connect": {
             "*": {"session_options": {"spark.sql.ansi.enabled": "true"}},
             "csv": {"null_value": "NA"},
@@ -113,5 +113,5 @@ StorageExplorer(
 ```
 
 pyspark-support's
-[Format options](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/plugins/pyspark-support/README.md#format-options)
+[Engine options](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/plugins/pyspark-support/README.md#engine-options)
 lists them. `session_options` are set on the session at run time, as Databricks Connect takes no others.

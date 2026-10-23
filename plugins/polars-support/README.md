@@ -25,7 +25,7 @@ Without `deltalake` or `fastexcel`, the other formats still work.
 ### Prerequisites
 
 - The plugin expects polars to reach your storage already, as configured in the environment: polars reads the data
-  without options. You can still give options in [Format options](#format-options).
+  without options. You can still give options in [Engine options](#engine-options).
 - polars and deltalake do not use fsspec: they read cloud storage with Rust's object_store. Its configuration keys,
   which it also reads from environment variables, are listed for
   [AWS](https://docs.rs/object_store/latest/object_store/aws/enum.AmazonS3ConfigKey.html),
@@ -55,14 +55,14 @@ def plugin_options():
 | `enabled`  | `True`  | Whether explorers use the plugin. `False`: not even imported.                                            |
 | `priority` | lowest  | Plugins of a higher priority come first: their supports are tried before the others'. Equal ones by key. |
 
-## Format options
+## Engine options
 
-The supports' options, in `format_options["polars"]` (by format, or `"*"` for all), for the data browser and the code:
+The supports' options, in `engine_options["polars"]` (by format, or `"*"` for all), for the data browser and the code:
 
 ```python
 StorageExplorer(
     "s3://my-bucket/lake",
-    format_options={
+    engine_options={
         "polars": {
             "*": {"storage_options": {"aws_region": "eu-west-1"}},
             "csv": {"null_values": ["NA"], "try_parse_dates": True},

@@ -22,7 +22,7 @@ class Engine:
     ----------
     key : str
         Identifier, lower case, e.g. "polars": in ``engine_preference``, and
-        the key of its supports' options in ``format_options``.
+        the key of its supports' options in ``engine_options``.
     label : str
         Shown to the user, e.g. "Polars".
     requirements : tuple

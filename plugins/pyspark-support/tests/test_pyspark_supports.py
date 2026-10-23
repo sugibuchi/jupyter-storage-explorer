@@ -228,7 +228,7 @@ class TestOptions:
 
     @pytest.mark.parametrize("model", FORMAT_OPTIONS)
     def test_options_left_to_spark_by_default(self, model):
-        # format_options set only some, so each has a default: None, which
+        # engine_options set only some, so each has a default: None, which
         # leaves it to Spark, but CSV's header and inferSchema.
         assert len(fields(model)) > len(fields(PySparkOptions))
         expected = (
