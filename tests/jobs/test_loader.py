@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import threading
 
 from in_a_kernel import until
@@ -36,6 +37,27 @@ def test_work_runs_in_a_worker_and_ends_on_the_main_thread():
     assert result == "view"
     assert thread is threading.main_thread()
     assert threads["work"] is not threading.main_thread()
+
+
+def test_ends_in_the_submitting_context():
+    """``done`` sees the context variables of the request that submitted the
+    load, as ipykernel 7.0's send needs (see _jobs/runner.py)."""
+    request = contextvars.ContextVar("request")
+
+    async def main():
+        shown = []
+
+        def submit():
+            request.set("preview")
+            Loader().submit(
+                lambda: "view", lambda r: shown.append(request.get()), print
+            )
+
+        contextvars.copy_context().run(submit)
+        await until(lambda: shown)
+        return shown
+
+    assert asyncio.run(main()) == ["preview"]
 
 
 def test_a_cancelled_load_is_discarded():

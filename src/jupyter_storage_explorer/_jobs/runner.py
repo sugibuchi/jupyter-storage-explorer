@@ -6,12 +6,18 @@ widget state may change: reporting its progress (``notify``) and finishing
 it (e.g. refreshing the file list). In a kernel, the main thread runs an
 asyncio loop, which worker threads hand functions to; without one (tests,
 scripts), jobs run synchronously instead.
+
+Functions handed to the loop run in the context variables of the request
+that submitted the job, copied when it was submitted. The kernel keeps the
+request being answered there, which ``send`` needs: ipykernel 7.0, for one,
+fails to send in a worker thread's own, empty context.
 """
 
 from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+import contextvars
 import itertools
 import logging
 import threading
@@ -72,6 +78,16 @@ class _Inline(concurrent.futures.Executor):
         return future
 
 
+def main_thread(
+    loop: asyncio.AbstractEventLoop | None,
+) -> Callable[[Callable[[], None], contextvars.Context], Any]:
+    """How worker threads run a function on the main thread, in the context
+    given: handed to ``loop``, or, without one, at once."""
+    if loop is None:
+        return lambda fn, context: fn()
+    return lambda fn, context: loop.call_soon_threadsafe(fn, context=context)
+
+
 class JobRunner:
     """Runs jobs one at a time, in submission order.
 
@@ -90,15 +106,14 @@ class JobRunner:
             loop = asyncio.get_running_loop()
         except RuntimeError:
             loop = None
+        self._main = main_thread(loop)
         if loop is not None:
-            self._main: Callable[[Callable[[], None]], Any] = loop.call_soon_threadsafe
             self._executor: concurrent.futures.Executor = (
                 concurrent.futures.ThreadPoolExecutor(
                     max_workers=1, thread_name_prefix="jse-job"
                 )
             )
         else:
-            self._main = lambda fn: fn()
             self._executor = _Inline()
 
     def submit(
@@ -114,6 +129,7 @@ class JobRunner:
         ``update(job)`` runs on the main thread before each progress report
         (e.g. to show what it has changed so far)."""
         job = Job(id=f"{self._prefix}-{next(self._ids)}", kind=kind, title=title)
+        context = contextvars.copy_context()
         last = [0.0]
         lock = threading.Lock()
 
@@ -124,12 +140,12 @@ class JobRunner:
                 if now - last[0] < REPORT_INTERVAL:
                     return
                 last[0] = now
-            self._main(lambda: self._report(job, update))
+            self._main(lambda: self._report(job, update), context)
 
         job.progress = JobProgress(on_change=report)
         self.jobs[job.id] = job
         self._notify(job)
-        self._executor.submit(self._run, job, work, finish)
+        self._executor.submit(self._run, job, work, finish, context)
         return job
 
     def cancel(self, job_id: str) -> bool:
@@ -162,13 +178,14 @@ class JobRunner:
         job: Job,
         work: Callable[[JobProgress], dict[str, Any]],
         finish: Callable[[Job], None] | None,
+        context: contextvars.Context,
     ) -> None:
         """In the job's thread: do the work, then finish on the main thread."""
         if job.progress.cancelled:
             job.state = "cancelled"  # cancelled while queued
         else:
             job.state = "running"
-            self._main(lambda: self._notify_unless_finished(job))
+            self._main(lambda: self._notify_unless_finished(job), context)
             try:
                 job.result = work(job.progress) or {}
                 job.state = "cancelled" if job.result.get("cancelled") else "done"
@@ -178,7 +195,7 @@ class JobRunner:
                 log.exception("job %s (%s) failed", job.id, job.title)
                 job.state = "failed"
                 job.error = f"{type(exc).__name__}: {exc}"
-        self._main(lambda: self._end(job, finish))
+        self._main(lambda: self._end(job, finish), context)
 
     def _end(self, job: Job, finish: Callable[[Job], None] | None) -> None:
         if finish is not None:

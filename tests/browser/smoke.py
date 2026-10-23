@@ -516,6 +516,25 @@ def copy_paste(x: Explorer) -> None:
 
 
 @check
+def copy_paste_folder(x: Explorer) -> None:
+    # A folder of the lake, pasted into Scratch as a job: the job ends, and
+    # the folder shows without a refresh.
+    x.storage("Sales lake")
+    x.el.locator(".jse-crumb", has_text="/sales-lake").click()
+    # Unsafe mode for the copy, then again for the paste.
+    x.el.locator(".jse-unsafe").click()
+    x.menu(x.row("curated"), "Copy")
+    expect(x.status).to_contain_text("Copied curated")
+    x.top("Scratch")
+    x.el.locator(".jse-unsafe").click()
+    x.list_menu("Paste curated")
+    x.button("Paste").click()
+    expect(x.row("curated")).to_be_visible()
+    expect(x.el.locator(".jse-job")).to_have_count(0)
+    expect(x.status).to_contain_text("Pasted curated")
+
+
+@check
 def rename(x: Explorer) -> None:
     x.top("Scratch")
     paste_from_lake(x, "catalog.json")
@@ -1514,6 +1533,25 @@ def launcher_tab(lab: Lab, page: Page) -> None:
     tab = open_launcher_tab(lab, page)
     expect(tab.locator(".jse-tree .jse-node").first).to_contain_text("sales-lake")
     expect(tab.locator(".jse-fs-select")).to_be_visible()
+
+
+@lab_check
+def launcher_tab_paste_folder(lab: Lab, page: Page) -> None:
+    # A folder of the lake, pasted into Scratch's exports in a launcher tab:
+    # the job ends, and the folder shows without a refresh.
+    x = Explorer.__new__(Explorer)
+    x.lab, x.page = lab, page
+    x.el = open_launcher_tab(lab, page)  # on the lake's top folder
+    x.el.locator(".jse-unsafe").click()
+    x.menu(x.row("curated"), "Copy")
+    expect(x.status).to_contain_text("Copied curated")
+    tab_go(page, x.el, "Scratch", "exports")
+    x.el.locator(".jse-unsafe").click()
+    x.list_menu("Paste curated")
+    x.button("Paste").click()
+    expect(x.row("curated")).to_be_visible()
+    expect(x.el.locator(".jse-job")).to_have_count(0)
+    expect(x.status).to_contain_text("Pasted curated")
 
 
 @lab_check
