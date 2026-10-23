@@ -533,6 +533,25 @@ ties widgets to that kernel connection. The tab closes with the explorer or a ke
 
 Every storage is an fsspec filesystem. A `StorageExplorer` can hold several, by name.
 
+#### Why locations and mappers
+
+A URL does not always say where a file is. `s3://sales/orders.parquet` names a bucket and a key, but not the server.
+AWS, a MinIO server and another S3-compatible store can each have a bucket named "sales". So the same URL can name
+different files on different servers.
+
+Software working with one storage service at a time can ignore this. Storage Explorer cannot, as it is built to reach
+several storage services at once.
+
+What the URL leaves out is held by the client. An fsspec filesystem knows its S3 endpoint, or its Azure account, from
+its settings.
+
+Storage Explorer handles this with two classes:
+
+- A `Location` names a file or folder uniquely across storage services. An `S3Location` holds the endpoint besides the
+  bucket and the key, for example. Its `url` is the URL in its usual form, for libraries and users.
+- A `FileSystemMapper` maps between locations and an fsspec filesystem with its paths. It gives a path's location, and
+  the path of a location in a filesystem, if that filesystem reaches it.
+
 #### Locations
 
 A `Location`, in `location.py`, says where an item is, independently of fsspec's implementations. So it can travel to
