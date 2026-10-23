@@ -63,7 +63,12 @@ class TestCodeSnippet:
     def test_every_engine_by_default(self, lake):
         explorer = make("/", fs=lake)
         assert explorer._code_snippet
-        assert self.engines(explorer) == ["Polars", "PySpark", "pandas"]
+        assert self.engines(explorer) == [
+            "Databricks Connect",
+            "Polars",
+            "PySpark",
+            "pandas",
+        ]
 
     def test_disabled(self, lake):
         explorer = make("/", fs=lake, code_snippet="disabled")

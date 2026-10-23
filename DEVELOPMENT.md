@@ -15,7 +15,7 @@ explorer exactly, so an extra always installs the plugin of the explorer's versi
 |-------------------------------------------|---------------------------|-------------------------------------------------------------------------------------------------------|
 | `jupyter-storage-explorer`                | `.`                       | The widgets `StorageExplorer` and `DataExplorer`; pure Python, no build.                              |
 | `jupyter-storage-explorer-launcher`       | `launcher/`               | The JupyterLab launcher item, and `launch()` run in the tab it opens.                                 |
-| `jupyter-storage-explorer-<name>-support` | `plugins/<name>-support/` | The plugins: `polars`, `pandas`, `pyspark` (engines), `abfs` (Azure Data Lake Storage operations) and `databricks` (Databricks locations, experimental). |
+| `jupyter-storage-explorer-<name>-support` | `plugins/<name>-support/` | The plugins: `polars`, `pandas`, `pyspark` (engines), `abfs` (Azure Data Lake Storage operations) and `databricks` (Databricks locations and the Databricks Connect engine, experimental). |
 
 | Path                                                           | Contents                                                                                             |
 |----------------------------------------------------------------|------------------------------------------------------------------------------------------------------|
@@ -1077,6 +1077,16 @@ The explorer uses each kind of component as given in its arguments, then the plu
 
 A plugin's name, description, version, authors, license and URLs are its package's metadata. About shows them, also for
 plugins not loaded. Plugins never depend on their libraries: their `full` extra installs them.
+
+databricks-support depends on pyspark-support, of exactly its own version. Its engine, Databricks Connect, has
+pyspark-support's supports as subclasses, which override how the session is made:
+
+- `session` makes it with `DatabricksSession`, on the workspace of fsspec-databricks' filesystem when the item is on
+  one.
+- `session_code` and `session_import` give the code's lines.
+- `databricks-connect` brings a pyspark of its own, which makes no session with `SparkSession.builder`. pyspark-support's
+  `PySpark` package then counts as not installed, so its engine is not offered.
+- `databricks-connect` is not in databricks-support's `full` extra, as it replaces pyspark.
 
 Tests fake entry points to `tests/plugin_samples.py`. `tests/all_supports.py` has the supports of this repository's
 plugins, which the other tests use, and `NO_PLUGINS`, options disabling them all.

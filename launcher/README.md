@@ -42,9 +42,9 @@ The launcher has the same extras as `jupyter-storage-explorer`
 |------------|--------------------|---------------------------------------------------------------------|
 | `polars`   | `polars-support`   | Polars: Delta Lake, Parquet, CSV, JSON Lines, Excel                 |
 | `pandas`   | `pandas-support`   | pandas: Parquet, CSV, JSON Lines, Excel                             |
-| `pyspark`  | `pyspark-support`  | PySpark or Databricks Connect: Delta Lake, Parquet, CSV, JSON Lines |
+| `pyspark`  | `pyspark-support`  | PySpark: Delta Lake, Parquet, CSV, JSON Lines                       |
 | `abfs`     | `abfs-support`     | Azure Data Lake Storage Gen2                                        |
-| `databricks` | `databricks-support` | Databricks volumes and workspace files (experimental)           |
+| `databricks` | `databricks-support` | Databricks volumes and workspace files; Databricks Connect (experimental) |
 | `all`      | `all-supports`     | All of the above, but the experimental ones                         |
 
 Full extras are handy for a quick try. **Support-only extras are highly recommended for an IPython kernel whose data

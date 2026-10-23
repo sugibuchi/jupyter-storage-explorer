@@ -9,8 +9,8 @@ import pytest
 import traitlets
 from all_supports import all_supports
 from explorers import make, path_of
+from jupyter_storage_explorer_databricks_support import DatabricksConnect
 from jupyter_storage_explorer_polars_support import DeltaLakeByPolars
-from jupyter_storage_explorer_pyspark_support import DatabricksConnect
 
 from jupyter_storage_explorer._explorer.states import ExplorerStates
 from jupyter_storage_explorer._explorer.supports import SupportChain

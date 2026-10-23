@@ -16,7 +16,6 @@ import pytest
 from jupyter_storage_explorer_pyspark_support import (
     CsvByPySpark,
     CsvByPySparkOptions,
-    DatabricksConnect,
     DeltaLakeByPySpark,
     DeltaLakeByPySparkOptions,
     JsonLinesByPySpark,
@@ -116,11 +115,13 @@ def test_plugin_registered():
     assert CsvByPySpark in plugin.format_supports
 
 
-def test_engine_with_databricks_connect(monkeypatch):
-    monkeypatch.setattr(PySpark, "is_installed", lambda self: False)
-    monkeypatch.setattr(DatabricksConnect, "is_installed", lambda self: True)
-    assert PySparkEngine.is_installed()
-    assert [p.package for p in PySparkEngine.packages()] == ["databricks-connect"]
+def test_engine_not_with_databricks_connects_pyspark(monkeypatch):
+    # Its pyspark makes no session with SparkSession.builder: databricks-
+    # support's engine uses it instead.
+    monkeypatch.setattr(pyspark._DatabricksConnect, "is_installed", lambda self: True)
+    assert not PySpark().is_installed()
+    assert not PySparkEngine.is_installed()
+    assert [p.package for p in PySparkEngine.packages()] == ["pyspark"]
 
 
 def test_spark_url(tmp_path):
@@ -374,7 +375,7 @@ class Builder:
 
 
 class TestSession:
-    """spark_session(), with pyspark (and Databricks Connect) faked."""
+    """spark_session(), with pyspark faked."""
 
     @pytest.fixture
     def spark(self, monkeypatch):
@@ -390,7 +391,6 @@ class TestSession:
             "load",
             lambda self, sub=None: SimpleNamespace(SparkSession=SparkSession),
         )
-        monkeypatch.setattr(DatabricksConnect, "is_installed", lambda self: False)
         state.builder = builder
         return state
 

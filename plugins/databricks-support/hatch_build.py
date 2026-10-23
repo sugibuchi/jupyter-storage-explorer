@@ -1,11 +1,11 @@
-"""The plugin's dependencies: jupyter-storage-explorer at the plugin's own
+"""The plugin's dependencies: jupyter-storage-explorer and pyspark-support,
+whose supports the Databricks Connect engine extends, at the plugin's own
 version.
 
-The two are released together, with the same version (from the git tags),
-and the plugin may use the explorer's internals: any other version of the
-explorer may not work with it. Its libraries are not dependencies (see the
-"full" extra in pyproject.toml). Hatchling has resolved the version when it
-runs this hook.
+They are released together, with the same version (from the git tags), and
+the plugin may use their internals: any other version may not work with it.
+Its libraries are not dependencies (see the "full" extra in pyproject.toml).
+Hatchling has resolved the version when it runs this hook.
 """
 
 from __future__ import annotations
@@ -21,4 +21,7 @@ class PluginMetadataHook(MetadataHookInterface):
         # Without the local part (+g<commit>.d<date>) of development builds,
         # which "==" ignores, so an editable explorer of the same commit matches.
         version = Version(metadata["version"]).public
-        metadata["dependencies"] = [f"jupyter-storage-explorer=={version}"]
+        metadata["dependencies"] = [
+            f"jupyter-storage-explorer=={version}",
+            f"jupyter-storage-explorer-pyspark-support=={version}",
+        ]
