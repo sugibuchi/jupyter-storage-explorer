@@ -814,7 +814,7 @@ requires pyspark-support of its own version, whose supports its engine extends. 
    requires the explorer of exactly its own), and the package to the root's dev dependencies and `[tool.uv.sources]`.
 3. Give it a release workflow, `.github/workflows/release-<plugin>.yaml` (a copy of another's), and its PyPI project a
    trusted publisher for it (see [One-time setup for PyPI](../DEVELOPMENT.md#one-time-setup-for-pypi)).
-4. List it in the extras' tables of [docs/storage-explorer.md](storage-explorer.md#installation), the README and the
-   launcher's README.
+4. List it in [plugins/README.md](../plugins/README.md): in the table of its engine or storage, and in the extras'
+   table.
 5. Write its README as [The README](#the-readme) says, with the explorer's extras in its commands.
    `tests/test_plugin_readmes.py` checks it with the others.

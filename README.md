@@ -27,16 +27,35 @@ for all you can do with it.
 
 ## Highlights
 
-- **`StorageExplorer`**: any fsspec storage, several in one explorer; copy and paste between storages and notebooks.
-- **`DataExplorer`**: page, sort and filter any dataframe; get the result back in code.
-- **Previews** of Delta Lake, Parquet, CSV, JSON, Excel, text and images, with code to load them.
-- **Your engine**: query data with Polars, pandas or PySpark, chosen from the status bar.
-- **Plugins** for engines and storages: install one, and every explorer uses it; they never change the data libraries
-  of a shared environment. Databricks volumes and Databricks Connect come with an experimental one.
-- **Background file operations** with progress and Cancel; folder operations only in Unsafe mode, or always, or never.
-- **Work in JupyterLab**: open storage files in JupyterLab's own editors and viewers, and save them back; view tables
-  and files in tabs of their own.
-- **Bookmarks**, remembered queries, transfer rules, a JupyterLab launcher item and a side panel.
+- **`StorageExplorer`**: one explorer to browse them all. S3, Azure, Google Cloud Storage, local disks and anything else
+  fsspec reaches,
+  [side by side](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#several-storages-in-one-explorer).
+- **`DataExplorer`**: a table widget for your dataframes, more than meets the eye. Page, sort and filter large tables in
+  your data lake, and
+  [get the result back in code](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/data-explorer.md#the-result-in-code).
+- **[Launcher](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/launcher/README.md)**: right at home in
+  your Jupyter. Open the explorer in a tab or in the side panel,
+  [edit storage files](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#edit-files),
+  and copy and paste or
+  [drag and drop](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#drag-and-drop)
+  files between explorers, and more.
+- **Previews**: look before you load.
+  [Delta Lake, Parquet, CSV, JSON, Excel, text and images](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#supported-formats)
+  open at a click, with ready-to-run code that loads them into your notebook.
+- **Plugin support**: data professionals, start your engines. Plug your favourite data library, such as
+  [Polars, pandas or PySpark](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/plugins/README.md), into
+  the explorer, and browse data with it on the fly. Not supported yet? You, or your AI assistant, can
+  write a plugin for it: see [Developing plugins](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/development-plugin.md).
+- **Safe file operations**: keep calm and copy on. Copy, move and delete large folders
+  [in the background](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#background-operations),
+  with progress and Cancel. Folder operations wait for
+  [Unsafe mode](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#unsafe-operations),
+  and [transfer rules](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#transfer-policy)
+  keep data where it may go.
+- **Bookmarks**: there and back again.
+  [Bookmarks](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#bookmarks) and
+  [remembered queries](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#remembered-states)
+  bring you back where you left off.
 
 ## Quick start
 
@@ -64,8 +83,9 @@ pip install "jupyter-storage-explorer[polars]"
 
 `[polars]` adds the Polars plugin with Polars itself; other engines and storages are extras too, e.g.
 `[polars-support]` for the plugin alone, using the libraries you have (recommended in carefully set up kernels). See
+[Plugins](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/plugins/README.md) for all of them, and
 [Installation](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#installation)
-for all of them and the storage packages.
+for the storage packages.
 
 ```python
 from jupyter_storage_explorer import StorageExplorer

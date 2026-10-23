@@ -161,7 +161,7 @@ Write docs so that people can review them. That covers this file, DEVELOPMENT.md
 - The root README is the quick start and the highlights. Update its highlights for new features.
 - `docs/storage-explorer.md` has the user-facing details: installation, using the explorer, unsafe operations, the
   transfer policy, formats, engine options and the explorer's options.
-- Its Installation table lists the plugins, by their extras. Add new ones there.
+- `plugins/README.md` lists the plugins, with their extras and libraries. Add new ones there, not in other READMEs.
 - `docs/data-explorer.md` covers the data browser, `result()`, `on_change()`, `QuerySettings` and `DataExplorer`'s
   options.
 - DEVELOPMENT.md has custom icons, in "Customizing", and how the code fits together, in "Architecture".
