@@ -234,7 +234,7 @@ class StorageExplorer(
         refuses them whatever the page sends.
     code_snippet : "enabled", "disabled" or sequence of str, default "enabled"
         The right-click menu's "Python code": the code of every engine
-        ("enabled"), none and no such item ("disabled"), or that of the
+        installed ("enabled"), none and no such item ("disabled"), or that of the
         engines named, by key, e.g. ``["polars", "pyspark"]`` (``"python"``
         for the code of the formats without an engine, such as JSON). Names
         that no support has are left out with a warning.

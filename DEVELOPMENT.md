@@ -968,7 +968,7 @@ The chain answers:
 - `viewers(fmt)`: the engines that can view a format, then None for the built-in views;
 - `engine_for(fmt, engine)`: the engine chosen if it handles the format, else the built-in views;
 - `view(...)`, with one engine's supports;
-- `recipes(...)`: the first support with "recipe" of each library, installed or not, as the code may run elsewhere.
+- `recipes(...)`: the first installed support with "recipe" of each library, as for views.
 
 `engine_for` never falls back to another engine. If the chosen engine's support is not installed, it raises
 `LookupError`.

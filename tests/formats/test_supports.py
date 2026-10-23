@@ -10,7 +10,7 @@ from typing import get_args
 
 import polars as pl
 import pytest
-from all_supports import ALL_SUPPORTS, NO_PLUGINS, all_supports
+from all_supports import ALL_SUPPORTS, NO_PLUGINS, all_supports, installed_only
 from items import local_item
 from jupyter_storage_explorer_pandas_support import CsvByPandas, CsvByPandasOptions
 from jupyter_storage_explorer_polars_support import (
@@ -66,6 +66,14 @@ class Missing(Engine):
     key = "not-a-package"
     label = "Missing"
     requirements = (MissingPackage(),)
+
+
+class Duck(Engine):
+    """An engine needing no package: always installed."""
+
+    key = "duck"
+    label = "Duck"
+    requirements = ()
 
 
 def support(fmt=Csv, engine=None, capabilities=("view",), **methods):
@@ -197,12 +205,12 @@ class TestOptions:
             threads: int = 1
 
         duck = support(
-            engine=Missing,
+            engine=Duck,
             capabilities=("recipe",),
             recipe=lambda self, fmt, ctx, options: seen.append(options) or {},
         )
         duck.options_model = DuckOptions
-        chain = SupportChain([duck], {"not-a-package": {"*": {"threads": 4}}})
+        chain = SupportChain([duck], {"duck": {"*": {"threads": 4}}})
         chain.recipes(Csv(), make_item("/a.csv", b""))
         assert seen == [DuckOptions(threads=4)]
 
@@ -273,18 +281,14 @@ class TestOptionsByLocation:
     def test_the_items_location(self, make_item):
         seen = []
         recording = support(
-            engine=Missing,
+            engine=Duck,
             capabilities=("recipe",),
             recipe=lambda self, fmt, ctx, options: seen.append(options) or {},
         )
         recording.options_model = FsspecOptions
         chain = SupportChain(
             [recording],
-            {
-                "not-a-package": {
-                    "*": lambda location: {"storage_options": {"at": location.url}}
-                }
-            },
+            {"duck": {"*": lambda location: {"storage_options": {"at": location.url}}}},
         )
         chain.recipes(Csv(), make_item("/a.csv", b"", location=ACCOUNT_B))
         assert seen == [FsspecOptions(storage_options={"at": ACCOUNT_B.url})]
@@ -423,16 +427,20 @@ class TestChain:
         assert isinstance(view, QueryView)
         assert view.data.collect().columns == ["a", "b"]
 
-    def test_recipes_of_every_support_installed_or_not(self, make_item, monkeypatch):
-        monkeypatch.setattr(PythonPackage, "is_installed", lambda self: False)
+    def test_recipes_of_the_installed_supports_only(self, make_item, monkeypatch):
+        # As for views: no code the kernel could not run.
         chain = SupportChain(all_supports())
-        recipes = chain.recipes(Csv(), make_item("/a.csv", b"a\n"))
-        assert [(r.requirements[0].package, r.title) for r in recipes] == [
-            ("polars", "Load as DataFrame"),
-            ("pandas", "Load as DataFrame"),
-            ("databricks-connect", "Load as DataFrame"),
-            ("pyspark", "Load as DataFrame"),
-        ]
+        item = make_item("/a.csv", b"a\n")
+
+        def engines():
+            return [r.requirements[0].package for r in chain.recipes(Csv(), item)]
+
+        installed_only(monkeypatch, "polars", "pandas", "pyspark")
+        assert engines() == ["polars", "pandas", "pyspark"]
+        installed_only(monkeypatch, "databricks-connect")
+        assert engines() == ["databricks-connect"]  # its pyspark is not PySpark's
+        installed_only(monkeypatch)
+        assert engines() == []
 
     def test_recipes_by_title(self, make_item):
         several = support(
@@ -445,17 +453,24 @@ class TestChain:
             ("Load eagerly", "eager"),
         ]
 
-    def test_recipes_name_their_packages(self, make_item, memfs):
+    def test_recipes_name_their_packages(self, make_item, memfs, monkeypatch):
         memfs.pipe_file("/t/_delta_log/00000000000000000000.json", b"{}")
         chain = SupportChain(all_supports())
-        recipes = chain.recipes(DeltaLake(), make_item("/t"))
-        packages = [[r.package for r in recipe.requirements] for recipe in recipes]
-        assert packages == [
+
+        def packages():
+            recipes = chain.recipes(DeltaLake(), make_item("/t"))
+            return [[r.package for r in recipe.requirements] for recipe in recipes]
+
+        installed_only(monkeypatch, "polars", "deltalake", "pyspark", "delta-spark")
+        assert packages() == [
             ["polars", "deltalake"],
             ["polars", "deltalake"],
-            ["databricks-connect"],  # Databricks has Delta Lake
             ["pyspark", "delta-spark"],
         ]
+        installed_only(monkeypatch, "polars", "pyspark")  # nor Delta Lake's
+        assert packages() == []
+        installed_only(monkeypatch, "databricks-connect")
+        assert packages() == [["databricks-connect"]]  # Databricks has Delta Lake
 
     def test_query_view(self, tmp_path):
         path = tmp_path / "a.parquet"
@@ -469,29 +484,33 @@ class TestChain:
 class TestExplorer:
     """``supports`` are tried before the explorer's ``default_supports()``."""
 
-    def test_given_first(self, make_item, mem_explorer):
+    def test_given_first(self, make_item, mem_explorer, monkeypatch):
         duck = support(
             fmt=Parquet,
-            engine=Missing,
+            engine=Duck,
             capabilities=("recipe",),
             recipe=lambda *a, **k: {"Load as a duck": "duck"},
         )
         explorer = StorageExplorer(fs=mem_explorer._fs, supports=[duck])
+        installed_only(monkeypatch, "polars", "pyspark")
         recipes = explorer._supports.recipes(Parquet(), make_item("/a.parquet", b""))
-        # With the plugins': polars (lazily and eagerly), pandas,
-        # databricks-connect, pyspark; its engine, not among
-        # engine_preference's, after polars' and pandas', by key.
-        assert ("Load as a duck", "duck") in [(r.title, r.code) for r in recipes[3:]]
-        assert len(recipes) == 6
+        # With the plugins' installed: polars (lazily and eagerly), pyspark;
+        # its engine, not among engine_preference's, after polars', by key.
+        assert [(r.engine.key, r.title) for r in recipes] == [
+            ("polars", "Load as LazyFrame"),
+            ("polars", "Load as DataFrame"),
+            ("duck", "Load as a duck"),
+            ("pyspark", "Load as DataFrame"),
+        ]
 
-    def test_a_library_given_replaces_the_default_code(self, make_item):
+    def test_a_library_given_replaces_the_default_code(self, make_item, monkeypatch):
         explorer = StorageExplorer(fs=None, supports=[CsvByPolars()])
+        installed_only(monkeypatch, "polars", "pandas", "pyspark")
         recipes = explorer._supports.recipes(Csv(), make_item("/a.csv", b"a\n"))
         # Its recipes replace the default CsvByPolars': one each.
         assert [r.requirements[0].package for r in recipes] == [
             "polars",
             "pandas",
-            "databricks-connect",
             "pyspark",
         ]
 

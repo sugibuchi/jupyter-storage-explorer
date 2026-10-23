@@ -25,7 +25,6 @@ from jupyter_storage_explorer.formats import (
     TreeView,
     ViewLimits,
 )
-from jupyter_storage_explorer.formats.packages import Pillow
 
 CHAIN = SupportChain(all_supports())
 
@@ -238,10 +237,8 @@ class TestRecipes:
     def test_svg_has_no_recipe(self, make_item):
         assert CHAIN.recipes(Image(), make_item("/a.svg", b"<svg/>")) == []
 
-    def test_runs_in_a_new_notebook(self, make_item, monkeypatch):
-        # Its imports first, whatever the notebook has imported; missing
-        # packages are not installed by the code.
-        monkeypatch.setattr(Pillow, "is_installed", lambda self: False)
+    def test_runs_in_a_new_notebook(self, make_item):
+        # Its imports first, whatever the notebook has imported.
         [recipe] = CHAIN.recipes(Image(), make_item("/a.png", b""))
         assert recipe.title == "Open the image"
         assert recipe.code == (

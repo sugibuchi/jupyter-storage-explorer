@@ -310,7 +310,7 @@ class FormatSupport:
     ``engine_preference``) whose packages are installed and that lists
     "view" in ``capabilities``; "Preview as" offers the other engines. "Python
     code" shows the recipes of the first support listing "recipe" of each
-    engine, installed or not.
+    engine whose packages are installed.
 
     Rules for a subclass:
 

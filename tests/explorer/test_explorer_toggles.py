@@ -5,6 +5,7 @@ offered on demand, always or never; code_snippet, which engines' code
 from __future__ import annotations
 
 import pytest
+from all_supports import installed_only
 from explorers import make
 
 
@@ -60,15 +61,13 @@ class TestCodeSnippet:
         reply = explorer.request({"type": "menu_info", "rid": 1, "path": path})
         return sorted({recipe["engine"] for recipe in reply["recipes"]})
 
-    def test_every_engine_by_default(self, lake):
+    def test_every_engine_installed_by_default(self, lake, monkeypatch):
         explorer = make("/", fs=lake)
         assert explorer._code_snippet
-        assert self.engines(explorer) == [
-            "Databricks Connect",
-            "Polars",
-            "PySpark",
-            "pandas",
-        ]
+        installed_only(monkeypatch, "polars", "pandas", "pyspark")
+        assert self.engines(explorer) == ["Polars", "PySpark", "pandas"]
+        installed_only(monkeypatch, "polars", "databricks-connect")
+        assert self.engines(explorer) == ["Databricks Connect", "Polars"]
 
     def test_disabled(self, lake):
         explorer = make("/", fs=lake, code_snippet="disabled")

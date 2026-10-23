@@ -222,7 +222,8 @@ Returns code by title, e.g. `{"Load as DataFrame": "import duckdb\n..."}`, shown
 code**, with the engine's label. Titles say what the code does, not the library. The code runs as it is in a new
 notebook: imports first. Write it as class attributes `*_template` (`inspect.cleandoc`, just before the method), filled
 with `str.format`: `{url}` (`repr` of the location as the library reads it) and `{kwargs}` (`format_kwargs(...)`, which
-leaves out `None` and gives `", a=1, b=2"`). Recipes are shown whether the engine is installed or not.
+leaves out `None` and gives `", a=1, b=2"`). As with views, recipes are shown only when the support's packages are
+installed.
 
 ### Options
 

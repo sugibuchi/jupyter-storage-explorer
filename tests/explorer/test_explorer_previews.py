@@ -8,6 +8,7 @@ import itertools
 import threading
 
 import pytest
+from all_supports import installed_only
 from explorers import entries, make, path_of
 from format_samples import DUCKDB_BYTES, SQLITE_BYTES, DuckDB, SQLite
 from in_a_kernel import until
@@ -159,15 +160,17 @@ class TestPreview:
         assert reply["error"].startswith("the data is no longer open")
 
 
-def test_menu_info(mem_explorer):
+def test_menu_info(mem_explorer, monkeypatch):
+    # The recipes of the engines installed only, as for the views.
+    installed_only(monkeypatch, "fsspec", "polars", "pandas", "pyspark")
     reply = mem_explorer.request({"type": "menu_info", "rid": 1, "path": "/data/a.csv"})
     assert reply["formats"] == ["csv", "text"]
     assert [(r["packages"], r["title"]) for r in reply["recipes"]] == [
         (["polars"], "Load as DataFrame"),
         (["pandas"], "Load as DataFrame"),
-        (["databricks-connect"], "Load as DataFrame"),
         (["pyspark"], "Load as DataFrame"),
     ]
+    assert {v["engine"] for v in reply["views"]} >= {"polars", "pandas"}
     assert "query" not in reply  # known only once viewed
     folder = mem_explorer.request(
         {"type": "menu_info", "rid": 1, "path": "/data/table"}
