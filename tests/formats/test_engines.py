@@ -200,7 +200,6 @@ class TestExplorer:
         assert {(r["title"], r["engine"]) for r in reply["recipes"]} >= {
             ("Load as LazyFrame", "Polars"),
             ("Load as DataFrame", "pandas"),
-            ("Load as DataFrame", "PySpark"),
         }
         text = local.request(
             {"type": "menu_info", "rid": 2, "path": path_of(local, "notes.txt")}

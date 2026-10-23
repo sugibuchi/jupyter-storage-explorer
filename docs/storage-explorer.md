@@ -134,7 +134,7 @@ installed. Click it to choose another; the preview open is shown again with it, 
 
 - **View** *format* **in new tab**, **Preview** *format*: with the [engine](#engines) chosen
 - **View in new tab as**, **Preview as**: with another format or engine
-- **Python code**: code loading the data, for each engine
+- **Python code**: code loading the data, for each engine installed
 - **Copy**, **Cut**, **Copy URL**, **Copy path** (local disk), **Paste**
 - **Edit**, **Rename**, **Create a folder**, **Delete**
 - **Download to local**, **Download to JupyterLab**
@@ -347,8 +347,8 @@ StorageExplorer("s3://my-bucket/data", states=ExplorerStates("states.json", max_
 Folders of Parquet files written by Spark or Hive, partitioned or not, are supported; folders written by other tools
 may work, but are not guaranteed to.
 
-The preview and the data browser use the [engine](#engines) chosen. **Python code** shows the code of every engine,
-each recipe under its engine; a support given for an engine replaces that engine's default one.
+The preview and the data browser use the [engine](#engines) chosen. **Python code** shows the code of every engine
+installed in the kernel, each recipe under its engine. A support given for an engine replaces that engine's default one.
 The name identifies the format in CSS (see [Icons](../DEVELOPMENT.md#icons)) and in [Engine options](#engine-options).
 To handle a format with another library, see [Format supports](development-plugin.md#format-supports).
 
@@ -514,7 +514,7 @@ Operations and transfers:
 | Option                      | Meaning                                                                                                     |
 |-----------------------------|-------------------------------------------------------------------------------------------------------------|
 | `unsafe_mode="on_demand"`   | Folder operations: with the Unsafe mode slider, `"always"` or `"blocked"`; see [Unsafe operations](#unsafe-operations). |
-| `code_snippet="enabled"`    | **Python code**: every engine's code, `"disabled"` (no such item), or the engines named, e.g. `["polars", "pyspark"]` (`"python"` for JSON, text and images). |
+| `code_snippet="enabled"`    | **Python code**: the code of every engine installed, `"disabled"` (no such item), or the engines named, e.g. `["polars", "pyspark"]` (`"python"` for JSON, text and images). |
 | `transfer_policy=[...]`     | Where files may be copied or moved; see [Transfer policy](#transfer-policy).                                |
 
 For extending the explorer, tried before the defaults:

@@ -217,16 +217,16 @@ class SupportChain:
         raise ValueError(f"{ctx.name} cannot be viewed as {fmt.label}")
 
     def recipes(self, fmt: DataFormat, ctx: ItemContext) -> list[Recipe]:
-        """The recipes of the supports with "recipe" for ``fmt``, installed or
-        not (the code may run elsewhere): of each engine, those of the first
-        support that has code for the item, so a support given before the
-        defaults replaces the default one of its engine. Those without an
-        engine first, then by engine: those of ``engine_preference``, in its
-        order, then the others by key (installed or not), whichever plugin
-        they come from."""
+        """The recipes of the supports with "recipe" for ``fmt`` whose packages
+        are installed, as for views: code the kernel could not run is not
+        offered. Of each engine, those of the first support that has code for
+        the item, so a support given before the defaults replaces the default
+        one of its engine. Those without an engine first, then by engine:
+        those of ``engine_preference``, in its order, then the others by key,
+        whichever plugin they come from."""
         recipes: list[Recipe] = []
         libraries: set[str] = set()
-        for support in self._registered(fmt, "recipe"):
+        for support in self.of(fmt, "recipe"):
             if support.library() in libraries:
                 continue
             options = self.options_of(support, ctx.location)

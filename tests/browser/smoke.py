@@ -424,10 +424,12 @@ def python_code(x: Explorer) -> None:
     x.go("curated")
     x.row("orders.parquet").click(button="right")
     x.menu_item("Python code").hover()
+    code = x.el.locator(".jse-submenu .jse-menu-item:visible")
+    # The engines installed only: development has no pyspark.
+    expect(code.filter(has_text="(Polars)").first).to_be_visible()
+    expect(code.filter(has_text="(PySpark)")).to_have_count(0)
     # Each recipe by title, with its engine.
-    x.el.locator(".jse-submenu .jse-menu-item:visible").filter(
-        has_text="Load as DataFrame (Polars)"
-    ).click()
+    code.filter(has_text="Load as DataFrame (Polars)").click()
     dialog = x.el.locator(".jse-dialog:visible")
     expect(dialog).to_contain_text("Load as DataFrame (Polars)")
     expect(dialog).to_contain_text("read_parquet")
