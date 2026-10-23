@@ -85,7 +85,7 @@ def _workspace_config(fs: AbstractFileSystem | None) -> Any:
 
 class _ByDatabricksConnect:
     """pyspark-support's support of a format, with Databricks Connect's
-    sessions. Its options are those of the support, in ``format_options``
+    sessions. Its options are those of the support, in ``engine_options``
     under this engine's key."""
 
     engine = DatabricksConnectEngine

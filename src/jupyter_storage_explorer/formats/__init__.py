@@ -25,6 +25,7 @@ from jupyter_storage_explorer.formats.parquet import Parquet, ParquetLayout
 from jupyter_storage_explorer.formats.support import (
     LIBRARY_DEFAULT,
     Capability,
+    EngineOptions,
     FormatOptions,
     FormatSupport,
     LibraryDefault,
@@ -57,6 +58,7 @@ __all__ = [
     "DataFormat",
     "DeltaLake",
     "Engine",
+    "EngineOptions",
     "Excel",
     "FormatOptions",
     "FormatSupport",

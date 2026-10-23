@@ -14,7 +14,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, TypeAlias
 
-# At run time, not only for type checkers: FormatOptions, a public alias,
+# At run time, not only for type checkers: EngineOptions, a public alias,
 # names it.
 from jupyter_storage_explorer.location import Location
 
@@ -31,12 +31,15 @@ if TYPE_CHECKING:
 # loading it ("Python code").
 Capability: TypeAlias = Literal["view", "recipe"]
 
-# StorageExplorer's format_options: {library: {format name or "*": options}},
+# StorageExplorer's engine_options: {engine key: {format name or "*": options}},
 # the options a dict, or a function of the item's location returning one
-# (see StorageExplorer's format_options).
-FormatOptions: TypeAlias = Mapping[
+# (see StorageExplorer's engine_options).
+EngineOptions: TypeAlias = Mapping[
     str, Mapping[str, Mapping[str, Any] | Callable[[Location], Mapping[str, Any]]]
 ]
+# The former name of EngineOptions, kept as an alias. To be removed in the
+# major release.
+FormatOptions: TypeAlias = EngineOptions
 
 
 def format_kwargs(**kwargs: Any) -> str:
@@ -185,9 +188,9 @@ class SupportOptions:
     A support taking options names a subclass as its ``options_model``: a
     frozen, keyword-only dataclass whose fields are the options, each with a
     default, as users may set none of them. Explorers make one from
-    ``format_options`` and pass it to each of the support's methods.
+    ``engine_options`` and pass it to each of the support's methods.
     Subclasses of a library's options share them, e.g. its storage options,
-    which ``format_options``' ``"*"`` then sets for all its formats.
+    which ``engine_options``' ``"*"`` then sets for all its formats.
 
     Mark secrets with ``secret_field`` (a whole value) or
     ``secret_dict_field`` (keys of a mapping), and give generated code the
@@ -208,13 +211,13 @@ class SupportOptions:
     >>> StorageExplorer(
     ...     "data",
     ...     supports=[ParquetByDuckDB],
-    ...     format_options={"duckdb": {"*": {"config": {"threads": 4}}}},
+    ...     engine_options={"duckdb": {"*": {"config": {"threads": 4}}}},
     ... )
     """
 
     @classmethod
     def option_names(cls) -> frozenset[str]:
-        """The options: the names of the fields, those ``format_options`` may
+        """The options: the names of the fields, those ``engine_options`` may
         set.
 
         Returns
@@ -337,7 +340,7 @@ class FormatSupport:
     - Options are the fields of ``options_model`` (see ``SupportOptions``),
       never ``__init__`` arguments: explorers create supports without
       arguments, and give each the options of its engine's ``key``
-      (``format_options={"polars": {"*": {...}, "parquet": {...}}}``),
+      (``engine_options={"polars": {"*": {...}, "parquet": {...}}}``),
       those of its model's fields.
     - Import the packages through their ``PythonPackage``'s ``load()``, in the
       methods, never at the top of the module: they are optional.
@@ -349,7 +352,7 @@ class FormatSupport:
     engine : type of Engine or None
         The library handling it, e.g. polars-support's ``PolarsEngine``: what users choose to
         view with, what "Python code" names, and the key of its options in
-        ``format_options`` (its ``key``, e.g. "polars"). None for the
+        ``engine_options`` (its ``key``, e.g. "polars"). None for the
         built-in views needing no package (text, JSON, images), used for the
         formats the engine chosen does not handle; they take no options.
     additional_requirements : tuple of PythonPackage
@@ -389,7 +392,7 @@ class FormatSupport:
     @classmethod
     def library(cls) -> str:
         """Its engine's ``key`` ("python" for the built-in views): its
-        options' key in ``format_options``."""
+        options' key in ``engine_options``."""
         return cls.engine.key if cls.engine is not None else "python"
 
     def view(

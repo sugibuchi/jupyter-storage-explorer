@@ -1,6 +1,6 @@
 """The explorer's supports (``SupportChain``): the formats they handle, which
 support of a format does what, with which engine and options
-(``format_options``), the engines users choose from, and the "Python code"
+(``engine_options``), the engines users choose from, and the "Python code"
 recipes the supports give (``Recipe``)."""
 
 from __future__ import annotations
@@ -19,12 +19,12 @@ if TYPE_CHECKING:
     from jupyter_storage_explorer.formats.package import PythonPackage
     from jupyter_storage_explorer.formats.support import (
         Capability,
-        FormatOptions,
+        EngineOptions,
         SupportOptions,
     )
     from jupyter_storage_explorer.location import Location
 
-# In format_options, the options of a library for all formats.
+# In engine_options, the options of a library for all formats.
 ALL_FORMATS = "*"
 
 # The engines offered first when the explorer is given no engine_preference:
@@ -64,7 +64,7 @@ class SupportChain:
     options.
 
     Supports given as classes are created (without arguments). Each gets an
-    ``options_model`` made from ``format_options``, by engine key ("python"
+    ``options_model`` made from ``engine_options``, by engine key ("python"
     for the supports without an engine: the built-in views and code), then
     format name, or ``"*"`` for all formats, e.g. ``{"polars": {"*":
     {"storage_options": {...}}, "delta": {"use_pyarrow": True}}}``: those of
@@ -87,7 +87,7 @@ class SupportChain:
     ``DEFAULT_ENGINE_PREFERENCE``.
 
     ValueError for an engine key no support has (in ``engine_preference``
-    or ``format_options``), two engine classes of one key (an engine is
+    or ``engine_options``), two engine classes of one key (an engine is
     defined once, e.g. by its plugin, and imported by others), a format of
     no support, or an option no support of the engine (for that format) takes:
     a typo would otherwise be ignored. A function's options are checked when
@@ -97,13 +97,13 @@ class SupportChain:
     def __init__(
         self,
         supports: Iterable[type[FormatSupport] | FormatSupport],
-        format_options: FormatOptions | None = None,
+        engine_options: EngineOptions | None = None,
         *,
         formats: Iterable[type[DataFormat]] = (),
         engine_preference: Sequence[str] | None = None,
     ) -> None:
         self.supports = [_created(s) for s in supports]
-        self.format_options = format_options or {}
+        self.engine_options = engine_options or {}
         # The supports of each library (an engine's key, or "python"), and
         # the format names options may name: what options are checked against.
         self._libraries: dict[str, list[FormatSupport]] = {}
@@ -117,7 +117,7 @@ class SupportChain:
             for cls in dict.fromkeys([*(s.format for s in self.supports), *formats])
         ]
         self._format_names = [f.name for f in self.formats]
-        _check_options(self.format_options, self._libraries, self._format_names)
+        _check_options(self.engine_options, self._libraries, self._format_names)
         if engine_preference is None:
             engine_preference = DEFAULT_ENGINE_PREFERENCE
         else:
@@ -137,14 +137,14 @@ class SupportChain:
         has (see the class docstring). ValueError for options a function
         returned that no support of the library takes."""
         library = support.library()
-        by_format = self.format_options.get(library, {})
+        by_format = self.engine_options.get(library, {})
         merged: dict[str, Any] = {}
         for name in (ALL_FORMATS, support.format.name):
             values = by_format.get(name)
             if callable(values):
                 values = values(location)
-                _check_format_options(
-                    f"format_options[{library!r}][{name!r}]({location.url!r})",
+                _check_engine_options(
+                    f"engine_options[{library!r}][{name!r}]({location.url!r})",
                     name,
                     values,
                     self._libraries[library],
@@ -263,26 +263,26 @@ def _created(support: type[FormatSupport] | FormatSupport) -> FormatSupport:
 
 
 def _check_options(
-    format_options: Mapping[str, Any],
+    engine_options: Mapping[str, Any],
     libraries: Mapping[str, Sequence[FormatSupport]],
     format_names: Sequence[str],
 ) -> None:
-    """ValueError for ``format_options`` that no support takes (see
+    """ValueError for ``engine_options`` that no support takes (see
     ``SupportChain``); functions are checked when called."""
-    for library, by_format in format_options.items():
+    for library, by_format in engine_options.items():
         if library not in libraries:
             raise ValueError(
-                f"format_options: unknown engine {library!r}; "
+                f"engine_options: unknown engine {library!r}; "
                 f"choose from {sorted(libraries)}"
             )
         if not isinstance(by_format, dict):
             raise ValueError(
-                f"format_options[{library!r}] must be a dict of format names "
+                f"engine_options[{library!r}] must be a dict of format names "
                 f"(or {ALL_FORMATS!r}) to options"
             )
         for name, values in by_format.items():
-            _check_format_options(
-                f"format_options[{library!r}][{name!r}]",
+            _check_engine_options(
+                f"engine_options[{library!r}][{name!r}]",
                 name,
                 values,
                 libraries[library],
@@ -290,7 +290,7 @@ def _check_options(
             )
 
 
-def _check_format_options(
+def _check_engine_options(
     where: str,
     name: str,
     values: Any,

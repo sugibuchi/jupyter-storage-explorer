@@ -30,21 +30,8 @@ rules are stated explicitly, and the templates are complete. When generating a p
 | Filesystem mapper        | `FileSystemMapper` (`jupyter_storage_explorer.filesystems`)      | Gives a storage's paths their locations (URLs), and tells storages apart.       |
 | Plugin                   | `StorageExplorerPlugin` (`jupyter_storage_explorer`)             | Packages the above, so that every explorer uses them.                         |
 
-Each component can be tried on one explorer before packaging it, given as an argument:
-
-```python
-from jupyter_storage_explorer import StorageExplorer
-
-StorageExplorer(
-    "s3://bucket/data",
-    supports=[ParquetByDuckDB],         # FormatSupport classes (their formats come with them)
-    operations=[ServerSideCopy()],      # FileSystemOperations objects
-    filesystem_mappers=[MyMapper()],    # FileSystemMapper objects
-)
-```
-
-What an explorer is given comes first, then the plugins' components, then the defaults: for each job, the first that
-can do it does it.
+Each component can be tried in an explorer before packaging it: see
+[Trying components in an explorer](#trying-components-in-an-explorer).
 
 ## Rules for generated code
 
@@ -53,7 +40,7 @@ can do it does it.
 2. **Never add the backend library to the package's dependencies.** It goes in the `full` extra and the `dev`
    dependency group (see [Packaging a plugin](#packaging-a-plugin)).
 3. **Format supports take no `__init__` arguments.** Their options are the fields of their `options_model`, set
-   through `format_options`. Explorers create them from their classes.
+   through `engine_options`. Explorers create them from their classes.
 4. **List every implemented method in `capabilities`** (`"view"`, `"recipe"`), and implement every method listed. The
    explorer reads only `capabilities`: a method not listed is never called.
 5. **Raise `NotSupported`** (`FormatSupport.NotSupported`, `FileSystemOperations.NotSupported`) for what a component
@@ -78,7 +65,7 @@ from jupyter_storage_explorer.formats import DataFormat
 
 
 class Avro(DataFormat):
-    name = "avro"            # identifier: lower case, "-" between words; used in format_options and CSS
+    name = "avro"            # identifier: lower case, "-" between words; used in engine_options and CSS
     label = "Avro"           # shown to users
     priority = 0             # the highest-priority match wins (Delta 20 > Parquet 10 > 0 > Text -10)
     extensions = (".avro",)  # the default matches() checks these (lower case)
@@ -126,7 +113,7 @@ class DuckDB(PythonPackage):
 
 
 class DuckDBEngine(Engine):
-    key = "duckdb"          # in engine_preference and format_options
+    key = "duckdb"          # in engine_preference and engine_options
     label = "DuckDB"        # shown in the status bar's engine menu
     requirements = (DuckDB(),)  # all needed; alternatives: ((DuckDB(),), (MotherDuck(),))
 ```
@@ -240,7 +227,7 @@ leaves out `None` and gives `", a=1, b=2"`). Recipes are shown whether the engin
 ### Options
 
 A support's options are the fields of its `options_model`: a frozen, keyword-only dataclass subclassing
-`SupportOptions`, each field with a default. Users set them with `format_options`, by engine key, then format name or
+`SupportOptions`, each field with a default. Users set them with `engine_options`, by engine key, then format name or
 `"*"`; a function of the item's `Location` may give them per storage:
 
 ```python
@@ -261,7 +248,7 @@ class DuckDBOptions(SupportOptions):
 ```
 
 ```python
-StorageExplorer(format_options={"duckdb": {"*": {"memory_limit": "2GB"}, "parquet": {"config": {...}}}})
+StorageExplorer(engine_options={"duckdb": {"*": {"memory_limit": "2GB"}, "parquet": {"config": {...}}}})
 ```
 
 Recipes read options with `options.code_value(name)`: `None` for a secret field, and a mapping without its secret keys.
@@ -498,7 +485,7 @@ class DuckDBSupport(StorageExplorerPlugin):
     options: DuckDBSupportOptions
 
     @property
-    def format_supports(self):  # FormatSupport classes (their options: format_options)
+    def format_supports(self):  # FormatSupport classes (their options: engine_options)
         return (ParquetByDuckDB,)
 
     @property
@@ -522,7 +509,7 @@ __all__ = ["DuckDBEngine", "DuckDBOptions", "DuckDBSupport", "DuckDBSupportOptio
   has `enabled` (False: not used, not even imported) and `priority` (higher first; then by key). An option the model
   lacks is an error.
 - Plugin options configure the components made with arguments (operations, mappers). Format supports get theirs from
-  `format_options`, by engine key.
+  `engine_options`, by engine key.
 - `name`, `description` and `version` come from the package's metadata (`[project]`): the class does not repeat them.
 - A plugin that cannot be imported or created is left out with a warning, and greyed out in "About".
 
@@ -555,7 +542,7 @@ The first command installs them:
 ### Prerequisites
 
 - The plugin expects DuckDB to reach your storage already, as configured in the environment: DuckDB reads the data
-  without options. You can still give options in [Format options](#format-options).
+  without options. You can still give options in [Engine options](#engine-options).
 
 ## Plugin options
 
@@ -579,9 +566,9 @@ def plugin_options():
 | `enabled`  | `True`  | Whether explorers use the plugin. `False`: not even imported.                                            |
 | `priority` | lowest  | Plugins of a higher priority come first: their supports are tried before the others'. Equal ones by key. |
 
-## Format options
+## Engine options
 
-The supports' options, in `format_options["duckdb"]` (by format, or `"*"` for all), with an example, then a table per
+The supports' options, in `engine_options["duckdb"]` (by format, or `"*"` for all), with an example, then a table per
 format: each option, its default and its meaning, from the library's documentation.
 ````
 
@@ -665,6 +652,54 @@ def test_plugin_registered():
 Try it in a browser with `uv run jupyter lab`: the plugin's engine is in the status bar's engine menu, and ⚙ → **About**
 lists the plugin with its version.
 
+### Trying components in an explorer
+
+A component can be tried in a browser before it is packaged, without a plugin or an entry point. `StorageExplorer`
+takes components as arguments:
+
+```python
+from jupyter_storage_explorer import StorageExplorer
+from my_components import MyMapper, ParquetByDuckDB, ServerSideCopy
+
+StorageExplorer(
+    "s3://bucket/data",
+    supports=[ParquetByDuckDB],  # FormatSupport classes: their formats come with them
+    operations=[ServerSideCopy()],  # FileSystemOperations objects
+    filesystem_mappers=[MyMapper()],  # FileSystemMapper objects
+)
+```
+
+What an explorer is given comes first, then the plugins' components, then the defaults. For each job, the first that
+can do it does it. So the component tried handles what it can, and what it raises `NotSupported` for is left to the
+others.
+
+Restart the kernel after changing the component's module: Python imports a module only once.
+
+The launcher's tab and side panel take the same components from functions of the same names in `launcher.py`:
+
+```python
+def supports():
+    from my_components import ParquetByDuckDB
+
+    return [ParquetByDuckDB]
+
+
+def operations():
+    from my_components import ServerSideCopy
+
+    return [ServerSideCopy()]
+
+
+def filesystem_mappers():
+    from my_components import MyMapper
+
+    return [MyMapper()]
+```
+
+- The module must be importable by the tab's kernel, e.g. installed in its environment or on `PYTHONPATH`.
+- A later layer's components come before an earlier layer's, and all before the plugins' and the defaults.
+- Open a new tab after changing the module. A reloaded page keeps its kernel, and with it the module imported.
+
 ## Checklist
 
 - [ ] Package `jupyter-storage-explorer-<name>-support`, module `jupyter_storage_explorer_<name>_support`.
@@ -683,7 +718,7 @@ lists the plugin with its version.
 - [ ] Locations: frozen keyword-only dataclasses, normalized, without credentials.
 - [ ] Tests in the plugin's `tests/`, of its own code, run with `uv run pytest`; the plugin loads from its entry point.
 - [ ] README in the layout of [The README](#the-readme): Installation with the `full` extra's libraries,
-  Prerequisites, Plugin options with both examples, and the format options' tables.
+  Prerequisites, Plugin options with both examples, and the engine options' tables.
 
 ## Plugins of this repository
 
@@ -700,6 +735,7 @@ requires pyspark-support of its own version, whose supports its engine extends. 
    requires the explorer of exactly its own), and the package to the root's dev dependencies and `[tool.uv.sources]`.
 3. Give it a release workflow, `.github/workflows/release-<plugin>.yaml` (a copy of another's), and its PyPI project a
    trusted publisher for it (see [One-time setup for PyPI](../DEVELOPMENT.md#one-time-setup-for-pypi)).
-4. List it in [docs/storage-explorer.md](storage-explorer.md#plugins)'s table and the README's extras.
+4. List it in the extras' tables of [docs/storage-explorer.md](storage-explorer.md#installation), the README and the
+   launcher's README.
 5. Write its README as [The README](#the-readme) says, with the explorer's extras in its commands.
    `tests/test_plugin_readmes.py` checks it with the others.

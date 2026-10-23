@@ -2,7 +2,7 @@
 own packages: text and code (highlighted), Markdown and JSON from the
 beginning of the file, and images, which the browser shows; and code reading
 text and JSON with fsspec, and images with Pillow, for any storage. Their
-options are the "python" entry of ``format_options``."""
+options are the "python" entry of ``engine_options``."""
 
 from __future__ import annotations
 

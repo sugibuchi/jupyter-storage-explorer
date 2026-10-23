@@ -29,9 +29,9 @@ final. Each file may have these functions, all optional:
     ``[FormatSupport, ...]``: how formats' data is handled with libraries
     of your own (classes or objects), tried before the defaults; a later
     layer's come first. Their formats are detected with the defaults'.
-``format_options()``
-    ``{library: {format or "*": {option: value}}}`` for the supports (see
-    ``StorageExplorer``'s ``format_options``), merged option by option (a
+``engine_options()``
+    ``{engine key: {format or "*": {option: value}}}`` for the supports (see
+    ``StorageExplorer``'s ``engine_options``), merged option by option (a
     value is replaced whole, e.g. a ``storage_options`` dict). Options may
     be a function of the item's location returning them: merged with
     another layer's, the later layer's options still win option by option.
@@ -119,12 +119,16 @@ HOOKS = (
     "filesystems",
     "plugin_options",
     "supports",
-    "format_options",
+    "engine_options",
     "operations",
     "filesystem_mappers",
     "transfer_policy",
     "parameters",
 )
+
+# Former names of functions, taken for the new ones, also in final(). To be
+# removed in the major release.
+ALIASES = {"format_options": "engine_options"}
 
 # Functions launcher.py files may still have, no longer used: they are
 # ignored (and their names in final()), with a warning shown in the tab.
@@ -146,6 +150,8 @@ _NOT_PARAMETERS = frozenset(
         "filesystems",
         "plugin_options",
         "supports",
+        "engine_options",
+        # engine_options' former name (see ALIASES).
         "format_options",
         "operations",
         "filesystem_mappers",
@@ -173,8 +179,8 @@ class Settings:
     # {plugin key: {option: value}}
     plugin_options: dict[str, dict[str, Any]] = dataclasses.field(default_factory=dict)
     supports: list[Any] = dataclasses.field(default_factory=list)
-    # {library: {format or "*": a dict of options, or a function of the location}}
-    format_options: dict[str, dict[str, Any]] = dataclasses.field(default_factory=dict)
+    # {engine key: {format or "*": a dict of options, or a function of the location}}
+    engine_options: dict[str, dict[str, Any]] = dataclasses.field(default_factory=dict)
     operations: list[Any] = dataclasses.field(default_factory=list)
     filesystem_mappers: list[Any] = dataclasses.field(default_factory=list)
     transfer_policy: list[Any] = dataclasses.field(default_factory=list)
@@ -199,8 +205,8 @@ class Settings:
             kwargs["plugin_options"] = self.plugin_options
         if self.supports:
             kwargs["supports"] = list(self.supports)
-        if self.format_options:
-            kwargs["format_options"] = self.format_options
+        if self.engine_options:
+            kwargs["engine_options"] = self.engine_options
         if self.operations:
             kwargs["operations"] = list(self.operations)
         if self.filesystem_mappers:
@@ -331,7 +337,18 @@ def _read_layer(path: pathlib.Path) -> tuple[dict[str, Any], list[str]]:
             warnings.append(
                 f"{path}: {name}() is no longer used and is ignored; {instead}"
             )
-    return {name: _call(module, path, name) for name in (*HOOKS, "final")}, warnings
+    values = {name: _call(module, path, name) for name in (*HOOKS, "final")}
+    for old, new in ALIASES.items():
+        value = _call(module, path, old)
+        if value is not None:
+            if values[new] is not None:
+                raise LauncherError(
+                    f"{path}: give {new}() only: {old}() is its former name"
+                )
+            values[new] = value
+    if values["final"]:
+        values["final"] = [ALIASES.get(name, name) for name in values["final"]]
+    return values, warnings
 
 
 def _check_layer(
@@ -368,7 +385,7 @@ def _apply(
         if merge == "by name":
             getattr(settings, name).update(_mapping(value, path, name))
         elif merge == "by option":
-            _merge_format_options(settings.format_options, value, path)
+            _merge_engine_options(settings.engine_options, value, path)
         elif merge == "by plugin":
             _merge_plugin_options(settings.plugin_options, value, path)
         else:  # "first"
@@ -399,7 +416,7 @@ _MERGES = {
     "filesystems": "by name",
     "plugin_options": "by plugin",
     "supports": "first",
-    "format_options": "by option",
+    "engine_options": "by option",
     "operations": "first",
     "filesystem_mappers": "first",
     "transfer_policy": "first",
@@ -455,19 +472,19 @@ def _mapping(value: Any, path: pathlib.Path, name: str) -> dict[str, Any]:
     return value
 
 
-def _merge_format_options(
+def _merge_engine_options(
     merged: dict[str, dict[str, Any]], value: Any, path: pathlib.Path
 ) -> None:
-    """Merge one layer's ``format_options()`` into ``merged``: by library,
+    """Merge one layer's ``engine_options()`` into ``merged``: by engine,
     format, then option, so a layer changes one option of a format without
     restating the others. Whether the names exist is checked by the explorer."""
-    for library, by_format in _mapping(value, path, "format_options").items():
+    for library, by_format in _mapping(value, path, "engine_options").items():
         if not isinstance(by_format, dict) or not all(
             isinstance(options, dict) or callable(options)
             for options in by_format.values()
         ):
             raise LauncherError(
-                f"{path}: format_options(): {library!r} must map format names "
+                f"{path}: engine_options(): {library!r} must map format names "
                 f'(or "*") to dicts of options, or functions of the location '
                 f"returning them"
             )
@@ -519,7 +536,7 @@ def _check_parameter_name(name: str, path: pathlib.Path) -> None:
     if name in _NOT_PARAMETERS - {"self"}:
         raise LauncherError(
             f"{path}: parameters(): {name} is set by its own function, not parameters()"
-            if name in HOOKS
+            if name in HOOKS or name in ALIASES
             else f"{path}: parameters(): {name} is set by the launcher (use filesystems())"
         )
     if name not in _parameter_names():
