@@ -32,6 +32,8 @@ databricks-support = "jupyter_storage_explorer_databricks_support:DatabricksSupp
 [project.optional-dependencies]
 full = [
     "fsspec-databricks>=0.1.10",
+    # Replaces pyspark: never beside it.
+    "databricks-connect>=13.3",
 ]
 
 [build-system]

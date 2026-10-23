@@ -1086,7 +1086,8 @@ pyspark-support's supports as subclasses, which override how the session is made
 - `session_code` and `session_import` give the code's lines.
 - `databricks-connect` brings a pyspark of its own, which makes no session with `SparkSession.builder`. pyspark-support's
   `PySpark` package then counts as not installed, so its engine is not offered.
-- `databricks-connect` is not in databricks-support's `full` extra, as it replaces pyspark.
+- `databricks-connect` is in databricks-support's `full` extra. It replaces pyspark, so the two extras must not be
+  installed together.
 
 Tests fake entry points to `tests/plugin_samples.py`. `tests/all_supports.py` has the supports of this repository's
 plugins, which the other tests use, and `NO_PLUGINS`, options disabling them all.

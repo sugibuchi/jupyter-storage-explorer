@@ -38,7 +38,7 @@ Engines and storages come as plugins, installed with extras of two kinds:
 | `pandas`   | `pandas-support`   | pandas: Parquet, CSV, JSON Lines, Excel                                       | pandas, pyarrow, openpyxl          |
 | `pyspark`  | `pyspark-support`  | PySpark: Delta Lake, Parquet, CSV, JSON Lines                                 | pyspark, delta-spark               |
 | `abfs`     | `abfs-support`     | Azure Data Lake Storage Gen2: folders moved in one step, copies on the server | adlfs, azure-storage-file-datalake |
-| `databricks` | `databricks-support` | Databricks volumes and workspace files, by workspace; Databricks Connect (experimental) | fsspec-databricks                  |
+| `databricks` | `databricks-support` | Databricks volumes and workspace files, by workspace; Databricks Connect (experimental) | fsspec-databricks, databricks-connect |
 | `all`      | `all-supports`     | All of the above, but the experimental ones                                   | All of the above, but the experimental ones |
 
 Full extras are handy for a quick try. **Support-only extras are highly recommended for an IPython kernel whose data

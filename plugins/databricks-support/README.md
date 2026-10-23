@@ -13,22 +13,23 @@ read Delta Lake tables, Parquet, CSV and JSON Lines on Databricks compute.
 ## Installation
 
 ```bash
-pip install "jupyter-storage-explorer[databricks]"          # the plugin and its library
-pip install "jupyter-storage-explorer[databricks-support]"  # the plugin only, with the library you have
+pip install "jupyter-storage-explorer[databricks]"          # the plugin and its libraries
+pip install "jupyter-storage-explorer[databricks-support]"  # the plugin only, with the libraries you have
 ```
 
-The library is not the plugin's dependency, so that installing it never changes those of a shared environment. The
-first command installs it, as does `jupyter-storage-explorer-databricks-support[full]`:
+The libraries are not the plugin's dependencies, so that installing it never changes those of a shared environment.
+The first command installs them, as does `jupyter-storage-explorer-databricks-support[full]`:
 
-| Library             | Needed for                                    |
-|---------------------|-----------------------------------------------|
-| `fsspec-databricks` | Mandatory: the workspace's files, through fsspec |
+| Library              | Needed for                                       |
+|----------------------|--------------------------------------------------|
+| `fsspec-databricks`  | Mandatory: the workspace's files, through fsspec |
+| `databricks-connect` | The Databricks Connect engine                    |
+
+`databricks-connect` replaces `pyspark`: the two must not be installed together. Beside pyspark, install the plugin
+alone. Databricks recommends a `databricks-connect` of your compute's Databricks Runtime version.
 
 The plugin is not in the explorer's `all` and `all-supports` extras: install it on purpose. It installs
 pyspark-support, whose supports the Databricks Connect engine uses.
-
-For the Databricks Connect engine, install `databricks-connect` too, of your compute's version. It is not in the `full`
-extra, as it replaces `pyspark`: the two must not be installed together.
 
 ### Prerequisites
 
