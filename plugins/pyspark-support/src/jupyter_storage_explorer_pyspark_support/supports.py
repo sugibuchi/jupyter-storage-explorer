@@ -41,8 +41,21 @@ _SPARK_SCHEMES = {"abfs": "abfss", "az": "abfss", "s3": "s3a"}
 
 
 class PySpark(PythonPackage):
+    """pyspark, with which sessions are made by ``SparkSession.builder``."""
+
     package = "pyspark"
     import_name = "pyspark"
+
+    def is_installed(self) -> bool:
+        # Databricks Connect brings a pyspark of its own, whose builder makes
+        # no session (databricks-support's engine uses it): not this one.
+        return super().is_installed() and not _DatabricksConnect().is_installed()
+
+
+class _DatabricksConnect(PythonPackage):
+    package = "databricks-connect"
+    # "databricks" alone is a namespace other packages share (databricks-sdk).
+    import_name = "databricks.connect"
 
 
 class DeltaSpark(PythonPackage):
@@ -50,15 +63,6 @@ class DeltaSpark(PythonPackage):
 
     package = "delta-spark"
     import_name = "delta"
-
-
-class DatabricksConnect(PythonPackage):
-    """Spark sessions on a Databricks cluster: PySpark's API without pyspark
-    itself, an alternative of ``PySparkEngine``."""
-
-    package = "databricks-connect"
-    # "databricks" alone is a namespace other packages share (databricks-sdk).
-    import_name = "databricks.connect"
 
 
 def spark_url(url: str) -> str:
@@ -82,29 +86,17 @@ def spark_url(url: str) -> str:
 def spark_session(session_options: Mapping[str, Any] | None = None) -> Any:
     """The Spark session views read with: the active one (e.g. the
     notebook's on Databricks, or one the user created in the kernel), else
-    one created, by Databricks Connect if it is installed (its own pyspark
-    needs it), else by pyspark.
+    one created by pyspark.
 
     ``session_options`` are given to the session's builder (``config(key,
     value)``); with a session already running, ``getOrCreate`` returns it,
-    applying those Spark can still change (runtime configuration). A builder
-    without ``config`` (some Databricks Connect versions) gets them as the
-    session's runtime configuration (``spark.conf.set``) instead."""
+    applying those Spark can still change (runtime configuration)."""
     spark_session_class = PySpark().load("sql").SparkSession
     active = spark_session_class.getActiveSession()
     if active is not None and not session_options:
         return active
-    if active is None and DatabricksConnect().is_installed():
-        builder = DatabricksConnect().load().DatabricksSession.builder
-    else:
-        builder = spark_session_class.builder
-    config = dict(session_options or {})
-    if not hasattr(builder, "config"):
-        session = builder.getOrCreate()
-        for key, value in config.items():
-            session.conf.set(key, value)
-        return session
-    for key, value in config.items():
+    builder = spark_session_class.builder
+    for key, value in (session_options or {}).items():
         builder = builder.config(key, value)
     return builder.getOrCreate()
 
@@ -114,11 +106,11 @@ def _url(ctx: ItemContext) -> str:
 
 
 class PySparkEngine(Engine):
-    """Spark's Python API, with pyspark or with Databricks Connect."""
+    """Spark's Python API, with pyspark."""
 
     key = "pyspark"
     label = "PySpark"
-    requirements = ((PySpark(),), (DatabricksConnect(),))
+    requirements = (PySpark(),)
 
 
 # The fields of PySparkOptions that are not one reader option each.
@@ -365,10 +357,24 @@ class DeltaLakeByPySparkOptions(PySparkOptions):
 
 
 class _BySpark(FormatSupport):
-    """A format Spark reads, with its session and reader options."""
+    """A format Spark reads, with its session and reader options.
+
+    Subclasses for another way of making sessions (databricks-support's, by
+    Databricks Connect) override ``session``, ``session_import`` and
+    ``session_code``, and set their own ``engine``."""
 
     engine = PySparkEngine
     options_model = PySparkOptions
+    # The code's import of what ``session_code`` uses.
+    session_import = "from pyspark.sql import SparkSession"
+
+    def session(self, ctx: ItemContext, options: PySparkOptions) -> Any:
+        """The Spark session to read ``ctx``'s item with."""
+        return spark_session(options.session_options)
+
+    def session_code(self, ctx: ItemContext, options: PySparkOptions) -> str:
+        """The code's lines making the session, ``spark``."""
+        return options.session_code()
 
 
 AS_DATA_FRAME = "Load as DataFrame"
@@ -392,11 +398,11 @@ class CsvByPySpark(_BySpark):
         if options.sep is None:
             text, _ = ctx.head_text(limits.max_bytes)
             defaults["sep"] = fmt.separator(ctx.name, text)
-        spark = spark_session(options.session_options)
+        spark = self.session(ctx, options)
         return QueryView(data=options.reader(spark, defaults).csv(_url(ctx)))
 
     data_frame_template = cleandoc("""
-        from pyspark.sql import SparkSession
+        {session_import}
 
         {session}
         df = spark.read{reader}.csv({url})
@@ -408,7 +414,8 @@ class CsvByPySpark(_BySpark):
         defaults = {} if options.sep is not None else {"sep": fmt.code_separator(ctx)}
         return {
             AS_DATA_FRAME: self.data_frame_template.format(
-                session=options.session_code(),
+                session_import=self.session_import,
+                session=self.session_code(ctx, options),
                 reader=options.reader_code(defaults),
                 url=repr(_url(ctx)),
             )
@@ -427,12 +434,12 @@ class JsonLinesByPySpark(_BySpark):
         options: JsonLinesByPySparkOptions,
         limits: ViewLimits,
     ) -> View:
-        spark = spark_session(options.session_options)
+        spark = self.session(ctx, options)
         return QueryView(data=options.reader(spark).json(_url(ctx)))
 
     # Spark reads JSON Lines (one record per line) by default.
     data_frame_template = cleandoc("""
-        from pyspark.sql import SparkSession
+        {session_import}
 
         {session}
         df = spark.read{reader}.json({url})
@@ -442,7 +449,8 @@ class JsonLinesByPySpark(_BySpark):
         self, fmt: JsonLines, ctx: ItemContext, options: JsonLinesByPySparkOptions
     ) -> dict[str, str]:
         code = self.data_frame_template.format(
-            session=options.session_code(),
+            session_import=self.session_import,
+            session=self.session_code(ctx, options),
             reader=options.reader_code(),
             url=repr(_url(ctx)),
         )
@@ -462,12 +470,12 @@ class ParquetByPySpark(_BySpark):
         limits: ViewLimits,
     ) -> View:
         # A file or a folder of them; Spark finds partitions itself.
-        spark = spark_session(options.session_options)
+        spark = self.session(ctx, options)
         return QueryView(data=options.reader(spark).parquet(_url(ctx)))
 
     # A file or a folder of them; Spark finds partitions itself.
     data_frame_template = cleandoc("""
-        from pyspark.sql import SparkSession
+        {session_import}
 
         {session}
         df = spark.read{reader}.parquet({url})
@@ -477,7 +485,8 @@ class ParquetByPySpark(_BySpark):
         self, fmt: Parquet, ctx: ItemContext, options: ParquetByPySparkOptions
     ) -> dict[str, str]:
         code = self.data_frame_template.format(
-            session=options.session_code(),
+            session_import=self.session_import,
+            session=self.session_code(ctx, options),
             reader=options.reader_code(),
             url=repr(_url(ctx)),
         )
@@ -498,12 +507,12 @@ class DeltaLakeByPySpark(_BySpark):
         options: DeltaLakeByPySparkOptions,
         limits: ViewLimits,
     ) -> View:
-        spark = spark_session(options.session_options)
+        spark = self.session(ctx, options)
         data = options.reader(spark).format("delta").load(_url(ctx))
         return QueryView(data=data)
 
     data_frame_template = cleandoc("""
-        from pyspark.sql import SparkSession
+        {session_import}
 
         # Needs Delta Lake in the Spark session (Databricks has it)
         {session}
@@ -514,7 +523,8 @@ class DeltaLakeByPySpark(_BySpark):
         self, fmt: DeltaLake, ctx: ItemContext, options: DeltaLakeByPySparkOptions
     ) -> dict[str, str]:
         code = self.data_frame_template.format(
-            session=options.session_code(),
+            session_import=self.session_import,
+            session=self.session_code(ctx, options),
             reader=options.reader_code(),
             url=repr(_url(ctx)),
         )

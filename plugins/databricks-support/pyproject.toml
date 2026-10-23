@@ -32,6 +32,8 @@ databricks-support = "jupyter_storage_explorer_databricks_support:DatabricksSupp
 [project.optional-dependencies]
 full = [
     "fsspec-databricks>=0.1.10",
+    # Replaces pyspark: never beside it.
+    "databricks-connect>=13.3",
 ]
 
 [build-system]
@@ -43,8 +45,8 @@ build-backend = "hatchling.build"
 source = "vcs"
 raw-options = { root = "../..", version_scheme = "post-release" }
 
-# The dependencies, set by hatch_build.py: jupyter-storage-explorer at the
-# plugin's own version.
+# The dependencies, set by hatch_build.py: jupyter-storage-explorer and
+# pyspark-support at the plugin's own version.
 [tool.hatch.metadata.hooks.custom]
 
 [tool.hatch.build.targets.wheel]
@@ -62,6 +64,7 @@ cache-keys = [{ file = "pyproject.toml" }, { file = "hatch_build.py" }, { git = 
 
 [tool.uv.sources]
 jupyter-storage-explorer = { workspace = true }
+jupyter-storage-explorer-pyspark-support = { workspace = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

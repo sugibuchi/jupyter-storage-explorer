@@ -165,6 +165,7 @@ def test_menu_info(mem_explorer):
     assert [(r["packages"], r["title"]) for r in reply["recipes"]] == [
         (["polars"], "Load as DataFrame"),
         (["pandas"], "Load as DataFrame"),
+        (["databricks-connect"], "Load as DataFrame"),
         (["pyspark"], "Load as DataFrame"),
     ]
     assert "query" not in reply  # known only once viewed

@@ -2,8 +2,8 @@
 
 PySpark support for Storage Explorer,
 the [Jupyter Storage Explorer](https://github.com/sugibuchi/jupyter-storage-explorer) plugin for
-PySpark (or Databricks Connect) as an engine: the data browser on Spark DataFrames of Delta Lake tables, Parquet, CSV
-and JSON Lines, and code loading them.
+PySpark as an engine: the data browser on Spark DataFrames of Delta Lake tables, Parquet, CSV and JSON Lines, and code
+loading them.
 
 ## Installation
 
@@ -17,17 +17,18 @@ The first command installs them, as does `jupyter-storage-explorer-pyspark-suppo
 
 | Library       | Needed for                                                       |
 |---------------|------------------------------------------------------------------|
-| `pyspark`     | Mandatory: the engine, unless `databricks-connect` is installed  |
+| `pyspark`     | Mandatory: the engine                                            |
 | `delta-spark` | Delta Lake tables                                                |
 
-With Databricks Connect, install the plugin alone: `databricks-connect` replaces `pyspark`, which must then not be
-installed beside it. Without `delta-spark`, the other formats still work.
+Without `delta-spark`, the other formats still work. For Databricks Connect, use
+[databricks-support](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/plugins/databricks-support/README.md)
+instead: with Databricks Connect installed, this plugin's engine is not offered.
 
 ### Prerequisites
 
 - The plugin expects Spark to reach your storage already, e.g. through
   [`spark-defaults.conf`](https://spark.apache.org/docs/latest/configuration.html#overriding-configuration-directory)
-  or a Databricks cluster.
+  or a Databricks cluster's notebook.
 - `session_options` in [Format options](#format-options) can add Spark properties. With a session already running,
   only those Spark can change at run time apply.
 

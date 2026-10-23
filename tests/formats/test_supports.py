@@ -430,6 +430,7 @@ class TestChain:
         assert [(r.requirements[0].package, r.title) for r in recipes] == [
             ("polars", "Load as DataFrame"),
             ("pandas", "Load as DataFrame"),
+            ("databricks-connect", "Load as DataFrame"),
             ("pyspark", "Load as DataFrame"),
         ]
 
@@ -452,6 +453,7 @@ class TestChain:
         assert packages == [
             ["polars", "deltalake"],
             ["polars", "deltalake"],
+            ["databricks-connect"],  # Databricks has Delta Lake
             ["pyspark", "delta-spark"],
         ]
 
@@ -476,10 +478,11 @@ class TestExplorer:
         )
         explorer = StorageExplorer(fs=mem_explorer._fs, supports=[duck])
         recipes = explorer._supports.recipes(Parquet(), make_item("/a.parquet", b""))
-        # With the plugins': polars (lazily and eagerly), pandas, pyspark; its
-        # engine, not among engine_preference's, after polars' and pandas', by key.
+        # With the plugins': polars (lazily and eagerly), pandas,
+        # databricks-connect, pyspark; its engine, not among
+        # engine_preference's, after polars' and pandas', by key.
         assert ("Load as a duck", "duck") in [(r.title, r.code) for r in recipes[3:]]
-        assert len(recipes) == 5
+        assert len(recipes) == 6
 
     def test_a_library_given_replaces_the_default_code(self, make_item):
         explorer = StorageExplorer(fs=None, supports=[CsvByPolars()])
@@ -488,6 +491,7 @@ class TestExplorer:
         assert [r.requirements[0].package for r in recipes] == [
             "polars",
             "pandas",
+            "databricks-connect",
             "pyspark",
         ]
 

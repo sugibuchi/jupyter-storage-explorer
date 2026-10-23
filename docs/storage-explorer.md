@@ -36,9 +36,9 @@ Engines and storages come as plugins, installed with extras of two kinds:
 |------------|--------------------|-------------------------------------------------------------------------------|------------------------------------|
 | `polars`   | `polars-support`   | Polars: Delta Lake, Parquet, CSV, JSON Lines, Excel                           | polars, deltalake, fastexcel       |
 | `pandas`   | `pandas-support`   | pandas: Parquet, CSV, JSON Lines, Excel                                       | pandas, pyarrow, openpyxl          |
-| `pyspark`  | `pyspark-support`  | PySpark or Databricks Connect: Delta Lake, Parquet, CSV, JSON Lines           | pyspark, delta-spark               |
+| `pyspark`  | `pyspark-support`  | PySpark: Delta Lake, Parquet, CSV, JSON Lines                                 | pyspark, delta-spark               |
 | `abfs`     | `abfs-support`     | Azure Data Lake Storage Gen2: folders moved in one step, copies on the server | adlfs, azure-storage-file-datalake |
-| `databricks` | `databricks-support` | Databricks volumes and workspace files, by workspace (experimental)       | fsspec-databricks                  |
+| `databricks` | `databricks-support` | Databricks volumes and workspace files, by workspace; Databricks Connect (experimental) | fsspec-databricks, databricks-connect |
 | `all`      | `all-supports`     | All of the above, but the experimental ones                                   | All of the above, but the experimental ones |
 
 Full extras are handy for a quick try. **Support-only extras are highly recommended for an IPython kernel whose data
@@ -544,9 +544,9 @@ StorageExplorer(
 |-------------------|-----------------------------------------------------------------------------------------------|--------------------------------------------------|
 | [`polars-support`](../plugins/polars-support/README.md)  | Polars: Delta Lake, Parquet, CSV, JSON Lines, Excel                                           | `pip install "jupyter-storage-explorer[polars]"`  |
 | [`pandas-support`](../plugins/pandas-support/README.md)  | pandas: Parquet, CSV, JSON Lines, Excel                                                       | `pip install "jupyter-storage-explorer[pandas]"`  |
-| [`pyspark-support`](../plugins/pyspark-support/README.md) | PySpark or Databricks Connect: Delta Lake, Parquet, CSV, JSON Lines                           | `pip install "jupyter-storage-explorer[pyspark]"` |
+| [`pyspark-support`](../plugins/pyspark-support/README.md) | PySpark: Delta Lake, Parquet, CSV, JSON Lines                                                 | `pip install "jupyter-storage-explorer[pyspark]"` |
 | [`abfs-support`](../plugins/abfs-support/README.md)    | Azure Data Lake Storage Gen2: folders moved in one step, copies within an account on the server (`concurrency`, default 64, at once), empty folders | `pip install "jupyter-storage-explorer[abfs]"`    |
-| [`databricks-support`](../plugins/databricks-support/README.md) | Databricks: Unity Catalog volumes, workspace files and legacy DBFS through fsspec-databricks, with locations naming the workspace. Experimental: not for production; feedback welcome | `pip install "jupyter-storage-explorer[databricks]"` |
+| [`databricks-support`](../plugins/databricks-support/README.md) | Databricks: Unity Catalog volumes, workspace files and legacy DBFS through fsspec-databricks, with locations naming the workspace; Databricks Connect as an engine. Experimental: not for production; feedback welcome | `pip install "jupyter-storage-explorer[databricks]"` |
 
 Each plugin's README has its options (`plugin_options`, and `format_options` for its engine).
 
