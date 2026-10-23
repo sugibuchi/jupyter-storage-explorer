@@ -208,8 +208,12 @@ administrator can make it final (see [Layers](../launcher/README.md#layers-of-th
 ## File transfers between storages
 
 Within a storage, files are moved and copied by the storage itself where it can, e.g. with a rename or a copy on the
-server. Between storages, the kernel copies them file by file, through a temporary file. A failed or cancelled copy
-leaves no partial file, and a move deletes each file only once its copy is complete.
+server. Between storages, the kernel copies them file by file. Large files stream through its memory, so they need
+no space on its disk.
+
+- A failed or cancelled copy leaves no partial file.
+- A move deletes each file only once its copy is complete.
+- A file replaced on a local disk is lost if the copy fails. On object stores, it stays as it was.
 
 When files are copied or dragged from one explorer to another, **the destination explorer reads them with a file
 system of its own** for the source storage. If it has none for that storage, e.g. one in another kernel's memory or on another

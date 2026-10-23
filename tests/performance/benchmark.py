@@ -16,14 +16,18 @@ import sys
 import time
 from collections import Counter
 from contextlib import contextmanager
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Self
 
 import polars as pl
 from fsspec.implementations.asyn_wrapper import AsyncFileSystemWrapper
 from fsspec.implementations.memory import MemoryFileSystem
 
 from jupyter_storage_explorer import DataExplorer, QuerySettings, StorageExplorer
-from jupyter_storage_explorer.filesystems import AsyncFsspecOperations, Progress
+from jupyter_storage_explorer.filesystems import (
+    AsyncFsspecOperations,
+    FsspecOperations,
+    Progress,
+)
 
 LATENCY = 0.05  # seconds per call
 THROUGHPUT = 50e6  # bytes per second, for copies
@@ -55,12 +59,39 @@ class SlowMemoryFileSystem(MemoryFileSystem):
 
     def _open(self, path, mode="rb", **kwargs):
         self._wait("open")
-        return super()._open(path, mode=mode, **kwargs)
+        return SlowFile(super()._open(path, mode=mode, **kwargs))
 
     def cp_file(self, path1, path2, **kwargs):
         # The store's size, not ``self.size``: that would be a call too.
         self._wait("cp_file", self.store[self._strip_protocol(path1)].size)
         return super().cp_file(path1, path2, **kwargs)
+
+
+class SlowFile:
+    """A file of the slow filesystem: reads and writes wait by their size,
+    as a network transfers them. Waits in different threads overlap, as a
+    download and an upload do."""
+
+    def __init__(self, file: Any) -> None:
+        self._file = file
+
+    def read(self, size: int = -1) -> bytes:
+        data = self._file.read(size)
+        time.sleep(len(data) / THROUGHPUT)
+        return data
+
+    def write(self, data: bytes) -> int:
+        time.sleep(len(data) / THROUGHPUT)
+        return self._file.write(data)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._file, name)
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self._file.close()
 
 
 class Explorer(StorageExplorer):
@@ -144,6 +175,32 @@ def copy() -> None:
         )
 
 
+def transfer() -> None:
+    """Copying between two storages, through the kernel: a folder of mixed
+    sizes between asynchronous storages, 32 at a time, and one large file
+    between synchronous ones."""
+    fs = fresh()
+    for i in range(310):
+        data = b"x" * (25_000_000 if i % 31 == 0 else 1_000)
+        write(fs, f"/src/f{i:03d}.bin", data)
+    write(fs, "/big/one.bin", b"x" * 200_000_000)
+    # Two storages, as the explorer sees them: the copies are not ``same``.
+    source, target = AsyncFileSystemWrapper(fs), AsyncFileSystemWrapper(fresh_view())
+    with timed("copy 310 files (10 of 25 MB) between storages"):
+        AsyncFsspecOperations(concurrency=32).copy(
+            source, "/src", target, "/dst", Progress(), same=False
+        )
+    with timed("copy one file of 200 MB between storages"):
+        FsspecOperations()._copy_file(
+            fs, "/big/one.bin", fresh_view(), "/big/copy.bin", Progress()
+        )
+
+
+def fresh_view() -> SlowMemoryFileSystem:
+    """Another instance of the slow filesystem, on the same store."""
+    return SlowMemoryFileSystem(skip_instance_cache=True)
+
+
 def scrolling() -> None:
     """Scrolling the data browser in memory mode, filtered and sorted: 20
     pages of a million rows."""
@@ -169,7 +226,13 @@ def scrolling() -> None:
                 )
 
 
-SCENARIOS = {"listing": listing, "clicks": clicks, "copy": copy, "scrolling": scrolling}
+SCENARIOS = {
+    "listing": listing,
+    "clicks": clicks,
+    "copy": copy,
+    "transfer": transfer,
+    "scrolling": scrolling,
+}
 
 
 if __name__ == "__main__":

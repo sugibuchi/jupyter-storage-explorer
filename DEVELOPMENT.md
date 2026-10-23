@@ -305,8 +305,8 @@ These follow from the choices above. Users may meet them.
 
 - **One job at a time.** A kernel runs file operations one after another, so a long copy delays a delete. Properties
   run apart.
-- **Copies between storages go through the kernel.** Each file is copied to a temporary file on the kernel's disk,
-  then up. Bandwidth and disk space are the kernel's.
+- **Copies between storages go through the kernel.** Bandwidth is the kernel's. Files stream through its memory, not
+  its disk.
 - **Synchronous filesystems copy one file at a time.** Only async filesystems, such as s3fs and adlfs, run files in
   parallel.
 - **A click may show a file as it was up to 5 seconds before.** The detection is reused for a few seconds. Refresh
@@ -642,9 +642,24 @@ themselves, moves included, so that they can report progress file by file. Their
 `move` and `copy` take a source and a target filesystem, the same one or not. Between filesystems, each file goes
 through `_copy_file` and `_move_file`, which subclasses can override.
 
-- By default, a copy goes through a temporary file, so a failure leaves no partial file.
+- By default, a copy goes through the kernel's memory, in `filesystems/_streaming.py`.
 - A move copies, then deletes each file, so a cancel leaves each file in one place.
 - The async class has `_copy_file_async` and `_move_file_async` instead.
+
+A file up to 8 MiB is read whole, then written in one call. A larger one streams: a thread reads the next blocks while
+the last is written, so reading and writing overlap. The async class streams in a few threads at a time, which bounds
+the memory used.
+
+A failed or cancelled stream leaves no partial file:
+
+- On object stores, the file is never completed. Its last part is not sent, and the parts sent are discarded.
+- On other storages, such as local disks, the file written is deleted.
+- A file the copy was replacing is never deleted. Object stores keep it until a write completes, but on a local disk
+  it is spoiled.
+
+After a stream, the target's size is checked against the bytes written. A storage whose writable files lose bytes
+then fails the copy, instead of losing them silently. fsspec's `AsyncFileSystemWrapper` has such files, so streams
+use the filesystem it wraps.
 
 A folder copy is refused before anything is written if a file's path in it has `.` or `..` parts. Object stores keep
 such keys, and on a local disk they would land outside the target folder.
