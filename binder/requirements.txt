@@ -1,9 +1,10 @@
 # The demo on mybinder.org (see README.md): the released packages, and the
 # libraries the demo data, its previews and charts use. The demo's data
 # (docs/scripts/demo_data.py) needs the plugins of 0.14 or later: polars-support
-# with polars, pandas-support with pandas.
+# with polars, pandas-support with pandas. Before 0.20, background work hung
+# with the ipykernel of mybinder.org's image, 7.0.
 jupyterlab>=4.2
-jupyter-storage-explorer-launcher[polars,pandas]>=0.14
+jupyter-storage-explorer-launcher[polars,pandas]>=0.20
 polars
 deltalake
 pyarrow
