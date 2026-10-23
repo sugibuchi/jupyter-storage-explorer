@@ -275,6 +275,36 @@ class TestFsspecOperations:
         assert not tree.exists("/src")
         assert progress.files_done == 3
 
+    def test_delete_folder_where_rm_takes_one_path(self, tree, monkeypatch):
+        # As huggingface_hub's HfFileSystem, against fsspec's API: a list is
+        # refused, so the files are deleted one by one.
+        rm = tree.rm
+
+        def one_path(path, recursive=False, maxdepth=None):
+            if isinstance(path, list):
+                raise ValueError(f"not a path: {path!r}")
+            return rm(path, recursive=recursive, maxdepth=maxdepth)
+
+        monkeypatch.setattr(tree, "rm", one_path)
+        progress = JobProgress()
+        self.ops.delete(tree, "/src", progress)
+        assert not tree.exists("/src")
+        assert progress.files_done == 3
+
+    def test_delete_folder_after_a_list_partly_deleted(self, tree, monkeypatch):
+        # Files the refused call deleted are skipped, not an error.
+        rm = tree.rm
+
+        def partly(path, recursive=False, maxdepth=None):
+            if isinstance(path, list):
+                tree.rm_file(path[0])
+                raise TypeError("one path only")
+            return rm(path, recursive=recursive, maxdepth=maxdepth)
+
+        monkeypatch.setattr(tree, "rm", partly)
+        self.ops.delete(tree, "/src", JobProgress())
+        assert not tree.exists("/src")
+
     def test_move_folder_file_by_file(self, tree):
         progress = Recorder()
         self.ops.move(tree, "/src", tree, "/moved", progress, same=True)

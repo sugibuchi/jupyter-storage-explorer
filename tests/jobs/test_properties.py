@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 import os
+import types
 from typing import TYPE_CHECKING, Any
 
 import fsspec
@@ -115,6 +116,16 @@ def test_mtime_whichever_key():
     assert mtime({"LastModified": when}) == when.timestamp()
     assert mtime({"last_modified": "2025-01-02T00:00:00+00:00"}) == when.timestamp()
     assert mtime({"size": 1}) is None
+
+
+def test_mtime_of_the_last_commit():
+    # huggingface_hub's HfFileSystem, with expand_info=True: a LastCommitInfo
+    # with its date; None without expand_info.
+    when = dt.datetime(2024, 1, 4, 11, 54, 16, tzinfo=dt.UTC)
+    commit = types.SimpleNamespace(oid="a3f3", title="Convert", date=when)
+    assert mtime({"last_commit": commit}) == when.timestamp()
+    assert mtime({"last_commit": {"date": when.isoformat()}}) == when.timestamp()
+    assert mtime({"last_commit": None, "size": 1}) is None
 
 
 def test_file_properties():
