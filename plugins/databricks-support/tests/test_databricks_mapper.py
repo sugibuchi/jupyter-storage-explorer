@@ -17,6 +17,7 @@ from jupyter_storage_explorer_databricks_support import (
 
 from jupyter_storage_explorer import Location
 from jupyter_storage_explorer.filesystems import (
+    DatabricksMapper,
     FsspecLocation,
     MapperChain,
     default_mappers,
@@ -72,6 +73,10 @@ class TestLocations:
     )
     def test_the_explorers_levels(self, chain, path, level):
         assert chain.level_of(DatabricksFileSystem(), path) == level
+
+    def test_the_explorers_icons(self, chain):
+        mapper = chain.mapper_of(DatabricksFileSystem())
+        assert mapper.css and mapper.css == DatabricksMapper.css
 
     def test_the_top(self, chain):
         location = chain.location_of(DatabricksFileSystem(), "")

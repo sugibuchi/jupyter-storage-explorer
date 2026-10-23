@@ -84,6 +84,7 @@ the code. The traps:
 - A new frontend file in `static/` is joined into the module only if `_static.esm` names it. A part in
   `static/<widget>/` is joined automatically.
 - Mappers match classes by qualified name: never import an optional package to map it.
+- Filesystem-specific CSS, such as level icons and storage colours, goes in its mapper's `css`, never in `static/`.
 - `MapperChain.locate` never opens an `FsspecLocation`'s URL.
 - Outside an explorer, callers of `move` and `copy` pass `same` themselves, e.g. the module-level `same_filesystem`.
 - An operation that cannot handle a call raises `FileSystemOperations.NotSupported`, never `NotImplementedError`,

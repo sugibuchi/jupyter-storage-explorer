@@ -25,6 +25,7 @@ from jupyter_storage_explorer._explorer.icons import format_icons
 from jupyter_storage_explorer._explorer.jobs import JobsMixin
 from jupyter_storage_explorer._explorer.jupyterlab import JupyterLabFilesMixin
 from jupyter_storage_explorer._explorer.listing import Listing
+from jupyter_storage_explorer._explorer.mapper_css import mapper_key, mapper_styles
 from jupyter_storage_explorer._explorer.previews import PreviewsMixin
 from jupyter_storage_explorer._explorer.requests import FileRequestsMixin
 from jupyter_storage_explorer._explorer.states import ExplorerStates, explorer_states
@@ -448,6 +449,11 @@ class StorageExplorer(
     # come with the tree's entries and the listing.
     _fs_protocol = traitlets.Unicode().tag(sync=True)
     _root_level = traitlets.Unicode().tag(sync=True)
+    # How the storages look: their mappers' CSS (FileSystemMapper.css), by
+    # mapper (see _explorer/mapper_css.py), and the mapper of the storage
+    # shown, for CSS (data-fs-mapper; "" for a mapper without CSS).
+    _mapper_css = traitlets.Dict().tag(sync=True)
+    _fs_mapper = traitlets.Unicode().tag(sync=True)
     # The "Unsafe mode" switch in the toolbar: while on, risky operations
     # are offered (today: moving, copying, pasting, renaming and deleting folders). The
     # frontend turns it off when any operation starts, and sends with each
@@ -650,6 +656,10 @@ class StorageExplorer(
             _text_formats=[f.name for f in self._formats if isinstance(f, Text)],
             _format_icons=icons,
             _file_icon_svgs=svgs,
+            _mapper_css=mapper_styles(
+                self._mappers.mapper_in(storage.fs)
+                for storage in self._filesystems.values()
+            ),
             _max_upload_bytes=max_upload_bytes,
             _filesystem_names=list(self._filesystems),
             _explorer_id=uuid.uuid4().hex,
@@ -740,6 +750,7 @@ class StorageExplorer(
             top = self._mappers.location_of(self._fs, root)
             self._local_paths = isinstance(top, LocalLocation)
             self._fs_protocol = top.protocol if top else protocols(self._fs)[0]
+            self._fs_mapper = mapper_key(self._mappers.mapper_in(self._fs))
             self._root_level = self._level_of(root) or ""
             self._root = root
             if self._current_dir == path:

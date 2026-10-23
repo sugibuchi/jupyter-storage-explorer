@@ -574,12 +574,20 @@ A `FileSystemMapper`, in `filesystems/mapper.py`, maps the paths of one fsspec i
   has no location.
 - `path_of(fs, location)` is the reverse. It gives None unless `fs` reaches the location, which the mapper decides from
   the location's fields and the instance's settings.
-- `level(fs, path)` says what the storage makes of a folder, such as "container". It gives folders their icons and
-  their rows' `data-fs-level`.
+- `level(fs, path)` says what the storage makes of a folder, such as "container". It gives the folder's row its
+  `data-fs-level`.
+- `css` is how the explorer shows the mapper's storages, e.g. the icons of its levels and its colour.
 
 By default, `level` reads `levels`, a name per depth from the top folder, e.g. adlfs's `("account", "container")`.
-The explorer sends each folder's level with the tree and the listing. `LEVEL_ICONS`, in `icons.js`, gives each level
-its icon.
+The explorer sends each folder's level with the tree and the listing.
+
+The explorer sends its storages' mappers' CSS, each nested in `:where(.jse-browser[data-fs-mapper="<class>"])`, which
+adds no weight to its selectors. It sets `data-fs-mapper` to the mapper of the storage shown. The frontend puts each
+mapper's CSS on the page once, in a `<style>` of its own (`mapper_css.js`).
+
+- `level_icon_css`, in `filesystems/level_icons.py`, writes icons as masks in the storage's colour. That module has
+  the predefined mappers' icons.
+- Filesystem-specific CSS belongs in its mapper, never in `static/`.
 
 A mapper matches filesystems by the qualified names of their classes and bases. So optional packages are never
 imported. Tests fake s3fs, gcsfs, SFTP and Databricks classes by setting their `__module__`.
@@ -1271,15 +1279,18 @@ this repository's plugins (`plugins/`).
 
 ### Icons
 
-The icons are JupyterLab's file browser's, as SVG images (`.jse-icon svg`).
+The icons of files and plain folders are JupyterLab's file browser's, as SVG images (`.jse-icon svg`).
 
 - **Files** get the icon of their format (its `file_icon`, one of `FILE_ICONS` in `formats/base.py`), else of their
   extension. A format can bring an icon of its own, `file_icon = ("avro", "<svg ...>...</svg>")`, shown as an image
   (`.jse-icon img`).
-- **Folders that a storage makes more than folders** get icons of their own: Azure accounts and containers, S3 and
-  GCS buckets, SFTP servers, local drives, the memory filesystem, and Databricks' catalogs, schemas, volumes and
-  workspace folders. The filesystem's mapper tells which they are (`FileSystemMapper.level`, see
-  [development-plugin.md](docs/development-plugin.md)).
+- **Folders that a storage makes more than folders** get icons of their own, e.g.:
+  - Azure accounts and containers, S3 and GCS buckets, SFTP servers, local drives and the memory filesystem;
+  - Databricks' catalogs, schemas, volumes and workspace folders.
+
+  The filesystem's mapper tells which they are, and its CSS gives their icons: `FileSystemMapper.level` and
+  `FileSystemMapper.css`, see [development-plugin.md](docs/development-plugin.md#how-its-storages-look). The icon
+  hides the folder's image, and is drawn in its `.jse-icon::before`, as a mask.
 - **Azure, S3, GCS and Databricks** icons are in their cloud's colour, the variable `--jse-storage-color`. For example,
   `.jse-browser[data-fs-protocol="s3"] { --jse-storage-color: green; }`, or `initial` for JupyterLab's grey.
 
@@ -1289,6 +1300,7 @@ The explorer and its rows carry attributes to select them by:
 |-------------------------------------------|--------------------------------------------------------------------------------------------------------|
 | `.jse-browser`                            | The explorer. Every selector starts with it, so nothing else on the page changes.                      |
 | `.jse-browser[data-fs-protocol="s3"]`     | The explorer while it shows a storage of that protocol: `abfs`, `s3`, `gs`, `dbfs`, `sftp`, `file`, …  |
+| `.jse-browser[data-fs-mapper="…"]`        | The explorer while it shows a storage of that mapper, by its class's qualified name, if it has CSS |
 | `[data-fs-level="container"]`             | Folders by what the storage makes of them: `account`, `container`, `endpoint`, `bucket`, `host`, `drive`, `memory` |
 | `[data-fs-level="catalog"]`               | Databricks' folders: `workspace`, `volumes`, `catalog`, `schema`, `volume`, `workspace-files`, `repos`, `users`, `shared`, `user`, `repository`, `legacy` |
 | `[data-depth="0"]`, `[data-depth="1"]`, … | Folders in the tree and the list, by their level: `0` the top folder, `1` the folders in it, …    |
@@ -1296,13 +1308,27 @@ The explorer and its rows carry attributes to select them by:
 | `[data-file-format="parquet"]`            | Files of one format: `parquet`, `csv`, `json`, `json-lines`, `excel`, `markdown`, `text`, `image` |
 | `.jse-icon svg`, `.jse-icon::before`      | In a row, the icon's image, and where to show something else instead                              |
 
-To change an icon, hide its image and show something else in its `::before`, e.g. an emoji. This CSS shows the top
-folder as 🗄️, the folders in it as 🗃️ (deeper ones keep the folder icon), and gives data files their own icons:
+To change an icon, hide its image and show something else in its `::before`, e.g. an emoji.
+
+- A folder of a level has its mapper's icon there already, drawn as a mask. Reset it too: `mask: none; background:
+  none; width: auto; height: auto;`.
+- Your CSS overrides the mappers' when its selectors start with `.jse-browser`, as below.
+
+This CSS shows the top folder as 🗄️, the folders in it as 🗃️, and gives data files their own icons. Deeper folders
+keep the folder icon:
 
 ```css
 /* Folders: an emoji per depth */
 .jse-browser :is([data-depth="0"], [data-depth="1"]) .jse-icon svg {
     display: none;
+}
+
+/* Not their mapper's icon, if they have one */
+.jse-browser :is([data-depth="0"], [data-depth="1"]) .jse-icon::before {
+    mask: none;
+    background: none;
+    width: auto;
+    height: auto;
 }
 
 .jse-browser [data-depth="0"] .jse-icon::before {
@@ -1350,8 +1376,14 @@ use, e.g. an image of yours for S3 buckets:
 
 .jse-browser[data-fs-protocol="s3"] [data-fs-level="bucket"] .jse-icon::before {
     content: url("https://example.com/my-bucket-icon.svg");
+    mask: none;
+    background: none;
+    width: auto;
+    height: auto;
 }
 ```
+
+A plugin's mapper can bring such icons for every user instead, in its `css`.
 
 #### Test in notebooks
 

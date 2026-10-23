@@ -78,6 +78,8 @@ class DatabricksWorkspaceMapper(FileSystemMapper):
     """
 
     classes = ("fsspec_databricks.spec.DatabricksFileSystem",)
+    # The explorer's own icons of the levels, and Databricks' colour.
+    css = DatabricksMapper.css
 
     def __init__(self) -> None:
         # The explorer's own: the levels, and fsspec's URLs.

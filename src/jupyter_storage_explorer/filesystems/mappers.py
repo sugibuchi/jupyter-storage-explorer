@@ -2,7 +2,8 @@
 Data Lake Storage Gen2 (adlfs), Amazon S3 and S3-compatible stores (s3fs),
 Google Cloud Storage (gcsfs), the local disk, fsspec's memory filesystem, and
 SFTP servers (fsspec's own, and sshfs). They match fsspec classes by name, so none of these packages is
-imported. Their locations are in locations.py.
+imported. Their locations are in locations.py, and their folders' icons in
+level_icons.py: each mapper's ``css`` gives its own, in its cloud's colour.
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from jupyter_storage_explorer.filesystems.level_icons import ICONS, level_icon_css
 from jupyter_storage_explorer.filesystems.locations import (
     AbfsLocation,
     FsspecLocation,
@@ -54,6 +56,9 @@ class AzureBlobMapper(FileSystemMapper):
 
     classes = ("adlfs.spec.AzureBlobFileSystem",)
     levels = ("account", "container")
+    css = level_icon_css(
+        {"account": ICONS["cloud"], "container": ICONS["box"]}, color="#0078d4"
+    )
 
     def to_location(self, fs: AbstractFileSystem, path: str) -> AbfsLocation:
         host = _blob_host(fs) or ""
@@ -99,6 +104,9 @@ class S3Mapper(FileSystemMapper):
     classes = ("s3fs.core.S3FileSystem",)
     # The top: the buckets of an endpoint or partition.
     levels = ("endpoint", "bucket")
+    css = level_icon_css(
+        {"endpoint": ICONS["cloud"], "bucket": ICONS["bucket"]}, color="#ec7211"
+    )
 
     def to_location(self, fs: AbstractFileSystem, path: str) -> S3Location:
         bucket, _, key = path.strip("/").partition("/")
@@ -134,6 +142,9 @@ class GCSMapper(FileSystemMapper):
 
     classes = ("gcsfs.core.GCSFileSystem",)
     levels = ("endpoint", "bucket")
+    css = level_icon_css(
+        {"endpoint": ICONS["cloud"], "bucket": ICONS["bucket"]}, color="#4285f4"
+    )
 
     def to_location(self, fs: AbstractFileSystem, path: str) -> GcsLocation:
         bucket, _, key = path.strip("/").partition("/")
@@ -164,6 +175,7 @@ class LocalMapper(FileSystemMapper):
     # A drive's top folder: "/", or on Windows "C:/" (one folder deep, as
     # the explorer counts: "C:" is its name).
     levels = ("", "drive") if sys.platform == "win32" else ("drive",)
+    css = level_icon_css({"drive": ICONS["harddisk"]})
 
     def to_location(self, fs: AbstractFileSystem, path: str) -> LocalLocation:
         return LocalLocation(path=path, **_machine())
@@ -218,6 +230,7 @@ class MemoryMapper(FileSystemMapper):
 
     classes = ("fsspec.implementations.memory.MemoryFileSystem",)
     levels = ("memory",)
+    css = level_icon_css({"memory": ICONS["chip"]})
 
     def to_location(self, fs: AbstractFileSystem, path: str) -> MemoryLocation:
         return MemoryLocation(path=path, process=_PROCESS)
@@ -236,6 +249,7 @@ class SFTPMapper(FileSystemMapper):
 
     classes = ("fsspec.implementations.sftp.SFTPFileSystem",)
     levels = ("host",)
+    css = level_icon_css({"host": ICONS["server"]})
 
     def server(self, fs: AbstractFileSystem) -> dict[str, Any]:
         """{"host", "port", "user"} of ``fs``."""
@@ -298,6 +312,23 @@ class DatabricksMapper(FsspecMapper):
     classes = (
         "fsspec_databricks.spec.DatabricksFileSystem",
         "fsspec.implementations.dbfs.DatabricksFileSystem",
+    )
+    css = level_icon_css(
+        {
+            "workspace": ICONS["cloud"],
+            "volumes": ICONS["bookshelf"],
+            "catalog": ICONS["book2"],
+            "schema": ICONS["database"],
+            "volume": ICONS["files"],
+            "workspace-files": ICONS["work"],
+            "repos": ICONS["repositories"],
+            "users": ICONS["group"],
+            "user": ICONS["person"],
+            "shared": ICONS["folder-shared"],
+            "repository": ICONS["repository"],
+            "legacy": ICONS["folder-clock"],
+        },
+        color="#03a9f4",
     )
 
     def matches(self, fs: AbstractFileSystem) -> bool:

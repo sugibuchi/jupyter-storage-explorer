@@ -4,6 +4,7 @@ and back, and where files copied in another kernel are."""
 from __future__ import annotations
 
 import dataclasses
+import re
 
 import fsspec
 import pytest
@@ -16,15 +17,18 @@ from jupyter_storage_explorer import Location
 from jupyter_storage_explorer.filesystems import (
     AbfsLocation,
     AzureBlobMapper,
+    DatabricksMapper,
     FileSystemMapper,
     FsspecLocation,
     GcsLocation,
     LocalLocation,
     MapperChain,
     MemoryLocation,
+    MemoryMapper,
     S3Location,
     SftpLocation,
     default_mappers,
+    level_icon_css,
     same_filesystem,
 )
 
@@ -420,6 +424,73 @@ class TestLevels:
     def test_databricks(self, cls, path, level):
         fs = cls.__new__(cls)  # no workspace
         assert chain.level_of(fs, path) == level
+
+
+class TestLevelIcons:
+    """The CSS of the folders' icons: each mapper's own (FileSystemMapper.css)."""
+
+    DATABRICKS_LEVELS = (
+        "workspace",
+        "volumes",
+        "catalog",
+        "schema",
+        "volume",
+        "workspace-files",
+        "repos",
+        "users",
+        "user",
+        "shared",
+        "repository",
+        "legacy",
+    )
+
+    @staticmethod
+    def iconed(css):
+        """The levels ``css`` gives an icon."""
+        return set(
+            re.findall(
+                r'\[data-fs-level="([^"]+)"\] \.jse-icon::before \{ mask-image', css
+            )
+        )
+
+    def test_every_predefined_level_has_an_icon(self):
+        for mapper in default_mappers():
+            levels = (
+                set(self.DATABRICKS_LEVELS)
+                if isinstance(mapper, DatabricksMapper)
+                else set(mapper.levels) - {""}
+            )
+            assert self.iconed(mapper.css) == levels, type(mapper).__name__
+
+    def test_clouds_in_their_colour(self):
+        colours = {
+            type(m).__name__: re.findall(r"--jse-storage-color: ([^;]+);", m.css)
+            for m in default_mappers()
+        }
+        assert colours["AzureBlobMapper"] == ["#0078d4"]
+        assert colours["S3Mapper"] == ["#ec7211"]
+        assert colours["GCSMapper"] == ["#4285f4"]
+        assert colours["DatabricksMapper"] == ["#03a9f4"]
+        assert colours["MemoryMapper"] == colours["LocalMapper"] == []
+
+    def test_none_by_default(self):
+        assert FileSystemMapper.css == ""
+        assert level_icon_css({}) == ""
+
+    def test_level_icon_css(self):
+        css = level_icon_css({"a": "<svg/>", 'odd"one': "<svg/>"}, color="red")
+        assert css.startswith("& { --jse-storage-color: red; }")
+        assert self.iconed(css) == {"a"}
+        # A quote in a level's name, escaped in the selector's string.
+        assert '[data-fs-level="odd\\"one"] .jse-icon::before { mask-image' in css
+        # The image, as a data URL, in its mask.
+        assert 'url("data:image/svg+xml,%3Csvg%2F%3E")' in css
+        # Selected rows in the selection's colour.
+        assert ":where(.jse-selected, .jse-active)" in css
+
+    def test_mapper_in_a_dir_filesystem(self, memfs):
+        assert isinstance(chain.mapper_in(DirFileSystem("/a", memfs)), MemoryMapper)
+        assert isinstance(chain.mapper_in(memfs), MemoryMapper)
 
 
 class TestDatabricks:
