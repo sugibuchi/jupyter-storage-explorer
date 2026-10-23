@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import os
 import threading
 from typing import Any
@@ -705,3 +706,37 @@ class TestJobRunner:
         assert seen["finish_thread"] == main_thread
         assert seen["notify_threads"] == {main_thread}
         assert seen["states"][0] == "queued" and seen["states"][-1] == "done"
+
+    def test_reports_in_the_submitting_context(self, monkeypatch):
+        """Reports and finishing see the context variables of the request that
+        submitted the job, as ipykernel 7.0's send needs: they have no
+        default in a worker thread's context."""
+        monkeypatch.setattr(jobs, "REPORT_INTERVAL", 0)
+        request = contextvars.ContextVar("request")
+
+        async def main() -> list[tuple[str, str]]:
+            done = asyncio.Event()
+            seen = []
+
+            def notify(job):
+                seen.append((job.state, request.get()))
+                if job.finished:
+                    done.set()
+
+            def work(progress):
+                progress.advance(files=1)
+                return {}
+
+            def submit():
+                request.set("paste")
+                JobRunner(notify).submit(
+                    "test", "Threaded", work, lambda job: request.get()
+                )
+
+            contextvars.copy_context().run(submit)
+            await asyncio.wait_for(done.wait(), 5)
+            return seen
+
+        seen = asyncio.run(main())
+        assert {state for state, _ in seen} == {"queued", "running", "done"}
+        assert {value for _, value in seen} == {"paste"}

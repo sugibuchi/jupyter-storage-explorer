@@ -20,12 +20,13 @@ from __future__ import annotations
 import asyncio
 import collections
 import concurrent.futures
+import contextvars
 import functools
 import logging
 import threading
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
-from jupyter_storage_explorer._jobs.runner import _Inline
+from jupyter_storage_explorer._jobs.runner import _Inline, main_thread
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Hashable
@@ -77,12 +78,12 @@ class Loader:
             loop = asyncio.get_running_loop()
         except RuntimeError:
             loop = None
-        if loop is not None:
-            self._main: Callable[[Callable[[], None]], Any] = loop.call_soon_threadsafe
-            self._executor: concurrent.futures.Executor = _workers()
-        else:
-            self._main = lambda fn: fn()
-            self._executor = _Inline()
+        # In the context of the request submitting the load, as jobs (see
+        # _jobs/runner.py).
+        self._main = main_thread(loop)
+        self._executor: concurrent.futures.Executor = (
+            _workers() if loop is not None else _Inline()
+        )
         # The lanes running: lane -> the runs waiting in it.
         self._lanes: dict[Hashable, collections.deque[Callable[[], None]]] = {}
         self._lanes_lock = threading.Lock()
@@ -99,15 +100,18 @@ class Loader:
         ``discard(result)`` if the load was cancelled meanwhile. ``work``
         reports its own errors in its result: one it raises is only logged."""
         load: Load[T] = Load()
+        context = contextvars.copy_context()
 
         def run() -> None:
             try:
                 result = work()
             except Exception:
                 log.exception("a load failed")
-                self._main(functools.partial(setattr, load, "ended", True))
+                self._main(functools.partial(setattr, load, "ended", True), context)
                 return
-            self._main(functools.partial(self._end, load, result, done, discard))
+            self._main(
+                functools.partial(self._end, load, result, done, discard), context
+            )
 
         # Without a loop, runs are in order already: one ends before the next.
         if lane is None or isinstance(self._executor, _Inline):
