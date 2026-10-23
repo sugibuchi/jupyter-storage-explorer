@@ -337,6 +337,29 @@ steps, which raises `OperationCancelled` when the user cancels. Import the stora
 
 ## Filesystem mappers
 
+### The challenge
+
+A URL does not always say where a file is. `s3://sales/orders.parquet` names a bucket and a key, but not the server.
+AWS, a MinIO server and another S3-compatible store can each have a bucket named "sales". So the same URL can name
+different files on different servers.
+
+Software working with one storage service at a time can ignore this. Storage Explorer cannot, as it is built to reach
+several storage services at once.
+
+What the URL leaves out is held by the client. An fsspec filesystem knows its S3 endpoint, or its Azure account, from
+its settings.
+
+### Our approach
+
+Storage Explorer handles this with two classes:
+
+- A `Location` names a file or folder uniquely across storage services. An `S3Location` holds the endpoint besides the
+  bucket and the key, for example. Its `url` is the URL in its usual form, for libraries and users.
+- A `FileSystemMapper` maps between locations and an fsspec filesystem with its paths. It gives a path's location, and
+  the path of a location in a filesystem, if that filesystem reaches it.
+
+### Writing a mapper
+
 A `FileSystemMapper` turns the paths of one fsspec implementation's filesystems into locations, and back. Locations are
 where files are, independently of the implementation: their `url` is what "Copy URL", previews, recipes and the transfer
 policy use, and how files copied from another kernel are found.
@@ -345,9 +368,7 @@ policy use, and how files copied from another kernel are found.
 import dataclasses
 
 from jupyter_storage_explorer import Location
-from jupyter_storage_explorer.filesystems import FileSystemMapper, level_icon_css
-
-SERVER_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="..."/></svg>'
+from jupyter_storage_explorer.filesystems import FileSystemMapper
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
@@ -363,8 +384,6 @@ class MyLocation(Location):
 
 class MyMapper(FileSystemMapper):
     classes = ("mypackage.MyFileSystem",)  # matched by qualified name, subclasses too: no import
-    levels = ("server",)  # optional: what the folders at each depth from the top are, for CSS
-    css = level_icon_css({"server": SERVER_SVG})  # optional: how its storages look
 
     def to_location(self, fs, path):
         return MyLocation(server=fs.server.lower(), path=path)
@@ -376,8 +395,29 @@ class MyMapper(FileSystemMapper):
         return None
 ```
 
-`level(fs, path)` tells what a folder is when it is more than a folder, e.g. "container". Its row gets
-`data-fs-level`, which CSS selects it by.
+Normalize locations when they are made, e.g. lower-case hosts and no trailing "/". Equal locations must name the same
+item.
+
+The predefined mappers cover:
+
+- Azure, S3 and Google Cloud Storage;
+- SFTP, local disks and memory;
+- Databricks, with [fsspec-databricks](https://github.com/sugibuchi/fsspec-databricks) and with fsspec's own
+  filesystem. Their URLs are fsspec's, such as `dbfs://Volumes/...`.
+
+Other filesystems get fsspec's URLs.
+
+### Levels
+
+`level(fs, path)` tells what a folder is when it is more than a folder, e.g. "container". The explorer uses it mainly to
+show such folders differently from plain ones, such as with an icon of their own. See
+[How its storages look](#how-its-storages-look).
+
+```python
+class MyMapper(FileSystemMapper):
+    ...
+    levels = ("server",)  # what the folders at each depth from the top are
+```
 
 - By default, `level` reads `levels`: a level per depth from the filesystem's top folder, e.g. adlfs's `("account",
   "container")`. "" stands for a depth of plain folders.
@@ -394,7 +434,18 @@ storage's colour. Folders of a level without an icon keep the folder icon.
 `level_icon_css(icons, color=None)` writes such CSS, from an SVG image per level. Each icon is drawn in one colour:
 the storage's, else JupyterLab's grey, and white in selected rows. The predefined mappers' icons are made this way.
 
-Write CSS of your own for anything else:
+```python
+from jupyter_storage_explorer.filesystems import level_icon_css
+
+SERVER_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="..."/></svg>'
+
+
+class MyMapper(FileSystemMapper):
+    ...
+    css = level_icon_css({"server": SERVER_SVG}, color="#7b1fa2")
+```
+
+Write CSS of your own for anything else. A folder's row has its level in `data-fs-level`, which CSS selects it by.
 
 ```python
 class MyMapper(FileSystemMapper):
@@ -411,11 +462,6 @@ class MyMapper(FileSystemMapper):
 - Use the selectors in DEVELOPMENT.md's "Icons", such as `.jse-icon::before`. The explorer's other classes may change.
 - Ship only icons you may ship: no cloud provider's logo, unless its licence allows it.
 - Each mapper class's CSS is on the page once. Keep it the same for every instance: it is a class attribute.
-
-Normalize locations when made (lower-case hosts, no trailing "/"): equal locations must name the same item. The
-predefined mappers cover Azure, S3, Google Cloud Storage, SFTP, local disks, memory and Databricks
-([fsspec-databricks](https://github.com/sugibuchi/fsspec-databricks) and fsspec's own; fsspec's URLs,
-`dbfs://Volumes/...`); other filesystems get fsspec's URLs.
 
 ## Packaging a plugin
 
