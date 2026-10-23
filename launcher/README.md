@@ -38,14 +38,8 @@ The launcher has the same extras as `jupyter-storage-explorer`
 - **Support-only extras**, e.g. `[polars-support]`: the plugin alone, using the libraries already installed. Nothing
   else is installed or upgraded.
 
-| Full extra | Support-only extra | Plugin                                                              |
-|------------|--------------------|---------------------------------------------------------------------|
-| `polars`   | `polars-support`   | Polars: Delta Lake, Parquet, CSV, JSON Lines, Excel                 |
-| `pandas`   | `pandas-support`   | pandas: Parquet, CSV, JSON Lines, Excel                             |
-| `pyspark`  | `pyspark-support`  | PySpark: Delta Lake, Parquet, CSV, JSON Lines                       |
-| `abfs`     | `abfs-support`     | Azure Data Lake Storage Gen2                                        |
-| `databricks` | `databricks-support` | Databricks volumes and workspace files; Databricks Connect (experimental) |
-| `all`      | `all-supports`     | All of the above, but the experimental ones                         |
+[Plugins](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/plugins/README.md) lists the plugins, with
+their extras and libraries.
 
 Full extras are handy for a quick try. **Support-only extras are highly recommended for an IPython kernel whose data
 access packages are carefully installed and configured** (e.g. a shared JupyterHub image): the plugins use what is

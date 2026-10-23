@@ -31,14 +31,7 @@ Engines and storages come as plugins, installed with extras of two kinds:
 - **Support-only extras**, e.g. `[polars-support]`: the plugin alone, using the libraries already installed. Nothing
   else is installed or upgraded.
 
-| Full extra | Support-only extra | Plugin                                                                        | Libraries of the full extra        |
-|------------|--------------------|-------------------------------------------------------------------------------|------------------------------------|
-| `polars`   | `polars-support`   | [Polars](../plugins/polars-support/README.md): Delta Lake, Parquet, CSV, JSON Lines, Excel | polars, deltalake, fastexcel |
-| `pandas`   | `pandas-support`   | [pandas](../plugins/pandas-support/README.md): Parquet, CSV, JSON Lines, Excel | pandas, pyarrow, openpyxl |
-| `pyspark`  | `pyspark-support`  | [PySpark](../plugins/pyspark-support/README.md): Delta Lake, Parquet, CSV, JSON Lines | pyspark, delta-spark |
-| `abfs`     | `abfs-support`     | [Azure Data Lake Storage Gen2](../plugins/abfs-support/README.md): folders moved in one step, copies on the server | adlfs, azure-storage-file-datalake |
-| `databricks` | `databricks-support` | [Databricks](../plugins/databricks-support/README.md) volumes and workspace files, by workspace; Databricks Connect (experimental) | fsspec-databricks, databricks-connect |
-| `all`      | `all-supports`     | All of the above, but the experimental ones                                   | All of the above, but the experimental ones |
+[Plugins](../plugins/README.md) lists the plugins, with their extras and libraries.
 
 Full extras are handy for a quick try. **Support-only extras are highly recommended for an IPython kernel whose data
 access packages are carefully installed and configured** (e.g. a shared JupyterHub image, or Spark and Databricks
