@@ -6,13 +6,15 @@ import datetime as dt
 from typing import Any
 
 # Keys used by different fsspec implementations for the modification time
-# (local: mtime, s3fs: LastModified, adlfs: last_modified, gcsfs: updated).
+# (local: mtime, s3fs: LastModified, adlfs: last_modified, gcsfs: updated,
+# huggingface_hub: last_commit, with expand_info=True).
 _MTIME_KEYS = (
     "mtime",
     "LastModified",
     "last_modified",
     "updated",
     "modified",
+    "last_commit",
     "created",
 )
 
@@ -31,6 +33,13 @@ def _to_timestamp(value: Any) -> float | None:
             return dt.datetime.fromisoformat(value).timestamp()
         except ValueError:
             return None
+    # A commit's details, with its date: huggingface_hub's LastCommitInfo,
+    # or a dict of them.
+    date = (
+        value.get("date") if isinstance(value, dict) else getattr(value, "date", None)
+    )
+    if isinstance(date, (dt.datetime, str)):
+        return _to_timestamp(date)
     return None
 
 

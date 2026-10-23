@@ -8,6 +8,7 @@ filesystems (s3fs, gcsfs, adlfs, ...), many files at a time
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING, Any
 
@@ -142,13 +143,27 @@ class FsspecOperations(FileSystemOperations):
             progress.check()
             batch = names[start : start + self.DELETE_BATCH]
             progress.working_on(_paths.basename(batch[-1]))
-            fs.rm(batch)
+            self._rm_batch(fs, batch)
             progress.advance(
                 files=len(batch), bytes=sum(files[n].get("size") or 0 for n in batch)
             )
         # The folders left, e.g. on local disks.
         if fs.exists(path):
             fs.rm(path, recursive=True)
+
+    @staticmethod
+    def _rm_batch(fs: AbstractFileSystem, batch: list[str]) -> None:
+        """Delete the files ``batch`` names, in one request where the
+        filesystem can. fsspec's ``rm`` takes a list of paths, but some
+        filesystems' take one path only (huggingface_hub's ``HfFileSystem``
+        raises ValueError): their files are then deleted one by one, skipping
+        those the refused call may have deleted already."""
+        try:
+            fs.rm(batch)
+        except (TypeError, ValueError):
+            for name in batch:
+                with contextlib.suppress(FileNotFoundError):
+                    fs.rm_file(name)
 
     def download(
         self, fs: AbstractFileSystem, path: str, local_path: str, progress: Progress
