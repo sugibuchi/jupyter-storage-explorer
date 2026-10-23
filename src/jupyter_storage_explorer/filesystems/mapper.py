@@ -63,6 +63,15 @@ class FileSystemMapper:
         and its folders the containers; "" for a depth of plain folders, as
         are those below the last. Empty by default. What ``level`` gives,
         unless a subclass overrides it.
+    css : str
+        How the explorer shows the mapper's storages: CSS applied to the
+        explorer while it shows one, e.g. icons for the folders of each
+        level (``level_icon_css`` writes them). The explorer scopes it, so
+        its selectors select inside the explorer, e.g.
+        ``[data-fs-level="catalog"] .jse-icon::before``, and ``& { ... }``
+        the explorer itself, e.g. its ``--jse-storage-color``. It adds no
+        weight to the selectors, so users' CSS of the same weight, in
+        JupyterLab's ``custom.css``, overrides it. Empty by default.
 
     Examples
     --------
@@ -88,6 +97,7 @@ class FileSystemMapper:
 
     classes: tuple[str, ...] = ()
     levels: tuple[str, ...] = ()
+    css: str = ""
 
     def matches(self, fs: AbstractFileSystem) -> bool:
         """Whether this mapper maps ``fs``.
@@ -133,9 +143,9 @@ class FileSystemMapper:
     def level(self, fs: AbstractFileSystem, path: str) -> str | None:
         """What the storage makes of the folder at ``path``, if more than a
         folder: e.g. "container" for an Azure container, "catalog" for a
-        Unity Catalog's folder of Databricks volumes. The explorer gives such
-        folders an icon of their own (for the predefined levels), and CSS
-        selects them by it (``[data-fs-level]``).
+        Unity Catalog's folder of Databricks volumes. CSS selects such
+        folders by it (``[data-fs-level]``), e.g. the mapper's ``css`` to give
+        them icons of their own.
 
         Called for every folder listed, so it must be quick: from the path
         and the instance's settings, never by reading the storage.
@@ -229,6 +239,22 @@ class MapperChain:
             if mapper.matches(fs):
                 return mapper
         return _FALLBACK
+
+    def mapper_in(self, fs: AbstractFileSystem) -> FileSystemMapper:
+        """The mapper of the filesystem that ``fs`` is, or that the
+        ``DirFileSystem`` ``fs`` wraps.
+
+        Parameters
+        ----------
+        fs : AbstractFileSystem
+            Any filesystem, maybe a ``DirFileSystem``.
+
+        Returns
+        -------
+        FileSystemMapper
+            The mapper of the filesystem holding the files.
+        """
+        return self.mapper_of(_unwrap(fs)[0])
 
     def location_of(self, fs: AbstractFileSystem, path: str) -> Location | None:
         """The location of ``path`` of ``fs``, from the mapper of the

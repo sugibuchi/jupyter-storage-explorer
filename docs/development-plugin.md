@@ -344,7 +344,9 @@ policy use, and how files copied from another kernel are found.
 import dataclasses
 
 from jupyter_storage_explorer import Location
-from jupyter_storage_explorer.filesystems import FileSystemMapper
+from jupyter_storage_explorer.filesystems import FileSystemMapper, level_icon_css
+
+SERVER_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="..."/></svg>'
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
@@ -360,7 +362,8 @@ class MyLocation(Location):
 
 class MyMapper(FileSystemMapper):
     classes = ("mypackage.MyFileSystem",)  # matched by qualified name, subclasses too: no import
-    levels = ("server",)  # optional: what the folders at each depth from the top are, for icons and CSS
+    levels = ("server",)  # optional: what the folders at each depth from the top are, for CSS
+    css = level_icon_css({"server": SERVER_SVG})  # optional: how its storages look
 
     def to_location(self, fs, path):
         return MyLocation(server=fs.server.lower(), path=path)
@@ -372,12 +375,41 @@ class MyMapper(FileSystemMapper):
         return None
 ```
 
-`level(fs, path)` tells what a folder is when it is more than a folder: the rows get `data-fs-level`, and the
-predefined levels (DEVELOPMENT.md's "Icons") their icons; others keep the folder icon unless CSS gives them one. By
-default it is `levels` by the folder's depth from the filesystem's top folder (e.g. adlfs's `("account",
-"container")`; "" for a depth of plain folders). Override it when the level depends on the path, as
-`DatabricksMapper`'s does (`/Volumes/<catalog>/<schema>/<volume>`, `/Workspace/Repos/<user>/<repository>`, ...). It
-is called for every folder listed: decide from the path and the instance's settings, never by reading the storage.
+`level(fs, path)` tells what a folder is when it is more than a folder, e.g. "container". Its row gets
+`data-fs-level`, which CSS selects it by.
+
+- By default, `level` reads `levels`: a level per depth from the filesystem's top folder, e.g. adlfs's `("account",
+  "container")`. "" stands for a depth of plain folders.
+- Override `level` when the level depends on the path, not only on its depth. `DatabricksMapper`'s does, for
+  `/Volumes/<catalog>/<schema>/<volume>` and `/Workspace/Repos/<user>/<repository>`.
+- It is called for every folder listed. Decide from the path and the instance's settings, never by reading the
+  storage.
+
+### How its storages look
+
+`css` is the CSS of the explorer while it shows one of the mapper's storages: e.g. icons for its levels, and the
+storage's colour. Folders of a level without an icon keep the folder icon.
+
+`level_icon_css(icons, color=None)` writes such CSS, from an SVG image per level. Each icon is drawn in one colour:
+the storage's, else JupyterLab's grey, and white in selected rows. The predefined mappers' icons are made this way.
+
+Write CSS of your own for anything else:
+
+```python
+class MyMapper(FileSystemMapper):
+    css = """
+    & { --jse-storage-color: #7b1fa2; }  /* the explorer itself */
+    [data-fs-level="server"] .jse-icon svg { display: none; }
+    [data-fs-level="server"] .jse-icon::before { content: "🖥️"; }
+    """
+```
+
+- The explorer scopes it to its own element, while it shows one of the mapper's storages. So selectors start inside
+  the explorer, e.g. at `[data-fs-level]`. `& { ... }` styles the explorer itself.
+- The scope adds no weight to the selectors. So users' CSS starting with `.jse-browser` overrides it.
+- Use the selectors in DEVELOPMENT.md's "Icons", such as `.jse-icon::before`. The explorer's other classes may change.
+- Ship only icons you may ship: no cloud provider's logo, unless its licence allows it.
+- Each mapper class's CSS is on the page once. Keep it the same for every instance: it is a class attribute.
 
 Normalize locations when made (lower-case hosts, no trailing "/"): equal locations must name the same item. The
 predefined mappers cover Azure, S3, Google Cloud Storage, SFTP, local disks, memory and Databricks

@@ -1169,11 +1169,15 @@ def local_paths_copied(lab: Lab, page: Page) -> None:
 
 
 # Memory filesystems as an Azure account and as S3, to their mappers: folders
-# at their top are containers and buckets (FileSystemMapper.levels).
+# at their top are containers and buckets (FileSystemMapper.levels), with the
+# icons of Azure's mapper, and an emoji of the mapper's own for buckets
+# (FileSystemMapper.css).
 STORAGE_LEVELS = """\
 from fsspec.implementations.memory import MemoryFileSystem
 from jupyter_storage_explorer import StorageExplorer
-from jupyter_storage_explorer.filesystems import FileSystemMapper, AbfsLocation, S3Location
+from jupyter_storage_explorer.filesystems import (
+    AbfsLocation, AzureBlobMapper, FileSystemMapper, S3Location,
+)
 
 class Account(MemoryFileSystem):
     store, pseudo_dirs = {}, [""]
@@ -1183,12 +1187,17 @@ class Buckets(MemoryFileSystem):
 
 class AccountMapper(FileSystemMapper):
     classes, levels = ("__main__.Account",), ("account", "container")
+    css = AzureBlobMapper.css
     def to_location(self, fs, path):
         container, _, key = path.strip("/").partition("/")
         return AbfsLocation(account_name="lake", container_name=container, path=key)
 
 class BucketMapper(FileSystemMapper):
     classes, levels = ("__main__.Buckets",), ("endpoint", "bucket")
+    css = '''
+    [data-fs-level="bucket"] .jse-icon svg { display: none; }
+    [data-fs-level="bucket"] .jse-icon::before { content: "B"; }
+    '''
     def to_location(self, fs, path):
         bucket, _, key = path.strip("/").partition("/")
         return S3Location(bucket=bucket, key=key)
@@ -1202,29 +1211,62 @@ StorageExplorer(
 )"""
 
 
+def before(target: Locator, prop: str) -> str:
+    """A computed property of the ``::before`` of ``target``'s icon."""
+    return target.locator(".jse-icon").evaluate(
+        "(el, prop) => getComputedStyle(el, '::before').getPropertyValue(prop)", prop
+    )
+
+
 @lab_check
 def storage_levels(lab: Lab, page: Page) -> None:
-    # Accounts, containers and buckets get icons of their own, and their rows
-    # data-fs-level; the explorer data-fs-protocol; plain folders neither.
+    # Accounts, containers and buckets get their rows' data-fs-level, and the
+    # icons their mapper's CSS gives them, while the explorer shows one of
+    # its storages (data-fs-mapper); plain folders keep the folder icon.
     x = Explorer(lab, page, STORAGE_LEVELS)
-    icon = ".jse-icon svg"
+    svg = ".jse-icon svg"
     expect(x.el).to_have_attribute("data-fs-protocol", "abfs")
+    expect(x.el).to_have_attribute("data-fs-mapper", "__main__.AccountMapper")
     root = x.el.locator(".jse-tree .jse-node").first
     expect(root).to_have_attribute("data-fs-level", "account")
-    expect(root.locator(icon)).to_have_attribute("data-icon", "cloud")
     expect(x.node("raw")).to_have_attribute("data-fs-level", "container")
     expect(x.row("raw")).to_have_attribute("data-fs-level", "container")
-    expect(x.row("raw").locator(icon)).to_have_attribute("data-icon", "box")
+    # Azure's icons: masks, in Azure's colour; the selection's in the tree's
+    # current folder, the root.
+    for target in (root, x.row("raw")):
+        expect(target.locator(svg)).to_be_hidden()
+        assert "data:image/svg+xml" in before(target, "mask-image")
+    assert before(x.row("raw"), "background-color") == "rgb(0, 120, 212)"
+    assert before(root, "background-color") != "rgb(0, 120, 212)"
+    # Users' CSS, as in custom.css, overrides the mapper's, in selected rows too.
+    user_css = page.add_style_tag(
+        content='.jse-browser [data-fs-level="container"] .jse-icon::before'
+        ' { content: "C"; mask: none; background: none; }'
+    )
+    x.row("raw").click()
+    expect(x.row("raw")).to_have_class(re.compile("jse-selected"))
+    assert before(x.row("raw"), "content") == '"C"'
+    assert before(x.row("raw"), "mask-image") == "none"
+    assert before(x.row("raw"), "background-color") == "rgba(0, 0, 0, 0)"
+    user_css.evaluate("style => style.remove()")
     x.row("raw").dblclick()
     # The path: "/ raw", no separator after a root of "/".
     expect(x.el.locator(".jse-crumb")).to_have_text(["/", "raw"])
     expect(x.el.locator(".jse-crumbs .jse-sep")).to_have_count(0)
     expect(x.row("sales")).not_to_have_attribute("data-fs-level", re.compile("."))
-    expect(x.row("sales").locator(icon)).to_have_attribute("data-icon", "folder")
+    expect(x.row("sales").locator(svg)).to_have_attribute("data-icon", "folder")
+    expect(x.row("sales").locator(svg)).to_be_visible()
     x.el.locator(".jse-fs-select").select_option("S3")
-    expect(x.el).to_have_attribute("data-fs-protocol", "s3")
-    expect(x.row("landing").locator(icon)).to_have_attribute("data-icon", "bucket")
+    expect(x.el).to_have_attribute("data-fs-mapper", "__main__.BucketMapper")
     expect(x.node("landing")).to_have_attribute("data-fs-level", "bucket")
+    # The bucket mapper's own CSS, and none of Azure's.
+    expect(x.row("landing").locator(svg)).to_be_hidden()
+    assert before(x.row("landing"), "content") == '"B"'
+    assert before(x.row("landing"), "mask-image") == "none"
+    # Each mapper's CSS once on the page.
+    for mapper in ("AccountMapper", "BucketMapper"):
+        style = page.locator(f'style[data-jse-mapper="__main__.{mapper}"]')
+        expect(style).to_have_count(1)
 
 
 # A support taking seconds to view text files, as a Spark session starting.

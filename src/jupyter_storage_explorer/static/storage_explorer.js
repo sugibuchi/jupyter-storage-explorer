@@ -76,6 +76,7 @@ function render({ model, el }) {
   x.jupyterlab = createJupyterLab(x);
   x.properties = createProperties(x);
   x.about = createAbout(x);
+  x.mapperCss = createMapperCss(x);
   // Keys in the file list: Ctrl+C, Ctrl+X, Ctrl+V, F2, Delete, Enter.
   createShortcuts(x).attach(x.list.pane);
 
@@ -94,7 +95,8 @@ function render({ model, el }) {
   // Bottom edge of the widget: resizes the last area (preview panel or tree and list).
   const grip = h("div", { className: "jse-grip", title: "Drag to resize" });
   // "jse-browser" is for user styles too, e.g. icons by [data-depth] (DEVELOPMENT.md),
-  // with the storage shown's protocol, e.g. .jse-browser[data-fs-protocol="s3"].
+  // with the storage shown's protocol, e.g. .jse-browser[data-fs-protocol="s3"],
+  // and its mapper, whose CSS shows its storages (mapper_css.js).
   el.classList.add("jse-widget", "jse-browser");
   const renderProtocol = () => (el.dataset.fsProtocol = model.get("_fs_protocol"));
   // The narrow layout of JupyterLab's side bar (the launcher's side panel):
@@ -209,6 +211,8 @@ function render({ model, el }) {
     },
     "change:_filesystem_names": x.tree.renderStorages,
     "change:_fs_protocol": renderProtocol,
+    "change:_fs_mapper": x.mapperCss.render,
+    "change:_mapper_css": x.mapperCss.render,
     // Sent with the storage's _root, which draws the tree again.
     "change:_root_level": x.tree.render,
     "change:_listing": x.list.render,
@@ -238,6 +242,7 @@ function render({ model, el }) {
 
   applyHeight();
   renderProtocol();
+  x.mapperCss.render();
   x.toolbar.renderTreeButton();
   placeStorages();
   x.tree.renderStorages();

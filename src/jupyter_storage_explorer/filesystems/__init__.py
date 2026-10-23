@@ -3,14 +3,16 @@ they move, copy, delete, upload and download files (operations).
 
 ``FileSystemMapper`` (mapper.py) and ``FileSystemOperations``
 (operation.py) are the interfaces; locations.py has the predefined
-locations (``Location`` subclasses), and mappers.py and operations.py the
-predefined ones, tried after an explorer's own (its ``filesystem_mappers``
+locations (``Location`` subclasses), level_icons.py the CSS of folders'
+icons (``level_icon_css``), and mappers.py and operations.py the predefined
+ones, tried after an explorer's own (its ``filesystem_mappers``
 and ``operations`` arguments): ``default_mappers()`` and
 ``default_operations()``. Operations and mappers for particular storages
 come with plugins, e.g. ``AzureDataLakeGen2Operation`` with abfs-support
 (``pip install "jupyter-storage-explorer[abfs]"``).
 """
 
+from jupyter_storage_explorer.filesystems.level_icons import level_icon_css
 from jupyter_storage_explorer.filesystems.locations import (
     AbfsLocation,
     FsspecLocation,
@@ -78,5 +80,6 @@ __all__ = [
     "SftpLocation",
     "default_mappers",
     "default_operations",
+    "level_icon_css",
     "same_filesystem",
 ]

@@ -91,6 +91,50 @@ class TestStorageLevels:
         assert explorer._root_level == ""  # not a drive's top folder
 
 
+class TestMapperCss:
+    """How the storages look: their mappers' CSS (FileSystemMapper.css),
+    scoped to the explorer while it shows one of their storages."""
+
+    MEMORY = "jupyter_storage_explorer.filesystems.mappers.MemoryMapper"
+    LOCAL = "jupyter_storage_explorer.filesystems.mappers.LocalMapper"
+
+    def test_the_storages_mappers(self, memfs, tmp_path):
+        explorer = make(filesystems={"mem": memfs, "local": str(tmp_path)})
+        assert set(explorer._mapper_css) == {self.MEMORY, self.LOCAL}
+        assert explorer._fs_mapper == self.MEMORY
+        explorer._filesystem = "local"
+        assert explorer._fs_mapper == self.LOCAL
+
+    def test_scoped_without_weight(self, mem_explorer):
+        css = mem_explorer._mapper_css[self.MEMORY]
+        assert css.startswith(
+            f':where(.jse-browser[data-fs-mapper="{self.MEMORY}"]) {{\n'
+        )
+        assert MemoryMapper.css in css
+        assert css.endswith("\n}")
+
+    def test_a_mapper_of_ones_own(self, memfs):
+        class Painted(AzureLike):
+            css = "& { --jse-storage-color: red; }"
+
+        explorer = make("/", fs=memfs, filesystem_mappers=[Painted()])
+        key = f"{__name__}.TestMapperCss.test_a_mapper_of_ones_own.<locals>.Painted"
+        assert explorer._fs_mapper == key
+        assert list(explorer._mapper_css) == [key]
+        assert Painted.css in explorer._mapper_css[key]
+
+    def test_none_without_css(self, memfs):
+        """AzureLike gives its levels but no CSS: plain folders' icons."""
+        explorer = make("/", fs=memfs, filesystem_mappers=[AzureLike()])
+        assert explorer._fs_mapper == ""
+        assert explorer._mapper_css == {}
+
+    def test_in_a_dir_filesystem(self, memfs):
+        within = make(fs=DirFileSystem("/", memfs))
+        assert within._fs_mapper == self.MEMORY
+        assert list(within._mapper_css) == [self.MEMORY]
+
+
 class TestListing:
     def test_entries_and_tree(self, mem_explorer):
         mem_explorer._current_dir = "/data"

@@ -311,7 +311,7 @@ function createList(x) {
       h(
         "td",
         { className: "jse-col-name" },
-        h("span", { className: "jse-icon" }, fileIcon(entry.name, isDir, formatIcon, model.get("_file_icon_svgs")[formatIcon], level)),
+        h("span", { className: "jse-icon" }, fileIcon(entry.name, isDir, formatIcon, model.get("_file_icon_svgs")[formatIcon])),
         visible(entry.name),
       ),
       ...columns.filter((col) => col.key !== "name").map((col) => h("td", { className: `jse-col-${col.key}`, textContent: CELLS[col.key](entry) })),
