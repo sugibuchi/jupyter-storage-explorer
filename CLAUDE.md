@@ -120,7 +120,7 @@ the code. The traps:
   `hatch_build.py`.
 - Each library's options are listed in its plugin's README only. Update it when an options model changes.
 - A plugin's README follows "The README" in docs/development-plugin.md, which `tests/test_plugin_readmes.py` checks.
-  Its Installation table lists exactly the `full` extra's libraries.
+  The table in the plugin README's own Installation section lists exactly its `full` extra's libraries.
 
 ## Conventions
 
