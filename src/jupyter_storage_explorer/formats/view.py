@@ -84,9 +84,10 @@ class View:
         ----------
         callback : callable
             Called with the view, as ``callback(view)``, once, however often
-            it is given. Errors are logged, not raised, so that they never
-            keep the next view from showing, and do not stop the other
-            functions.
+            it is given, in the order the functions were given (e.g. a
+            connection closed before its file is released). Errors are
+            logged, not raised, so that they never keep the next view from
+            showing, and do not stop the other functions.
         remove : bool, default False
             Stop calling ``callback`` instead.
 
@@ -251,15 +252,16 @@ class TableSetView(View):
     ...     selector="tab",
     ... )
 
-    A local database's schemas and tables (``con.table`` reads tables, not
-    views), the connection closed with the view:
+    A local database's schemas and tables, read by SQL (``con.table`` fails
+    for a view named with its schema), the connection closed with the view:
 
     >>> con = duckdb.connect(path, read_only=True)
+    >>> sql = {"sales.orders": 'select * from "sales"."orders"'}
     >>> view = TableSetView(
     ...     nodes=[
     ...         Node(label="sales", children=[Leaf(label="orders", id="sales.orders")]),
     ...     ],
-    ...     loader=con.table,
+    ...     loader=lambda id: con.sql(sql[id]),
     ... )
     >>> view.on_close(lambda view: con.close())
     """

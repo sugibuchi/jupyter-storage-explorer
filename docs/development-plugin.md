@@ -241,8 +241,8 @@ class ParquetByDuckDB(FormatSupport):
 ```
 
 `additional_requirements` gate the whole support: without them, neither its views nor its code are offered. List
-there what the data browser needs too. In memory mode, it collects lazy data into the library narwhals collects it
-into, e.g. PyArrow for a DuckDB relation.
+there what the data browser needs too. It collects each page of lazy data, in either mode, into the library narwhals
+collects it into, e.g. PyArrow for a DuckDB relation or a Spark DataFrame.
 
 ### `view(fmt, ctx, options, limits)`
 
@@ -284,20 +284,27 @@ time a table is chosen or read again, e.g. a database's tables from one connecti
 
 ```python
 con = duckdb.connect(path, read_only=True)  # a local file's path: DuckDB opens databases itself
-# Tables only: con.table cannot read views, which information_schema.tables lists too.
-tables = con.sql(
-    "select table_schema, table_name from information_schema.tables where table_type = 'BASE TABLE'"
-).fetchall()
+tables = con.sql("select table_schema, table_name from information_schema.tables").fetchall()  # views too
+
+
+def quoted(name):
+    return '"' + name.replace('"', '""') + '"'
+
+
+# By SQL: con.table fails for a view named with its schema ("main"."v"), and for names needing quotes.
+sql = {f"{s}.{t}": f"select * from {quoted(s)}.{quoted(t)}" for s, t in tables}
 schemas = sorted({schema for schema, _ in tables})
 view = TableSetView(
     nodes=[
         Node(label=s, children=[Leaf(label=t, id=f"{s}.{t}") for schema, t in tables if schema == s])
         for s in schemas
     ],
-    loader=con.table,
+    loader=lambda id: con.sql(sql[id]),
 )
 view.on_close(lambda view: con.close())
 ```
+
+A `TableSetView` needs at least one table: show another view, e.g. a `TextView`, for an item without any.
 
 The last three ask the user before the view is made, e.g. before reading a whole large file:
 
@@ -371,7 +378,8 @@ fields are its reader's arguments, of the same names, from the library's API doc
 each defaulting to `LIBRARY_DEFAULT`: not passed, so the library's own default applies (unlike `None`, which some
 arguments take as a value). Leave out the source, functions (callables) and arguments that change what the reader
 returns (iterators, chunks). A reader passing arguments on to another library's, as Dask's `read_csv` does to pandas',
-takes those too, less those it refuses: check them with the installed library. Pass `options.arguments()` (those given) to the reader, after the support's own defaults
+takes those too, less those it refuses: check them with the installed library. A reader taking `**kwargs` shows
+none in its signature, and may take an unknown name given `None`: check each with a real value. Pass `options.arguments()` (those given) to the reader, after the support's own defaults
 (e.g. a separator detected), so that the user's win; the code gets `format_arguments(options.code_arguments())`, which
 leaves out secrets and Python objects (e.g. data types) but keeps `None`. List them in the plugin's README, a table per
 format, their descriptions from the library's documentation.
@@ -419,8 +427,12 @@ A library reads the item in one of five ways. Choose per storage in `supports`, 
 - Handing `ctx.fs` over, pass `ctx.path`, the item's path in it, not `ctx.location.url`. The location's URL may not be
   the filesystem's: a `DirFileSystem`'s paths are relative, and a mapper's URL may name the storage otherwise (adlfs
   reads `abfs://container@account...` as `container/...`).
-- A library registering filesystems by protocol may already read that protocol itself (DuckDB's `s3://`). Register
-  the explorer's under a name of its own, so that both work.
+- A library registering filesystems by protocol, as DuckDB's `register_filesystem`, takes `ctx.fs` as it is: read
+  `ctx.fs.unstrip_protocol(ctx.path)`, its own URL of the item. That works for a `DirFileSystem` too.
+  - DuckDB calls `modified()`, and fails where the filesystem has none, e.g. fsspec's HTTP and zip filesystems: refuse
+    those in `supports`, or give a wrapper a `modified()` of the info's time.
+  - The library may also read that protocol itself, e.g. DuckDB's `s3://`. Check with the real filesystem which one
+    reads it.
 - By URL, fsspec rebuilds the filesystem from its protocol and `storage_options`, and only some instances can be
   rebuilt so. Arguments given by position are not in `storage_options`, e.g. a `DirFileSystem("/data", fs=...)`'s
   folder, and a subclass not registered for its protocol comes back as its parent. Check in `supports` that
@@ -439,8 +451,12 @@ its copy:
   own copy.
 - A copy stays valid while the remote file's modification time is the same; `get` downloads a changed file again.
 - `status(ctx)` says "cached", "invalid" (changed since) or "not_cached": ask before a large download unless "cached".
-- `get` counts the view as a user; release it in `on_close` with `invalidate_file(ctx.location, delay=...)`. The copy is
+- `get` counts the view as a user; release it in `on_close` with `release(ctx.location, delay=...)`. The copy is
   deleted once no view uses it, after the delay, so that viewing the file again soon reuses it.
+- Release it also when what follows `get` fails, e.g. opening the copy.
+- Close what reads the copy before releasing it: on Windows, a file still open cannot be deleted. `on_close` calls
+  its functions in the order given.
+- Ask first also when the size is unknown (`ctx.size` is None).
 - The copies are removed at the kernel's exit.
 
 ```python
@@ -448,13 +464,20 @@ cache = local_file_cache()
 
 
 def open_copy():
-    con = duckdb.connect(str(cache.get(ctx)), read_only=True)
+    path = cache.get(ctx)
+    try:
+        con = duckdb.connect(str(path), read_only=True)
+    except Exception:
+        cache.release(ctx.location)  # get() counted this view
+        raise
     view = TableSetView(...)
-    view.on_close(lambda view: (con.close(), cache.invalidate_file(ctx.location, delay=600)))
+    view.on_close(lambda view: con.close())  # first
+    view.on_close(lambda view: cache.release(ctx.location, delay=600))
     return view
 
 
-if cache.status(ctx) != "cached" and (ctx.size or 0) > limits.max_whole_file_bytes:
+large = ctx.size is None or ctx.size > limits.max_whole_file_bytes
+if cache.status(ctx) != "cached" and large:
     return ViewWithConfirmation(message=f"Download {ctx.name} to view it?", factory=open_copy)
 return open_copy()
 ```
@@ -938,8 +961,14 @@ A storage plugin's tests need no real storage either:
 Try it in a browser with `uv run jupyter lab`: the plugin's engine is in the status bar's engine menu, and ⚙ → **About**
 lists the plugin with its version.
 
-This repository's plugins also get a check in `tests/browser/smoke.py` for what users see, such as a storage's levels
-and icons. `storage_levels` there shows how, on a fake filesystem.
+This repository's plugins also get a check in `tests/browser/smoke.py` for what users see:
+
+- a storage plugin, such as a storage's levels and icons: `storage_levels` there shows how, on a fake filesystem;
+- an engine plugin, its views in the preview panel: `prompts` there is a lab check of its own explorer, on fsspec's
+  memory filesystem, viewing with Polars.
+
+Checks opening view tabs need the launcher's JupyterLab extension built: `uv run jlpm install` and `uv run jlpm build`
+in `launcher/labextension`, then `uv sync`.
 
 Plugins outside this repository use only the public API: the top level, `filesystems`, `formats`, `formats.supports`
 and `testing`. This repository's plugins may also use the explorer's internals, as they are released with it.
@@ -1030,8 +1059,12 @@ requires pyspark-support of its own version, whose supports its engine extends. 
    tests are in its `tests/`, named `test_<name>_*.py` (pytest at the root runs every plugin's, and imports test files
    by name).
 2. Add its extras, `<name>` (the plugin's `full`) and `<name>-support` (the plugin alone), to
-   `[project.optional-dependencies]` in the root's and the launcher's `pyproject.toml` (and to their `all` and `all-supports`), without versions (the plugin
-   requires the explorer of exactly its own), and the package to the root's dev dependencies and `[tool.uv.sources]`.
+   `[project.optional-dependencies]` in the root's and the launcher's `pyproject.toml`, without versions: the plugin
+   requires the explorer of exactly its own.
+   - Add them to the root's `all` and `all-supports`. The launcher's delegate to the root's.
+   - Add the package to the root's dev dependencies and `[tool.uv.sources]`.
+   - The workspace shares one lock: the plugin's `dev` group must agree with the root's, e.g. the root keeps DuckDB
+     below 2 for sqlframe.
 3. Give it a release workflow, `.github/workflows/release-<plugin>.yaml` (a copy of another's), and its PyPI project a
    trusted publisher for it (see [One-time setup for PyPI](../DEVELOPMENT.md#one-time-setup-for-pypi)).
 4. List it in [plugins/README.md](../plugins/README.md): in the table of its engine or storage, and in the extras'

@@ -62,7 +62,7 @@ def test_downloaded_on_demand_once(cache, make_item, downloads):
 def test_downloaded_again_once_changed(cache, make_item, downloads):
     first = cache.get(remote(make_item))
     # Unused, kept for a while.
-    cache.invalidate_file(remote(make_item).location, delay=60)
+    cache.release(remote(make_item).location, delay=60)
     changed = remote(make_item, b"v2", mtime=2.0)
     assert cache.status(changed) == "invalid"
     path = cache.get(changed)
@@ -76,8 +76,8 @@ def test_a_copy_replaced_while_used_is_deleted_later(cache, make_item):
     changed = remote(make_item, b"v2", mtime=2.0)
     second = cache.get(changed)
     assert first.exists()  # its user may still read it
-    cache.invalidate_file(changed.location)
-    cache.invalidate_file(changed.location)
+    cache.release(changed.location)
+    cache.release(changed.location)
     assert not second.exists()
     assert not first.exists()
 
@@ -86,9 +86,9 @@ def test_kept_while_used(cache, make_item):
     item = remote(make_item)
     path = cache.get(item)
     cache.get(item)  # a second view
-    cache.invalidate_file(item.location)
+    cache.release(item.location)
     assert cache.status(item) == "cached"
-    cache.invalidate_file(item.location)
+    cache.release(item.location)
     assert cache.status(item) == "not_cached"
     assert not path.exists()
 
@@ -96,7 +96,7 @@ def test_kept_while_used(cache, make_item):
 def test_deleted_after_the_delay(cache, make_item):
     item = remote(make_item)
     path = cache.get(item)
-    cache.invalidate_file(item.location, delay=0.05)
+    cache.release(item.location, delay=0.05)
     assert cache.status(item) == "cached"  # viewing it again soon reuses it
     until(lambda: not path.exists())
     assert cache.status(item) == "not_cached"
@@ -105,7 +105,7 @@ def test_deleted_after_the_delay(cache, make_item):
 def test_taken_again_within_the_delay(cache, make_item, downloads):
     item = remote(make_item)
     cache.get(item)
-    cache.invalidate_file(item.location, delay=0.1)
+    cache.release(item.location, delay=0.1)
     cache.get(item)  # cancels the deletion
     time.sleep(0.2)
     assert cache.status(item) == "cached"
@@ -113,7 +113,7 @@ def test_taken_again_within_the_delay(cache, make_item, downloads):
 
 
 def test_unknown_locations_ignored(cache, make_item):
-    cache.invalidate_file(remote(make_item).location)
+    cache.release(remote(make_item).location)
 
 
 def test_one_download_for_calls_at_once(cache, make_item, memfs, monkeypatch):
