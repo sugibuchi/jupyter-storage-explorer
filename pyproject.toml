@@ -57,6 +57,10 @@ abfs-support = ["jupyter-storage-explorer-abfs-support"]
 # Experimental, as fsspec-databricks is: not in "all" or "all-supports".
 databricks = ["jupyter-storage-explorer-databricks-support[full]"]
 databricks-support = ["jupyter-storage-explorer-databricks-support"]
+# Experimental, as it is not tested on a Dask cluster: not in "all" or
+# "all-supports".
+dask = ["jupyter-storage-explorer-dask-support[full]"]
+dask-support = ["jupyter-storage-explorer-dask-support"]
 duckdb = ["jupyter-storage-explorer-duckdb-support[full]"]
 duckdb-support = ["jupyter-storage-explorer-duckdb-support"]
 pandas = ["jupyter-storage-explorer-pandas-support[full]"]
@@ -100,6 +104,7 @@ dev = [
     "duckdb>=1.5.6,<2",
     "fastexcel>=0.21.0",
     "jupyter-storage-explorer-abfs-support",
+    "jupyter-storage-explorer-dask-support",
     "jupyter-storage-explorer-databricks-support",
     "jupyter-storage-explorer-duckdb-support",
     "jupyter-storage-explorer-launcher",
@@ -132,6 +137,7 @@ members = ["launcher", "plugins/*"]
 [tool.uv.sources]
 jupyter-storage-explorer-launcher = { workspace = true }
 jupyter-storage-explorer-abfs-support = { workspace = true }
+jupyter-storage-explorer-dask-support = { workspace = true }
 jupyter-storage-explorer-databricks-support = { workspace = true }
 jupyter-storage-explorer-duckdb-support = { workspace = true }
 jupyter-storage-explorer-pandas-support = { workspace = true }

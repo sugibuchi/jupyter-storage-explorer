@@ -46,7 +46,10 @@ requires-python = ">=3.11"
 abfs = ["jupyter-storage-explorer[abfs]"]
 abfs-support = ["jupyter-storage-explorer[abfs-support]"]
 # Experimental: not in "all" or "all-supports".
-databricks = ["jupyter-storage-explorer[databricks]"]
+dask = ["jupyter-storage-explorer[dask]"]
+dask-support = ["jupyter-storage-explorer[dask-support]"]
+# Experimental: not in "all" or "all-supports".
+databricks =["jupyter-storage-explorer[databricks]"]
 databricks-support = ["jupyter-storage-explorer[databricks-support]"]
 duckdb = ["jupyter-storage-explorer[duckdb]"]
 duckdb-support = ["jupyter-storage-explorer[duckdb-support]"]

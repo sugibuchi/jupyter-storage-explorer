@@ -1,0 +1,67 @@
+[project]
+name = "jupyter-storage-explorer-dask-support"
+dynamic = ["version", "dependencies"]
+description = "Dask support for Storage Explorer"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Tsuyoshi SUGIBUCHI" }]
+keywords = ["jupyter", "jupyter-storage-explorer", "dask", "parquet", "csv"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Framework :: Jupyter",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Scientific/Engineering",
+]
+requires-python = ">=3.11"
+
+[project.urls]
+Homepage = "https://github.com/sugibuchi/jupyter-storage-explorer/tree/main/plugins/dask-support"
+Source = "https://github.com/sugibuchi/jupyter-storage-explorer"
+Issues = "https://github.com/sugibuchi/jupyter-storage-explorer/issues"
+
+# Explorers load the plugin by this entry point, named by its key.
+[project.entry-points."jupyter_storage_explorer.plugins"]
+dask-support = "jupyter_storage_explorer_dask_support:DaskSupport"
+
+# The libraries the plugin uses: not dependencies, so that installing the
+# plugin never changes those of a shared environment; "full" installs them.
+# Dask's "dataframe" extra brings pandas and PyArrow, which dask.dataframe
+# needs. 2025.1 is the first Dask with its query planner (dask-expr) built in,
+# which narwhals queries.
+[project.optional-dependencies]
+full = ["dask[dataframe]>=2025.1.0"]
+
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+# The same version as jupyter-storage-explorer: from the repository's git tags.
+[tool.hatch.version]
+source = "vcs"
+raw-options = { root = "../..", version_scheme = "post-release" }
+
+# The dependencies, set by hatch_build.py: jupyter-storage-explorer at the
+# plugin's own version.
+[tool.hatch.metadata.hooks.custom]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/jupyter_storage_explorer_dask_support"]
+
+[dependency-groups]
+dev = [
+    # As the root's dev group: the workspace shares one lock.
+    "dask[dataframe]>=2026.8.0",
+    "pytest>=9.1.1",
+]
+
+[tool.uv]
+cache-keys = [{ file = "pyproject.toml" }, { file = "hatch_build.py" }, { git = { commit = true, tags = true } }]
+
+[tool.uv.sources]
+jupyter-storage-explorer = { workspace = true }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

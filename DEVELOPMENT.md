@@ -15,7 +15,7 @@ explorer exactly, so an extra always installs the plugin of the explorer's versi
 |-------------------------------------------|---------------------------|-------------------------------------------------------------------------------------------------------|
 | `jupyter-storage-explorer`                | `.`                       | The widgets `StorageExplorer` and `DataExplorer`; pure Python, no build.                              |
 | `jupyter-storage-explorer-launcher`       | `launcher/`               | The JupyterLab launcher item, and `launch()` run in the tab it opens.                                 |
-| `jupyter-storage-explorer-<name>-support` | `plugins/<name>-support/` | The plugins: `polars`, `pandas`, `duckdb`, `pyspark` (engines), `abfs` (Azure Data Lake Storage operations) and `databricks` (Databricks locations and the Databricks Connect engine, experimental). |
+| `jupyter-storage-explorer-<name>-support` | `plugins/<name>-support/` | The plugins: `polars`, `pandas`, `duckdb`, `pyspark` and `dask` (engines; Dask experimental), `abfs` (Azure Data Lake Storage operations) and `databricks` (Databricks locations and the Databricks Connect engine, experimental). |
 
 | Path                                                           | Contents                                                                                             |
 |----------------------------------------------------------------|------------------------------------------------------------------------------------------------------|
@@ -1293,6 +1293,7 @@ The workflows publish with PyPI's [trusted publishing](https://docs.pypi.org/tru
    | `jupyter-storage-explorer`                 | `release-explorer.yaml`        |
    | `jupyter-storage-explorer-launcher`        | `release-launcher.yaml`        |
    | `jupyter-storage-explorer-abfs-support`    | `release-abfs-support.yaml`    |
+   | `jupyter-storage-explorer-dask-support`    | `release-dask-support.yaml`    |
    | `jupyter-storage-explorer-databricks-support` | `release-databricks-support.yaml` |
    | `jupyter-storage-explorer-duckdb-support`  | `release-duckdb-support.yaml`  |
    | `jupyter-storage-explorer-pandas-support`  | `release-pandas-support.yaml`  |

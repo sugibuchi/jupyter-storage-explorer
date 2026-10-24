@@ -35,7 +35,7 @@ Storage Explorer. See
   [Delta Lake, Parquet, CSV, JSON, Excel, DuckDB databases, text and images](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#supported-formats)
   open at a click, with ready-to-run code that loads them into your notebook.
 - **Plugin support**: data professionals, start your engines. Plug your favourite data library, such as
-  [Polars, pandas, DuckDB or PySpark](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/plugins/README.md), into
+  [Polars, pandas, DuckDB, PySpark or Dask](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/plugins/README.md), into
   the explorer, and browse data with it on the fly. Not supported yet? You, or your AI assistant, can
   write a plugin for it: see [Developing plugins](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/development-plugin.md).
 - **Safe file operations**: keep calm and copy on. Copy, move and delete large folders

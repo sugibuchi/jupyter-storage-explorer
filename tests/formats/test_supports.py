@@ -12,6 +12,7 @@ import polars as pl
 import pytest
 from all_supports import ALL_SUPPORTS, NO_PLUGINS, all_supports, installed_only
 from items import local_item
+from jupyter_storage_explorer_dask_support import CsvByDask
 from jupyter_storage_explorer_duckdb_support import CsvByDuckDB
 from jupyter_storage_explorer_pandas_support import CsvByPandas, CsvByPandasOptions
 from jupyter_storage_explorer_polars_support import (
@@ -434,6 +435,7 @@ class TestChain:
         item = make_item("/a.csv", b"")
         # In the supports' order: the plugins', by key.
         assert [type(s) for s in chain.of(Csv(), item, "view")] == [
+            CsvByDask,
             CsvByDuckDB,
             CsvByPandas,
             CsvByPolars,

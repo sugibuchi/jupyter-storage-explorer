@@ -94,8 +94,8 @@ class TestCodeSnippet:
         assert "Python" in self.engines(explorer, "b.json")
 
     def test_unknown_engines_left_out_with_a_warning(self, folder):
-        with pytest.warns(RuntimeWarning, match="no support of dask"):
-            explorer = make(folder, code_snippet=["dask", "pandas"])
+        with pytest.warns(RuntimeWarning, match="no support of vaex"):
+            explorer = make(folder, code_snippet=["vaex", "pandas"])
         assert self.engines(explorer) == ["pandas"]
 
     @pytest.mark.parametrize("value", ["polars", "yes", [1]])
