@@ -27,7 +27,7 @@ pip install "jupyter-storage-explorer[polars]"
 
 Engines and storages come as plugins, installed with extras of two kinds:
 
-- **Full extras**, e.g. `[polars]`: the plugin and the libraries it uses (Polars, deltalake, fastexcel).
+- **Full extras**, e.g. `[polars]`: the plugin and the libraries it uses (Polars, deltalake, fastexcel, PyArrow).
 - **Support-only extras**, e.g. `[polars-support]`: the plugin alone, using the libraries already installed. Nothing
   else is installed or upgraded.
 

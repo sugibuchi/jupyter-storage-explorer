@@ -33,6 +33,7 @@ full = [
     "polars>=1.20",
     "deltalake>=1.0",
     "fastexcel>=0.12",
+    "pyarrow>=14",
 ]
 
 [build-system]
@@ -56,6 +57,7 @@ dev = [
     "polars>=1.20",
     "deltalake>=1.0",
     "fastexcel>=0.12",
+    "pyarrow>=14",
     # The tests' (tests/), besides the libraries.
     "openpyxl>=3.1",
     "pytest>=9.1.1",
