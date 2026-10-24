@@ -1118,6 +1118,9 @@ order, until one gives rows:
    narwhals' `head` would read every partition. Sorted Dask data, found in its expression, is read in one pass:
    computed one by one, each partition would sort all the data again. Others read all rows up to `offset + length`.
 
+A `DataQuery` takes one `fetch`. The explorer joins the first two steps into it, so a standalone `DataExplorer` has
+only its own `fetch_rows`.
+
 `ViewLimits` sets the browser's page size, `max_display_rows`, and its limits for live and memory modes.
 
 #### Recipes

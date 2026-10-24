@@ -126,6 +126,24 @@ class _Asking(NamedTuple):
         return {**section(self.view), "prompt": self.id}
 
 
+def _layered_fetch(
+    user: Callable[[Any, int, int], Any] | None,
+    view_fetch: Callable[[], Callable[[Any, int, int], Any] | None],
+) -> Callable[[Any, int, int], Any]:
+    """The data browser's ``fetch`` of a view's data: the explorer's
+    ``fetch_rows`` (the user's), then the view's ``fetch`` (a support's), the
+    one of the view now shown, as a reload's may differ; None where neither
+    reads, for the default (``DataQuery``)."""
+
+    def fetch(lf: Any, offset: int, length: int) -> Any:
+        for read in (user, view_fetch()):
+            if read is not None and (df := read(lf, offset, length)) is not None:
+                return df
+        return None
+
+    return fetch
+
+
 class _TableRead:
     """How the data browser reads a table set's table: with its loader,
     ``load(again)``, keeping the ``QueryView`` it gave, if any, which tells
@@ -683,9 +701,7 @@ class PreviewsMixin:
         mode = state.mode if state is not None else "auto"
         limits = self._view_limits
         options = {
-            "fetch": self._fetch_rows,
-            # The fetch of the view the data is from: a reload's may differ.
-            "view_fetch": lambda: current[0].fetch,
+            "fetch": _layered_fetch(self._fetch_rows, lambda: current[0].fetch),
             "cut": lambda: current[0].more,
             "max_live_rows": limits.max_live_rows,
             "max_memory_rows": limits.max_memory_rows,
@@ -719,7 +735,6 @@ class PreviewsMixin:
         url = item.ctx.location.url
         limits = self._view_limits
         options = {
-            "fetch": self._fetch_rows,
             "max_live_rows": limits.max_live_rows,
             "max_memory_rows": limits.max_memory_rows,
             "page_rows": limits.max_display_rows,
@@ -732,8 +747,8 @@ class PreviewsMixin:
             reading = _TableRead(load)
             table_options = {
                 **options,
+                "fetch": _layered_fetch(self._fetch_rows, reading.view_fetch),
                 "cut": reading.cut,
-                "view_fetch": reading.view_fetch,
                 "on_close": reading.close,
             }
             try:

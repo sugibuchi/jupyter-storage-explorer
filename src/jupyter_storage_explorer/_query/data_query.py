@@ -157,10 +157,9 @@ class DataQuery:
     be switched.
 
     Every read of lazy data, the first rows when opening and each live page,
-    goes through ``fetch`` (the explorer's ``fetch_rows``, the user's), then
-    ``view_fetch()`` (the ``fetch`` of the view the data came from, a
-    support's, asked at each read), then ``fetch_rows``: the first giving
-    rows reads them.
+    goes through ``fetch`` if given (an explorer's: its ``fetch_rows``, the
+    user's, then the view's ``fetch``, a support's), then ``fetch_rows``,
+    the default: the first giving rows reads them.
 
     ``cut``, if given, tells whether the data the source gave holds only the
     first part of the item's: eager data its first rows (e.g. read with
@@ -184,8 +183,6 @@ class DataQuery:
         max_memory_rows: int = 100_000,
         page_rows: int = 100,
         fetch: Callable[[nw.LazyFrame, int, int], nw.DataFrame | None] | None = None,
-        view_fetch: Callable[[], Callable[[nw.LazyFrame, int, int], Any] | None]
-        | None = None,
         cut: Callable[[], bool] | None = None,
         on_close: Callable[[], object] | None = None,
     ) -> None:
@@ -200,7 +197,6 @@ class DataQuery:
         # Rows of a page of the browser's table.
         self.page_rows = max(1, page_rows)
         self.fetch = fetch
-        self.view_fetch = view_fetch
         self.cut = cut
         # The mode asked for, by the caller or the user: reloading starts in it.
         self.requested = mode
@@ -256,13 +252,12 @@ class DataQuery:
     def _read(self, lf: nw.LazyFrame, offset: int, length: int) -> nw.DataFrame:
         """Rows ``offset`` to ``offset + length`` of lazy data: every read of
         the source, the first rows when opening and the pages of live
-        queries. By the explorer's ``fetch`` (the user's), else the view's
-        (``view_fetch``, the support's, for its library), else
-        ``fetch_rows``; each but the last may return None to pass it on."""
-        view_fetch = self.view_fetch() if self.view_fetch is not None else None
-        for fetch in (self.fetch, view_fetch):
-            if fetch is not None and (df := fetch(lf, offset, length)) is not None:
-                return df
+        queries. By ``fetch``, else, where it gives None, ``fetch_rows``."""
+        if (
+            self.fetch is not None
+            and (df := self.fetch(lf, offset, length)) is not None
+        ):
+            return df
         return fetch_rows(lf, offset, length)
 
     def _fits_live_rows(self) -> bool:
