@@ -165,6 +165,7 @@ def test_menu_info(mem_explorer, monkeypatch):
     installed_only(monkeypatch, "fsspec", "polars", "pandas", "pyspark")
     reply = mem_explorer.request({"type": "menu_info", "rid": 1, "path": "/data/a.csv"})
     assert reply["formats"] == ["csv", "text"]
+    # polars' code opens the file with fsspec: polars cannot read memory://.
     assert [(r["packages"], r["title"]) for r in reply["recipes"]] == [
         (["polars"], "Load as DataFrame"),
         (["pandas"], "Load as DataFrame"),

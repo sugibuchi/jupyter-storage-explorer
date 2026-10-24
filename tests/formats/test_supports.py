@@ -25,7 +25,7 @@ from jupyter_storage_explorer_polars_support import (
 
 from jupyter_storage_explorer import StorageExplorer
 from jupyter_storage_explorer._explorer.supports import SupportChain
-from jupyter_storage_explorer.filesystems import AbfsLocation
+from jupyter_storage_explorer.filesystems import AbfsLocation, S3Location
 from jupyter_storage_explorer.formats import (
     LIBRARY_DEFAULT,
     Csv,
@@ -87,6 +87,11 @@ def support(fmt=Csv, engine=None, **methods):
 ACCOUNT_A = AbfsLocation(account_name="a", container_name="c", path="x")
 ACCOUNT_B = AbfsLocation(account_name="b", container_name="c", path="x")
 ACCOUNT_KEYS = {"a": "key-a", "b": "key-b"}
+
+
+def on_s3(key):
+    """A location polars reads itself, for its code: not the memory filesystem's."""
+    return S3Location(bucket="b", key=key)
 
 
 def options_by_class(engine_options=None, location=ACCOUNT_A):
@@ -464,7 +469,7 @@ class TestChain:
     def test_recipes_of_the_installed_supports_only(self, make_item, monkeypatch):
         # As for views: no code the kernel could not run.
         chain = SupportChain(all_supports())
-        item = make_item("/a.csv", b"a\n")
+        item = make_item("/a.csv", b"a\n", location=on_s3("a.csv"))
 
         def engines():
             return [r.requirements[0].package for r in chain.recipes(Csv(), item)]
@@ -491,7 +496,7 @@ class TestChain:
         chain = SupportChain(all_supports())
 
         def packages():
-            recipes = chain.recipes(DeltaLake(), make_item("/t"))
+            recipes = chain.recipes(DeltaLake(), make_item("/t", location=on_s3("t")))
             return [[r.package for r in recipe.requirements] for recipe in recipes]
 
         installed_only(monkeypatch, "polars", "deltalake", "pyspark", "delta-spark")
@@ -525,7 +530,9 @@ class TestExplorer:
         )
         explorer = StorageExplorer(fs=mem_explorer._fs, supports=[duck])
         installed_only(monkeypatch, "polars", "pyspark")
-        recipes = explorer._supports.recipes(Parquet(), make_item("/a.parquet", b""))
+        recipes = explorer._supports.recipes(
+            Parquet(), make_item("/a.parquet", b"", location=on_s3("a.parquet"))
+        )
         # With the plugins' installed: polars (lazily and eagerly), pyspark;
         # its engine, not among engine_preference's, after polars', by key.
         assert [(r.engine.key, r.title) for r in recipes] == [
@@ -538,7 +545,8 @@ class TestExplorer:
     def test_a_library_given_replaces_the_default_code(self, make_item, monkeypatch):
         explorer = StorageExplorer(fs=None, supports=[CsvByPolars()])
         installed_only(monkeypatch, "polars", "pandas", "pyspark")
-        recipes = explorer._supports.recipes(Csv(), make_item("/a.csv", b"a\n"))
+        item = make_item("/a.csv", b"a\n", location=on_s3("a.csv"))
+        recipes = explorer._supports.recipes(Csv(), item)
         # Its recipes replace the default CsvByPolars': one each.
         assert [r.requirements[0].package for r in recipes] == [
             "polars",

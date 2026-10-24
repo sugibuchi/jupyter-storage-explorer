@@ -63,6 +63,11 @@ def workbook() -> bytes:
     return buffer.getvalue()
 
 
+def on_s3(key: str) -> S3Location:
+    """A location polars reads itself: its code reads the URL."""
+    return S3Location(bucket="b", key=key)
+
+
 def last_line(code: str) -> str:
     return code.strip().splitlines()[-1]
 
@@ -222,13 +227,13 @@ class TestPartitionedParquet:
 class TestRecipes:
     def test_csv(self, make_item):
         code = CsvByPolars().recipe(
-            Csv(), make_item("/a.tsv", b"x\ty\n"), PolarsOptions()
+            Csv(),
+            make_item("/a.tsv", b"x\ty\n", location=on_s3("a.tsv")),
+            PolarsOptions(),
         )
         [frame] = code.values()
         assert frame.startswith("import polars as pl")
-        assert (
-            last_line(frame) == "df = pl.read_csv('memory:///a.tsv', separator='\\t')"
-        )
+        assert last_line(frame) == "df = pl.read_csv('s3://b/a.tsv', separator='\\t')"
 
     def test_lazy_and_eager(self, make_item, memfs):
         memfs.pipe_file("/d/part-0.parquet", b"")
@@ -240,13 +245,15 @@ class TestRecipes:
             "df = pl.read_parquet('memory:///d/*.parquet')"
         )
         lines = JsonLinesByPolars().recipe(
-            JsonLines(), make_item("/a.jsonl", b"{}\n"), PolarsOptions()
+            JsonLines(),
+            make_item("/a.jsonl", b"{}\n", location=on_s3("a.jsonl")),
+            PolarsOptions(),
         )
         assert last_line(lines["Load as LazyFrame"]) == (
-            "df = pl.scan_ndjson('memory:///a.jsonl')"
+            "df = pl.scan_ndjson('s3://b/a.jsonl')"
         )
         assert last_line(lines["Load as DataFrame"]) == (
-            "df = pl.read_ndjson('memory:///a.jsonl')"
+            "df = pl.read_ndjson('s3://b/a.jsonl')"
         )
 
     def test_delta(self, make_item, memfs):
@@ -258,10 +265,12 @@ class TestRecipes:
 
     def test_json(self, make_item):
         code = JsonByPolars().recipe(
-            Json(), make_item("/a.json", b"{}"), PolarsOptions()
+            Json(),
+            make_item("/a.json", b"{}", location=on_s3("a.json")),
+            PolarsOptions(),
         )
         assert last_line(code["Load as DataFrame"]) == (
-            "df = pl.read_json('memory:///a.json')"
+            "df = pl.read_json('s3://b/a.json')"
         )
 
 
@@ -271,10 +280,14 @@ class TestOptions:
             storage_options={"aws_region": "eu", "aws_secret_access_key": "s"}
         )
         [code] = (
-            CsvByPolars().recipe(Csv(), make_item("/a.csv", b"x,y\n"), options).values()
+            CsvByPolars()
+            .recipe(
+                Csv(), make_item("/a.csv", b"x,y\n", location=on_s3("a.csv")), options
+            )
+            .values()
         )
         assert last_line(code) == (
-            "df = pl.read_csv('memory:///a.csv', storage_options={'aws_region': 'eu'})"
+            "df = pl.read_csv('s3://b/a.csv', storage_options={'aws_region': 'eu'})"
         )
 
     def test_delta_options(self, make_item, memfs):
@@ -297,6 +310,7 @@ class TestOptions:
         assert PolarsOptions.option_names() == {
             "storage_options",
             "credential_provider",
+            "fsspec_storage_options",
         }
         assert DeltaLakeByPolarsOptions.option_names() >= {
             "use_pyarrow",
@@ -324,12 +338,16 @@ class TestReaderOptions:
             separator="|", quote_char=None, schema_overrides={"n": pl.String}
         )
         [code] = (
-            CsvByPolars().recipe(Csv(), make_item("/a.csv", b"x;y\n"), options).values()
+            CsvByPolars()
+            .recipe(
+                Csv(), make_item("/a.csv", b"x;y\n", location=on_s3("a.csv")), options
+            )
+            .values()
         )
         # The separator given, not the one detected; None, a value given,
         # shown; data types (objects) not.
         assert last_line(code) == (
-            "df = pl.read_csv('memory:///a.csv', separator='|', quote_char=None)"
+            "df = pl.read_csv('s3://b/a.csv', separator='|', quote_char=None)"
         )
 
     def test_unset_arguments_are_not_passed(self):
@@ -344,10 +362,12 @@ class TestReaderOptions:
         assert df.rows() == [(0, 1), (1, 2)]
         # cache is scan_parquet's only: the DataFrame is scanned, then read.
         code = ParquetByPolars().recipe(
-            Parquet(), make_item("/a.parquet", b""), ParquetByPolarsOptions(cache=False)
+            Parquet(),
+            make_item("/a.parquet", b"", location=on_s3("a.parquet")),
+            ParquetByPolarsOptions(cache=False),
         )
         assert last_line(code["Load as DataFrame"]) == (
-            "df = pl.scan_parquet('memory:///a.parquet', cache=False).collect()"
+            "df = pl.scan_parquet('s3://b/a.parquet', cache=False).collect()"
         )
 
     def test_excel_sheet(self, make_item):
@@ -376,10 +396,14 @@ class TestReaderOptions:
     def test_json_code(self, make_item):
         options = JsonByPolarsOptions(infer_schema_length=None)
         [code] = (
-            JsonByPolars().recipe(Json(), make_item("/a.json", b"[]"), options).values()
+            JsonByPolars()
+            .recipe(
+                Json(), make_item("/a.json", b"[]", location=on_s3("a.json")), options
+            )
+            .values()
         )
         assert last_line(code) == (
-            "df = pl.read_json('memory:///a.json', infer_schema_length=None)"
+            "df = pl.read_json('s3://b/a.json', infer_schema_length=None)"
         )
 
     def test_delta_version(self, tmp_path):
@@ -432,8 +456,42 @@ class TestStoragesPolarsCannotRead:
         make_item("/t/_delta_log/0.json", b"{}")
         support = DeltaLakeByPolars()
         assert not support.supports(DeltaLake(), make_item("/t"), "view")
-        assert support.supports(DeltaLake(), make_item("/t"), "recipe")
         assert support.supports(DeltaLake(), local_item(tmp_path), "view")
+
+    @pytest.mark.parametrize(
+        ("support", "fmt", "name", "reader"),
+        [
+            (CsvByPolars, Csv, "a.csv", "read_csv(f)"),
+            (JsonLinesByPolars, JsonLines, "a.jsonl", "read_ndjson(f)"),
+            (JsonByPolars, Json, "a.json", "read_json(f)"),
+            (ParquetByPolars, Parquet, "a.parquet", "read_parquet(f)"),
+        ],
+    )
+    def test_code_of_a_file_opened_with_fsspec(
+        self, make_item, support, fmt, name, reader
+    ):
+        # polars cannot read the URL: a DataFrame of the file opened with
+        # fsspec, no LazyFrame, which would read it whole all the same.
+        item = make_item(f"/{name}", b"a,b\n")
+        assert support().supports(fmt(), item, "recipe")
+        options = support.options_model(fsspec_storage_options={"anon": True})
+        assert support().recipe(fmt(), item, options) == {
+            "Load as DataFrame": (
+                "import fsspec\nimport polars as pl\n\n"
+                f"with fsspec.open('memory:///{name}', 'rb', anon=True) as f:\n"
+                f"    df = pl.{reader}"
+            )
+        }
+
+    def test_no_code_for_folders_and_delta(self, make_item, memfs):
+        memfs.pipe_file("/d/part-0.parquet", b"")
+        assert not ParquetByPolars().supports(Parquet(), make_item("/d"), "recipe")
+        memfs.pipe_file("/t/_delta_log/0.json", b"{}")
+        assert not DeltaLakeByPolars().supports(DeltaLake(), make_item("/t"), "recipe")
+
+    def test_excel_code_reads_through_fsspec(self, make_item):
+        item = make_item("/a.xlsx", b"")
+        assert ExcelByPolars().supports(Excel(), item, "recipe")
 
     def test_parquet_as_a_pyarrow_dataset(self, make_item):
         item = make_item("/a.parquet", parquet_bytes(pl.DataFrame({"a": [1, 2, 3]})))
