@@ -37,14 +37,18 @@ def _is_nan(value: Any) -> bool:
 
 
 def fetch_rows(lf: nw.LazyFrame, offset: int, length: int) -> nw.DataFrame:
-    """Read one page of a query's result, for the data browser's table.
+    """Read rows of a query's result, for the data browser: a page of its
+    table, or the first rows when the data opens.
 
     The default of ``DataExplorer``'s and ``StorageExplorer``'s
-    ``fetch_rows``, which replace it for live queries only (rows in memory
-    always use it), and fall back to it for pages they return None for.
-    polars and DuckDB skip the rows before ``offset``
-    themselves; other libraries (e.g. Spark) have no portable way to, so all
-    rows up to ``offset + length`` are read and the first ones dropped.
+    ``fetch_rows``, which replace it for every read of lazy data (rows held
+    in memory are sliced), and fall back to it for reads they return None
+    for; a view's ``fetch`` comes between them (``QueryView``). polars and
+    DuckDB skip the rows before ``offset`` themselves. Dask reads partition
+    by partition until it has the rows (narwhals' ``head`` would read every
+    partition). Other libraries (e.g. Spark) have no portable way to skip
+    rows, so all rows up to ``offset + length`` are read and the first ones
+    dropped.
 
     Parameters
     ----------
@@ -79,8 +83,28 @@ def fetch_rows(lf: nw.LazyFrame, offset: int, length: int) -> nw.DataFrame:
         return nw.from_native(native.slice(offset, length).collect())
     if lf.implementation.is_duckdb():
         return nw.from_native(native.limit(length, offset)).collect()
+    if lf.implementation.is_dask():
+        return _dask_rows(native, offset, length)
     df = lf.head(offset + length).collect()
     return df.tail(max(0, len(df) - offset))
+
+
+def _dask_rows(native: Any, offset: int, length: int) -> nw.DataFrame:
+    """Rows ``offset`` to ``offset + length`` of a Dask DataFrame, computing
+    its partitions in order until there are enough: the first page of a
+    large file reads its first block, not all of them. A sort still reads
+    every partition, as Dask's sorting does."""
+    needed, have, parts = offset + length, 0, []
+    for i in range(native.npartitions):
+        part = nw.from_native(native.partitions[i].compute(), eager_only=True)
+        parts.append(part)
+        have += len(part)
+        if have >= needed:
+            break
+    if not parts:
+        return nw.from_native(native.head(0, npartitions=1), eager_only=True)
+    df = nw.concat(parts) if len(parts) > 1 else parts[0]
+    return df[offset:needed]
 
 
 class DataQuery:
@@ -116,6 +140,12 @@ class DataQuery:
     raises ValueError for it. When all the data is in memory, the mode cannot
     be switched.
 
+    Every read of lazy data, the first rows when opening and each live page,
+    goes through ``fetch`` (the explorer's ``fetch_rows``, the user's), then
+    ``view_fetch()`` (the ``fetch`` of the view the data came from, a
+    support's, asked at each read), then ``fetch_rows``: the first giving
+    rows reads them.
+
     ``cut``, if given, tells whether the data the source gave holds only the
     first part of the item's: eager data its first rows (e.g. read with
     pandas, which reads eagerly), which the browser counts as it does rows
@@ -138,6 +168,8 @@ class DataQuery:
         max_memory_rows: int = 100_000,
         page_rows: int = 100,
         fetch: Callable[[nw.LazyFrame, int, int], nw.DataFrame | None] | None = None,
+        view_fetch: Callable[[], Callable[[nw.LazyFrame, int, int], Any] | None]
+        | None = None,
         cut: Callable[[], bool] | None = None,
         on_close: Callable[[], object] | None = None,
     ) -> None:
@@ -152,6 +184,7 @@ class DataQuery:
         # Rows of a page of the browser's table.
         self.page_rows = max(1, page_rows)
         self.fetch = fetch
+        self.view_fetch = view_fetch
         self.cut = cut
         # The mode asked for, by the caller or the user: reloading starts in it.
         self.requested = mode
@@ -204,9 +237,21 @@ class DataQuery:
         elif not self._fits_live_rows():
             self._go_live()
 
+    def _read(self, lf: nw.LazyFrame, offset: int, length: int) -> nw.DataFrame:
+        """Rows ``offset`` to ``offset + length`` of lazy data: every read of
+        the source, the first rows when opening and the pages of live
+        queries. By the explorer's ``fetch`` (the user's), else the view's
+        (``view_fetch``, the support's, for its library), else
+        ``fetch_rows``; each but the last may return None to pass it on."""
+        view_fetch = self.view_fetch() if self.view_fetch is not None else None
+        for fetch in (self.fetch, view_fetch):
+            if fetch is not None and (df := fetch(lf, offset, length)) is not None:
+                return df
+        return fetch_rows(lf, offset, length)
+
     def _fits_live_rows(self) -> bool:
         """Keep the data in memory if it has at most ``max_live_rows`` rows."""
-        head = self.source.head(self.max_live_rows + 1).collect()
+        head = self._read(self.source, 0, self.max_live_rows + 1)
         if len(head) > self.max_live_rows:
             return False
         self._hold(head, cut=False)
@@ -216,7 +261,7 @@ class DataQuery:
 
     def _load_memory(self) -> None:
         """Read the first ``max_memory_rows`` rows into memory, to query them there."""
-        rows = self.source.head(self.max_memory_rows + 1).collect()
+        rows = self._read(self.source, 0, self.max_memory_rows + 1)
         cut = len(rows) > self.max_memory_rows
         self._hold(rows.head(self.max_memory_rows), cut=cut)
 
@@ -385,11 +430,7 @@ class DataQuery:
                 total = len(result)
             else:
                 query = build_query(self.lf, self.schema, settings)
-                # ``fetch`` is for the data's library. It returns None to leave
-                # a page to the default.
-                df = self.fetch(query, offset, window + 1) if self.fetch else None
-                if df is None:
-                    df = fetch_rows(query, offset, window + 1)
+                df = self._read(query, offset, window + 1)
         except Exception as exc:
             return {"error": error_text(exc), "settings": settings}
         beyond = len(df) > window

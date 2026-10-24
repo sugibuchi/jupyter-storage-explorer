@@ -126,6 +126,39 @@ class _Asking(NamedTuple):
         return {**section(self.view), "prompt": self.id}
 
 
+class _TableRead:
+    """How the data browser reads a table set's table: with its loader,
+    ``load(again)``, keeping the ``QueryView`` it gave, if any, which tells
+    whether its rows are cut short (``more``) and how to read them
+    (``fetch``), and is closed once replaced or no longer shown."""
+
+    def __init__(self, load: Callable[[bool], Any]) -> None:
+        self._load = load
+        self.loaded: QueryView | None = None
+        # Whether the table was read: the next read is a reload.
+        self.read = False
+
+    def source(self) -> Any:
+        data = self._load(self.read)
+        self.read = True
+        if isinstance(data, QueryView):
+            previous, self.loaded = self.loaded, data
+            if previous is not None:
+                previous.close()
+            return data.data
+        return data
+
+    def cut(self) -> bool:
+        return self.loaded is not None and self.loaded.more
+
+    def view_fetch(self) -> Any:
+        return self.loaded.fetch if self.loaded is not None else None
+
+    def close(self) -> None:
+        if self.loaded is not None:
+            self.loaded.close()
+
+
 class _Loaded(NamedTuple):
     """What a preview's load read (see ``PreviewsMixin._open_preview``): what
     shows it (None if nothing does) and the ``_preview`` to show."""
@@ -651,6 +684,8 @@ class PreviewsMixin:
         limits = self._view_limits
         options = {
             "fetch": self._fetch_rows,
+            # The fetch of the view the data is from: a reload's may differ.
+            "view_fetch": lambda: current[0].fetch,
             "cut": lambda: current[0].more,
             "max_live_rows": limits.max_live_rows,
             "max_memory_rows": limits.max_memory_rows,
@@ -694,39 +729,24 @@ class PreviewsMixin:
             key = f"{url}#{table}"
             state = self._states.query(key)
             mode = state.mode if state is not None else "auto"
-            # The table's QueryView, if the loader gave one (its data cut
-            # short or not: ``more``), closed once replaced or no longer shown.
-            loaded: list[QueryView | None] = [None]
-            # Whether the table was read: the next read is a reload.
-            read = [False]
-
-            def source() -> Any:
-                data = load(read[0])
-                read[0] = True
-                if isinstance(data, QueryView):
-                    previous, loaded[0] = loaded[0], data
-                    if previous is not None:
-                        previous.close()
-                    return data.data
-                return data
-
-            def cut() -> bool:
-                return loaded[0] is not None and loaded[0].more
-
-            def close() -> None:
-                if loaded[0] is not None:
-                    loaded[0].close()
-
-            table_options = {**options, "cut": cut, "on_close": close}
+            reading = _TableRead(load)
+            table_options = {
+                **options,
+                "cut": reading.cut,
+                "view_fetch": reading.view_fetch,
+                "on_close": reading.close,
+            }
             try:
-                return DataQuery(source, key, self._states, mode=mode, **table_options)
+                return DataQuery(
+                    reading.source, key, self._states, mode=mode, **table_options
+                )
             except ValueError:
                 if mode != "live":
                     raise
                 # "live" chosen when the table was lazy, and no longer is:
                 # read again from the same view, not a reload.
-                read[0] = False
-                return DataQuery(source, key, self._states, **table_options)
+                reading.read = False
+                return DataQuery(reading.source, key, self._states, **table_options)
 
         return TableSet(view, make_query, viewer)
 

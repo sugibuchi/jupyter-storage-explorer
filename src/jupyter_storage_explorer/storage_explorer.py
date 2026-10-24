@@ -298,11 +298,12 @@ class StorageExplorer(
         (see ``listing.Listing``), one page at a time, instead of by the
         browser from the whole listing; None for never.
     fetch_rows : callable, optional
-        Reads one page of a live query's result in the data browser, as
-        ``fetch_rows(lf, offset, length)``, e.g. to skip rows in a library
-        the default reads them all for; None to leave the page to the
-        default, ``jupyter_storage_explorer.fetch_rows``, which has an
-        example.
+        Reads rows of lazy data in the data browser, as ``fetch_rows(lf,
+        offset, length)``: the first rows when it opens, and each page of a
+        live query's result, e.g. to skip rows in a library the default reads
+        them all for; None to leave them to the view's ``fetch`` (a
+        support's, see ``QueryView``), else the default,
+        ``jupyter_storage_explorer.fetch_rows``, which has an example.
     operations : sequence of FileSystemOperations, optional
         File operations of your own, tried before the plugins' and
         ``default_operations()``,

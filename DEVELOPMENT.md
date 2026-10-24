@@ -1108,6 +1108,14 @@ Listing folders still runs on the main thread.
 
 So behaviour such as regular expressions follows the data's library. The core needs no engine: polars is optional.
 
+Every read of lazy data, the first rows when opening and each live page, goes through `DataQuery._read`. It asks, in
+order, until one gives rows:
+
+1. the explorer's `fetch_rows`, the user's;
+2. the `fetch` of the `QueryView` the data came from, a support's, asked at each read, as a reload's view may differ;
+3. `fetch_rows`, the default: polars and DuckDB skip rows themselves, and Dask is read partition by partition, as
+   narwhals' `head` would read every partition. Others read all rows up to `offset + length`.
+
 `ViewLimits` sets the browser's page size, `max_display_rows`, and its limits for live and memory modes.
 
 #### Recipes

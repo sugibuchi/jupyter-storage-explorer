@@ -8,6 +8,7 @@ from typing import Any
 
 import duckdb
 import narwhals as nw
+import pandas as pd
 import polars as pl
 import pytest
 from sqlframe.duckdb import DuckDBSession
@@ -481,7 +482,8 @@ class TestModes:
         assert last["rows"] == [[16], [17], [18], [19]]
         assert (last["more"], last["limited"]) == (False, True)
         # Pages read through fetch, with one row more: is there more, or a limit?
-        assert reads == [(0, 5), (16, 5)]
+        # The first rows when opening (max_live_rows + 1), then the pages.
+        assert reads == [(0, 11), (0, 5), (16, 5)]
         # A result within the limit is not limited.
         small = rows_of(
             query, settings={"filters": {"n": {"op": "range", "min": "45", "max": ""}}}
@@ -536,3 +538,82 @@ class TestSparkLike:
         assert query.check({"column": "name", "filter": f}) == {}
         # ...so the error comes with the rows.
         assert "error" in rows_of(query, settings={"filters": {"name": f}})
+
+
+class TestReads:
+    """Every read of lazy data, the first rows when opening and each live
+    page, goes through the explorer's fetch (the user's), then the view's (a
+    support's), then fetch_rows."""
+
+    @staticmethod
+    def recording(name, reads, give=True):
+        def fetch(lf, offset, length):
+            reads.append((name, offset, length))
+            return data_query.fetch_rows(lf, offset, length) if give else None
+
+        return fetch
+
+    def query(self, reads, *, user=True, view=True, user_gives=True):
+        return mode_query(
+            fetch=self.recording("user", reads, user_gives) if user else None,
+            view_fetch=(lambda: self.recording("view", reads)) if view else None,
+        )
+
+    def test_the_users_first(self):
+        reads = []
+        rows_of(self.query(reads), offset=5, window=2)
+        assert reads == [("user", 0, 11), ("user", 5, 3)]
+
+    def test_the_views_when_the_user_gives_none(self):
+        reads = []
+        reply = rows_of(self.query(reads, user_gives=False), offset=5, window=2)
+        assert reply["rows"] == [[5], [6]]
+        assert [name for name, *_ in reads] == ["user", "view", "user", "view"]
+
+    def test_the_default_otherwise(self):
+        reply = rows_of(self.query([], user=False, view=False), offset=5, window=2)
+        assert reply["rows"] == [[5], [6]]
+
+    def test_reading_into_memory(self):
+        reads = []
+        mode_query(mode="memory", view_fetch=lambda: self.recording("view", reads))
+        assert reads == [("view", 0, 21)]  # max_memory_rows + 1
+
+
+class TestDaskRows:
+    """Dask's rows are read partition by partition, until there are enough:
+    narwhals' head would read every partition."""
+
+    @pytest.fixture
+    def frame(self):
+        dd = pytest.importorskip("dask.dataframe")
+        computed = []
+
+        def partition(i):
+            computed.append(i)
+            return pd.DataFrame({"n": range(i * 10, i * 10 + 10)})
+
+        meta = pd.DataFrame({"n": pd.Series(dtype="int64")})
+        return dd.from_map(partition, range(5), meta=meta), computed
+
+    def test_first_partitions_only(self, frame):
+        ddf, computed = frame
+        lf = nw.from_native(ddf)
+        assert data_query.fetch_rows(lf, 0, 5)["n"].to_list() == [0, 1, 2, 3, 4]
+        assert computed == [0]
+        computed.clear()
+        page = data_query.fetch_rows(lf, 15, 10)["n"].to_list()
+        assert page == list(range(15, 25))
+        assert computed == [0, 1, 2]
+
+    def test_beyond_the_end(self, frame):
+        ddf, _ = frame
+        assert len(data_query.fetch_rows(nw.from_native(ddf), 45, 10)) == 5
+
+    def test_opening_reads_the_first_partitions(self, frame):
+        ddf, computed = frame
+        query = mode_query(ddf)  # max_live_rows 10: 11 rows, two partitions
+        assert query.mode == "live"
+        assert sorted(set(computed)) == [0, 1]
+        reply = rows_of(query, settings={"filters": {"n": {"op": "range", "min": 42}}})
+        assert [row[0] for row in reply["rows"]] == list(range(42, 50))

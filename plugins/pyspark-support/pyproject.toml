@@ -32,6 +32,7 @@ pyspark-support = "jupyter_storage_explorer_pyspark_support:PySparkSupport"
 full = [
     "pyspark>=3.5",
     "delta-spark>=3.0",
+    "pyarrow>=14",
 ]
 
 [build-system]
@@ -54,6 +55,7 @@ packages = ["src/jupyter_storage_explorer_pyspark_support"]
 dev = [
     "pyspark>=3.5",
     "delta-spark>=3.0",
+    "pyarrow>=14",
     # The tests' (tests/), besides the libraries: they run on a local Spark
     # session, which needs Java (skipped without it).
     "pytest>=9.1.1",

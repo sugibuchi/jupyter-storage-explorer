@@ -19,6 +19,7 @@ The first command installs them, as does `jupyter-storage-explorer-pyspark-suppo
 |---------------|------------------------------------------------------------------|
 | `pyspark`     | Mandatory: the engine                                            |
 | `delta-spark` | Delta Lake tables                                                |
+| `pyarrow`     | Mandatory: the data browser reads Spark's rows into PyArrow       |
 
 Without `delta-spark`, the other formats still work. For Databricks Connect, use
 [databricks-support](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/plugins/databricks-support/README.md)

@@ -93,12 +93,15 @@ def test_fetch_rows_given():
     explorer = Explorer(data, max_live_rows=10, fetch_rows=fetch)
     reply = explorer.request({"type": "query_rows", "offset": 25, "window": 10})
     assert reply["rows"] == [[25], [26], [27], [28], [29]]
-    assert fetched == [(25, 11)]  # one extra row tells whether there are more
-    # Rows in memory (collected into another library) are read by the default.
+    # The first rows when opening, then the page: one extra row tells whether
+    # there are more.
+    assert fetched == [(0, 11), (25, 11)]
+    # Reading into memory goes through it too (max_memory_rows + 1); the rows
+    # in memory (collected into another library) are then sliced.
     explorer.request({"type": "query_mode", "mode": "memory"})
     reply = explorer.request({"type": "query_rows", "offset": 25, "window": 10})
     assert len(reply["rows"]) == 5
-    assert fetched == [(25, 11)]
+    assert fetched == [(0, 11), (25, 11), (0, 100_001)]
 
 
 def test_fetch_rows_none_reads_the_default_way():
@@ -297,13 +300,17 @@ def test_requests_in_a_worker_in_order():
     # free; the replies come in the order asked, one request at a time.
     release = threading.Event()
     threads = []
+    holding = []  # the pages only, not the first rows read when opening
 
     def held(lf, offset, length):
+        if not holding:
+            return None
         threads.append(threading.current_thread())
         assert release.wait(5)
 
     async def main():
         explorer = Explorer(DF.lazy(), mode="live", fetch_rows=held)
+        holding.append(True)
         explorer.sent = []
         for rid in (1, 2):
             explorer._on_custom_msg(

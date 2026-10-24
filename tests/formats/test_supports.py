@@ -483,7 +483,7 @@ class TestChain:
         def engines():
             return [r.requirements[0].package for r in chain.recipes(Csv(), item)]
 
-        installed_only(monkeypatch, "polars", "pandas", "pyspark")
+        installed_only(monkeypatch, "polars", "pandas", "pyspark", "pyarrow")
         assert engines() == ["polars", "pandas", "pyspark"]
         installed_only(monkeypatch, "databricks-connect")
         assert engines() == ["databricks-connect"]  # its pyspark is not PySpark's
@@ -508,13 +508,15 @@ class TestChain:
             recipes = chain.recipes(DeltaLake(), make_item("/t", location=on_s3("t")))
             return [[r.package for r in recipe.requirements] for recipe in recipes]
 
-        installed_only(monkeypatch, "polars", "deltalake", "pyspark", "delta-spark")
+        installed_only(
+            monkeypatch, "polars", "deltalake", "pyspark", "pyarrow", "delta-spark"
+        )
         assert packages() == [
             ["polars", "deltalake"],
             ["polars", "deltalake"],
-            ["pyspark", "delta-spark"],
+            ["pyspark", "pyarrow", "delta-spark"],
         ]
-        installed_only(monkeypatch, "polars", "pyspark")  # nor Delta Lake's
+        installed_only(monkeypatch, "polars", "pyspark", "pyarrow")  # nor Delta Lake's
         assert packages() == []
         installed_only(monkeypatch, "databricks-connect")
         assert packages() == [["databricks-connect"]]  # Databricks has Delta Lake
@@ -538,7 +540,7 @@ class TestExplorer:
             recipe=lambda *a, **k: {"Load as a duck": "duck"},
         )
         explorer = StorageExplorer(fs=mem_explorer._fs, supports=[duck])
-        installed_only(monkeypatch, "polars", "pyspark")
+        installed_only(monkeypatch, "polars", "pyspark", "pyarrow")
         recipes = explorer._supports.recipes(
             Parquet(), make_item("/a.parquet", b"", location=on_s3("a.parquet"))
         )
@@ -553,7 +555,7 @@ class TestExplorer:
 
     def test_a_library_given_replaces_the_default_code(self, make_item, monkeypatch):
         explorer = StorageExplorer(fs=None, supports=[CsvByPolars()])
-        installed_only(monkeypatch, "polars", "pandas", "pyspark")
+        installed_only(monkeypatch, "polars", "pandas", "pyspark", "pyarrow")
         item = make_item("/a.csv", b"a\n", location=on_s3("a.csv"))
         recipes = explorer._supports.recipes(Csv(), item)
         # Its recipes replace the default CsvByPolars': one each.

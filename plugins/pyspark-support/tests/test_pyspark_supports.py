@@ -12,6 +12,7 @@ from dataclasses import fields
 from importlib.metadata import entry_points
 from types import SimpleNamespace
 
+import narwhals as nw
 import pytest
 from jupyter_storage_explorer_pyspark_support import (
     CsvByPySpark,
@@ -26,6 +27,7 @@ from jupyter_storage_explorer_pyspark_support import (
     PySparkEngine,
     PySparkOptions,
     PySparkSupport,
+    spark_rows,
     spark_url,
 )
 from jupyter_storage_explorer_pyspark_support import supports as pyspark
@@ -122,7 +124,7 @@ def test_engine_not_with_databricks_connects_pyspark(monkeypatch):
     monkeypatch.setattr(pyspark._DatabricksConnect, "is_installed", lambda self: True)
     assert not PySpark().is_installed()
     assert not PySparkEngine.is_installed()
-    assert [p.package for p in PySparkEngine.packages()] == ["pyspark"]
+    assert [p.package for p in PySparkEngine.packages()] == ["pyspark", "pyarrow"]
 
 
 def test_spark_url(tmp_path):
@@ -166,6 +168,27 @@ def test_viewed_in_a_worker_read_on_the_main_thread(tmp_path, session):
             CsvByPySpark().view, Csv(), local_item(path), CsvByPySparkOptions(), LIMITS
         ).result()
     assert rows(view) == [(1,), (2,)]
+
+
+def test_rows_skipped_by_spark(tmp_path, session):
+    # The data browser reads pages with Spark's offset, not all rows before.
+    path = tmp_path / "a.csv"
+    path.write_text("x\n1\n2\n3\n4\n5\n")
+    view = CsvByPySpark().view(Csv(), local_item(path), CsvByPySparkOptions(), LIMITS)
+    assert view.fetch is spark_rows
+    page = spark_rows(nw.from_native(view.data), 2, 2)
+    assert page["x"].to_list() == [3, 4]
+
+
+def test_rows_left_to_the_default_without_offset():
+    # A Spark before 3.4: its DataFrame has no offset method (its attributes
+    # are also its columns, so the class is asked).
+    class OldDataFrame:
+        def __getattr__(self, name):
+            return f"column {name}"
+
+    lf = SimpleNamespace(to_native=OldDataFrame)
+    assert spark_rows(lf, 5, 2) is None
 
 
 def test_json_lines(tmp_path, session):

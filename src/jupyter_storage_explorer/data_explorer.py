@@ -85,11 +85,11 @@ class DataExplorer(anywidget.AnyWidget):
         those only. Also the most rows a live query gives, as libraries that
         cannot skip rows (e.g. Spark) read all rows before each page.
     fetch_rows : callable, optional
-        Reads one page of a live query's result (on the data itself, not
-        rows in memory), as ``fetch_rows(lf, offset, length)``, e.g. to skip
-        rows in a library the default reads them all for; None to leave the
-        page to the default, ``jupyter_storage_explorer.fetch_rows``, which
-        has an example.
+        Reads rows of lazy data, as ``fetch_rows(lf, offset, length)``: the
+        first rows when it opens, and each page of a live query's result (on
+        the data itself, not rows in memory), e.g. to skip rows in a library
+        the default reads them all for; None to leave them to the default,
+        ``jupyter_storage_explorer.fetch_rows``, which has an example.
     title : str, optional
         Shown above the table. Default: the dataframe's type, e.g.
         "LazyFrame".

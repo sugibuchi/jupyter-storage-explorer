@@ -72,7 +72,7 @@ class TestCodeSnippet:
     def test_every_engine_installed_by_default(self, folder, monkeypatch):
         explorer = make(folder)
         assert explorer._code_snippet
-        installed_only(monkeypatch, "polars", "pandas", "pyspark")
+        installed_only(monkeypatch, "polars", "pandas", "pyspark", "pyarrow")
         assert self.engines(explorer) == ["Polars", "PySpark", "pandas"]
         installed_only(monkeypatch, "polars", "databricks-connect")
         # Not Databricks Connect: its cluster cannot read the kernel's files.

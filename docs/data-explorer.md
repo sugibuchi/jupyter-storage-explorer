@@ -132,7 +132,8 @@ DataExplorer(orders_df, settings=settings)
 
 ### Reading pages
 
-`fetch_rows=` customizes how live queries read each page of rows, e.g. with Spark's `offset()`:
+`fetch_rows=` customizes how rows of lazy data are read: the first rows when it opens, and each page of live queries,
+e.g. with Spark's `offset()`:
 
 ```python
 import narwhals as nw
