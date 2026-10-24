@@ -1,6 +1,7 @@
-"""launcher/figs/side-panel.png, in the launcher's README: the side panel in
+"""In the launcher's README: launcher/figs/side-panel.png, the side panel in
 JupyterLab's left side bar, its file selected, beside the tab its View button
-opened in the data browser.
+opened in the data browser; launcher/figs/side-panel-restart.png, the side
+panel's kernel in JupyterLab's Running panel, its Shut Down button shown.
 
 uv run --group docs docs/scripts/launcher_side_panel.py
 """
@@ -33,6 +34,34 @@ def make(lab: Lab) -> None:
         _lab.calm(page, 1500)
         _, _, x1, y1 = box(page.locator("#jp-main-dock-panel"))
         shot(page, _lab.LAUNCHER_FIGS / "side-panel.png", (0, 0, x1, y1), pad=0)
+
+        # The Running panel, the side panel's kernel hovered: its Shut Down
+        # button (a cross) shows. From the side bar to the kernel's console.
+        page.locator(".jp-SideBar .lm-TabBar-tab[title*='Running']").click()
+        kernel = page.locator(
+            ".jp-RunningSessions-item.jp-mod-kernel", has_text="side panel"
+        )
+        kernel.wait_for()
+        # Wider, so that the kernel's name shows whole.
+        handle = page.locator("#jp-main-split-panel > .lm-SplitPanel-handle").first
+        hx, hy, _, hy1 = box(handle)
+        page.mouse.move(hx + 1, (hy + hy1) / 2)
+        page.mouse.down()
+        page.mouse.move(hx + 140, (hy + hy1) / 2, steps=5)
+        page.mouse.up()
+        _lab.calm(page)
+        kernel.locator(":scope > .jp-RunningSessions-itemLabel").hover()
+        kernel.locator(":scope > .jp-RunningSessions-itemShutdown").wait_for()
+        page.wait_for_timeout(500)
+        _, y0, _, _ = box(page.locator(".jp-RunningSessions"))
+        _, _, x1, _ = box(page.locator("#jp-left-stack"))
+        _, _, _, y1 = box(kernel)
+        shot(
+            page,
+            _lab.LAUNCHER_FIGS / "side-panel-restart.png",
+            (0, y0, x1, y1 + 8),
+            pad=0,
+        )
 
 
 if __name__ == "__main__":

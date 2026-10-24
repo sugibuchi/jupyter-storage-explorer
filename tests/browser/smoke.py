@@ -1998,6 +1998,22 @@ def side_panel(lab: Lab, page: Page) -> None:
         re.compile(r"\bjse-selected\b")
     )
     assert side_panel_kernels(lab) == kernels
+    # Its kernel shut down in JupyterLab's Running panel, as the launcher's
+    # README's "Restart the side panel" says: the panel starts a new one, with
+    # the explorer.
+    page.locator(".jp-SideBar .lm-TabBar-tab[title*='Running']").click()
+    kernel = page.locator(
+        ".jp-RunningSessions-item.jp-mod-kernel", has_text="side panel"
+    )
+    kernel.hover()
+    kernel.locator(":scope > .jp-RunningSessions-itemShutdown").click()
+    wait_for(
+        lambda: side_panel_kernels(lab) not in ([], kernels),
+        "new kernel for the side panel",
+        timeout=60,
+    )
+    open_side_panel(page)
+    expect(page.locator(".jse-side-panel .jse-launcher-panel")).to_have_count(1)
 
 
 # --- Helpers ---

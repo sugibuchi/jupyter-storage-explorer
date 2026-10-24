@@ -5,7 +5,7 @@
 # web browser, then open the explorer tab again to apply the changes; a tab
 # shows the error if this file cannot be used.
 #
-# See https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/launcher/README.md#configuration
+# See https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/launcher/README.md#configuration-details
 
 
 # The storages offered, by name: a URL, or an fsspec filesystem for options

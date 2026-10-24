@@ -20,7 +20,7 @@ the pictures are taken at 2× (`data-explorer.png`, `launcher.png` and the GIFs 
 | `data_explorer.py`        | `docs/figs/data-explorer.png`                                         |
 | `launcher_item.py`        | `launcher/figs/launcher.png`                                          |
 | `launcher_settings.py`    | `launcher/figs/settings-*.png` (the settings button, `launcher.py`)   |
-| `launcher_side_panel.py`  | `launcher/figs/side-panel.png` (the side panel, and a tab from View)  |
+| `launcher_side_panel.py`  | `launcher/figs/side-panel*.png` (the side panel; restarting it)       |
 | `storage_explorer_gif.py` | `docs/figs/storage-explorer.gif`                                      |
 | `data_explorer_gif.py`    | `docs/figs/data-explorer.gif`                                         |
 | `file_transfer_gif.py`    | `docs/figs/file-transfer.gif` ("File transfers between storages")     |

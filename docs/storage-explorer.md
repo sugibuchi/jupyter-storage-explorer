@@ -255,7 +255,7 @@ StorageExplorer(filesystems={...}, transfer_policy=[
 URLs are those of "Copy URL" (`file:///...` for local files); files through JupyterLab's file browser are `jupyterlab://<absolute path>`, e.g.
 `jupyterlab:///home/jovyan/x.csv`, and files on your computer `browser:///<name>`. A pattern left out matches any URL.
 A folder is checked as one item, by its own URL. The policy prevents mistakes; it is not a security boundary. For the launcher's
-tabs, use `transfer_policy()` in [its configuration](../launcher/README.md#configuration).
+tabs, use `transfer_policy()` in [its configuration](../launcher/README.md#configuration-details).
 
 **Named groups** tie the two URLs together: `(?P<name>...)` in both patterns, and the rule matches only if each group
 captures the same text in both. Both patterns must have the same group names. With `L` for
