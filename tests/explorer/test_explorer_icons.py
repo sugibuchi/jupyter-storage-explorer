@@ -7,7 +7,7 @@ from all_supports import NO_PLUGINS
 
 from jupyter_storage_explorer import StorageExplorer
 from jupyter_storage_explorer._explorer.icons import format_icons
-from jupyter_storage_explorer._explorer.supports import SupportChain
+from jupyter_storage_explorer._explorer.supports import ActionChain
 from jupyter_storage_explorer.formats import (
     FILE_ICONS,
     Csv,
@@ -35,7 +35,7 @@ class TestFileIcons:
 
     def test_default_formats(self):
         assert format_icons(
-            SupportChain(default_supports(), formats=DEFAULT_FORMATS).formats
+            ActionChain(default_supports(), formats=DEFAULT_FORMATS).formats
         ) == (
             {
                 "parquet": "spreadsheet",

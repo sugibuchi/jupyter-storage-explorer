@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
     from jupyter_storage_explorer.filesystems.mapper import FileSystemMapper
     from jupyter_storage_explorer.filesystems.operation import FileSystemOperations
+    from jupyter_storage_explorer.formats.actions import Action
     from jupyter_storage_explorer.formats.base import DataFormat
     from jupyter_storage_explorer.formats.support import FormatSupport
 
@@ -107,13 +108,14 @@ def _create(
 
 
 class PluginComponents:
-    """What ``plugins`` give, in their order: supports (classes or objects),
-    formats (classes), operations and mappers (objects; classes are
-    created without arguments)."""
+    """What ``plugins`` give, in their order: actions (each plugin's
+    ``actions``, then its supports of the former interface, classes or
+    objects), formats (classes), operations and mappers (objects; classes
+    are created without arguments)."""
 
     def __init__(self, plugins: Sequence[StorageExplorerPlugin]) -> None:
-        self.supports: list[type[FormatSupport] | FormatSupport] = [
-            s for p in plugins for s in p.format_supports
+        self.actions: list[Action[Any] | type[FormatSupport] | FormatSupport] = [
+            a for p in plugins for a in (*p.actions, *p.format_supports)
         ]
         self.formats: list[type[DataFormat]] = [f for p in plugins for f in p.formats]
         self.operations: list[FileSystemOperations] = [

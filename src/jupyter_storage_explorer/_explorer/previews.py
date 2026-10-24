@@ -332,7 +332,7 @@ class PreviewsMixin:
         try:
             return self._supports.engine_for(fmt, ctx, chosen)
         except LookupError:
-            if not self._supports.installed(fmt, "view"):
+            if not self._supports.installed(fmt):
                 # Nothing installed views it: the engines come with plugins.
                 raise ValueError(
                     f"{name} cannot be viewed as {fmt.label}: no library viewing "

@@ -9,7 +9,7 @@ import polars as pl
 import pytest
 from all_supports import all_supports
 
-from jupyter_storage_explorer._explorer.supports import SupportChain
+from jupyter_storage_explorer._explorer.supports import ActionChain
 from jupyter_storage_explorer.formats import (
     Csv,
     DeltaLake,
@@ -26,7 +26,7 @@ from jupyter_storage_explorer.formats import (
     ViewLimits,
 )
 
-CHAIN = SupportChain(all_supports())
+CHAIN = ActionChain(all_supports())
 
 
 def parquet_bytes(df: pl.DataFrame) -> bytes:
@@ -220,7 +220,7 @@ class TestViews:
 
     def test_nothing_installed(self, make_item, monkeypatch):
         monkeypatch.setattr(PythonPackage, "is_installed", lambda self: False)
-        assert CHAIN.of(Csv(), make_item("/a.csv", b""), "view") == []
+        assert CHAIN.of(Csv(), make_item("/a.csv", b"")) == []
 
     def test_image_needs_no_package(self, make_item, monkeypatch):
         # The browser shows images itself: Pillow is for the load code only.
@@ -252,7 +252,7 @@ class TestRecipes:
         )
 
     def test_python_options(self, make_item):
-        chain = SupportChain(
+        chain = ActionChain(
             all_supports(), {"python": {"*": {"storage_options": {"anon": True}}}}
         )
         [recipe] = chain.recipes(Text(), make_item("/a.txt", b""))

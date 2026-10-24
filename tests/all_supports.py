@@ -21,7 +21,7 @@ assert not _problems, _problems
 NO_PLUGINS = {p.key: {"enabled": False} for p in PLUGINS}
 
 ALL_SUPPORTS: tuple[type[FormatSupport], ...] = (
-    *PluginComponents(PLUGINS).supports,
+    *PluginComponents(PLUGINS).actions,  # the plugins give supports still
     *DEFAULT_SUPPORTS,
 )
 
