@@ -13,11 +13,11 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 
 from jupyter_storage_explorer import _paths
 from jupyter_storage_explorer._explorer.common import error_text, explorers
+from jupyter_storage_explorer._explorer.table_set_tab import TableSetTab
+from jupyter_storage_explorer._explorer.view_tab import ViewTab
 from jupyter_storage_explorer._json import jsonable
 from jupyter_storage_explorer._query.data_query import DataQuery
 from jupyter_storage_explorer._query.table_set import SEPARATOR, TableSet
-from jupyter_storage_explorer._table_set_tab import TableSetTab
-from jupyter_storage_explorer._view_tab import ViewTab
 from jupyter_storage_explorer.data_explorer import DataExplorer
 from jupyter_storage_explorer.formats import (
     DataFormat,

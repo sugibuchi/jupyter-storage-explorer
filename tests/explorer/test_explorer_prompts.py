@@ -7,7 +7,7 @@ import polars as pl
 import pytest
 from explorers import make
 
-from jupyter_storage_explorer._view_tab import ViewTab
+from jupyter_storage_explorer._explorer.view_tab import ViewTab
 from jupyter_storage_explorer.formats import (
     FormatSupport,
     QueryView,
