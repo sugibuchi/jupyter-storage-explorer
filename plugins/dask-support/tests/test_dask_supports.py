@@ -26,7 +26,6 @@ from jupyter_storage_explorer_dask_support import (
     JsonLinesByDaskOptions,
     ParquetByDask,
     ParquetByDaskOptions,
-    dask_rows,
 )
 
 from jupyter_storage_explorer._query.data_query import fetch_rows
@@ -142,7 +141,7 @@ def test_parquet_file_partitions_are_its_row_groups(make_item):
     item = make_item("/a.parquet", parquet_bytes())
     view = ParquetByDask().view(Parquet(), item, ParquetByDaskOptions(), ViewLimits())
     assert isinstance(view, QueryView)
-    assert view.fetch is dask_rows
+    assert view.fetch is None  # the core reads Dask's partitions
     assert view.data.npartitions == ROWS // 100
     assert rows(view)["id"].tolist() == FRAME["id"]
 
@@ -204,22 +203,8 @@ def test_sorted_pages_are_read_in_one_pass(make_item):
     lf = nw.from_native(view.data)
     query = lf.sort("x", "id", descending=[True, False]).select("id", "x")
     expected = pd.DataFrame(FRAME).sort_values(["x", "id"], ascending=[False, True])
-    page = dask_rows(query, 250, 20)
+    page = fetch_rows(query, 250, 20)
     assert page.to_native()["id"].tolist() == expected["id"].tolist()[250:270]
-    assert dask_rows(lf.filter(nw.col("x") > 3), 0, 10) is None
-
-
-def test_sorted_pages_read_less_than_partition_by_partition(counting):
-    counting.pipe_file("/big.parquet", parquet_bytes(row_group_size=50))
-    item = item_of(counting, "/big.parquet")
-    view = ParquetByDask().view(Parquet(), item, ParquetByDaskOptions(), ViewLimits())
-    query = nw.from_native(view.data).sort("x")
-    READ["bytes"] = 0
-    dask_rows(query, 900, 50)
-    one_pass = READ["bytes"]
-    READ["bytes"] = 0
-    fetch_rows(query, 900, 50)
-    assert one_pass < READ["bytes"]
 
 
 def test_the_data_is_read_in_another_thread(make_item):

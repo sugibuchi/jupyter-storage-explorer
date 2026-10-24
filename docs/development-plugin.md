@@ -269,8 +269,8 @@ applied, and `fetch` returns rows `offset` to `offset + length` as a narwhals Da
 1. the explorer's `fetch_rows`, the user's;
 2. the view's `fetch`, a support's, for a library with a cheaper way than the default, e.g. pyspark-support's
    `spark_rows`, which skips rows with Spark's `offset`;
-3. the core's default, which skips rows itself for polars and DuckDB, reads Dask partition by partition, and reads
-   all rows up to `offset + length` for others.
+3. the core's default, which skips rows itself for polars and DuckDB, reads Dask partition by partition (sorted
+   data in one pass), and reads all rows up to `offset + length` for others.
 
 Every view has `title` and `note`. `limits` (`ViewLimits`) says how much to read: `max_bytes`, `max_display_rows`,
 `max_whole_file_bytes`, `max_live_rows`, `max_memory_rows`. Lazy data (a polars LazyFrame, a DuckDB relation, a Spark

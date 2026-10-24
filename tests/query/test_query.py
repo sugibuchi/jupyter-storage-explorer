@@ -13,6 +13,7 @@ import polars as pl
 import pytest
 from sqlframe.duckdb import DuckDBSession
 
+from jupyter_storage_explorer._explorer.previews import _layered_fetch
 from jupyter_storage_explorer._explorer.states import ExplorerStates
 from jupyter_storage_explorer._json import jsonable
 from jupyter_storage_explorer._query import data_query
@@ -542,8 +543,8 @@ class TestSparkLike:
 
 class TestReads:
     """Every read of lazy data, the first rows when opening and each live
-    page, goes through the explorer's fetch (the user's), then the view's (a
-    support's), then fetch_rows."""
+    page, goes through the query's fetch, then fetch_rows. An explorer's
+    fetch is the user's, then the view's (a support's)."""
 
     @staticmethod
     def recording(name, reads, give=True):
@@ -553,31 +554,46 @@ class TestReads:
 
         return fetch
 
-    def query(self, reads, *, user=True, view=True, user_gives=True):
-        return mode_query(
-            fetch=self.recording("user", reads, user_gives) if user else None,
-            view_fetch=(lambda: self.recording("view", reads)) if view else None,
-        )
-
-    def test_the_users_first(self):
+    def test_the_fetch_first(self):
         reads = []
-        rows_of(self.query(reads), offset=5, window=2)
-        assert reads == [("user", 0, 11), ("user", 5, 3)]
+        rows_of(mode_query(fetch=self.recording("fetch", reads)), offset=5, window=2)
+        assert reads == [("fetch", 0, 11), ("fetch", 5, 3)]
 
-    def test_the_views_when_the_user_gives_none(self):
+    def test_the_default_when_the_fetch_gives_none(self):
         reads = []
-        reply = rows_of(self.query(reads, user_gives=False), offset=5, window=2)
+        query = mode_query(fetch=self.recording("fetch", reads, give=False))
+        reply = rows_of(query, offset=5, window=2)
         assert reply["rows"] == [[5], [6]]
-        assert [name for name, *_ in reads] == ["user", "view", "user", "view"]
+        assert len(reads) == 2
 
-    def test_the_default_otherwise(self):
-        reply = rows_of(self.query([], user=False, view=False), offset=5, window=2)
+    def test_the_default_without_fetch(self):
+        reply = rows_of(mode_query(), offset=5, window=2)
         assert reply["rows"] == [[5], [6]]
 
     def test_reading_into_memory(self):
         reads = []
-        mode_query(mode="memory", view_fetch=lambda: self.recording("view", reads))
-        assert reads == [("view", 0, 21)]  # max_memory_rows + 1
+        mode_query(mode="memory", fetch=self.recording("fetch", reads))
+        assert reads == [("fetch", 0, 21)]  # max_memory_rows + 1
+
+    def test_an_explorers_the_users_first(self):
+        reads = []
+        user = self.recording("user", reads)
+        fetch = _layered_fetch(user, lambda: self.recording("view", reads))
+        rows_of(mode_query(fetch=fetch), offset=5, window=2)
+        assert [name for name, *_ in reads] == ["user", "user"]
+
+    def test_an_explorers_the_views_when_the_user_gives_none(self):
+        reads = []
+        user = self.recording("user", reads, give=False)
+        fetch = _layered_fetch(user, lambda: self.recording("view", reads))
+        reply = rows_of(mode_query(fetch=fetch), offset=5, window=2)
+        assert reply["rows"] == [[5], [6]]
+        assert [name for name, *_ in reads] == ["user", "view", "user", "view"]
+
+    def test_an_explorers_the_default_without_either(self):
+        fetch = _layered_fetch(None, lambda: None)
+        reply = rows_of(mode_query(fetch=fetch), offset=5, window=2)
+        assert reply["rows"] == [[5], [6]]
 
 
 class TestDaskRows:
@@ -605,6 +621,15 @@ class TestDaskRows:
         page = data_query.fetch_rows(lf, 15, 10)["n"].to_list()
         assert page == list(range(15, 25))
         assert computed == [0, 1, 2]
+
+    def test_sorted_in_one_pass(self, frame):
+        # Computed one by one, each partition of sorted data would sort all
+        # of it again: Dask's head of every partition reads each once.
+        ddf, computed = frame
+        lf = nw.from_native(ddf).sort("n", descending=True)
+        page = data_query.fetch_rows(lf, 15, 10)["n"].to_list()
+        assert page == list(range(34, 24, -1))
+        assert sorted(computed) == [0, 1, 2, 3, 4]
 
     def test_beyond_the_end(self, frame):
         ddf, _ = frame

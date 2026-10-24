@@ -46,9 +46,9 @@ def fetch_rows(lf: nw.LazyFrame, offset: int, length: int) -> nw.DataFrame:
     for; a view's ``fetch`` comes between them (``QueryView``). polars and
     DuckDB skip the rows before ``offset`` themselves. Dask reads partition
     by partition until it has the rows (narwhals' ``head`` would read every
-    partition). Other libraries (e.g. Spark) have no portable way to skip
-    rows, so all rows up to ``offset + length`` are read and the first ones
-    dropped.
+    partition), and sorted data in one pass. Other libraries (e.g. Spark)
+    have no portable way to skip rows, so all rows up to ``offset + length``
+    are read and the first ones dropped.
 
     Parameters
     ----------
@@ -89,12 +89,28 @@ def fetch_rows(lf: nw.LazyFrame, offset: int, length: int) -> nw.DataFrame:
     return df.tail(max(0, len(df) - offset))
 
 
+def _dask_sorted(native: Any) -> bool:
+    """Whether a Dask DataFrame is sorted (a ``SortValues`` in its
+    expression): False if the expressions cannot tell, e.g. an older Dask's."""
+    try:
+        return any(type(e).__name__ == "SortValues" for e in native.expr.walk())
+    except Exception:
+        return False
+
+
 def _dask_rows(native: Any, offset: int, length: int) -> nw.DataFrame:
     """Rows ``offset`` to ``offset + length`` of a Dask DataFrame, computing
     its partitions in order until there are enough: the first page of a
-    large file reads its first block, not all of them. A sort still reads
-    every partition, as Dask's sorting does."""
-    needed, have, parts = offset + length, 0, []
+    large file reads its first block, not all of them.
+
+    Sorted data is read in one pass instead, Dask's ``head`` of every
+    partition (the smallest rows of each, then of those): computed one by
+    one, each partition would sort all the data again."""
+    needed = offset + length
+    if _dask_sorted(native):
+        rows = native.head(needed, npartitions=-1)
+        return nw.from_native(rows, eager_only=True)[offset:needed]
+    have, parts = 0, []
     for i in range(native.npartitions):
         part = nw.from_native(native.partitions[i].compute(), eager_only=True)
         parts.append(part)
@@ -141,10 +157,9 @@ class DataQuery:
     be switched.
 
     Every read of lazy data, the first rows when opening and each live page,
-    goes through ``fetch`` (the explorer's ``fetch_rows``, the user's), then
-    ``view_fetch()`` (the ``fetch`` of the view the data came from, a
-    support's, asked at each read), then ``fetch_rows``: the first giving
-    rows reads them.
+    goes through ``fetch`` if given (an explorer's: its ``fetch_rows``, the
+    user's, then the view's ``fetch``, a support's), then ``fetch_rows``,
+    the default: the first giving rows reads them.
 
     ``cut``, if given, tells whether the data the source gave holds only the
     first part of the item's: eager data its first rows (e.g. read with
@@ -168,8 +183,6 @@ class DataQuery:
         max_memory_rows: int = 100_000,
         page_rows: int = 100,
         fetch: Callable[[nw.LazyFrame, int, int], nw.DataFrame | None] | None = None,
-        view_fetch: Callable[[], Callable[[nw.LazyFrame, int, int], Any] | None]
-        | None = None,
         cut: Callable[[], bool] | None = None,
         on_close: Callable[[], object] | None = None,
     ) -> None:
@@ -184,7 +197,6 @@ class DataQuery:
         # Rows of a page of the browser's table.
         self.page_rows = max(1, page_rows)
         self.fetch = fetch
-        self.view_fetch = view_fetch
         self.cut = cut
         # The mode asked for, by the caller or the user: reloading starts in it.
         self.requested = mode
@@ -240,13 +252,12 @@ class DataQuery:
     def _read(self, lf: nw.LazyFrame, offset: int, length: int) -> nw.DataFrame:
         """Rows ``offset`` to ``offset + length`` of lazy data: every read of
         the source, the first rows when opening and the pages of live
-        queries. By the explorer's ``fetch`` (the user's), else the view's
-        (``view_fetch``, the support's, for its library), else
-        ``fetch_rows``; each but the last may return None to pass it on."""
-        view_fetch = self.view_fetch() if self.view_fetch is not None else None
-        for fetch in (self.fetch, view_fetch):
-            if fetch is not None and (df := fetch(lf, offset, length)) is not None:
-                return df
+        queries. By ``fetch``, else, where it gives None, ``fetch_rows``."""
+        if (
+            self.fetch is not None
+            and (df := self.fetch(lf, offset, length)) is not None
+        ):
+            return df
         return fetch_rows(lf, offset, length)
 
     def _fits_live_rows(self) -> bool:

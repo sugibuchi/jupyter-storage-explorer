@@ -24,10 +24,8 @@ counting the bytes read (the plugin's README says it for users):
   a block is never larger. JSON Lines without a block size would be read
   whole when the DataFrame is made, and for each page.
 - A filter matching few rows reads every partition, as with any lazy
-  library. The core reads Dask's pages partition by partition
-  (``fetch_rows``); a sort makes each partition read every partition again,
-  so sorted pages are read with Dask's ``head`` instead (``dask_rows``),
-  which Dask plans as one pass picking the smallest rows.
+  library. The core reads Dask's pages partition by partition, and sorted
+  ones in one pass (``fetch_rows``).
 - The data, made in the view's worker thread, is read in other threads, on
   the scheduler active: Dask's threads, or a distributed ``Client``.
 """
@@ -39,7 +37,6 @@ from inspect import cleandoc
 from typing import TYPE_CHECKING, Any, ClassVar
 
 import fsspec
-import narwhals as nw
 from fsspec.core import split_protocol
 from fsspec.implementations.dirfs import DirFileSystem
 
@@ -244,45 +241,6 @@ class JsonLinesByDaskOptions(DaskOptions):
     dtype_backend: str | _Default = LIBRARY_DEFAULT
 
 
-def dask_rows(lf: Any, offset: int, length: int) -> Any:
-    """Rows ``offset`` to ``offset + length`` of a sorted query of Dask's
-    data, for the data browser (``QueryView.fetch``); None for others, which
-    the core reads partition by partition.
-
-    The core computes the partitions one by one, which for sorted data
-    sorts it again for each partition: a page past the first sorted
-    partition reads the data as many times. Dask's ``head`` of every
-    partition plans the sort as one pass instead, keeping the smallest rows
-    of each partition.
-
-    Parameters
-    ----------
-    lf : narwhals.LazyFrame
-        The query: Dask's data with the browser's filters, sort and hidden
-        columns applied.
-    offset : int
-        The first row to read.
-    length : int
-        The most rows to read.
-
-    Returns
-    -------
-    narwhals.DataFrame or None
-    """
-    native = lf.to_native()
-    expr = getattr(native, "expr", None)
-    try:
-        sorted_ = expr is not None and any(
-            type(e).__name__ == "SortValues" for e in expr.walk()
-        )
-    except Exception:  # Another Dask's expressions: leave it to the core.
-        return None
-    if not sorted_:
-        return None
-    rows = native.head(offset + length, npartitions=-1)
-    return nw.from_native(rows, eager_only=True)[offset : offset + length]
-
-
 def _unwrapped(fs: AbstractFileSystem, path: str) -> tuple[AbstractFileSystem, str]:
     """The filesystem a ``DirFileSystem`` wraps, and the path in it: Dask makes
     a folder's path absolute, which a ``DirFileSystem`` does not find, and
@@ -327,14 +285,14 @@ def _code_kwargs(options: DaskOptions, defaults: Mapping[str, Any]) -> str:
 
 class _DaskSupport(FormatSupport):
     """A format read with Dask: lazy data, which the data browser reads a
-    partition at a time, sorted pages with ``dask_rows``."""
+    partition at a time (the core's ``fetch_rows``)."""
 
     engine = DaskEngine
     options_model = DaskOptions
 
     @staticmethod
     def _query_view(data: Any) -> QueryView:
-        return QueryView(data=data, fetch=dask_rows)
+        return QueryView(data=data)
 
 
 class ParquetByDask(_DaskSupport):
