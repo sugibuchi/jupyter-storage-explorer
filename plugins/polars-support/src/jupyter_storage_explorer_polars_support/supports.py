@@ -5,7 +5,7 @@ from __future__ import annotations
 import io
 from dataclasses import dataclass
 from inspect import cleandoc
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from jupyter_storage_explorer.filesystems.locations import LocalLocation
 from jupyter_storage_explorer.formats.delta import DeltaLake
@@ -36,7 +36,7 @@ from jupyter_storage_explorer.formats.view import (
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
 
-    from jupyter_storage_explorer.formats.base import ItemContext
+    from jupyter_storage_explorer.formats.base import DataFormat, ItemContext
     from jupyter_storage_explorer.formats.parquet import ParquetLayout
     from jupyter_storage_explorer.formats.support import Task
     from jupyter_storage_explorer.formats.view import View, ViewLimits
@@ -68,7 +68,39 @@ class PolarsEngine(Engine):
 
 
 @dataclass(frozen=True, kw_only=True)
-class PolarsOptions(SupportOptions):
+class FsspecCodeOptions(SupportOptions):
+    """The options of code opening the file with fsspec for polars: Excel's
+    always, the other formats' on storages polars cannot read itself.
+
+    Attributes
+    ----------
+    fsspec_storage_options : mapping or None, default None
+        ``fsspec.open``'s keyword arguments in the code; those that look like
+        credentials are left out.
+    """
+
+    fsspec_storage_options: Mapping[str, Any] | None = secret_dict_field(
+        default=None,
+        secret_keys=[
+            "account_key",
+            "sas_token",
+            "connection_string",
+            "client_secret",
+            "key",
+            "secret",
+            "token",
+            "password",
+        ],
+    )
+
+    def fsspec_kwargs(self) -> str:
+        """``fsspec.open``'s keyword arguments in the code, after the URL and
+        mode."""
+        return format_kwargs(**(self.code_value("fsspec_storage_options") or {}))
+
+
+@dataclass(frozen=True, kw_only=True)
+class PolarsOptions(FsspecCodeOptions):
     """The options of the formats polars reads by URL.
 
     Attributes
@@ -170,7 +202,7 @@ class JsonLinesByPolarsOptions(PolarsOptions):
 
 
 @dataclass(frozen=True, kw_only=True)
-class JsonByPolarsOptions(SupportOptions):
+class JsonByPolarsOptions(FsspecCodeOptions):
     """polars' ``read_json`` arguments, in the code (JSON is viewed as a
     tree): unset ones are left to polars. The plugin's README lists them."""
 
@@ -212,33 +244,14 @@ _SCAN_PARQUET_ONLY = frozenset({"hidden_file_prefix", "cache", "extra_columns"})
 
 
 @dataclass(frozen=True, kw_only=True)
-class ExcelByPolarsOptions(SupportOptions):
-    """polars' ``read_excel`` arguments, and how the code reads the bytes:
-    unset ones are left to polars. The data browser shows the sheet (or
-    table) ``sheet_id``, ``sheet_name`` or ``table_name`` give, or each of
-    those they give, on tabs; without them, the workbook's sheets on tabs,
-    or its only sheet. The plugin's README lists them.
+class ExcelByPolarsOptions(FsspecCodeOptions):
+    """polars' ``read_excel`` arguments, and how the code reads the bytes
+    (``fsspec_storage_options``): unset ones are left to polars. The data
+    browser shows the sheet (or table) ``sheet_id``, ``sheet_name`` or
+    ``table_name`` give, or each of those they give, on tabs; without them,
+    the workbook's sheets on tabs, or its only sheet. The plugin's README
+    lists them."""
 
-    Attributes
-    ----------
-    fsspec_storage_options : mapping or None, default None
-        ``fsspec.open``'s keyword arguments in the code, which reads the
-        bytes with it; those that look like credentials are left out.
-    """
-
-    fsspec_storage_options: Mapping[str, Any] | None = secret_dict_field(
-        default=None,
-        secret_keys=[
-            "account_key",
-            "sas_token",
-            "connection_string",
-            "client_secret",
-            "key",
-            "secret",
-            "token",
-            "password",
-        ],
-    )
     sheet_id: int | Sequence[int] | _Default | None = LIBRARY_DEFAULT
     sheet_name: str | Sequence[str] | _Default | None = LIBRARY_DEFAULT
     table_name: str | _Default | None = LIBRARY_DEFAULT
@@ -272,10 +285,44 @@ class DeltaLakeByPolarsOptions(PolarsOptions):
 
 
 class _PolarsByUrl(FormatSupport):
-    """A format polars reads by URL, with the storage options of its readers."""
+    """A format polars reads by URL, with the storage options of its readers.
+
+    Its code reads the URL where polars reads the storage itself
+    (``reads_itself``). Elsewhere, a file's code opens it with fsspec and
+    gives polars the file, which it reads whole, into a DataFrame
+    (``fsspec_template``, with the reader's arguments): no LazyFrame, which
+    would read it whole all the same. Folders, and formats without that
+    template, have no code there."""
 
     engine = PolarsEngine
     options_model = PolarsOptions
+    # The code reading a file opened with fsspec: {url}, {fsspec_kwargs} and
+    # {kwargs}; None for none.
+    fsspec_template: ClassVar[str | None] = None
+
+    def supports(self, fmt: DataFormat, ctx: ItemContext, task: Task) -> bool:
+        coded = task != "recipe" or reads_itself(ctx) or self._fsspec_code(ctx)
+        return super().supports(fmt, ctx, task) and coded
+
+    def _fsspec_code(self, ctx: ItemContext) -> bool:
+        """Whether the item's code opens it with fsspec."""
+        return (
+            not reads_itself(ctx)
+            and self.fsspec_template is not None
+            and not ctx.is_dir
+        )
+
+    def _fsspec_recipe(
+        self, ctx: ItemContext, options: FsspecCodeOptions, kwargs: str
+    ) -> dict[str, str]:
+        """The code reading the file opened with fsspec, into a DataFrame."""
+        assert self.fsspec_template is not None
+        code = self.fsspec_template.format(
+            url=repr(ctx.library_url),
+            fsspec_kwargs=options.fsspec_kwargs(),
+            kwargs=kwargs,
+        )
+        return {AS_DATA_FRAME: code}
 
 
 # The URL schemes polars reads itself, with object_store: local paths, the
@@ -410,10 +457,22 @@ class CsvByPolars(_PolarsByUrl):
         df = pl.read_csv({url}{kwargs})
         """)
 
+    fsspec_template = cleandoc("""
+        import fsspec
+        import polars as pl
+
+        with fsspec.open({url}, 'rb'{fsspec_kwargs}) as f:
+            df = pl.read_csv(f{kwargs})
+        """)
+
     def recipe(
         self, fmt: Csv, ctx: ItemContext, options: CsvByPolarsOptions
     ) -> dict[str, str]:
-        kwargs = _code_kwargs(options, {"separator": fmt.code_separator(ctx)})
+        defaults = {"separator": fmt.code_separator(ctx)}
+        if self._fsspec_code(ctx):
+            kwargs = _code_kwargs(options, defaults, storage=False)
+            return self._fsspec_recipe(ctx, options, kwargs)
+        kwargs = _code_kwargs(options, defaults)
         url = repr(ctx.library_url)
         return {AS_DATA_FRAME: self.data_frame_template.format(url=url, kwargs=kwargs)}
 
@@ -450,9 +509,20 @@ class JsonLinesByPolars(_PolarsByUrl):
         df = pl.read_ndjson({url}{kwargs})
         """)
 
+    fsspec_template = cleandoc("""
+        import fsspec
+        import polars as pl
+
+        with fsspec.open({url}, 'rb'{fsspec_kwargs}) as f:
+            df = pl.read_ndjson(f{kwargs})
+        """)
+
     def recipe(
         self, fmt: JsonLines, ctx: ItemContext, options: JsonLinesByPolarsOptions
     ) -> dict[str, str]:
+        if self._fsspec_code(ctx):
+            kwargs = _code_kwargs(options, storage=False)
+            return self._fsspec_recipe(ctx, options, kwargs)
         url = repr(ctx.library_url)
         kwargs = _code_kwargs(options)
         return {
@@ -461,11 +531,10 @@ class JsonLinesByPolars(_PolarsByUrl):
         }
 
 
-class JsonByPolars(FormatSupport):
+class JsonByPolars(_PolarsByUrl):
     """Load code only: JSON is viewed as a tree (``JsonByPython``)."""
 
     format = Json
-    engine = PolarsEngine
     options_model = JsonByPolarsOptions
 
     data_frame_template = cleandoc("""
@@ -474,12 +543,22 @@ class JsonByPolars(FormatSupport):
         df = pl.read_json({url}{kwargs})
         """)
 
+    fsspec_template = cleandoc("""
+        import fsspec
+        import polars as pl
+
+        with fsspec.open({url}, 'rb'{fsspec_kwargs}) as f:
+            df = pl.read_json(f{kwargs})
+        """)
+
     def recipe(
         self, fmt: Json, ctx: ItemContext, options: JsonByPolarsOptions
     ) -> dict[str, str]:
         # polars' read_json takes no storage options.
-        url = repr(ctx.library_url)
         kwargs = _code_kwargs(options, storage=False)
+        if self._fsspec_code(ctx):
+            return self._fsspec_recipe(ctx, options, kwargs)
+        url = repr(ctx.library_url)
         return {AS_DATA_FRAME: self.data_frame_template.format(url=url, kwargs=kwargs)}
 
 
@@ -548,12 +627,9 @@ class ExcelByPolars(FormatSupport):
     def recipe(
         self, fmt: Excel, ctx: ItemContext, options: ExcelByPolarsOptions
     ) -> dict[str, str]:
-        fsspec_kwargs = format_kwargs(
-            **(options.code_value("fsspec_storage_options") or {})
-        )
         code = self.data_frame_template.format(
             url=repr(ctx.library_url),
-            fsspec_kwargs=fsspec_kwargs,
+            fsspec_kwargs=options.fsspec_kwargs(),
             kwargs=_code_kwargs(options, storage=False),
         )
         return {AS_DATA_FRAME: code}
@@ -647,9 +723,25 @@ class ParquetByPolars(_PolarsByUrl):
         df = pl.scan_parquet({url}{kwargs}).collect()
         """)
 
+    fsspec_template = cleandoc("""
+        import fsspec
+        import polars as pl
+
+        with fsspec.open({url}, 'rb'{fsspec_kwargs}) as f:
+            df = pl.read_parquet(f{kwargs})
+        """)
+
     def recipe(
         self, fmt: Parquet, ctx: ItemContext, options: ParquetByPolarsOptions
     ) -> dict[str, str]:
+        if self._fsspec_code(ctx):
+            # A file: none of scan_parquet's own arguments.
+            arguments = {
+                k: v
+                for k, v in options.code_arguments().items()
+                if k not in _SCAN_PARQUET_ONLY
+            }
+            return self._fsspec_recipe(ctx, options, format_arguments(arguments))
         layout = fmt.layout(ctx) if ctx.is_dir else None
         # "*" also matches Spark's "_SUCCESS" and checksums.
         hidden = layout is not None and layout.files == "*"
@@ -677,9 +769,8 @@ class DeltaLakeByPolars(_PolarsByUrl):
     options_model = DeltaLakeByPolarsOptions
 
     def supports(self, fmt: DeltaLake, ctx: ItemContext, task: Task) -> bool:
-        # delta-rs reads the table's storage itself: views only there.
-        native = task != "view" or reads_itself(ctx)
-        return super().supports(fmt, ctx, task) and native
+        # delta-rs reads the table's storage itself: views only there too.
+        return super().supports(fmt, ctx, task) and reads_itself(ctx)
 
     def view(
         self,

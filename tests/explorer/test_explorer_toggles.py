@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 from all_supports import installed_only
-from explorers import make
+from explorers import make, path_of
 
 
 def delete_folder(explorer, *, unsafe):
@@ -56,34 +56,42 @@ class TestUnsafeMode:
 
 
 class TestCodeSnippet:
+    @pytest.fixture
+    def folder(self, tmp_path):
+        """Local files: polars gives no code for the memory filesystem."""
+        (tmp_path / "a.csv").write_bytes(b"x,y\n1,2\n")
+        (tmp_path / "b.json").write_bytes(b"{}")
+        return str(tmp_path)
+
     @staticmethod
-    def engines(explorer, path="/data/a.csv"):
+    def engines(explorer, name="a.csv"):
+        path = path_of(explorer, name)
         reply = explorer.request({"type": "menu_info", "rid": 1, "path": path})
         return sorted({recipe["engine"] for recipe in reply["recipes"]})
 
-    def test_every_engine_installed_by_default(self, lake, monkeypatch):
-        explorer = make("/", fs=lake)
+    def test_every_engine_installed_by_default(self, folder, monkeypatch):
+        explorer = make(folder)
         assert explorer._code_snippet
         installed_only(monkeypatch, "polars", "pandas", "pyspark")
         assert self.engines(explorer) == ["Polars", "PySpark", "pandas"]
         installed_only(monkeypatch, "polars", "databricks-connect")
         assert self.engines(explorer) == ["Databricks Connect", "Polars"]
 
-    def test_disabled(self, lake):
-        explorer = make("/", fs=lake, code_snippet="disabled")
+    def test_disabled(self, folder):
+        explorer = make(folder, code_snippet="disabled")
         assert not explorer._code_snippet
         assert self.engines(explorer) == []
 
-    def test_engines_named(self, lake):
-        explorer = make("/", fs=lake, code_snippet=["polars", "python"])
+    def test_engines_named(self, folder):
+        explorer = make(folder, code_snippet=["polars", "python"])
         assert explorer._code_snippet
         assert self.engines(explorer) == ["Polars"]
         # "python": the code of the formats without an engine, e.g. JSON.
-        assert "Python" in self.engines(explorer, "/data/b.json")
+        assert "Python" in self.engines(explorer, "b.json")
 
-    def test_unknown_engines_left_out_with_a_warning(self, lake):
+    def test_unknown_engines_left_out_with_a_warning(self, folder):
         with pytest.warns(RuntimeWarning, match="no support of duckdb"):
-            explorer = make("/", fs=lake, code_snippet=["duckdb", "pandas"])
+            explorer = make(folder, code_snippet=["duckdb", "pandas"])
         assert self.engines(explorer) == ["pandas"]
 
     @pytest.mark.parametrize("value", ["polars", "yes", [1]])

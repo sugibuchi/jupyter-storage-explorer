@@ -42,6 +42,9 @@ Without `deltalake`, `fastexcel` or `pyarrow`, the other formats still work.
   - They are still read lazily: PyArrow reads only the columns and row groups needed, and some ahead.
   - The Parquet [engine options](#engine-options) do not apply there.
 - polars cannot view Delta Lake tables on those storages.
+- There, "Python code" opens a file with fsspec and reads it into a DataFrame, as polars reads a file object whole.
+  - It offers no LazyFrame, which would read the file whole all the same.
+  - Folders, such as Parquet datasets, and Delta Lake tables get no polars code there.
 
 ## Plugin options
 
@@ -88,6 +91,9 @@ Every format but JSON and Excel takes:
 |-----------------------|----------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `storage_options`     | `None`   | polars' `storage_options`: object_store's keys, not fsspec's ([AWS](https://docs.rs/object_store/latest/object_store/aws/enum.AmazonS3ConfigKey.html), [GCP](https://docs.rs/object_store/latest/object_store/gcp/enum.GoogleConfigKey.html), [Azure](https://docs.rs/object_store/latest/object_store/azure/enum.AzureConfigKey.html); Delta Lake's are [delta-rs'](https://delta-io.github.io/delta-rs/latest/usage/loading-table/)). Without them, polars reads credentials from the environment. |
 | `credential_provider` | `"auto"` | polars' `credential_provider`: a function giving cloud storage credentials, in the data browser only (never in the code).                                                                                                                                                                                                                                                                                                                                                                     |
+
+Every format takes `fsspec_storage_options` (default `None`): `fsspec.open`'s keyword arguments in the code that opens
+the file with fsspec. That is Excel's code, and the other formats' on storages polars cannot read itself.
 
 The other options are each format's reader's arguments, of the same names, with their descriptions from polars' API
 documentation. Those not set are not passed, so polars' defaults, shown below, apply, except where the explorer sets
@@ -209,8 +215,7 @@ shows a workbook's sheets on tabs below the table (only one sheet: that one), ea
 | `drop_empty_cols`     | `True`       | Indicate whether to omit empty columns (with no headers) when reading data into the DataFrame (note that empty column identification may vary depending on the underlying engine being used).                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `raise_if_empty`      | `True`       | When there is no data in the sheet,`NoDataError` is raised. If this parameter is set to False, an empty DataFrame (with no columns) is returned instead.                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 
-Excel's code reads the file with fsspec, then polars reads its bytes: `fsspec_storage_options` (default `None`) are
-`fsspec.open`'s keyword arguments there.
+Excel's code reads the file with fsspec, then polars reads its bytes.
 
 ### Delta Lake (`delta`)
 
