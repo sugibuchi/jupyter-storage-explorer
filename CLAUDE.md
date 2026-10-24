@@ -140,7 +140,7 @@ Docstrings of the public API are in numpy style: `Parameters`, `Returns`, `Raise
 - `StorageExplorer`, `DataExplorer`, `fetch_rows` and `QuerySettings`;
 - `ExplorerStates`, with `Bookmark` and `QueryState`;
 - `FileSystemOperations` and its subclasses, with `_copy_file` and `_move_file`, and `Measurement` and `Progress`;
-- `DataFormat`, `FormatSupport` and `View`;
+- `DataFormat`, `FormatSupport` and `View`, with `LocalFileCache`;
 - `Location`, `FileSystemMapper` and their subclasses, `MapperChain` and `same_filesystem`.
 
 Internal docstrings stay prose: underscore names, `DataQuery`, `FileTasks`, `JobRunner`, the mixins and the like.

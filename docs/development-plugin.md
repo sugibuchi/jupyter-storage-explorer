@@ -381,13 +381,14 @@ code = f"con.read_parquet({url!r}{format_arguments(options.code_arguments())})" 
 | `ctx.info`, `ctx.size`     | Its fsspec info; its size                                                                  |
 | `ctx.children`, `ctx.child_names`, `ctx.is_dir` | A folder's listing, its names, whether it is a folder                 |
 
-A library reads the item in one of three ways. Choose per storage in `supports`, as polars-support does:
+A library reads the item in one of four ways. Choose per storage in `supports`, as polars-support does:
 
 | Way | When | Examples |
 |---|---|---|
 | By URL, `ctx.library_url` | The library reads the storage itself, with its own credentials: the environment, or options | polars on S3 (object_store), Spark |
 | The explorer's filesystem, `ctx.fs` | The library takes an fsspec filesystem and reads lazily through it | PyArrow's `FSSpecHandler` (polars-support's Parquet), DuckDB's `register_filesystem` |
 | Bytes, `ctx.head(n)`, `ctx.read_whole(limits)` | The library reads only a file object or bytes, so the file is read whole | pandas, polars' CSV elsewhere, images |
+| A local copy, `local_file_cache().get(ctx)` | The library opens only local files | DuckDB and SQLite databases |
 
 - Check what the library really reads before relying on it. Lazy through fsspec for one format may be whole for
   another: DuckDB reads Parquet lazily through fsspec, but reads a CSV file again for each query.
@@ -398,6 +399,33 @@ A library reads the item in one of three ways. Choose per storage in `supports`,
   the explorer's under a name of its own, so that both work.
 - Reading bytes whole, ask first above `limits.max_whole_file_bytes`, with a `ViewWithChoice` or a
   `ViewWithConfirmation`.
+
+`local_file_cache()`, from `jupyter_storage_explorer.formats`, is the kernel's `LocalFileCache`. Views of one file share
+its copy:
+
+- `get(ctx)` downloads the file on demand, in a view's worker thread, and returns its local path. A local file is its
+  own copy.
+- A copy stays valid while the remote file's modification time is the same; `get` downloads a changed file again.
+- `status(ctx)` says "cached", "invalid" (changed since) or "not_cached": ask before a large download unless "cached".
+- `get` counts the view as a user; release it in `on_close` with `invalidate_file(ctx.location, delay=...)`. The copy is
+  deleted once no view uses it, after the delay, so that viewing the file again soon reuses it.
+- The copies are removed at the kernel's exit.
+
+```python
+cache = local_file_cache()
+
+
+def open_copy():
+    con = duckdb.connect(str(cache.get(ctx)), read_only=True)
+    view = TableSetView(...)
+    view.on_close(lambda view: (con.close(), cache.invalidate_file(ctx.location, delay=600)))
+    return view
+
+
+if cache.status(ctx) != "cached" and (ctx.size or 0) > limits.max_whole_file_bytes:
+    return ViewWithConfirmation(message=f"Download {ctx.name} to view it?", factory=open_copy)
+return open_copy()
+```
 
 ## File operations
 

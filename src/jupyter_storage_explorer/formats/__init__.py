@@ -20,6 +20,11 @@ from jupyter_storage_explorer.formats.delta import DeltaLake
 from jupyter_storage_explorer.formats.engine import Engine
 from jupyter_storage_explorer.formats.excel import Excel
 from jupyter_storage_explorer.formats.images import Image
+from jupyter_storage_explorer.formats.local_files import (
+    CacheStatus,
+    LocalFileCache,
+    local_file_cache,
+)
 from jupyter_storage_explorer.formats.package import PythonPackage
 from jupyter_storage_explorer.formats.parquet import Parquet, ParquetLayout
 from jupyter_storage_explorer.formats.support import (
@@ -57,6 +62,7 @@ from jupyter_storage_explorer.formats.view import (
 __all__ = [
     "FILE_ICONS",
     "LIBRARY_DEFAULT",
+    "CacheStatus",
     "Csv",
     "DataFormat",
     "DeltaLake",
@@ -71,6 +77,7 @@ __all__ = [
     "JsonLines",
     "Leaf",
     "LibraryDefault",
+    "LocalFileCache",
     "Markdown",
     "MarkdownView",
     "MediaView",
@@ -95,6 +102,7 @@ __all__ = [
     "default_supports",
     "format_arguments",
     "format_kwargs",
+    "local_file_cache",
     "secret_dict_field",
     "secret_field",
 ]
