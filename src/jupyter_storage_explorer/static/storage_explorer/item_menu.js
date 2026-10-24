@@ -66,9 +66,10 @@ function createItemMenu(x) {
         info.viewTabRow.replaceWith(viewTab);
       }
     }
-    // Each format and engine that can view it ("CSV (Polars)"), for either.
+    // Each format and engine that can view it ("CSV (Polars)"), for either;
+    // each view by name of an engine with several ("CSV (Polars): Widget").
     if (!msg.error && msg.views.length) {
-      const items = (open) => msg.views.map((v) => ({ label: v.label, action: () => open(path, v.format, v.engine) }));
+      const items = (open) => msg.views.map((v) => ({ label: v.label, action: () => open(path, v.format, v.engine, v.action) }));
       if (canPreview()) {
         info.previewAsSub.replaceChildren(...x.menu.rows(items(x.preview.open)));
         info.previewAsRow.hidden = false;

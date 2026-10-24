@@ -366,16 +366,23 @@ class PreviewsMixin:
             return False
         return True
 
-    def _viewer(self, fmt: DataFormat, item: _Detected, engine: str | None) -> _Viewer:
+    def _viewer(
+        self,
+        fmt: DataFormat,
+        item: _Detected,
+        engine: str | None,
+        action: str | None = None,
+    ) -> _Viewer:
         """Views ``item`` as ``fmt`` with ``engine`` (a key; None for the
-        built-in views; see ``_view_engine``), each time it is called: on
-        the storage it is on (its context's), also after switching storages;
-        a context read again (``_refreshed``) after the first time."""
+        built-in views; see ``_view_engine``), by its view ``action`` if
+        named, each time it is called: on the storage it is on (its
+        context's), also after switching storages; a context read again
+        (``_refreshed``) after the first time."""
         limits = self._view_limits
 
         def view(again: bool) -> View:
             ctx = self._refreshed(fmt, item.ctx) if again else item.ctx
-            return self._supports.view(fmt, ctx, limits, engine)
+            return self._supports.view(fmt, ctx, limits, engine, action)
 
         return _Viewer(view)
 
@@ -404,6 +411,7 @@ class PreviewsMixin:
         path: str,
         format: str | None = None,
         engine: str | EllipsisType | None = ...,
+        action: str | None = None,
     ) -> None:
         """Preview the file or directory at ``path`` in the preview panel: the
         data browser for a ``QueryView``, a ``TableSetView``'s tables, else
@@ -412,7 +420,8 @@ class PreviewsMixin:
         ``format`` names one of the formats matching it (e.g. "text" for a JSON
         file); by default the best match is used. ``engine`` (a key; None for
         the built-in views) views it instead of the one chosen (see
-        ``_view_engine``).
+        ``_view_engine``). ``action`` names the engine's view action; by
+        default its first doing the item.
 
         The reads (the item's detection, its view, the data browser's first
         rows) run in a worker thread (``_loader``): the panel shows "loading"
@@ -427,6 +436,7 @@ class PreviewsMixin:
             "format": None,
             "engine": None,
             "engine_label": "",
+            "action": action,
             "sections": [],
             "error": "",
         }
@@ -443,6 +453,7 @@ class PreviewsMixin:
                 detection=detection,
                 format=format,
                 engine=engine,
+                action=action,
                 chosen=chosen,
             )
 
@@ -521,12 +532,13 @@ class PreviewsMixin:
         format: str | None,
         engine: str | EllipsisType | None,
         chosen: str | None,
+        action: str | None = None,
         verb: str = "previewed",
     ) -> _Loaded:
         """In a worker thread, touching no trait: fill ``preview`` (see
         ``_open_preview``) with the item of ``detection`` (``_detection``'s),
-        viewed with ``chosen`` the engine chosen. Its errors say it cannot be
-        ``verb``."""
+        viewed with ``chosen`` the engine chosen, by its view ``action`` if
+        named. Its errors say it cannot be ``verb``."""
         path = preview["path"]
         # What shows it: the view, else its query or tables, which own it, or
         # the prompt asking for it.
@@ -546,7 +558,7 @@ class PreviewsMixin:
                 key = self._view_engine(fmt, item.ctx, engine, chosen)
                 preview["engine"] = key
                 preview["engine_label"] = self._engine_label(key)
-                viewer = self._viewer(fmt, item, key)
+                viewer = self._viewer(fmt, item, key, action)
                 shown = viewer()
                 shown = self._show(shown, viewer, item, preview)
         except Exception as exc:
@@ -802,6 +814,7 @@ class PreviewsMixin:
             "error": "",
         }
         format, engine = content.get("format") or None, content.get("engine", ...)
+        action = content.get("action") or None
         # As for a preview: what the worker needs of the explorer, as it is now.
         chosen = self._engine or None
         detection = self._detection(path, self._fs)
@@ -812,6 +825,7 @@ class PreviewsMixin:
                 detection=detection,
                 format=format,
                 engine=engine,
+                action=action,
                 chosen=chosen,
                 verb="viewed",
             )
@@ -1034,6 +1048,27 @@ class PreviewsMixin:
 
         self._loader.submit(work, reply, reply)
 
+    def _view_entries(
+        self, fmt: DataFormat, key: str | None, names: list[str]
+    ) -> list[dict[str, Any]]:
+        """The entries of "Preview as" for an item viewed as ``fmt`` with the
+        engine of ``key`` by its views ``names``: one, e.g. "CSV (Polars)";
+        or, for several, one per view, by name, e.g. "CSV (Polars): Widget
+        for CSV"."""
+        engine = f"({self._engine_label(key)})" if key else ""
+        label = " ".join(filter(None, [fmt.label, engine]))
+        if len(names) <= 1:
+            return [{"format": fmt.name, "engine": key, "label": label}]
+        return [
+            {
+                "format": fmt.name,
+                "engine": key,
+                "action": name,
+                "label": f"{label}: {name}",
+            }
+            for name in names
+        ]
+
     def _menu_info(
         self,
         formats: list[DataFormat],
@@ -1046,7 +1081,8 @@ class PreviewsMixin:
         ``chosen`` the engine chosen: "formats", the names of those matching;
         "view", the best format and the engine viewing it ("Preview", "View
         in a new tab"; None if the engine chosen cannot); "views", each
-        format and engine that can ("Preview as", "View in new tab as");
+        format and engine that can ("Preview as", "View in new tab as"),
+        each of the engine's views by name if it has several;
         "recipes", the load code ("Python code"), with their engine's label,
         or the error of a support's. Safe in a worker thread."""
         view = None
@@ -1061,19 +1097,11 @@ class PreviewsMixin:
             "formats": [f.name for f in formats],
             "view": view,
             "views": [
-                {
-                    "format": f.name,
-                    "engine": key,
-                    "label": " ".join(
-                        filter(
-                            None,
-                            [f.label, f"({self._engine_label(key)})" if key else ""],
-                        )
-                    ),
-                }
+                view
                 for f in formats
                 if ctx is not None
-                for key in self._supports.viewers(f, ctx)
+                for key, names in self._supports.views_by_engine(f, ctx).items()
+                for view in self._view_entries(f, key, names)
             ],
             # The frontend gets the packages' names, listed under the code.
             "recipes": [

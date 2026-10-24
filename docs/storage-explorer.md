@@ -530,5 +530,6 @@ For extending the explorer, tried before the defaults:
 | Option                     | Meaning                                                                                                               |
 |----------------------------|-----------------------------------------------------------------------------------------------------------------------|
 | `operations=[...]`         | File operations; see [File operations](development-plugin.md#file-operations).                                     |
+| `actions=[...]`            | Views and code of formats with libraries, as functions; see [Trying components](development-plugin.md#trying-components-in-an-explorer). |
 | `supports=[...]`           | Formats and the libraries handling them; see [Format supports](development-plugin.md#format-supports).            |
 | `filesystem_mappers=[...]` | How storages are told apart; see [Filesystem mappers](development-plugin.md#filesystem-mappers).                   |

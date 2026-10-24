@@ -974,8 +974,8 @@ This repository's plugins also get a check in `tests/browser/smoke.py` for what 
 Checks opening view tabs need the launcher's JupyterLab extension built: `uv run jlpm install` and `uv run jlpm build`
 in `launcher/labextension`, then `uv sync`.
 
-Plugins outside this repository use only the public API: the top level, `filesystems`, `formats`, `formats.supports`
-and `testing`. This repository's plugins may also use the explorer's internals, as they are released with it.
+Plugins outside this repository use only the public API: the top level, `filesystems`, `formats`, `formats.actions`,
+`formats.supports` and `testing`. This repository's plugins may also use the explorer's internals, as they are released with it.
 
 ### Trying components in an explorer
 
@@ -984,10 +984,11 @@ takes components as arguments:
 
 ```python
 from jupyter_storage_explorer import StorageExplorer
-from my_components import MyMapper, ParquetByDuckDB, ServerSideCopy
+from my_components import MyMapper, ParquetByDuckDB, ServerSideCopy, parquet_widget
 
 StorageExplorer(
     "s3://bucket/data",
+    actions=[parquet_widget],  # functions decorated with formats.actions.view or code
     supports=[ParquetByDuckDB],  # FormatSupport classes: their formats come with them
     operations=[ServerSideCopy()],  # FileSystemOperations objects
     filesystem_mappers=[MyMapper()],  # FileSystemMapper objects
@@ -997,8 +998,11 @@ StorageExplorer(
 What an explorer is given comes first, then the plugins' components, then the defaults. For each job, the first that
 can do it does it. So the component tried handles what it can, and leaves the rest to the others:
 
+- an action, the items its `check` refuses;
 - a support, the items its `supports` refuses;
 - an operation, what it raises `NotSupported` for.
+
+The first view an item matches is its default. **Preview as** lists the others of its engine by name.
 
 Restart the kernel after changing the component's module: Python imports a module only once.
 

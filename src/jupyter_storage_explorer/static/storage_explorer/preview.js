@@ -20,9 +20,10 @@ function createPreview(x) {
 
   // `format` (a format name) previews with that format instead of the best
   // match; `engine` (a key, or null for the built-in views) with that
-  // engine instead of the one chosen ("Preview as").
-  function open(path, format = null, engine = undefined) {
-    model.send({ type: "preview", path, format, ...(engine === undefined ? {} : { engine }) });
+  // engine instead of the one chosen ("Preview as"); `action` (a view's name)
+  // with that view of the engine instead of its first.
+  function open(path, format = null, engine = undefined, action = null) {
+    model.send({ type: "preview", path, format, ...(engine === undefined ? {} : { engine }), ...(action ? { action } : {}) });
   }
 
   // Without a preview panel (preview_panel="disabled"), the menus offer no
@@ -72,7 +73,7 @@ function createPreview(x) {
     // The same view in a tab of its own (with the launcher's extension).
     if (preview.format && !preview.loading && !preview.error && x.jupyterlab.canOpenViewTab()) {
       const tabBtn = iconButton("open-in-new", "View in a new tab");
-      tabBtn.addEventListener("click", () => x.jupyterlab.openViewTab(preview.path, preview.format, preview.engine));
+      tabBtn.addEventListener("click", () => x.jupyterlab.openViewTab(preview.path, preview.format, preview.engine, preview.action));
       head.append(h("span", { className: "jse-spacer" }), tabBtn);
     }
 
@@ -96,7 +97,7 @@ function createPreview(x) {
       // A prompt's answer goes to the kernel, which previews the view of it.
       const actions = {
         answer: (content) => model.send({ type: "preview_answer", path: preview.path, ...content }),
-        again: () => open(preview.path, preview.format, preview.engine),
+        again: () => open(preview.path, preview.format, preview.engine, preview.action),
       };
       children = preview.sections.map((section) => renderSection(section, actions));
     }

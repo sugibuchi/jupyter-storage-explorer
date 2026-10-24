@@ -63,7 +63,8 @@ writing tests. The traps:
   for each new feature. Drag and drop works only in a browser, not in IntelliJ's notebook view.
 - The launcher and the plugins pin the explorer of their exact version in their `hatch_build.py`. Add their new
   dependencies there.
-- Users import only from the top level, `filesystems`, `formats`, `formats.supports` and the plugins' packages. Keep
+- Users import only from the top level, `filesystems`, `formats`, `formats.actions`, `formats.supports` and the
+  plugins' packages. Keep
   the explorer's machinery out of their `__all__`.
 - `static/storage-explorer.svg` is a copy of the launcher's icon: change both.
 
@@ -172,7 +173,7 @@ Write docs so that people can review them. That covers this file, DEVELOPMENT.md
 
 Update the docs when operations, formats or options change. Keep user docs short: what users do, not how it works.
 
-`supports`, `operations` and `filesystem_mappers` are for development. They come last in the options table of
+`actions`, `supports`, `operations` and `filesystem_mappers` are for development. They come last in the options table of
 docs/storage-explorer.md and in the launcher's template. Only docs/development-plugin.md explains them, in "Trying
 components in an explorer".
 

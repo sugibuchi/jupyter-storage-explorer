@@ -95,9 +95,9 @@ function createJupyterLab(x) {
   // The tabs waiting for their view: load id -> the extension's handle.
   const loadingTabs = new Map();
 
-  // `format` and `engine` as for the preview (preview.js's open).
-  async function openViewTab(path, format = null, engine = undefined) {
-    const reply = await request({ type: "view_tab", path, format, ...(engine === undefined ? {} : { engine }) });
+  // `format`, `engine` and `action` as for the preview (preview.js's open).
+  async function openViewTab(path, format = null, engine = undefined, action = null) {
+    const reply = await request({ type: "view_tab", path, format, ...(engine === undefined ? {} : { engine }), ...(action ? { action } : {}) });
     if (reply.error) {
       x.flash(`Cannot open a tab: ${reply.error}`, { error: true });
       return;

@@ -381,3 +381,43 @@ class TestExplorer:
         assert text_of(explorer._supports.view(Csv(), item.ctx, LIMITS, "duck")) == (
             "rows=10"
         )
+
+    def menu_views(self, explorer, path):
+        item = explorer._detect_now(path, explorer._fs)
+        info = explorer._menu_info(item.formats, [], item.ctx, "duck")
+        return [(v["engine"], v.get("action"), v["label"]) for v in info["views"]]
+
+    def test_views_by_name_in_the_menu(self, memfs):
+        memfs.pipe_file("/a.csv", b"a\n1\n")
+        explorer = StorageExplorer(fs=memfs, actions=[csv_widget, csv_view, csv_code])
+        duck = [v for v in self.menu_views(explorer, "/a.csv") if v[0] == "duck"]
+        # An entry per view of an engine with several, the first its default.
+        assert duck == [
+            ("duck", "Widget for CSV", "CSV (Duck): Widget for CSV"),
+            ("duck", "View CSV", "CSV (Duck): View CSV"),
+        ]
+
+    def test_one_view_in_the_menu(self, memfs):
+        memfs.pipe_file("/a.csv", b"a\n1\n")
+        explorer = StorageExplorer(fs=memfs, actions=[csv_view, csv_code])
+        duck = [v for v in self.menu_views(explorer, "/a.csv") if v[0] == "duck"]
+        assert duck == [("duck", None, "CSV (Duck)")]
+
+    def test_preview_by_name(self, memfs):
+        memfs.pipe_file("/a.csv", b"a\n1\n")
+        explorer = StorageExplorer(
+            fs=memfs, preview_panel="open", actions=[csv_widget, csv_view, csv_code]
+        )
+        explorer._open_preview("/a.csv", "csv", "duck", "View CSV")
+        assert explorer._preview["action"] == "View CSV"
+        assert explorer._preview["sections"][0]["text"] == "threads=1"
+        explorer._open_preview("/a.csv", "csv", "duck")
+        assert explorer._preview["sections"][0]["text"] == "rows=10"
+
+    def test_preview_by_a_name_not_viewing_it(self, memfs):
+        memfs.pipe_file("/a.csv", b"a\n1\n")
+        explorer = StorageExplorer(
+            fs=memfs, preview_panel="open", actions=[csv_widget, csv_view, csv_code]
+        )
+        explorer._open_preview("/a.csv", "csv", "duck", "Gone")
+        assert explorer._preview["error"] == "a.csv cannot be viewed by 'Gone'"

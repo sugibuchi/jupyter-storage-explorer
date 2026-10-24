@@ -101,9 +101,10 @@ def _adapted(created: FormatSupport) -> list[Action[Any]]:
     common: dict[str, Any] = {
         "format": cls.format,
         "engine": cls.engine,
-        # Unique: supports have no names, and adapted actions are left out of
-        # check_actions anyway.
-        "name": f"{cls.__module__}.{cls.__qualname__}#{id(created)}",
+        # As the menu shows it if the engine has other views. Supports have no
+        # names: adapted actions are left out of check_actions, and only the
+        # first of an engine counts (see view_names).
+        "name": f"View {cls.format.label}",
         "requires": tuple(cls.additional_requirements),
         "options_model": cls.options_model,
         "support": created,
@@ -289,10 +290,27 @@ class ActionChain:
         """The engines that can view the item as ``fmt`` (their actions
         installed, and doing it), in the order of ``engines``, then None if
         the built-in views can: for "Preview as"."""
-        keys = {engine_key(a) for a in self.of(fmt, ctx)}
-        return [e.key for e in self.engines if e.key in keys] + (
-            [None] if None in keys else []
-        )
+        return list(self.views_by_engine(fmt, ctx))
+
+    def views_by_engine(
+        self, fmt: DataFormat, ctx: ItemContext
+    ) -> dict[str | None, list[str]]:
+        """The names of the view actions doing the item as ``fmt``, by engine
+        (see ``viewers``), each engine's in order: the first is its default.
+        Of supports of the former interface, the first of each engine only,
+        as before actions: a support given replaces the default one. One
+        pass over the actions, as the right-click menu needs all of them."""
+        names: dict[str | None, list[str]] = {}
+        adapted: set[str | None] = set()
+        for action in self.of(fmt, ctx):
+            key = engine_key(action)
+            if _is_adapted(action):
+                if key in adapted:
+                    continue
+                adapted.add(key)
+            names.setdefault(key, []).append(action.name)
+        order = [e.key for e in self.engines] + [None]
+        return {key: names[key] for key in order if key in names}
 
     def engine_for(
         self, fmt: DataFormat, ctx: ItemContext, engine: str | None
@@ -311,22 +329,40 @@ class ActionChain:
             return None
         raise LookupError(engine)
 
+    def view_names(
+        self, fmt: DataFormat, ctx: ItemContext, engine: str | None
+    ) -> list[str]:
+        """The names of the view actions of ``engine`` (a key; None for the
+        built-in views) that do the item as ``fmt``, in order: the first is
+        its default (see ``views_by_engine``)."""
+        return self.views_by_engine(fmt, ctx).get(engine, [])
+
     def view(
-        self, fmt: DataFormat, ctx: ItemContext, limits: ViewLimits, engine: str | None
+        self,
+        fmt: DataFormat,
+        ctx: ItemContext,
+        limits: ViewLimits,
+        engine: str | None,
+        action: str | None = None,
     ) -> View:
-        """The view of the first view action of ``engine`` (a key; None for
-        the built-in views) installed for ``fmt`` that does the item: what
-        it raises is the item's error, no other action is tried.
-        RuntimeError if there is none: callers check ``viewers`` or
-        ``engine_for`` first."""
+        """The view of the view action of ``engine`` (a key; None for the
+        built-in views) named ``action``, by default the first, installed for
+        ``fmt`` that does the item: what it raises is the item's error, no
+        other action is tried. RuntimeError if there is none: callers check
+        ``viewers`` or ``engine_for`` first. ValueError for an ``action``
+        that does not view it, e.g. no longer."""
         actions = [a for a in self.of(fmt, ctx) if engine_key(a) == engine]
         if not actions:
             raise RuntimeError(
                 f"no action of {engine or 'the built-in views'} installed views "
                 f"{ctx.name} as {fmt.label}; check viewers() first"
             )
-        action = actions[0]
-        return action(fmt, ctx, self.options_of(action, ctx.location), limits)
+        if action is not None:
+            actions = [a for a in actions if a.name == action]
+            if not actions:
+                raise ValueError(f"{ctx.name} cannot be viewed by {action!r}")
+        chosen = actions[0]
+        return chosen(fmt, ctx, self.options_of(chosen, ctx.location), limits)
 
     def recipes(self, fmt: DataFormat, ctx: ItemContext) -> list[Recipe]:
         """The recipes of the code actions for ``fmt`` that are installed and

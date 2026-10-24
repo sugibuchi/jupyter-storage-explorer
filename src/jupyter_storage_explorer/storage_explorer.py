@@ -1165,7 +1165,10 @@ class StorageExplorer(
         # the explorer never opens.
         if self._preview_panel != "disabled":
             self._open_preview(
-                content["path"], content.get("format"), content.get("engine", ...)
+                content["path"],
+                content.get("format"),
+                content.get("engine", ...),
+                content.get("action") or None,
             )
 
     # --- The folder shown and the selection, set by the frontend (here, as
