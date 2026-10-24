@@ -118,8 +118,8 @@ storage. Needs the [launcher](../launcher/README.md) package.
 
 ### Switch engine
 
-Previews read data with an [engine](#engines), shown left of **Preview**: Polars, pandas, DuckDB or PySpark, each when
-installed. Click it to choose another; the preview open is shown again with it, and the choice is remembered.
+Previews read data with an [engine](#engines), shown left of **Preview**: Polars, pandas, DuckDB, PySpark or Dask, each
+when installed. Click it to choose another; the preview open is shown again with it, and the choice is remembered.
 
 <img src="figs/using-engine.png" width="829" alt="The engines' menu, above the engine in the status bar">
 
@@ -280,10 +280,15 @@ tables side by side.
 ### Engines
 
 The engine is the library previews read data with: **Polars**, **pandas**, **DuckDB**, **PySpark** or, experimental,
-**Databricks Connect**, each with its plugin (see [Installation](#installation)). Engines read storage with their own settings, not the explorer's: e.g. the
-environment's credential setup, such as an AWS profile or an Azure CLI login. See [Engine options](#engine-options).
-DuckDB reads storages other than local disks through the explorer's filesystem, unless you configure DuckDB to read
-them itself.
+**Dask** and **Databricks Connect**, each with its plugin (see [Installation](#installation)).
+
+Engines read storage with their own settings, not the explorer's: e.g. the environment's credential setup, such as an
+AWS profile or an Azure CLI login. See [Engine options](#engine-options). The exceptions:
+
+- DuckDB reads storages other than local disks through the explorer's filesystem, unless you configure DuckDB to read
+  them itself.
+- Dask always reads through the explorer's filesystem.
+
 Text, Markdown, JSON and images are shown by the explorer itself. When the engine chosen cannot view an item, use
 **Preview as**.
 
@@ -332,9 +337,9 @@ StorageExplorer("s3://my-bucket/data", states=ExplorerStates("states.json", max_
 | Format                                                       | Name         | Preview                         | Data browser | Load with                                                                              |
 |--------------------------------------------------------------|--------------|---------------------------------|--------------|----------------------------------------------------------------------------------------|
 | Delta Lake tables                                            | `delta`      | First rows                      | ✓            | polars (with deltalake), DuckDB (with its delta extension), PySpark (with delta-spark) |
-| Parquet files, and folders of them (e.g. Spark, Hive output) | `parquet`    | First rows                      | ✓            | polars, pandas, DuckDB, PySpark                                                        |
-| CSV, TSV                                                     | `csv`        | First rows                      | ✓            | polars, pandas, DuckDB, PySpark                                                        |
-| JSON Lines                                                   | `json-lines` | First records                   | ✓            | polars, pandas, DuckDB, PySpark                                                        |
+| Parquet files, and folders of them (e.g. Spark, Hive output) | `parquet`    | First rows                      | ✓            | polars, pandas, DuckDB, PySpark, Dask                                                  |
+| CSV, TSV                                                     | `csv`        | First rows                      | ✓            | polars, pandas, DuckDB, PySpark, Dask                                                  |
+| JSON Lines                                                   | `json-lines` | First records                   | ✓            | polars, pandas, DuckDB, PySpark, Dask                                                  |
 | DuckDB databases                                             | `duckdb`     | Its tables and views, in a tree | ✓            | DuckDB                                                                                 |
 | JSON                                                         | `json`       | Collapsible tree                |              | Python, polars, pandas                                                                 |
 | Excel (`.xlsx`)                                              | `excel`      | Its sheets, on tabs             | ✓            | polars, pandas                                                                         |
@@ -377,6 +382,7 @@ StorageExplorer(
 | `duckdb`             | `delta`, `parquet`, `csv`, `json-lines`, `duckdb`        | duckdb-support's [Engine options](../plugins/duckdb-support/README.md#engine-options)         |
 | `pyspark`            | `delta`, `parquet`, `csv`, `json-lines`                  | pyspark-support's [Engine options](../plugins/pyspark-support/README.md#engine-options)       |
 | `databricks-connect` | `delta`, `parquet`, `csv`, `json-lines`                  | databricks-support's [Engine options](../plugins/databricks-support/README.md#engine-options) |
+| `dask`               | `parquet`, `csv`, `json-lines`                           | dask-support's [Engine options](../plugins/dask-support/README.md#engine-options)             |
 | `python`             | `json`, `text` (also Markdown's code), `image`           | `storage_options`: `fsspec.open`'s keyword arguments, in the code                             |
 
 Options that look like credentials are left out of the code. An engine, format or option name that no support takes is

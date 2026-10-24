@@ -46,6 +46,7 @@ def test_the_plugins(memfs):
     plugins = {p["key"]: p for p in about(explorer)["plugins"]}
     assert sorted(plugins) == [
         "abfs-support",
+        "dask-support",
         "databricks-support",
         "duckdb-support",
         "pandas-support",

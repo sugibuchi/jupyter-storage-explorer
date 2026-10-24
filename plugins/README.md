@@ -13,9 +13,10 @@ An engine is a data library that the explorer views data with. Choose one from t
 | [pyspark-support](pyspark-support/README.md)       | PySpark            | Delta Lake, Parquet, CSV, JSON Lines                   | Beta         |
 | [databricks-support](databricks-support/README.md) | Databricks Connect | Delta Lake, Parquet, CSV, JSON Lines                   | Experimental |
 | [duckdb-support](duckdb-support/README.md)         | DuckDB             | Delta Lake, Parquet, CSV, JSON Lines, DuckDB databases | Beta         |
+| [dask-support](dask-support/README.md)             | Dask               | Parquet, CSV, JSON Lines                               | Experimental |
 
 Polars and DuckDB query the data themselves, lazily. pandas reads the first rows only. PySpark and Databricks Connect
-run the queries on Spark.
+run the queries on Spark. Dask reads the data lazily, a partition at a time, on the Dask scheduler of the kernel.
 
 ## Storages
 
@@ -49,6 +50,7 @@ pip install "jupyter-storage-explorer[polars-support]"  # the plugin only, with 
 | [abfs-support](abfs-support/README.md)             | `abfs`       | `abfs-support`       | adlfs, azure-storage-file-datalake              |
 | [databricks-support](databricks-support/README.md) | `databricks` | `databricks-support` | fsspec-databricks, databricks-connect           |
 | [duckdb-support](duckdb-support/README.md)         | `duckdb`     | `duckdb-support`     | duckdb, pyarrow                                 |
+| [dask-support](dask-support/README.md)             | `dask`       | `dask-support`       | dask, with pandas and pyarrow                   |
 | All but the experimental ones                      | `all`        | `all-supports`       | All of the above, but the experimental plugins' |
 
 [Installation](../docs/storage-explorer.md#installation) says when to choose each kind of extra. Each plugin's README

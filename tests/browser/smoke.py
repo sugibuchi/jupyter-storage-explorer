@@ -1628,6 +1628,62 @@ def duckdb_engine(lab: Lab, page: Page) -> None:
     dialog.press("Escape")
 
 
+# dask-support's engine on a memory filesystem fsspec cannot rebuild from its
+# options (skip_instance_cache): Parquet read through it, a small CSV file
+# copied to the kernel's disk at once, and a large one copied once asked.
+DASK = """\
+import io
+import pandas as pd
+from fsspec.implementations.memory import MemoryFileSystem
+from jupyter_storage_explorer import StorageExplorer
+from jupyter_storage_explorer.formats import ViewLimits
+
+memory = MemoryFileSystem(skip_instance_cache=True)
+parquet = io.BytesIO()
+pd.DataFrame({"id": range(300)}).to_parquet(parquet, row_group_size=50)
+memory.pipe_file("/dask/orders.parquet", parquet.getvalue())
+memory.pipe_file("/dask/small.csv", b"a;b\\n" + b"1;2\\n" * 250)
+memory.pipe_file("/dask/large.csv", b"a\\n" + b"1\\n" * 3000)
+StorageExplorer(
+    "/dask",
+    fs=memory,
+    engine_preference=["dask"],
+    preview_panel="open",
+    view_limits=ViewLimits(max_whole_file_bytes=1024),
+)"""
+
+
+@lab_check
+def dask_engine(lab: Lab, page: Page) -> None:
+    x = Explorer(lab, page, DASK)
+    expect(x.el.locator(".jse-engine-btn")).to_have_text("Dask")
+    x.row("orders.parquet").click()
+    expect(x.preview.locator(".jse-badge")).to_have_text("Parquet · Dask")
+    expect(x.preview.locator(".jse-query-status")).to_have_text("Rows 1–100 / 300")
+    # The separator detected; copied at once, as the file is small.
+    x.row("small.csv").click()
+    expect(x.preview.locator(".jse-badge")).to_have_text("CSV · Dask")
+    expect(x.preview.locator(".jse-query thead")).to_contain_text("b")
+    expect(x.preview.locator(".jse-query-status")).to_have_text("Rows 1–100 / 250")
+    # A large file is copied once the user agrees.
+    x.row("large.csv").click()
+    prompt = x.preview.locator(".jse-prompt")
+    expect(prompt).to_contain_text("Dask cannot reach this storage by URL")
+    prompt.get_by_role("button", name="Copy").click()
+    expect(x.preview.locator(".jse-query-status")).to_have_text("Rows 1–100 / 3,000")
+    # The code reads the file by URL. The panel is closed first, as in
+    # duckdb_engine: with it open, hovering missed "Python code".
+    x.preview.press("Escape")
+    x.row("orders.parquet").click(button="right")
+    x.menu_item("Python code").hover()
+    x.el.locator(
+        ".jse-submenu .jse-menu-item:visible", has_text="Load as DataFrame (Dask)"
+    ).click()
+    dialog = x.el.locator(".jse-dialog:visible")
+    expect(dialog).to_contain_text("dd.read_parquet('memory:///dask/orders.parquet')")
+    dialog.press("Escape")
+
+
 @lab_check
 def python_callbacks(lab: Lab, page: Page) -> None:
     x = Explorer(lab, page, CALLBACKS)

@@ -92,8 +92,8 @@ class TestOrder:
         ]
 
     def test_default_polars_then_pandas(self):
-        # Then the others by key: duckdb (pyspark is not installed).
-        assert self.keys(all_supports()) == ["polars", "pandas", "duckdb"]
+        # Then the others by key: dask, duckdb (pyspark is not installed).
+        assert self.keys(all_supports()) == ["polars", "pandas", "dask", "duckdb"]
 
     def test_preference_then_the_others_by_key(self):
         supports = [support(Csv, engine(k)) for k in ("zeta", "alpha", "mid")]
@@ -149,7 +149,12 @@ class TestWhichEngineViews:
         assert chain.viewers(Csv(), b) == [None]
 
     def test_viewers(self, item):
-        assert self.chain.viewers(Csv(), item) == ["polars", "pandas", "duckdb"]
+        assert self.chain.viewers(Csv(), item) == [
+            "polars",
+            "pandas",
+            "dask",
+            "duckdb",
+        ]
         assert self.chain.viewers(Markdown(), item) == [None]
 
 
@@ -158,6 +163,7 @@ class TestExplorer:
         assert local._engines == [
             {"key": "polars", "label": "Polars"},
             {"key": "pandas", "label": "pandas"},
+            {"key": "dask", "label": "Dask"},
             {"key": "duckdb", "label": "DuckDB"},
         ]
         assert local._engine == "polars"
@@ -211,6 +217,7 @@ class TestExplorer:
         assert [v["label"] for v in reply["views"]] == [
             "Parquet (Polars)",
             "Parquet (pandas)",
+            "Parquet (Dask)",
             "Parquet (DuckDB)",
         ]
         assert {(r["title"], r["engine"]) for r in reply["recipes"]} >= {

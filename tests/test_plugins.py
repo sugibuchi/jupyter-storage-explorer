@@ -57,6 +57,7 @@ def test_the_repository_plugins():
     # Installed for development: each loads, under its key.
     assert keys(PLUGINS) == [
         "abfs-support",
+        "dask-support",
         "databricks-support",
         "duckdb-support",
         "pandas-support",
@@ -284,6 +285,7 @@ class TestExplorer:
             "/",
             fs=memfs,
             plugin_options={
+                "dask-support": {"enabled": False},
                 "duckdb-support": {"enabled": False},
                 "polars-support": {"enabled": False},
                 "pyspark-support": {"enabled": False},
