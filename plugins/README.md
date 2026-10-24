@@ -6,13 +6,13 @@ Engines and storages come to Storage Explorer as plugins. Install one, and every
 
 An engine is a data library that the explorer views data with. Choose one from the status bar.
 
-| Plugin                                             | Engine             | Formats                                                |
-|----------------------------------------------------|--------------------|--------------------------------------------------------|
-| [polars-support](polars-support/README.md)         | Polars             | Delta Lake, Parquet, CSV, JSON Lines, Excel            |
-| [pandas-support](pandas-support/README.md)         | pandas             | Parquet, CSV, JSON Lines, Excel                        |
-| [pyspark-support](pyspark-support/README.md)       | PySpark            | Delta Lake, Parquet, CSV, JSON Lines                   |
-| [databricks-support](databricks-support/README.md) | Databricks Connect | Delta Lake, Parquet, CSV, JSON Lines                   |
-| [duckdb-support](duckdb-support/README.md)         | DuckDB             | Delta Lake, Parquet, CSV, JSON Lines, DuckDB databases |
+| Plugin                                             | Engine             | Formats                                                | Status       |
+|----------------------------------------------------|--------------------|--------------------------------------------------------|--------------|
+| [polars-support](polars-support/README.md)         | Polars             | Delta Lake, Parquet, CSV, JSON Lines, Excel            | Beta         |
+| [pandas-support](pandas-support/README.md)         | pandas             | Parquet, CSV, JSON Lines, Excel                        | Beta         |
+| [pyspark-support](pyspark-support/README.md)       | PySpark            | Delta Lake, Parquet, CSV, JSON Lines                   | Beta         |
+| [databricks-support](databricks-support/README.md) | Databricks Connect | Delta Lake, Parquet, CSV, JSON Lines                   | Experimental |
+| [duckdb-support](duckdb-support/README.md)         | DuckDB             | Delta Lake, Parquet, CSV, JSON Lines, DuckDB databases | Beta         |
 
 Polars and DuckDB query the data themselves, lazily. pandas reads the first rows only. PySpark and Databricks Connect
 run the queries on Spark.
@@ -21,12 +21,16 @@ run the queries on Spark.
 
 A storage plugin makes the explorer work better with one storage service.
 
-| Plugin                                             | Storage                      | What it adds                                                   |
-|----------------------------------------------------|------------------------------|----------------------------------------------------------------|
-| [abfs-support](abfs-support/README.md)             | Azure Data Lake Storage Gen2 | Folders moved in one step, copies on the server, empty folders |
-| [databricks-support](databricks-support/README.md) | Databricks                   | Volumes, workspace files and legacy DBFS, by workspace         |
+| Plugin                                             | Storage                      | What it adds                                                   | Status       |
+|----------------------------------------------------|------------------------------|----------------------------------------------------------------|--------------|
+| [abfs-support](abfs-support/README.md)             | Azure Data Lake Storage Gen2 | Folders moved in one step, copies on the server, empty folders | Beta         |
+| [databricks-support](databricks-support/README.md) | Databricks                   | Volumes, workspace files and legacy DBFS, by workspace         | Experimental |
 
-databricks-support is experimental.
+Status:
+
+- **Beta**: tested, and may still change between releases.
+- **Experimental**: not tested where it is meant to run, e.g. on a cluster. Its extras are not in `all` and
+  `all-supports`.
 
 ## Installation
 
