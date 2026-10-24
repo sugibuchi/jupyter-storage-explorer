@@ -139,6 +139,9 @@ Without a running asyncio loop, jobs and loads run at once, so most tests need n
 run in `asyncio.run`, as code runs in a kernel. `until`, in `tests/in_a_kernel.py`, lets the loop run until a
 condition holds.
 
+There, an explorer lists its first folder in the background too. Wait for it with `listed`, from the same file, before
+selecting or previewing its items.
+
 Plugins' tests cover their own code: supports, options, engine, operations and entry point. The explorer's tests use
 the plugins' supports as material, from `tests/all_supports.py`. The plugins' test dependencies are in each one's
 `dev` group.
@@ -313,8 +316,6 @@ These follow from the choices above. Users may meet them.
   parallel.
 - **A click may show a file as it was up to 5 seconds before.** The detection is reused for a few seconds. Refresh
   and the explorer's own writes clear it.
-- **Listing a folder holds the kernel.** Previews, the data browser and clicks load in worker threads, but a listing
-  runs on the main thread: a slow one delays the explorer's other answers.
 - **Kernels sharing a states file do not lock it.** Each re-reads the file before a change and replaces it atomically.
   Two changes in the same instant can still lose one.
 
@@ -882,6 +883,16 @@ rewritten with the location at their next change.
 
 The browser filters, sorts and pages the file list, 100 items per page, from the full listing the kernel sends. The
 selection survives filtering and paging.
+
+Folders are listed as loads, in worker threads, so a slow storage leaves the kernel free:
+
+- The list of another folder shows "Loading…" until its listing arrives, with nothing selected.
+- The folder shown, listed again, keeps its items until the new listing replaces them.
+- A later listing cancels an earlier one. A slow folder the user has left never replaces the folder chosen.
+- The tree lists a folder's subfolders the same way, one load per folder.
+- Switching storages checks in the load that the remembered folder still exists, and shows the top folder if not.
+
+The load's work maps the items and detects their formats too. Only the result is shown on the main thread.
 
 Folders can hold tens of thousands of items, so the listing is sent as columns, without paths or URLs.
 

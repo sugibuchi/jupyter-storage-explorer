@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from jupyter_storage_explorer import StorageExplorer
+
 
 async def until(condition: Callable[[], object], seconds: float = 5.0) -> None:
     """Let the loop run, so that workers' results reach the main thread,
@@ -18,3 +20,10 @@ async def until(condition: Callable[[], object], seconds: float = 5.0) -> None:
             return
         await asyncio.sleep(0.01)
     raise AssertionError(f"still not true after {seconds} s")
+
+
+async def listed(explorer: StorageExplorer) -> StorageExplorer:
+    """``explorer`` once it shows its folder's listing: folders are listed
+    in loads too, so an explorer made in a loop shows "Loading…" first."""
+    await until(lambda: not explorer._listing.get("loading"))
+    return explorer

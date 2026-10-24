@@ -99,6 +99,8 @@ the code. The traps:
   `close_in_lane`, never directly, except at the kernel's exit (`now=True`).
 - Without a running asyncio loop, as in tests, jobs and loads run synchronously. Tests of the threaded path run in
   `asyncio.run`, with `until` from `tests/in_a_kernel.py`.
+- Folders are listed in loads: `_list` and `_load_children` return before the listing shows. In threaded tests, wait
+  for an explorer's first listing with `listed` from `tests/in_a_kernel.py`.
 - Measuring with a `Progress` lists folder by folder, never with `fs.walk`: its `on_error` misses subfolders.
 - The transfer policy is checked per item in the kernel, from `FileTasks._refused`. A new kind of transfer must call
   it there.

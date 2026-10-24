@@ -1691,6 +1691,48 @@ def dask_engine(lab: Lab, page: Page) -> None:
     dialog.press("Escape")
 
 
+# A storage whose folder "slow" takes 3 seconds to list.
+SLOW_LISTING = """\
+import time
+from fsspec.implementations.memory import MemoryFileSystem
+from jupyter_storage_explorer import StorageExplorer
+
+class SlowFileSystem(MemoryFileSystem):
+    def ls(self, path, detail=True, **kwargs):
+        if path.rstrip("/").endswith("/slow"):
+            time.sleep(3)
+        return super().ls(path, detail=detail, **kwargs)
+
+slow = SlowFileSystem(skip_instance_cache=True)
+slow.pipe_file("/listing/a.csv", b"x\\n1\\n")
+slow.pipe_file("/listing/slow/b.txt", b"b")
+StorageExplorer("/listing", fs=slow)"""
+
+
+@lab_check
+def listing_in_the_background(lab: Lab, page: Page) -> None:
+    # A slow folder shows "Loading…" in the list, the status bar and the tree.
+    # Leaving it meanwhile shows the folder chosen, which its listing never
+    # replaces.
+    x = Explorer(lab, page, SLOW_LISTING)
+    expect(x.row("a.csv")).to_be_visible()
+    x.row("slow").dblclick()
+    expect(x.el.locator(".jse-crumb").last).to_have_text("slow")
+    expect(x.el.locator(".jse-list .jse-placeholder")).to_have_text("Loading…")
+    expect(x.status).to_have_text("Loading…")
+    x.el.locator(".jse-crumb").first.click()  # the top folder
+    expect(x.row("a.csv")).to_be_visible()
+    page.wait_for_timeout(3500)  # the slow listing ends
+    expect(x.row("a.csv")).to_be_visible()
+    expect(x.row("b.txt")).to_have_count(0)
+    # Opened in the tree, its folders load too.
+    x.node("slow").locator(".jse-twisty").click()
+    expect(x.el.locator(".jse-tree-loading")).to_have_text("Loading…")
+    expect(x.el.locator(".jse-tree-loading")).to_have_count(0, timeout=10_000)
+    x.row("slow").dblclick()
+    expect(x.row("b.txt")).to_be_visible(timeout=10_000)
+
+
 @lab_check
 def python_callbacks(lab: Lab, page: Page) -> None:
     x = Explorer(lab, page, CALLBACKS)

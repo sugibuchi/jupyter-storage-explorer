@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from jupyter_storage_explorer import _infos, _paths
@@ -10,7 +11,31 @@ from jupyter_storage_explorer.formats import DataFormat, ItemContext
 from jupyter_storage_explorer.formats.base import detect as detect_format
 
 if TYPE_CHECKING:
+    from fsspec.spec import AbstractFileSystem
+
+    from jupyter_storage_explorer._jobs.loader import Load
     from jupyter_storage_explorer.location import Location
+
+
+@dataclass
+class _Listed:
+    """A folder as a listing's load read it (``FoldersMixin._read_folder``),
+    for the main thread to show."""
+
+    fs: AbstractFileSystem
+    # The folder listed: the fallback if the one asked for is gone.
+    path: str
+    columns: dict[str, Any]
+    # Why the folder could not be listed, or "".
+    error: str
+    # Folders' subfolders listed for the tree: the folder's and those of its
+    # ancestors not listed before.
+    tree: dict[str, list[dict[str, Any]]]
+    dir_format: tuple[DataFormat, ItemContext] | None
+
+
+def _ignore(_result: object) -> None:
+    pass
 
 
 def _entry(info: dict[str, Any]) -> dict[str, Any]:
@@ -26,28 +51,117 @@ def _entry(info: dict[str, Any]) -> dict[str, Any]:
 
 class FoldersMixin:
     """The list of the folder shown (``_listing``) and the tree (``_tree``):
-    listing folders, showing their items, following changes to them."""
+    listing folders, showing their items, following changes to them.
 
-    def _list(self, path: str) -> None:
-        # Make sure the tree can be expanded down to the current directory.
-        for ancestor in self._ancestors(path):
-            if ancestor not in self._tree:
-                self._load_children(ancestor)
-        try:
-            infos = self._ls(path)
-        except Exception as exc:
-            self._error = f"Cannot list {path}: {exc}"
-            self._show_listing(self._make_listing(path, []))
+    Listings run as loads (see _jobs/loader.py): a slow storage leaves the
+    kernel free to answer meanwhile. What a load needs of the explorer, the
+    storage shown and the folders the tree lacks, is taken on the main thread
+    before; its work only reads the storage, and maps and detects what it
+    lists."""
+
+    def _list(
+        self, path: str, *, follow: bool = False, fallback: str | None = None
+    ) -> None:
+        """Show folder ``path`` in the list, once a load has listed it.
+
+        Another folder than the one shown shows "Loading…" until then, with
+        nothing selected. The folder shown, listed again, stays until its new
+        listing replaces it. A later listing cancels this one.
+
+        ``follow``: listed again while a job adds items to it, so the
+        selection is kept, and an error leaves the list as it is (the job's
+        end lists it again). ``fallback``: the folder shown instead if
+        ``path`` is gone, e.g. a storage's remembered folder.
+        """
+        if self._listing_load is not None:
+            self._listing_load.cancel()
+        fs = self._fs
+        if not follow:
+            # Cleared now, not when listed: errors shown meanwhile stay, e.g.
+            # the launcher's about its settings, shown once the explorer is made.
+            self._error = ""
+        if self._full_listing.dir != path or self._listed_fs is not fs:
+            self._listed_fs = fs
+            self._show_listing({**self._make_listing(path, []), "loading": True})
             self._selected = []
             self._current_dir_format = None
             self._show_current_format()
+        # The tree can then be expanded down to the folder.
+        unlisted = {
+            folder: [a for a in self._ancestors(folder) if a not in self._tree]
+            for folder in {path, fallback or path}
+        }
+
+        def work() -> _Listed:
+            return self._read_folder(fs, path, fallback, unlisted)
+
+        load = self._loader.submit(
+            work, lambda listed: self._show_folder(listed, follow), _ignore
+        )
+        self._listing_load = None if load.ended else load
+
+    def _read_folder(
+        self,
+        fs: AbstractFileSystem,
+        path: str,
+        fallback: str | None,
+        unlisted: dict[str, list[str]],
+    ) -> _Listed:
+        """In a listing's load: folder ``path`` of ``fs`` listed, or
+        ``fallback`` if ``path`` is no folder, with the subfolders of its
+        ``unlisted`` ancestors."""
+        if fallback is not None and path != fallback:
+            try:
+                gone = not self._isdir(path, fs)
+            except Exception:
+                gone = True  # cannot tell: show the fallback rather than fail
+            if gone:
+                path = fallback
+        tree = {}
+        for ancestor in unlisted[path]:
+            try:
+                tree[ancestor] = self._subfolders(self._ls(ancestor, fs), fs)
+            except Exception:
+                tree[ancestor] = []  # the folder's own error, if any, is reported
+        try:
+            infos = self._ls(path, fs)
+        except Exception as exc:
+            columns = self._make_listing(path, [], fs)
+            return _Listed(fs, path, columns, f"Cannot list {path}: {exc}", tree, None)
+        tree[path] = self._subfolders(infos, fs)
+        columns = self._make_listing(path, infos, fs)
+        dir_format = self._directory_format(path, infos, fs)
+        return _Listed(fs, path, columns, "", tree, dir_format)
+
+    def _show_folder(self, listed: _Listed, follow: bool) -> None:
+        """On the main thread: show the folder a listing's load read."""
+        if listed.fs is not self._fs or (follow and listed.error):
             return
-        self._error = ""
-        self._set_children(path, infos)
-        self._show_listing(self._make_listing(path, infos))
-        self._selected = []
-        self._current_dir_format = self._directory_format(path, infos)
-        self._show_current_format()
+        with self.hold_sync():
+            self._tree = {**self._tree, **listed.tree}
+            self._listed_fs = listed.fs
+            if listed.error:
+                self._error = listed.error
+            self._show_listing(listed.columns)
+            if follow:
+                listed_paths = {_paths.norm(p) for p in self._listed_paths()}
+                kept = [p for p in self._selected if _paths.norm(p) in listed_paths]
+                if kept != list(self._selected):
+                    self._selected = kept
+            else:
+                self._selected = []
+            self._current_dir_format = listed.dir_format
+            self._show_current_format()
+            if listed.path != self._current_dir:
+                self._show_dir(listed.path)  # the folder asked for is gone
+
+    def _show_dir(self, path: str) -> None:
+        """Set ``_current_dir`` without listing it: the caller does."""
+        self._dir_listed_by_caller = True
+        try:
+            self._current_dir = path
+        finally:
+            self._dir_listed_by_caller = False
 
     def _ancestors(self, path: str) -> list[str]:
         """Directories from the root down to (but excluding) ``path``."""
@@ -60,28 +174,65 @@ class FoldersMixin:
         return out
 
     def _load_children(self, path: str) -> None:
-        try:
-            infos = self._ls(path)
-        except Exception as exc:
-            self._error = f"Cannot list {path}: {exc}"
-            infos = []
-        self._set_children(path, infos)
+        """Show folder ``path``'s subfolders in the tree, once a load has
+        listed them. A later load of the same folder cancels this one."""
+        if (running := self._tree_loads.pop(path, None)) is not None:
+            running.cancel()
+        fs = self._fs
 
-    def _set_children(self, path: str, infos: list[dict[str, Any]]) -> None:
+        def work() -> tuple[list[dict[str, Any]], str]:
+            try:
+                return self._subfolders(self._ls(path, fs), fs), ""
+            except Exception as exc:
+                return [], f"Cannot list {path}: {exc}"
+
+        def done(result: tuple[list[dict[str, Any]], str]) -> None:
+            # None while submitting: without a loop, the load ends before.
+            if load is not None and self._tree_loads.get(path) is load:
+                del self._tree_loads[path]
+            if fs is not self._fs:
+                return  # another storage shown since
+            dirs, error = result
+            if error:
+                self._error = error
+            self._tree = {**self._tree, path: dirs}
+
+        load: Load[Any] | None = None
+        load = self._loader.submit(work, done, _ignore)
+        if not load.ended:
+            self._tree_loads[path] = load
+
+    def _cancel_tree_loads(self) -> None:
+        """Cancel the tree's loads, e.g. when the tree is listed again."""
+        for load in self._tree_loads.values():
+            load.cancel()
+        self._tree_loads = {}
+
+    def _subfolders(
+        self, infos: list[dict[str, Any]], fs: AbstractFileSystem
+    ) -> list[dict[str, Any]]:
+        """The tree's entries of the folders in ``infos``, a folder's items in
+        ``fs``: {"name", "path"}, with "no_url" and "level" (see ``_tree``)."""
         dirs = []
         for info in infos:
             if info.get("type") == "directory":
                 child = _paths.norm(info["name"])
                 dirs.append({"name": _paths.basename(child), "path": child})
-                if self._location_of(child) is None:
+                if self._mappers.location_of(fs, child) is None:
                     dirs[-1]["no_url"] = True
-                if level := self._level_of(child):
+                if level := self._level_of(child, fs):
                     dirs[-1]["level"] = level
         dirs.sort(key=lambda d: d["name"].lower())
-        self._tree = {**self._tree, path: dirs}
+        return dirs
 
-    def _make_listing(self, path: str, infos: list[dict[str, Any]]) -> dict[str, Any]:
-        """The listing of directory ``path`` (its ``infos`` from ``_ls``) for ``_listing``.
+    def _make_listing(
+        self,
+        path: str,
+        infos: list[dict[str, Any]],
+        fs: AbstractFileSystem | None = None,
+    ) -> dict[str, Any]:
+        """The listing of directory ``path`` (its ``infos`` from ``_ls``, in
+        ``fs``, by default the storage shown) for ``_listing``.
 
         One list per column, an item per entry: "names", "is_dir" (0 or 1),
         "sizes" (None for folders), "mtimes" and "ctimes" (modification and
@@ -113,11 +264,13 @@ class FoldersMixin:
         # Folders can hold tens of thousands of items: their filesystem's
         # mapper is found once, and each item's location computed once. (Not
         # for no items: __init__ makes such a listing before choosing a storage.)
-        locate = self._mappers._locator(self._fs) if infos else None
+        if infos:
+            fs = fs or self._fs
+            locate = self._mappers._locator(fs)
         for i, info in enumerate(infos):
             entry = _entry(info)
             location = locate(entry["path"])
-            fmt = self._file_format(info, location)
+            fmt = self._file_format(info, location, fs)
             if fmt not in format_index:
                 format_index[fmt] = len(listing["formats"])
                 listing["formats"].append(fmt)
@@ -130,7 +283,7 @@ class FoldersMixin:
             listing["ctimes"].append(None if ctime is None else int(ctime))
             listing["format"].append(format_index[fmt])
             is_dir = entry["type"] == "directory"
-            level = (self._level_of(entry["path"]) if is_dir else None) or ""
+            level = (self._level_of(entry["path"], fs) if is_dir else None) or ""
             if level not in level_index:
                 level_index[level] = len(listing["levels"])
                 listing["levels"].append(level)
@@ -196,6 +349,7 @@ class FoldersMixin:
     def _refresh(self) -> None:
         """Drop cached listings and reload the current directory."""
         self._invalidate_cache()
+        self._cancel_tree_loads()
         self._tree = {}
         self._list(self._current_dir)
 
@@ -233,8 +387,10 @@ class FoldersMixin:
             self._full_listing.update(paths.index(path), entry["size"], mtime)
             self._send_listing()
 
-    def _file_format(self, info: dict[str, Any], location: Location | None) -> str:
-        """The format name of a listed file at ``location``, e.g. "json-lines".
+    def _file_format(
+        self, info: dict[str, Any], location: Location | None, fs: AbstractFileSystem
+    ) -> str:
+        """The format name of a listed file of ``fs`` at ``location``, e.g. "json-lines".
 
         Shown as the row's ``data-file-format``. Empty for folders (detecting
         them would mean listing each one), files without a URL, unrecognised
@@ -244,9 +400,7 @@ class FoldersMixin:
         if info.get("type") == "directory" or location is None:
             return ""
         path = _paths.norm(info["name"])
-        ctx = ItemContext(
-            location=location, fs=self._fs, path=path, info=info, children=None
-        )
+        ctx = ItemContext(location=location, fs=fs, path=path, info=info, children=None)
         try:
             fmt = detect_format(ctx, formats=self._formats, sniff=False)
         except Exception:
@@ -261,18 +415,18 @@ class FoldersMixin:
         self._current_format = detected[0].name if viewable else ""
 
     def _directory_format(
-        self, path: str, infos: list[dict[str, Any]]
+        self, path: str, infos: list[dict[str, Any]], fs: AbstractFileSystem
     ) -> tuple[DataFormat, ItemContext] | None:
-        """The format of directory ``path`` given its listing, if any, and the
-        directory as it was detected."""
-        location = self._location_of(path)
+        """The format of directory ``path`` of ``fs`` given its listing, if
+        any, and the directory as it was detected."""
+        location = self._mappers.location_of(fs, path)
         if location is None:
             return None
         # The listing is all directory formats need, so skip fetching the
         # directory's own info.
         info = {"name": path, "type": "directory"}
         ctx = ItemContext(
-            location=location, fs=self._fs, path=path, info=info, children=infos
+            location=location, fs=fs, path=path, info=info, children=infos
         )
         try:
             fmt = detect_format(ctx, formats=self._formats)
