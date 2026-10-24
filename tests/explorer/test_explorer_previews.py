@@ -13,7 +13,7 @@ import pytest
 from all_supports import NO_PLUGINS, installed_only
 from explorers import entries, make, path_of
 from format_samples import DUCKDB_BYTES, SQLITE_BYTES, DuckDB, SQLite
-from in_a_kernel import until
+from in_a_kernel import listed, until
 from jupyter_storage_explorer_pandas_support import CsvByPandas
 from jupyter_storage_explorer_polars_support import CsvByPolars
 
@@ -225,7 +225,9 @@ class TestPreviewLoadsInTheBackground:
         memfs.pipe_file("/data/b.txt", b"b")
 
         async def main():
-            return await test(make("/data", fs=memfs, supports=[HeldText]))
+            return await test(
+                await listed(make("/data", fs=memfs, supports=[HeldText]))
+            )
 
         return asyncio.run(main())
 
@@ -366,8 +368,12 @@ class TestQueriesInTheBackground:
             assert release.wait(5)
 
         async def main():
-            explorer = make(
-                local._root, fetch_rows=held, view_limits=ViewLimits(max_live_rows=1)
+            explorer = await listed(
+                make(
+                    local._root,
+                    fetch_rows=held,
+                    view_limits=ViewLimits(max_live_rows=1),
+                )
             )
             path = path_of(explorer, "data.parquet")
             explorer.message({"type": "preview", "path": path})
@@ -411,7 +417,7 @@ class TestClicksInTheBackground:
 
         async def main():
             try:
-                return await test(make("/data", fs=memfs), asked, release)
+                return await test(await listed(make("/data", fs=memfs)), asked, release)
             finally:
                 release.set()
 

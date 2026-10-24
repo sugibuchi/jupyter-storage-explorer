@@ -574,6 +574,14 @@ class StorageExplorer(
         # The current directory's items, kept for "list" requests (and paths).
         self._full_listing = Listing(self._make_listing("", []))
         self._listing_version = 0
+        # Folders are listed in loads (see FoldersMixin): the listing of the
+        # folder shown, if running, cancelled by the next; the tree's, by
+        # folder; and the filesystem of the listing shown.
+        self._listing_load: Load[Any] | None = None
+        self._tree_loads: dict[str, Load[Any]] = {}
+        self._listed_fs: AbstractFileSystem | None = None
+        # Set while _current_dir is set by a caller listing it itself.
+        self._dir_listed_by_caller = False
         # The item detected last, shared by a click's selection, menu and
         # preview (see PreviewsMixin._detection).
         self._detected: tuple[tuple[int, str], float, _Detected | None] | None = None
@@ -737,17 +745,11 @@ class StorageExplorer(
             self._remembered[change["old"]] = self._current_dir
         self._fs, root = self._filesystems[change["new"]]
         path = self._remembered.get(change["new"], root)
-        if path != root:
-            try:
-                gone = not self._isdir(path)
-            except Exception:
-                gone = True  # cannot tell: start at the top rather than fail the switch
-            if gone:
-                path = root  # the remembered folder is gone
         # One update for the frontend: separate ones would let it combine the
         # new root with the old folder (or the reverse) and ask the new
         # filesystem to list the old filesystem's paths.
         self._release_preview()
+        self._cancel_tree_loads()
         with self.hold_sync():
             # An open panel stays open, for the files of this storage.
             self._preview = {"empty": True} if self._preview else {}
@@ -758,18 +760,19 @@ class StorageExplorer(
             self._fs_mapper = mapper_key(self._mappers.mapper_in(self._fs))
             self._root_level = self._level_of(root) or ""
             self._root = root
-            if self._current_dir == path:
-                # Same path string as before (e.g. "/" on both), so no change event lists it.
-                self._list(path)
-            else:
-                self._current_dir = path
+            # Listed here, also for the same path string as before (e.g. "/"
+            # on both), which no change event would list. The top folder
+            # instead if the remembered one is gone.
+            self._show_dir(path)
+            self._list(path, fallback=root)
         self._changed()
 
-    def _level_of(self, path: str) -> str | None:
-        """What the storage makes of folder ``path`` (e.g. "container"), for
-        its icon: ``FileSystemMapper.level``; None for a plain folder."""
+    def _level_of(self, path: str, fs: AbstractFileSystem | None = None) -> str | None:
+        """What the storage makes of folder ``path`` of ``fs``, by default the
+        one shown (e.g. "container"), for its icon:
+        ``FileSystemMapper.level``; None for a plain folder."""
         try:
-            return self._mappers.level_of(self._fs, path)
+            return self._mappers.level_of(fs or self._fs, path)
         except Exception:
             return None  # a mapper's error only costs an icon
 
@@ -797,8 +800,11 @@ class StorageExplorer(
             if filesystem in wanted:
                 self._remembered[filesystem] = wanted[filesystem]
             self._filesystem = filesystem  # shows its remembered folder
-        elif filesystem in wanted and self._exists_folder(wanted[filesystem]):
-            self._current_dir = wanted[filesystem]
+        elif filesystem in wanted and wanted[filesystem] != self._current_dir:
+            # The folder shown stays if the saved one is gone.
+            shown = self._current_dir
+            self._show_dir(wanted[filesystem])
+            self._list(wanted[filesystem], fallback=shown)
         # Set last: switching remembers the folder left (the top one).
         self._remembered.update(
             {name: f for name, f in wanted.items() if name != self._filesystem}
@@ -1138,7 +1144,8 @@ class StorageExplorer(
 
     @traitlets.observe("_current_dir")
     def _on_current_dir(self, change: dict[str, Any]) -> None:
-        self._list(change["new"])
+        if not self._dir_listed_by_caller:
+            self._list(change["new"])
         self._changed()
 
     @traitlets.observe("_selected")

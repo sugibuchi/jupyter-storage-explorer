@@ -167,7 +167,8 @@ class JobsMixin:
             for folder in changes.added_to:
                 self._invalidate_cache(folder)
                 if folder == self._current_dir:
-                    self._relist_current()
+                    # Items appear while the job adds them.
+                    self._list(folder, follow=True)
                 elif folder in self._tree:
                     self._load_children(folder)
 
@@ -192,21 +193,6 @@ class JobsMixin:
         }
         if tree != self._tree:
             self._tree = tree
-
-    def _relist_current(self) -> None:
-        """List the folder shown again, keeping the selection (unlike _list,
-        for a folder newly shown): items appear while a job adds them."""
-        path = self._current_dir
-        try:
-            infos = self._ls(path)
-        except Exception:
-            return  # the job's end lists it again, and reports errors
-        self._set_children(path, infos)
-        self._show_listing(self._make_listing(path, infos))
-        listed = {_paths.norm(p) for p in self._listed_paths()}
-        kept = [p for p in self._selected if _paths.norm(p) in listed]
-        if kept != list(self._selected):
-            self._selected = kept
 
     def _moved_away(self, fs: AbstractFileSystem, path: str) -> None:
         """Follow ``path`` of ``fs``, cut and pasted into another filesystem.

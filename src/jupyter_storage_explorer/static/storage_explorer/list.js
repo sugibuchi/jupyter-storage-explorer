@@ -399,8 +399,10 @@ function createList(x) {
     const rows = shown.map((entry) => [row(entry, selected, columns), entry]);
     tbody.replaceChildren(...rows.map(([tr]) => tr));
     setTooltips(rows);
-    if (!shown.length && total) {
-      const text = loading ? "Loading…" : "No items match the filter";
+    // Another folder, still listed by the kernel: "Loading…" until it is.
+    const listing = Boolean(model.get("_listing").loading);
+    if (!shown.length && (total || listing)) {
+      const text = loading || listing ? "Loading…" : "No items match the filter";
       tbody.append(h("tr", {}, h("td", { className: "jse-placeholder", colSpan: columns.length, textContent: text })));
     }
     x.preview.updateButton();
@@ -469,6 +471,10 @@ function createList(x) {
     statusEl.title = error ? whole + (flashedError ? "\n\nClick to dismiss" : "") : "";
     if (error) {
       statusEl.textContent = visible(String(error).split("\n")[0]);
+      return;
+    }
+    if (model.get("_listing").loading) {
+      statusEl.textContent = "Loading…";
       return;
     }
     let total, matches;

@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
+import threading
+
 import fsspec
 import pytest
 from explorers import Explorer, entries, make, path_of
 from fsspec.implementations.dirfs import DirFileSystem
+from in_a_kernel import listed, until
 
 from jupyter_storage_explorer import Location
 from jupyter_storage_explorer._explorer.states import ExplorerStates
@@ -219,7 +223,7 @@ class TestListing:
         monkeypatch.setattr(
             mem_explorer,
             "_ls",
-            lambda path: [
+            lambda path, fs=None: [
                 {**i, "name": "/elsewhere/" + i["name"].rsplit("/", 1)[1]}
                 for i in listed
             ],
@@ -431,3 +435,122 @@ class TestFilesystems:
 def test_local_explorer_starts_in_the_folder(tmp_path):
     explorer = make(str(tmp_path))
     assert explorer._root == fsspec.filesystem("file")._strip_protocol(str(tmp_path))
+
+
+class TestListingInTheBackground:
+    """In a kernel, folders are listed in worker threads: the kernel answers
+    meanwhile, and a later listing replaces an earlier one."""
+
+    @staticmethod
+    def run(memfs, monkeypatch, test):
+        """Run ``test(explorer, held, release)`` in a running loop, once the
+        explorer shows /data: then listings of the folders in ``held`` wait
+        for ``release``."""
+        memfs.pipe_file("/data/a.csv", b"x,y\n1,2\n")
+        memfs.pipe_file("/data/slow/b.txt", b"b")
+        memfs.pipe_file("/data/fast/c.txt", b"c")
+        release, held = threading.Event(), set()
+        ls = memfs.ls
+
+        def holding(path, *args, **kwargs):
+            if path.rstrip("/") in held:
+                assert release.wait(5)
+            return ls(path, *args, **kwargs)
+
+        monkeypatch.setattr(memfs, "ls", holding)
+
+        async def main():
+            try:
+                explorer = await listed(make("/data", fs=memfs))
+                return await test(explorer, held, release)
+            finally:
+                release.set()
+
+        return asyncio.run(main())
+
+    def test_loading_while_the_kernel_answers(self, memfs, monkeypatch):
+        async def test(explorer, held, release):
+            held.add("/data/slow")
+            explorer._current_dir = "/data/slow"
+            assert explorer._listing["loading"]
+            assert explorer._listing["dir"] == "/data/slow"
+            assert explorer.request({"type": "bookmarks", "rid": 1})["rid"] == 1
+            release.set()
+            await listed(explorer)
+            return entries(explorer)
+
+        assert [e["name"] for e in self.run(memfs, monkeypatch, test)] == ["b.txt"]
+
+    def test_the_latest_folder_wins(self, memfs, monkeypatch):
+        async def test(explorer, held, release):
+            shown = []
+            explorer.observe(lambda c: shown.append(c["new"]["dir"]), "_listing")
+            held.add("/data/slow")
+            explorer._current_dir = "/data/slow"
+            explorer._current_dir = "/data/fast"
+            await listed(explorer)
+            release.set()
+            await asyncio.sleep(0.2)  # the slow listing ends, unshown
+            return shown, explorer
+
+        shown, explorer = self.run(memfs, monkeypatch, test)
+        assert shown == [
+            "/data/slow",
+            "/data/fast",
+            "/data/fast",
+        ]  # loading, loading, listed
+        assert [e["name"] for e in entries(explorer)] == ["c.txt"]
+
+    def test_the_folder_shown_stays_while_listed_again(self, memfs, monkeypatch):
+        async def test(explorer, held, release):
+            held.add("/data")
+            explorer.message({"type": "refresh"})
+            listing, load = explorer._listing, explorer._listing_load
+            release.set()
+            await until(lambda: load.ended)
+            return listing
+
+        listing = self.run(memfs, monkeypatch, test)
+        assert "loading" not in listing
+        assert "a.csv" in listing["names"]
+
+    def test_an_error_shown_meanwhile_stays(self, memfs):
+        # E.g. the launcher's about its settings, shown once the explorer is
+        # made, before its first listing ends.
+        memfs.pipe_file("/data/a.csv", b"x,y\n1,2\n")
+
+        async def main():
+            explorer = make("/data", fs=memfs)
+            explorer._error = "launcher.py: unknown parameter"
+            return await listed(explorer)
+
+        assert asyncio.run(main())._error == "launcher.py: unknown parameter"
+
+    def test_tree_folders_in_the_background(self, memfs, monkeypatch):
+        async def test(explorer, held, release):
+            held.add("/data/slow")
+            explorer.message({"type": "expand", "path": "/data/slow"})
+            assert "/data/slow" not in explorer._tree
+            release.set()
+            await until(lambda: "/data/slow" in explorer._tree)
+            return explorer._tree["/data/slow"]
+
+        assert self.run(memfs, monkeypatch, test) == []
+
+    def test_a_gone_folder_shows_the_top_one(self, memfs):
+        memfs.pipe_file("/data/a.csv", b"x,y\n1,2\n")
+        memfs.pipe_file("/data/gone/b.txt", b"b")
+        memfs.pipe_file("/other/x.txt", b"x")
+        storages = {"data": "memory:///data", "other": "memory:///other"}
+
+        async def main():
+            explorer = await listed(make(filesystems=storages))
+            explorer._current_dir = "/data/gone"
+            await listed(explorer)
+            memfs.rm("/data/gone", recursive=True)
+            explorer._filesystem = "other"
+            explorer._filesystem = "data"  # back to the folder left, now gone
+            await until(lambda: explorer._current_dir == "/data")
+            return await listed(explorer)
+
+        assert [e["name"] for e in entries(asyncio.run(main()))] == ["a.csv"]

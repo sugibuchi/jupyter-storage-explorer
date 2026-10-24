@@ -98,6 +98,12 @@ function createTree(x) {
       row.addEventListener("contextmenu", (ev) => x.menu.show(ev, x.itemMenu([{ ...dir, type: "directory" }], false)));
 
       const wrap = h("div", {}, row);
+      // Open, its folders still listed by the kernel.
+      if (isOpen && !children) {
+        const note = h("div", { className: "jse-node jse-tree-more jse-tree-loading", textContent: "Loading…" });
+        note.style.paddingLeft = `${(depth + 1) * 14 + 4 + 16}px`; // aligned with the folders' icons
+        wrap.append(note);
+      }
       if (isOpen && children) {
         const shown = shownChildren(children, depth);
         for (const child of shown) wrap.append(node(child, depth + 1));
