@@ -1,7 +1,7 @@
 """Create notebooks/samples/: one or more samples of each format the browser can preview.
 
 Run with: uv run notebooks/make_samples.py
-Needs the dev dependencies (polars, pyarrow, deltalake, openpyxl).
+Needs the dev dependencies (polars, pyarrow, deltalake, openpyxl, duckdb).
 """
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ import shutil
 import struct
 import zlib
 
+import duckdb
 import openpyxl
 import polars as pl
 import pyarrow.dataset as ds
@@ -74,7 +75,7 @@ def docs(out: pathlib.Path) -> None:
     (out / "notes.md").write_text(
         "# Sample data lake\n\n"
         "- `raw/`: files as delivered (CSV, TSV, JSON, JSON Lines, Excel)\n"
-        "- `lake/`: curated data (Parquet file, partitioned Parquet dataset, Delta Lake table)\n"
+        "- `lake/`: curated data (Parquet file, partitioned Parquet dataset, Delta Lake table, DuckDB database)\n"
         "- `images/`: PNG and SVG\n",
         encoding="utf-8",
     )
@@ -171,6 +172,28 @@ def lake(out: pathlib.Path, df: pl.DataFrame) -> None:
     write_deltalake(table, customers.head(40).to_arrow(), partition_by=["country"], name="customers",
                     description="Sample customers")  # fmt: skip
     write_deltalake(table, customers.tail(10).to_arrow(), mode="append")
+
+    # DuckDB database: tables in two schemas and a view, as the browser lists them.
+    # Blocks of 16 kB, not the default 256 kB, keep the file near 100 kB instead of 1 MB.
+    with duckdb.connect() as con:
+        path = (out / "warehouse.duckdb").as_posix()
+        con.execute(f"ATTACH '{path}' AS warehouse (BLOCK_SIZE 16384)")
+        con.execute("USE warehouse")
+        con.register("orders_df", df.to_arrow())
+        con.register("customers_df", customers.to_arrow())
+        con.execute("CREATE TABLE orders AS SELECT * FROM orders_df")
+        con.execute("CREATE TABLE customers AS SELECT * FROM customers_df")
+        con.execute(
+            "CREATE VIEW monthly_revenue AS"
+            " SELECT date_trunc('month', order_date) AS month,"
+            " sum(quantity * unit_price) AS revenue FROM orders GROUP BY 1 ORDER BY 1"
+        )
+        con.execute("CREATE SCHEMA staging")
+        con.execute(
+            "CREATE TABLE staging.orders_today AS"
+            " SELECT * FROM orders ORDER BY order_date DESC LIMIT 20"
+        )
+        con.execute("CHECKPOINT")
 
 
 def images(out: pathlib.Path) -> None:
