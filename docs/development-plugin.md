@@ -47,8 +47,8 @@ Each component can be tried in an explorer before packaging it: see
    - A format support overrides `supports(fmt, ctx, options, task)`, without reading the storage. Once it accepts an item, no
      other support is tried, and what its method raises is the item's error.
    - File operations raise `FileSystemOperations.NotSupported`. Never raise it for real errors: raise those as they are.
-5. **Ask before reading much.** A view reading a whole large file returns a `ViewWithConfirmation` or a
-   `ViewWithChoice`, which reads once the user answers.
+5. **Ask before reading much.** A view reading a whole large file, or whose every query of the data browser does,
+   returns a `ViewWithConfirmation` or a `ViewWithChoice`, which reads once the user answers.
 6. **Never put credentials in locations or generated code.** Locations are sent to the browser. Declare secret options
    with `secret_field` or `secret_dict_field`, and give code its options through `options.code_value(name)`.
 7. **Use frozen, keyword-only dataclasses for options and locations**, each field with a default (options).
@@ -87,7 +87,13 @@ You may read <storage or data>. Never write to it.
 The assistant works in this order:
 
 1. **Probe the real library and storage** before writing code, as [Check the real filesystem first](#check-the-real-filesystem-first)
-   says for storages. Libraries and storages behave in ways no guide can list.
+   says for storages. Libraries and storages behave in ways no guide can list. For an engine, measure on a large
+   file, through a filesystem counting the bytes it reads:
+   - what each of the [ways of reading](#reading-the-item) reads to make the view;
+   - what each query of the data browser reads: the first page, a filter, a sort, the count of rows (narwhals'
+     `head`, `filter`, `sort`, `len` on the library's data);
+   - whether the data made in one thread can be read in another, as the browser does;
+   - what the data browser's memory mode collects the data into, through narwhals.
 2. **Write the components**, following the [rules](#rules-for-generated-code).
 3. **Test on fakes built from what the probes showed**, not from assumptions. A fake written from a guess only confirms
    the guess.
@@ -173,6 +179,12 @@ the libraries only that engine uses (`Fastexcel` for polars, `DeltaSpark` for Sp
 its `Engine`; the support libraries several engines may use (`Fsspec`, `PyArrow`, `DeltaLake`, `Openpyxl`, and the
 core's `Pillow`) by the core, in `jupyter_storage_explorer.formats.packages`. A new plugin imports those, and defines
 its own engine's and its engine-only libraries.
+
+A package another engine's plugin defines, e.g. pandas-support's `Pandas`, may be defined again in yours: packages,
+unlike engines, may be defined twice. Never import another plugin for it, which would make yours depend on it.
+
+Where the library keeps global settings deciding how queries run, e.g. a Dask distributed `Client` or its scheduler,
+never change them from a support. Use what is active, and say in the README how the user's settings apply.
 
 ## Format supports
 
@@ -348,7 +360,8 @@ An option that no support of the engine has is an error, so typos are caught.
 fields are its reader's arguments, of the same names, from the library's API documentation (e.g. `read_parquet`'s),
 each defaulting to `LIBRARY_DEFAULT`: not passed, so the library's own default applies (unlike `None`, which some
 arguments take as a value). Leave out the source, functions (callables) and arguments that change what the reader
-returns (iterators, chunks). Pass `options.arguments()` (those given) to the reader, after the support's own defaults
+returns (iterators, chunks). A reader passing arguments on to another library's, as Dask's `read_csv` does to pandas',
+takes those too, less those it refuses: check them with the installed library. Pass `options.arguments()` (those given) to the reader, after the support's own defaults
 (e.g. a separator detected), so that the user's win; the code gets `format_arguments(options.code_arguments())`, which
 leaves out secrets and Python objects (e.g. data types) but keeps `None`. List them in the plugin's README, a table per
 format, their descriptions from the library's documentation.
@@ -381,12 +394,13 @@ code = f"con.read_parquet({url!r}{format_arguments(options.code_arguments())})" 
 | `ctx.info`, `ctx.size`     | Its fsspec info; its size                                                                  |
 | `ctx.children`, `ctx.child_names`, `ctx.is_dir` | A folder's listing, its names, whether it is a folder                 |
 
-A library reads the item in one of four ways. Choose per storage in `supports`, as polars-support does:
+A library reads the item in one of five ways. Choose per storage in `supports`, as polars-support does:
 
 | Way | When | Examples |
 |---|---|---|
 | By URL, `ctx.library_url` | The library reads the storage itself, with its own credentials: the environment, or options | polars on S3 (object_store), Spark |
 | The explorer's filesystem, `ctx.fs` | The library takes an fsspec filesystem and reads lazily through it | PyArrow's `FSSpecHandler` (polars-support's Parquet), DuckDB's `register_filesystem` |
+| The explorer's filesystem by URL, `ctx.fs.unstrip_protocol(ctx.path)` with `storage_options=ctx.fs.storage_options` | The library takes only a URL and fsspec's `storage_options`: fsspec gives back the explorer's own instance, from its cache | Dask's `read_csv` |
 | Bytes, `ctx.head(n)`, `ctx.read_whole(limits)` | The library reads only a file object or bytes, so the file is read whole | pandas, polars' CSV elsewhere, images |
 | A local copy, `local_file_cache().get(ctx)` | The library opens only local files | DuckDB and SQLite databases |
 
@@ -397,6 +411,13 @@ A library reads the item in one of four ways. Choose per storage in `supports`, 
   reads `abfs://container@account...` as `container/...`).
 - A library registering filesystems by protocol may already read that protocol itself (DuckDB's `s3://`). Register
   the explorer's under a name of its own, so that both work.
+- By URL, fsspec rebuilds the filesystem from its protocol and `storage_options`, and only some instances can be
+  rebuilt so. Arguments given by position are not in `storage_options`, e.g. a `DirFileSystem("/data", fs=...)`'s
+  folder, and a subclass not registered for its protocol comes back as its parent. Check in `supports` that
+  `fsspec.filesystem(protocol, **ctx.fs.storage_options) is ctx.fs`, and refuse the view if it is not, or raises (the
+  `DirFileSystem` above does). That reads nothing: fsspec returns the instance it cached.
+- Lazy is not enough. Some lazy data reads all of the file, or of every partition, for each query of the data
+  browser: Dask's `head(n)` through narwhals does. Measure what each query reads, and ask first as for whole files.
 - Reading bytes whole, ask first above `limits.max_whole_file_bytes`, with a `ViewWithChoice` or a
   `ViewWithConfirmation`.
 
@@ -815,7 +836,10 @@ format: each option, its default and its meaning, from the library's documentati
   configuration reference of a library that does not use fsspec, as polars-support links object_store's. Say which
   storages it reads itself, and how it reads the others, e.g. through the explorer's filesystem.
 - **Plugin options** shows one example for `StorageExplorer` and one for `launcher.py`, then the options' table.
-- Code blocks are formatted as ruff formats Python. Nothing checks this: format them by hand.
+- Code blocks are formatted as ruff formats Python. `uvx ruff format` formats the README's blocks too, and CI checks
+  them with the plugins' code.
+- A note on how the data browser behaves with the library, e.g. what it reads, goes in a section of its own after
+  Prerequisites.
 
 This repository's plugins publish the extras through the explorer, e.g. `jupyter-storage-explorer[polars]`. Their
 READMEs show those commands instead. `tests/test_plugin_readmes.py` checks this layout for them, and that the table
@@ -1005,7 +1029,11 @@ requires pyspark-support of its own version, whose supports its engine extends. 
    `tests/test_plugin_readmes.py` checks it with the others.
 6. Update the core's tests that list what is installed: `uv run pytest` at the root runs them with every plugin. They
    name the plugins, engines, formats and extras, and some use names that may now be taken, such as a sample format.
-   Search them for another plugin's key, e.g. `polars-support`, and for the new engine's and formats' names.
+   Search them for another plugin's key, e.g. `polars-support`, and for the new engine's and formats' names. A new
+   engine is offered after those of `engine_preference`, polars and pandas, by key.
+   - With uncommitted changes, hatch-vcs may give the workspace's packages different versions, as they are built at
+     different times, and `test_of_the_repository_plugins` then fails. Run `uv sync --reinstall-package <package>` for
+     each of them, or commit first.
 7. Add it to DEVELOPMENT.md's tables of the packages and of the PyPI projects. Add its engine, formats and engine
    options to [storage-explorer.md](storage-explorer.md), where it lists those.
 
