@@ -132,8 +132,8 @@ def test_supports_implement_a_task(cls):
 def test_supports_what_it_implements_by_default(make_item):
     coder = support(recipe=lambda *a, **k: {})()
     item = make_item("/a.csv", b"")
-    assert coder.supports(Csv(), item, "recipe")
-    assert not coder.supports(Csv(), item, "view")
+    assert coder.supports(Csv(), item, SupportOptions(), "recipe")
+    assert not coder.supports(Csv(), item, SupportOptions(), "view")
     with pytest.raises(NotImplementedError):
         coder.view(Csv(), item, SupportOptions(), LIMITS)
 
@@ -386,7 +386,7 @@ class TestChain:
         assert self.view(chain, make_item("/a.csv", b"")) == "first"
 
     def test_the_first_supporting_the_item(self, make_item):
-        def only_b(self, fmt, ctx, task):
+        def only_b(self, fmt, ctx, options, task):
             return ctx.name == "b.csv"
 
         chain = SupportChain(

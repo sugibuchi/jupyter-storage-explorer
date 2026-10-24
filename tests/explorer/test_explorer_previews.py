@@ -166,10 +166,10 @@ def test_menu_info(mem_explorer, monkeypatch):
     reply = mem_explorer.request({"type": "menu_info", "rid": 1, "path": "/data/a.csv"})
     assert reply["formats"] == ["csv", "text"]
     # polars' code opens the file with fsspec: polars cannot read memory://.
+    # Nor can Spark: none of its supported_protocols.
     assert [(r["packages"], r["title"]) for r in reply["recipes"]] == [
         (["polars"], "Load as DataFrame"),
         (["pandas"], "Load as DataFrame"),
-        (["pyspark"], "Load as DataFrame"),
     ]
     assert {v["engine"] for v in reply["views"]} >= {"polars", "pandas"}
     assert "query" not in reply  # known only once viewed

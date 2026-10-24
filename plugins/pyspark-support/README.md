@@ -31,6 +31,8 @@ instead: with Databricks Connect installed, this plugin's engine is not offered.
   or a Databricks cluster's notebook.
 - `session_options` in [Engine options](#engine-options) can add Spark properties. With a session already running,
   only those Spark can change at run time apply.
+- Spark reads the items' URLs itself. `supported_protocols` in [Engine options](#engine-options) says which storages it
+  reaches, e.g. `["s3a"]` for a cluster configured for S3 only.
 
 ## Plugin options
 
@@ -84,6 +86,7 @@ Every format takes:
 |-------------------|---------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `session_options` | None    | Spark configuration, `SparkSession.builder.config(key, value)` for each. With a session already running in the kernel, only what Spark can change at run time applies.                                                                                         |
 | `reader_options`  | None    | `spark.read.option(key, value)` for each: options not listed below, e.g. Spark's [generic file source options](https://spark.apache.org/docs/latest/sql-data-sources-generic-options.html) (`{"recursiveFileLookup": True}`). They override the options below. |
+| `supported_protocols` | `SPARK_PROTOCOLS` | The URL schemes Spark reads, as Spark names them: by default `file`, `hdfs`, `s3a`, `gs`, `abfss`, `abfs`, `wasbs`, `wasb` and `dbfs`. Items elsewhere, e.g. on SFTP, are neither viewed nor given code with Spark. `None`: any. |
 
 The other options are each format's reader options, from Spark's and Delta Lake's documentation, in snake case. Those
 left unset (None) are left to Spark, whose defaults are shown. Options that look like credentials are left out of the

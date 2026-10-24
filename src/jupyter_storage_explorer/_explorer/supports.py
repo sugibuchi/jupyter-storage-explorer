@@ -172,12 +172,14 @@ class SupportChain:
 
     def of(self, fmt: DataFormat, ctx: ItemContext, task: Task) -> list[FormatSupport]:
         """The supports for ``fmt`` (an instance of their ``format``) whose
-        packages are installed and that support ``task`` for the item, in
-        order: those the explorer may call. Empty if none of them can."""
+        packages are installed and that support ``task`` for the item, with
+        their options for it, in order: those the explorer may call. Empty if
+        none of them can."""
         return [
             s
             for s in self._registered(fmt, task)
-            if s.is_installed() and s.supports(fmt, ctx, task)
+            if s.is_installed()
+            and s.supports(fmt, ctx, self.options_of(s, ctx.location), task)
         ]
 
     def viewers(self, fmt: DataFormat, ctx: ItemContext) -> list[str | None]:

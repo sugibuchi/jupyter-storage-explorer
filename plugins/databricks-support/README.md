@@ -114,4 +114,8 @@ StorageExplorer(
 
 pyspark-support's
 [Engine options](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/plugins/pyspark-support/README.md#engine-options)
-lists them. `session_options` are set on the session at run time, as Databricks Connect takes no others.
+lists them. Two differ here:
+
+- `session_options` are set on the session at run time, as Databricks Connect takes no others.
+- `supported_protocols` defaults to `dbfs`, `s3a`, `abfss`, `abfs`, `wasbs`, `wasb` and `gs`. The cluster cannot read
+  the kernel's local files, so they are neither viewed nor given code with Databricks Connect.

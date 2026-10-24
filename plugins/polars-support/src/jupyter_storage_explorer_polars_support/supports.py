@@ -300,9 +300,11 @@ class _PolarsByUrl(FormatSupport):
     # {kwargs}; None for none.
     fsspec_template: ClassVar[str | None] = None
 
-    def supports(self, fmt: DataFormat, ctx: ItemContext, task: Task) -> bool:
+    def supports(
+        self, fmt: DataFormat, ctx: ItemContext, options: SupportOptions, task: Task
+    ) -> bool:
         coded = task != "recipe" or reads_itself(ctx) or self._fsspec_code(ctx)
-        return super().supports(fmt, ctx, task) and coded
+        return super().supports(fmt, ctx, options, task) and coded
 
     def _fsspec_code(self, ctx: ItemContext) -> bool:
         """Whether the item's code opens it with fsspec."""
@@ -666,9 +668,11 @@ class ParquetByPolars(_PolarsByUrl):
     format = Parquet
     options_model = ParquetByPolarsOptions
 
-    def supports(self, fmt: Parquet, ctx: ItemContext, task: Task) -> bool:
+    def supports(
+        self, fmt: Parquet, ctx: ItemContext, options: SupportOptions, task: Task
+    ) -> bool:
         reachable = task != "view" or reads_itself(ctx) or PyArrow().is_installed()
-        return super().supports(fmt, ctx, task) and reachable
+        return super().supports(fmt, ctx, options, task) and reachable
 
     def view(
         self,
@@ -768,9 +772,11 @@ class DeltaLakeByPolars(_PolarsByUrl):
     additional_requirements = (DeltaLakePackage(),)
     options_model = DeltaLakeByPolarsOptions
 
-    def supports(self, fmt: DeltaLake, ctx: ItemContext, task: Task) -> bool:
+    def supports(
+        self, fmt: DeltaLake, ctx: ItemContext, options: SupportOptions, task: Task
+    ) -> bool:
         # delta-rs reads the table's storage itself: views only there too.
-        return super().supports(fmt, ctx, task) and reads_itself(ctx)
+        return super().supports(fmt, ctx, options, task) and reads_itself(ctx)
 
     def view(
         self,

@@ -10,6 +10,7 @@ import pytest
 from fsspec import AbstractFileSystem
 from fsspec.implementations.dirfs import DirFileSystem
 from jupyter_storage_explorer_databricks_support import (
+    DATABRICKS_PROTOCOLS,
     CsvByDatabricksConnect,
     DatabricksConnect,
     DatabricksConnectEngine,
@@ -24,7 +25,9 @@ from jupyter_storage_explorer_pyspark_support import (
     ParquetByPySparkOptions,
 )
 
+from jupyter_storage_explorer.filesystems import S3Location
 from jupyter_storage_explorer.formats import Parquet
+from jupyter_storage_explorer.testing import local_item
 
 CONFIG = SimpleNamespace(host="https://adb-1.azuredatabricks.net")
 
@@ -140,3 +143,31 @@ def test_the_engine():
     ]
     # Databricks has Delta Lake: no delta-spark.
     assert DeltaLakeByDatabricksConnect.additional_requirements == ()
+
+
+class TestSupportedProtocols:
+    """The cluster reads the item's URL: not the kernel's local files."""
+
+    def test_databricks_default(self, make_item, tmp_path):
+        support = ParquetByDatabricksConnect()
+        options = support.options_model()
+        assert options.supported_protocols == DATABRICKS_PROTOCOLS
+        on_s3 = make_item("/a.parquet", b"", location=S3Location(bucket="b", key="a"))
+        assert support.supports(Parquet(), on_s3, options, "view")
+        assert not support.supports(Parquet(), local_item(tmp_path), options, "view")
+        # pyspark-support's own default still takes local files.
+        assert ParquetByPySpark().supports(
+            Parquet(), local_item(tmp_path), ParquetByPySparkOptions(), "view"
+        )
+
+    @pytest.mark.parametrize(
+        "support",
+        [
+            CsvByDatabricksConnect,
+            JsonLinesByDatabricksConnect,
+            ParquetByDatabricksConnect,
+            DeltaLakeByDatabricksConnect,
+        ],
+    )
+    def test_every_format(self, support):
+        assert "file" not in support.options_model().supported_protocols

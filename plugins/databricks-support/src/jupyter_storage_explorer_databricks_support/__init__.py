@@ -16,12 +16,17 @@ from jupyter_storage_explorer_databricks_support.mapper import (
     DatabricksWorkspaceMapper,
 )
 from jupyter_storage_explorer_databricks_support.supports import (
+    DATABRICKS_PROTOCOLS,
     CsvByDatabricksConnect,
+    CsvByDatabricksConnectOptions,
     DatabricksConnect,
     DatabricksConnectEngine,
     DeltaLakeByDatabricksConnect,
+    DeltaLakeByDatabricksConnectOptions,
     JsonLinesByDatabricksConnect,
+    JsonLinesByDatabricksConnectOptions,
     ParquetByDatabricksConnect,
+    ParquetByDatabricksConnectOptions,
     databricks_session,
 )
 
@@ -44,14 +49,19 @@ class DatabricksSupport(StorageExplorerPlugin):
 
 
 __all__ = [
+    "DATABRICKS_PROTOCOLS",
     "CsvByDatabricksConnect",
+    "CsvByDatabricksConnectOptions",
     "DatabricksConnect",
     "DatabricksConnectEngine",
     "DatabricksLocation",
     "DatabricksSupport",
     "DatabricksWorkspaceMapper",
     "DeltaLakeByDatabricksConnect",
+    "DeltaLakeByDatabricksConnectOptions",
     "JsonLinesByDatabricksConnect",
+    "JsonLinesByDatabricksConnectOptions",
     "ParquetByDatabricksConnect",
+    "ParquetByDatabricksConnectOptions",
     "databricks_session",
 ]

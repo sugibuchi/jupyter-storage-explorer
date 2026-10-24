@@ -11,14 +11,19 @@ configuration, e.g. the environment's.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from fsspec.implementations.dirfs import DirFileSystem
 from jupyter_storage_explorer_pyspark_support import (
     CsvByPySpark,
+    CsvByPySparkOptions,
     DeltaLakeByPySpark,
+    DeltaLakeByPySparkOptions,
     JsonLinesByPySpark,
+    JsonLinesByPySparkOptions,
     ParquetByPySpark,
+    ParquetByPySparkOptions,
 )
 
 from jupyter_storage_explorer.formats.engine import Engine
@@ -28,7 +33,7 @@ from jupyter_storage_explorer_databricks_support.mapper import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Mapping, Sequence
 
     from fsspec import AbstractFileSystem
     from jupyter_storage_explorer_pyspark_support import PySparkOptions
@@ -109,18 +114,46 @@ class _ByDatabricksConnect:
         )
 
 
+# The URL schemes Spark reads on Databricks compute by default, as Spark names
+# them: the workspace's files (dbfs) and cloud storage. Not the kernel's local
+# files, which the cluster does not see, nor HDFS. pyspark-support's
+# ``supported_protocols``, with this default.
+DATABRICKS_PROTOCOLS = ("dbfs", "s3a", "abfss", "abfs", "wasbs", "wasb", "gs")
+
+
+@dataclass(frozen=True, kw_only=True)
+class CsvByDatabricksConnectOptions(CsvByPySparkOptions):
+    supported_protocols: Sequence[str] | None = DATABRICKS_PROTOCOLS
+
+
+@dataclass(frozen=True, kw_only=True)
+class JsonLinesByDatabricksConnectOptions(JsonLinesByPySparkOptions):
+    supported_protocols: Sequence[str] | None = DATABRICKS_PROTOCOLS
+
+
+@dataclass(frozen=True, kw_only=True)
+class ParquetByDatabricksConnectOptions(ParquetByPySparkOptions):
+    supported_protocols: Sequence[str] | None = DATABRICKS_PROTOCOLS
+
+
+@dataclass(frozen=True, kw_only=True)
+class DeltaLakeByDatabricksConnectOptions(DeltaLakeByPySparkOptions):
+    supported_protocols: Sequence[str] | None = DATABRICKS_PROTOCOLS
+
+
 class CsvByDatabricksConnect(_ByDatabricksConnect, CsvByPySpark):
-    pass
+    options_model = CsvByDatabricksConnectOptions
 
 
 class JsonLinesByDatabricksConnect(_ByDatabricksConnect, JsonLinesByPySpark):
-    pass
+    options_model = JsonLinesByDatabricksConnectOptions
 
 
 class ParquetByDatabricksConnect(_ByDatabricksConnect, ParquetByPySpark):
-    pass
+    options_model = ParquetByDatabricksConnectOptions
 
 
 class DeltaLakeByDatabricksConnect(_ByDatabricksConnect, DeltaLakeByPySpark):
+    options_model = DeltaLakeByDatabricksConnectOptions
     # Databricks has Delta Lake: delta-spark is for local sessions.
     additional_requirements = ()

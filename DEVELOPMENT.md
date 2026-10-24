@@ -961,7 +961,8 @@ A `FormatSupport` declares:
 - `engine`, an `Engine` class, or None for the built-in views;
 - `additional_requirements`, packages besides the engine's.
 
-It implements `view`, `recipe` or both. Its `supports(fmt, ctx, task)` tells whether it does a task for an item:
+It implements `view`, `recipe` or both. Its `supports(fmt, ctx, options, task)` tells whether it does a task for an
+item, with its options for that item:
 
 - By default, it does what its class implements, for every item.
 - A support overrides it to refuse items, such as a storage its library cannot read.

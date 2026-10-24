@@ -401,16 +401,19 @@ class FormatSupport:
         item, e.g. the engines users choose from."""
         return getattr(cls, task) is not getattr(FormatSupport, task)
 
-    def supports(self, fmt: DataFormat, ctx: ItemContext, task: Task) -> bool:
+    def supports(
+        self, fmt: DataFormat, ctx: ItemContext, options: SupportOptions, task: Task
+    ) -> bool:
         """Whether it does ``task`` for the item: the explorer calls the
         method of a task only for the items it supports, and then tries no
         other support.
 
         Override it to refuse what the library cannot handle, e.g. an image
         format it cannot read, or a storage it cannot reach (from
-        ``ctx.location``). It runs on the kernel's main thread for each item
-        clicked, so it decides from the format, the location, the path and
-        the info: never by reading the storage.
+        ``ctx.location``, maybe as the options say). It runs on the kernel's
+        main thread for each item clicked, so it decides from the format, the
+        location, the path, the info and the options: never by reading the
+        storage.
 
         Parameters
         ----------
@@ -418,6 +421,9 @@ class FormatSupport:
             The format detected, an instance of ``format``.
         ctx : ItemContext
             The file or folder (see ``view``).
+        options : SupportOptions
+            Its options for the item, an ``options_model``, as the method
+            would get them.
         task : {"view", "recipe"}
             The method the explorer would call.
 
@@ -431,9 +437,9 @@ class FormatSupport:
         --------
         Code for the images Pillow opens, not SVG:
 
-        >>> def supports(self, fmt, ctx, task):
+        >>> def supports(self, fmt, ctx, options, task):
         ...     svg = fmt.mime_type(ctx.path) == "image/svg+xml"
-        ...     return super().supports(fmt, ctx, task) and not svg
+        ...     return super().supports(fmt, ctx, options, task) and not svg
         """
         return self.implements(task)
 

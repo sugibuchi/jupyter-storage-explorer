@@ -455,8 +455,12 @@ class TestStoragesPolarsCannotRead:
     def test_delta_viewed_only_where_delta_rs_reads(self, make_item, tmp_path):
         make_item("/t/_delta_log/0.json", b"{}")
         support = DeltaLakeByPolars()
-        assert not support.supports(DeltaLake(), make_item("/t"), "view")
-        assert support.supports(DeltaLake(), local_item(tmp_path), "view")
+        assert not support.supports(
+            DeltaLake(), make_item("/t"), DeltaLakeByPolarsOptions(), "view"
+        )
+        assert support.supports(
+            DeltaLake(), local_item(tmp_path), DeltaLakeByPolarsOptions(), "view"
+        )
 
     @pytest.mark.parametrize(
         ("support", "fmt", "name", "reader"),
@@ -473,7 +477,7 @@ class TestStoragesPolarsCannotRead:
         # polars cannot read the URL: a DataFrame of the file opened with
         # fsspec, no LazyFrame, which would read it whole all the same.
         item = make_item(f"/{name}", b"a,b\n")
-        assert support().supports(fmt(), item, "recipe")
+        assert support().supports(fmt(), item, support.options_model(), "recipe")
         options = support.options_model(fsspec_storage_options={"anon": True})
         assert support().recipe(fmt(), item, options) == {
             "Load as DataFrame": (
@@ -485,13 +489,17 @@ class TestStoragesPolarsCannotRead:
 
     def test_no_code_for_folders_and_delta(self, make_item, memfs):
         memfs.pipe_file("/d/part-0.parquet", b"")
-        assert not ParquetByPolars().supports(Parquet(), make_item("/d"), "recipe")
+        assert not ParquetByPolars().supports(
+            Parquet(), make_item("/d"), ParquetByPolarsOptions(), "recipe"
+        )
         memfs.pipe_file("/t/_delta_log/0.json", b"{}")
-        assert not DeltaLakeByPolars().supports(DeltaLake(), make_item("/t"), "recipe")
+        assert not DeltaLakeByPolars().supports(
+            DeltaLake(), make_item("/t"), DeltaLakeByPolarsOptions(), "recipe"
+        )
 
     def test_excel_code_reads_through_fsspec(self, make_item):
         item = make_item("/a.xlsx", b"")
-        assert ExcelByPolars().supports(Excel(), item, "recipe")
+        assert ExcelByPolars().supports(Excel(), item, ExcelByPolarsOptions(), "recipe")
 
     def test_parquet_as_a_pyarrow_dataset(self, make_item):
         item = make_item("/a.parquet", parquet_bytes(pl.DataFrame({"a": [1, 2, 3]})))
@@ -512,5 +520,9 @@ class TestStoragesPolarsCannotRead:
     def test_parquet_needs_pyarrow_there(self, make_item, tmp_path, monkeypatch):
         monkeypatch.setattr(PyArrow, "is_installed", lambda self: False)
         support = ParquetByPolars()
-        assert not support.supports(Parquet(), make_item("/a.parquet", b""), "view")
-        assert support.supports(Parquet(), local_item(tmp_path), "view")
+        assert not support.supports(
+            Parquet(), make_item("/a.parquet", b""), ParquetByPolarsOptions(), "view"
+        )
+        assert support.supports(
+            Parquet(), local_item(tmp_path), ParquetByPolarsOptions(), "view"
+        )
