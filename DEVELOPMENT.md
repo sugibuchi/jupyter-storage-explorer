@@ -1009,8 +1009,10 @@ and the others' code still shows.
 
 `view` returns one `View`, from `view.py`:
 
-- A `QueryView` opens the data browser. Its `data` is any dataframe narwhals supports, best lazy. `more` is eager data
-  of the first rows only, such as pandas' `max_memory_rows`.
+- A `QueryView` opens the data browser. Its `data` is any dataframe narwhals supports, best lazy. `more` says the data
+  holds only the item's first part:
+  - eager data of the first rows, such as pandas' `max_memory_rows`, counted as rows in memory are;
+  - lazy data of a file's first bytes, which the browser notes in either mode (`partial`).
 - A `TableSetView` offers several tables, such as Excel's sheets, on a tree or on tabs. Choosing one opens the data
   browser on it.
 - A `ViewWithPrompt` asks the user first: `ViewWithConfirmation`, `ViewWithChoice` or `ViewWithInput`.

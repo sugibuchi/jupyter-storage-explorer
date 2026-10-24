@@ -13,6 +13,7 @@ from jupyter_storage_explorer.formats import (
     QueryView,
     Text,
     TextView,
+    ViewLimits,
     ViewWithChoice,
     ViewWithConfirmation,
     ViewWithInput,
@@ -227,3 +228,17 @@ class TestViews:
         prompt = ViewWithInput(message="", factory=lambda text: TextView(text=text))
         assert prompt.answer("abc").text == "abc"
         assert prompt.answer(None).text == ""
+
+
+def test_the_first_part_said_in_the_data_browser(memfs):
+    # polars on a storage it cannot read itself: the file's first KB, lazy.
+    memfs.pipe_file("/data/large.csv", b"a\n" + b"1\n" * 3000)
+    explorer = make(
+        "/data", fs=memfs, view_limits=ViewLimits(max_whole_file_bytes=1024)
+    )
+    preview(explorer, "/data/large.csv")
+    first = answer(explorer, value="Its first 1 KB")
+    assert first["query"]["mode"]["partial"] is True
+    preview(explorer, "/data/large.csv")
+    whole = answer(explorer, value="The whole file (5 KB)")
+    assert whole["query"]["mode"]["partial"] is False

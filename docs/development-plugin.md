@@ -222,7 +222,7 @@ and opens the data browser on the one chosen. The others show what was read:
 
 | View                               | Fields                                                                 | Shown as                          |
 |------------------------------------|------------------------------------------------------------------------|-----------------------------------|
-| `QueryView(data=..., more=False)`  | Any dataframe narwhals supports, best lazy; `more`: eager data cut short | The data browser                  |
+| `QueryView(data=..., more=False)`  | Any dataframe narwhals supports, best lazy; `more`: only the item's first part (rows or bytes) | The data browser                  |
 | `TableSetView(nodes, loader, selector="tree")` | `nodes`: tables (`Leaf(label, id)`), maybe in groups (`Node(label, children)`); `loader(id)`: a table's dataframe, as `QueryView`'s `data` | The tables in a tree (`"tree"`) or on tabs (`"tab"`, tables only), and the data browser on the one chosen |
 | `TableView(columns, rows, ...)`    | `dtypes`, `more`, `total`, `unit` ("rows", "records")                  | A table, with a note of the counts |
 | `TextView(text, language=None)`    | `html`: highlighted text (optional)                                    | Text                              |
