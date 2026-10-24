@@ -25,8 +25,12 @@ function render({ model, el }) {
     badge.textContent = model.get("label");
   }
 
+  // A prompt's answer goes to the kernel, which shows the view of it in the
+  // tab, in a widget of its own.
+  const actions = { answer: (content) => model.send({ type: "answer", ...content }) };
+
   function renderView() {
-    body.replaceChildren(renderSection(model.get("view")));
+    body.replaceChildren(renderSection(model.get("view"), actions));
   }
 
   const onCustomMsg = (msg) => msg.type === "reply" && onReply(msg);

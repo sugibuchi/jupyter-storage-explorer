@@ -180,7 +180,6 @@ def test_menu_info(mem_explorer, monkeypatch):
 
 class SqliteByPython(FormatSupport):
     format = SQLite
-    capabilities = ("recipe",)
 
     def recipe(self, fmt, ctx, options):
         return {"Connect": "import sqlite3"}
@@ -188,7 +187,6 @@ class SqliteByPython(FormatSupport):
 
 class DuckdbByPython(FormatSupport):
     format = DuckDB
-    capabilities = ("recipe",)
 
     def recipe(self, fmt, ctx, options):
         return {"Connect": "import duckdb"}
@@ -199,7 +197,6 @@ class HeldText(FormatSupport):
     holds a view up; before the built-in views, as it is given first."""
 
     format = Text
-    capabilities = ("view",)
     release = threading.Event()
 
     def view(self, fmt, ctx, options, limits):

@@ -257,8 +257,10 @@ Formats, supports, file operations and mappers are each a chain of objects, trie
 
 The first that takes an item handles it:
 
-- A support or an operation refuses an item by raising its class's `NotSupported`, and the next one is tried.
-- A mapper takes the filesystems it matches. The highest priority among matching formats wins.
+- A support takes the items its `supports` accepts. What its method then raises is the item's error.
+- An operation refuses a call by raising `FileSystemOperations.NotSupported`, and the next one is tried.
+- A mapper takes the filesystems it matches.
+- The highest priority among matching formats wins.
 
 So a plugin or a user adds or replaces behaviour without changing the core.
 
@@ -957,15 +959,20 @@ A `FormatSupport` declares:
 
 - `format`, matched with `isinstance`, so subclasses too;
 - `engine`, an `Engine` class, or None for the built-in views;
-- `additional_requirements`, packages besides the engine's;
-- `capabilities`: the names of the methods it implements, "view" and "recipe".
+- `additional_requirements`, packages besides the engine's.
 
-The explorer reads only `capabilities`, so a method not listed is never called. Nothing checks that at run time, by
-design: users generate supports with AI from the rules in `FormatSupport`'s docstring. A test keeps those rules true of
-the defaults.
+It implements `view`, `recipe` or both. Its `supports(fmt, ctx, task)` tells whether it does a task for an item:
+
+- By default, it does what its class implements, for every item.
+- A support overrides it to refuse items, such as a storage its library cannot read.
+- It decides without reading the storage, as it runs on the main thread for each item clicked.
+
+Once a support accepts an item, the chain tries no other. What its method raises is shown as the item's error, so a
+failure is never hidden by another library's view. Without an item, as for the engines offered, the chain asks
+`implements(task)`.
 
 Each method gets the format object, then the `ItemContext`, then the support's options. `view` also gets the
-`ViewLimits`. Any method may raise `FormatSupport.NotSupported` for an item, and the next support is tried.
+`ViewLimits`.
 
 Supports never check their packages: the chain calls only installed ones. They take no `__init__` arguments.
 
@@ -982,15 +989,20 @@ The explorer has no `formats=` argument.
 
 The chain answers:
 
-- `of(fmt, capability)`: the installed supports of a format with a capability;
+- `of(fmt, ctx, task)`: the installed supports of a format that support a task for the item;
 - `engines`: the installed engines with a view support, the preferred first;
-- `viewers(fmt)`: the engines that can view a format, then None for the built-in views;
-- `engine_for(fmt, engine)`: the engine chosen if it handles the format, else the built-in views;
-- `view(...)`, with one engine's supports;
-- `recipes(...)`: the first installed support with "recipe" of each library, as for views.
+- `viewers(fmt, ctx)`: the engines that can view the item, then None for the built-in views;
+- `engine_for(fmt, ctx, engine)`: the engine chosen if it handles the format, else the built-in views;
+- `view(...)`, with the first of one engine's supports;
+- `recipes(...)`: the first support of each library for the item, as for views.
 
-`engine_for` never falls back to another engine. If the chosen engine's support is not installed, it raises
-`LookupError`.
+`engine_for` never falls back to another engine. It raises `LookupError` in two cases:
+
+- the chosen engine's support is not installed;
+- its support refuses the item.
+
+A support whose `recipe` fails gives a recipe holding the error. "Python code" shows it in place of that library's code,
+and the others' code still shows.
 
 #### Views
 
@@ -1000,8 +1012,20 @@ The chain answers:
   of the first rows only, such as pandas' `max_memory_rows`.
 - A `TableSetView` offers several tables, such as Excel's sheets, on a tree or on tabs. Choosing one opens the data
   browser on it.
+- A `ViewWithPrompt` asks the user first: `ViewWithConfirmation`, `ViewWithChoice` or `ViewWithInput`.
 - The others, `TableView`, `TextView`, `TreeView`, `MarkdownView` and `MediaView`, are sent to the frontend as a
   section, which it renders by kind.
+
+A prompt is a section too, without its function or a choice's values: the frontend answers with a label. Where it is
+shown:
+
+- In the preview panel, the answer comes back as "preview_answer". The view of it is read as a preview.
+- In a view tab, the prompt is a `ViewTab` sent with "asking". The tab keeps waiting, then shows the view's widget
+  instead and lets the prompt's go. The prompt's widget shows a later error or prompt.
+
+Each prompt shown has an id, and an answer to one no longer shown is ignored. The answers are kept by the item's viewer,
+`_Viewer` in `_explorer/previews.py`. A reload gives them to the prompts again, so it asks nothing. A prompt is closed
+with the view of its answer, or when cancelled.
 
 Whether an item opens in the data browser is known only once viewed. So the menu offers "Preview" and "View in a new
 tab" for anything with a format.

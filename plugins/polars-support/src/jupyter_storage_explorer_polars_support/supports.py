@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import io
 from dataclasses import dataclass
 from inspect import cleandoc
 from typing import TYPE_CHECKING, Any
 
+from jupyter_storage_explorer.filesystems.locations import LocalLocation
 from jupyter_storage_explorer.formats.delta import DeltaLake
 from jupyter_storage_explorer.formats.engine import Engine
 from jupyter_storage_explorer.formats.excel import Excel
@@ -24,12 +26,18 @@ from jupyter_storage_explorer.formats.support import (
     secret_field,
 )
 from jupyter_storage_explorer.formats.text import Csv, Json, JsonLines
-from jupyter_storage_explorer.formats.view import Leaf, QueryView, TableSetView
+from jupyter_storage_explorer.formats.view import (
+    Leaf,
+    QueryView,
+    TableSetView,
+    ViewWithChoice,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
 
     from jupyter_storage_explorer.formats.base import ItemContext
+    from jupyter_storage_explorer.formats.support import Task
     from jupyter_storage_explorer.formats.view import View, ViewLimits
 
 AS_LAZY_FRAME = "Load as LazyFrame"
@@ -269,6 +277,82 @@ class _PolarsByUrl(FormatSupport):
     options_model = PolarsOptions
 
 
+# The URL schemes polars reads itself, with object_store: local paths, the
+# cloud storages, HTTP(S) and Hugging Face. Its readers read any other
+# storage's files only whole, given as bytes.
+_READ_BY_POLARS = frozenset(
+    {
+        "file",
+        "s3",
+        "s3a",
+        "gs",
+        "gcs",
+        "az",
+        "azure",
+        "abfs",
+        "abfss",
+        "adl",
+        "http",
+        "https",
+        "hf",
+    }
+)
+
+
+def reads_itself(ctx: ItemContext) -> bool:
+    """Whether polars reads the item by its location itself, lazily."""
+    if isinstance(ctx.location, LocalLocation):
+        return True
+    return ctx.location.url.partition(":")[0].lower() in _READ_BY_POLARS
+
+
+def _size_text(size: int) -> str:
+    """``size`` bytes, as people read it, e.g. "586 MB"."""
+    if size < 1024 * 1024:
+        return f"{max(size // 1024, 1)} KB"
+    return f"{size / (1024 * 1024):,.0f} MB"
+
+
+def _read_through_fsspec(
+    ctx: ItemContext, limits: ViewLimits, scan: Callable[[io.BytesIO], Any]
+) -> View:
+    """The view of a text format (CSV, JSON Lines) on a storage polars cannot
+    read itself: ``scan`` of its bytes, read through the explorer's
+    filesystem, so polars parses it as it would by URL.
+
+    A file larger than ``limits.max_whole_file_bytes`` is read only once the
+    user chooses: whole, into memory, or its first bytes up to that size,
+    cut after their last line."""
+    size = ctx.size
+    limit = limits.max_whole_file_bytes
+
+    def read(first: int | None) -> View:
+        if first is None:
+            data = ctx.fs.cat_file(ctx.path)
+        else:
+            with ctx.fs.open(ctx.path, "rb") as f:
+                data = f.read(first + 1)
+        cut = first is not None and len(data) > first
+        if cut:
+            data = data[: data.rfind(b"\n", 0, first) + 1] or data[:first]
+        return QueryView(data=scan(io.BytesIO(data)), more=cut)
+
+    if size is not None and size <= limit:
+        return read(None)
+    whole = f"The whole file ({_size_text(size)})" if size else "The whole file"
+    first = f"Its first {_size_text(limit)}"
+    return ViewWithChoice(
+        message=(
+            "Polars cannot read this storage itself: the file is read into "
+            "memory, then queried there."
+        ),
+        choices={first: limit, whole: None},
+        factory=read,
+        style="button",
+        with_cancel=True,
+    )
+
+
 def _code_kwargs(
     options: SupportOptions,
     defaults: Mapping[str, Any] | None = None,
@@ -288,7 +372,6 @@ def _code_kwargs(
 class CsvByPolars(_PolarsByUrl):
     format = Csv
     options_model = CsvByPolarsOptions
-    capabilities = ("view", "recipe")
 
     def view(
         self,
@@ -299,19 +382,26 @@ class CsvByPolars(_PolarsByUrl):
     ) -> View:
         pl = Polars().load()
         url = ctx.library_url
+        native = reads_itself(ctx)
         # try_parse_dates: date columns get date filters (<, >, ...) instead of text ones.
         defaults: dict[str, Any] = {
             "truncate_ragged_lines": True,
             "try_parse_dates": True,
         }
         if options.separator is LIBRARY_DEFAULT:
-            # The first lines, read by polars too, so any URL it reads works.
-            lines = pl.scan_lines(url, **options.storage()).head(20).collect()["line"]
-            defaults["separator"] = fmt.separator(url, "\n".join(lines))
-        data = pl.scan_csv(
-            url, **{**defaults, **options.arguments()}, **options.storage()
-        )
-        return QueryView(data=data)
+            if native:
+                # The first lines, read by polars too, so any URL it reads works.
+                lines = pl.scan_lines(url, **options.storage()).head(20).collect()
+                text = "\n".join(lines["line"])
+            else:
+                text, _ = ctx.head_text(64 * 1024)
+            defaults["separator"] = fmt.separator(url, text)
+        arguments = {**defaults, **options.arguments()}
+        if not native:
+            return _read_through_fsspec(
+                ctx, limits, lambda data: pl.scan_csv(data, **arguments)
+            )
+        return QueryView(data=pl.scan_csv(url, **arguments, **options.storage()))
 
     data_frame_template = cleandoc("""
         import polars as pl
@@ -330,7 +420,6 @@ class CsvByPolars(_PolarsByUrl):
 class JsonLinesByPolars(_PolarsByUrl):
     format = JsonLines
     options_model = JsonLinesByPolarsOptions
-    capabilities = ("view", "recipe")
 
     def view(
         self,
@@ -339,11 +428,13 @@ class JsonLinesByPolars(_PolarsByUrl):
         options: JsonLinesByPolarsOptions,
         limits: ViewLimits,
     ) -> View:
-        data = (
-            Polars()
-            .load()
-            .scan_ndjson(ctx.library_url, **options.arguments(), **options.storage())
-        )
+        pl = Polars().load()
+        arguments = options.arguments()
+        if not reads_itself(ctx):
+            return _read_through_fsspec(
+                ctx, limits, lambda data: pl.scan_ndjson(data, **arguments)
+            )
+        data = pl.scan_ndjson(ctx.library_url, **arguments, **options.storage())
         return QueryView(data=data)
 
     lazy_frame_template = cleandoc("""
@@ -375,7 +466,6 @@ class JsonByPolars(FormatSupport):
     format = Json
     engine = PolarsEngine
     options_model = JsonByPolarsOptions
-    capabilities = ("recipe",)
 
     data_frame_template = cleandoc("""
         import polars as pl
@@ -410,7 +500,6 @@ class ExcelByPolars(FormatSupport):
         Fastexcel(),
         Fsspec(),
     )
-    capabilities = ("view", "recipe")
     options_model = ExcelByPolarsOptions
 
     def view(
@@ -472,7 +561,6 @@ class ExcelByPolars(FormatSupport):
 class ParquetByPolars(_PolarsByUrl):
     format = Parquet
     options_model = ParquetByPolarsOptions
-    capabilities = ("view", "recipe")
 
     def view(
         self,
@@ -552,8 +640,12 @@ class DeltaLakeByPolars(_PolarsByUrl):
     # polars reads the table with deltalake (delta-rs), which reads cloud
     # storage itself, by default with credentials from the environment.
     additional_requirements = (DeltaLakePackage(),)
-    capabilities = ("view", "recipe")
     options_model = DeltaLakeByPolarsOptions
+
+    def supports(self, fmt: DeltaLake, ctx: ItemContext, task: Task) -> bool:
+        # delta-rs reads the table's storage itself: views only there.
+        native = task != "view" or reads_itself(ctx)
+        return super().supports(fmt, ctx, task) and native
 
     def view(
         self,

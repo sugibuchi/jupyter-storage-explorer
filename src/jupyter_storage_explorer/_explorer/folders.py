@@ -256,13 +256,15 @@ class FoldersMixin:
     def _show_current_format(self) -> None:
         """``_current_format``: the folder's format, if it can be viewed with
         the engine chosen (the Preview button, with nothing selected)."""
-        fmt = self._current_dir_format
-        self._current_format = fmt.name if fmt and self._viewable(fmt) else ""
+        detected = self._current_dir_format
+        viewable = detected is not None and self._viewable(*detected)
+        self._current_format = detected[0].name if viewable else ""
 
     def _directory_format(
         self, path: str, infos: list[dict[str, Any]]
-    ) -> DataFormat | None:
-        """The format of directory ``path`` given its listing, if any."""
+    ) -> tuple[DataFormat, ItemContext] | None:
+        """The format of directory ``path`` given its listing, if any, and the
+        directory as it was detected."""
         location = self._location_of(path)
         if location is None:
             return None
@@ -273,6 +275,7 @@ class FoldersMixin:
             location=location, fs=self._fs, path=path, info=info, children=infos
         )
         try:
-            return detect_format(ctx, formats=self._formats)
+            fmt = detect_format(ctx, formats=self._formats)
         except Exception:
             return None  # detection is best-effort; a failure just means no preview
+        return (fmt, ctx) if fmt is not None else None

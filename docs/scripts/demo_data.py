@@ -444,7 +444,12 @@ def supports() -> list[Any]:
     # so that files saved from JupyterLab show as saved.
     result = [cls() for cls in PolarsSupport().format_supports]
     for support in result:
-        if "view" in support.capabilities:
+        # Whether polars supports the item is decided by its copy's location too.
+        supported = support.supports
+        support.supports = lambda fmt, ctx, task, supported=supported: supported(
+            fmt, local(ctx), task
+        )
+        if support.implements("view"):
             view = support.view
             support.view = lambda fmt, ctx, options, limits, view=view: view(
                 fmt, local(ctx), options, limits

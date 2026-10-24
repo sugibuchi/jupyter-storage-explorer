@@ -301,9 +301,18 @@ class TestListing:
         explorer._current_dir = "/data"
         assert len(entries(explorer)) == 5
 
-    def test_current_directory_format(self, mem_explorer):
+    def test_current_directory_format(self, tmp_path):
+        log = tmp_path / "table" / "_delta_log"
+        log.mkdir(parents=True)
+        (log / "00000000000000000000.json").write_bytes(b"{}")
+        explorer = make(str(tmp_path))
+        explorer._current_dir = path_of(explorer, "table")
+        assert explorer._current_format == "delta"
+
+    def test_current_directory_not_viewable_where_it_is(self, mem_explorer):
+        # polars' delta-rs cannot read the memory filesystem.
         mem_explorer._current_dir = "/data/table"
-        assert mem_explorer._current_format == "delta"
+        assert mem_explorer._current_format == ""
 
     def test_selection(self, mem_explorer):
         mem_explorer._current_dir = "/data"

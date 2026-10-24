@@ -1283,7 +1283,6 @@ from jupyter_storage_explorer_polars_support import PolarsEngine
 
 class SlowText(FormatSupport):
     format = Text
-    capabilities = ("view",)
 
     def view(self, fmt, ctx, options, limits):
         if ctx.name == "broken.txt":
@@ -1294,7 +1293,6 @@ class SlowText(FormatSupport):
 class CsvInMemory(FormatSupport):
     format = Csv
     engine = PolarsEngine
-    capabilities = ("view",)
 
     def view(self, fmt, ctx, options, limits):
         return QueryView(data=pl.read_csv(io.BytesIO(ctx.fs.cat_file(ctx.path))).lazy())
@@ -1350,6 +1348,50 @@ def slow_preview(lab: Lab, page: Page) -> None:
     expect(x.preview.locator(".jse-query tbody tr")).to_have_count(3, timeout=10_000)
 
 
+# CSV files polars cannot read itself (here in memory): read through fsspec,
+# the large one once the user chooses how much (ViewWithChoice).
+PROMPTS = """\
+import fsspec
+from jupyter_storage_explorer import StorageExplorer
+from jupyter_storage_explorer.formats import ViewLimits
+
+memory = fsspec.filesystem("memory")
+memory.pipe_file("/prompts/small.csv", b"a\\n1\\n2\\n")
+memory.pipe_file("/prompts/large.csv", b"a\\n" + b"1\\n" * 3000)
+StorageExplorer(
+    "/prompts",
+    fs=memory,
+    preview_panel="open",
+    view_limits=ViewLimits(max_whole_file_bytes=1024),
+)"""
+
+
+@lab_check
+def prompts(lab: Lab, page: Page) -> None:
+    # A small file is read at once; a large one asks first, in the panel.
+    x = Explorer(lab, page, PROMPTS)
+    x.row("small.csv").click()
+    expect(x.preview.locator(".jse-query tbody tr")).to_have_count(2)
+    x.row("large.csv").click()
+    prompt = x.preview.locator(".jse-prompt")
+    expect(prompt).to_contain_text("Polars cannot read this storage itself")
+    # Cancelled: nothing read, and a button to ask again.
+    prompt.get_by_role("button", name="Cancel").click()
+    expect(x.preview.locator(".jse-notice")).to_contain_text("Not previewed")
+    x.preview.get_by_role("button", name="Preview again").click()
+    # Its first KB: the data browser says it holds the first rows only.
+    x.preview.get_by_role("button", name="Its first 1 KB").click()
+    expect(x.preview.locator(".jse-query tbody tr").first).to_be_visible()
+    expect(x.preview.locator(".jse-prompt")).to_have_count(0)
+    # In a new tab, the tab asks, then shows the data instead.
+    x.menu(x.row("large.csv"), "View CSV in new tab")
+    tab = x.page.locator(".jse-query-tab")
+    tab.get_by_role("button", name="The whole file (5 KB)").click()
+    expect(tab.locator(".jse-query tbody tr").first).to_be_visible()
+    expect(tab.locator(".jse-prompt")).to_have_count(0)
+    x.back_to_notebook()
+
+
 # A support failing as Spark does, with the Java stack trace, and a file whose
 # info cannot be read.
 ERRORS = """\
@@ -1362,7 +1404,6 @@ class Py4JJavaError(Exception):
 
 class SparkLike(FormatSupport):
     format = Text
-    capabilities = ("view",)
 
     def view(self, fmt, ctx, options, limits):
         raise Py4JJavaError(
@@ -1491,7 +1532,6 @@ from jupyter_storage_explorer_polars_support import PolarsEngine
 class SheetsByPolars(FormatSupport):
     format = Excel
     engine = PolarsEngine
-    capabilities = ("view",)
 
     def view(self, fmt, ctx, options, limits):
         sheets = pl.read_excel(ctx.fs.cat_file(ctx.path), sheet_id=0)

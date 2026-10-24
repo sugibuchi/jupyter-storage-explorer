@@ -218,9 +218,9 @@ class TestViews:
         assert isinstance(media, MediaView)
         assert (media.mime, media.data) == ("image/png", b"\x89PNG")
 
-    def test_nothing_installed(self, monkeypatch):
+    def test_nothing_installed(self, make_item, monkeypatch):
         monkeypatch.setattr(PythonPackage, "is_installed", lambda self: False)
-        assert CHAIN.of(Csv(), "view") == []
+        assert CHAIN.of(Csv(), make_item("/a.csv", b""), "view") == []
 
     def test_image_needs_no_package(self, make_item, monkeypatch):
         # The browser shows images itself: Pillow is for the load code only.

@@ -2,7 +2,8 @@
 the explorer shows it in the preview panel or a tab of its own: the data
 browser for a ``QueryView``, and for the table chosen of a
 ``TableSetView``'s; the others rendered by the frontend according to their
-``kind``."""
+``kind``. A ``ViewWithPrompt`` asks the user something first, and makes the
+view from the answer."""
 
 from __future__ import annotations
 
@@ -11,7 +12,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Sequence
+    from collections.abc import Callable, Mapping, Sequence
 
 log = logging.getLogger(__name__)
 
@@ -332,3 +333,187 @@ class MediaView(View):
     mime: str
     data: bytes | None = None
     src: str | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class ViewWithPrompt(View):
+    """A question to the user, whose answer makes the view: one of the
+    subclasses below, e.g. before reading a whole large file.
+
+    The explorer shows ``message`` where the view would be, with ``button``
+    and Cancel (a choice, Cancel only ``with_cancel``). Once the user
+    answers, it calls ``answer`` in a worker thread, as it calls ``view()``,
+    and shows the view it returns: maybe another prompt. Cancel shows
+    nothing.
+
+    The answers are kept with the view: when the data browser reads the data
+    again, the prompts the support returns are answered the same way,
+    without asking.
+
+    The prompt is closed with the view its answer made, or when cancelled,
+    so the functions given to its ``on_close`` may release what that view
+    reads.
+
+    Parameters
+    ----------
+    message : str
+        The question, e.g. "Polars reads the whole file (586 MB) into
+        memory."
+    button : str, default "View"
+        The button answering it.
+    """
+
+    message: str
+    button: str = "View"
+
+    def answer(self, value: Any = None) -> View:
+        """The view of the user's answer.
+
+        Parameters
+        ----------
+        value : Any
+            What the user answered: nothing for a confirmation, the label
+            chosen for a choice, the text entered for an input.
+
+        Returns
+        -------
+        View
+            What its function made of the answer.
+
+        Raises
+        ------
+        TypeError
+            If the function returns no ``View``.
+        ValueError
+            If ``value`` is no possible answer.
+        """
+        view = self._make(value)
+        if not isinstance(view, View):
+            raise TypeError(f"the prompt's function returned no View: {view!r}")
+        return view
+
+    def _make(self, value: Any) -> View:
+        raise NotImplementedError
+
+
+@dataclass(frozen=True, kw_only=True)
+class ViewWithConfirmation(ViewWithPrompt):
+    """A confirmation: the view is made only once the user clicks
+    ``button``.
+
+    Parameters
+    ----------
+    message : str
+        What viewing does, e.g. "Polars reads the whole file (586 MB) into
+        memory."
+    factory : callable
+        Makes the view, as ``factory()``.
+    button : str, default "View"
+
+    Examples
+    --------
+    In a support's ``view()``:
+
+    >>> return ViewWithConfirmation(
+    ...     message=f"This reads the whole file ({size_mb} MB).",
+    ...     factory=lambda: QueryView(data=read_whole()),
+    ... )
+    """
+
+    kind: ClassVar[str] = "confirmation"
+    factory: Callable[[], View]
+
+    def _make(self, value: Any) -> View:
+        return self.factory()
+
+
+@dataclass(frozen=True, kw_only=True)
+class ViewWithChoice(ViewWithPrompt):
+    """A choice: the view is made of the value of the label the user
+    chooses.
+
+    Parameters
+    ----------
+    message : str
+        What is chosen, e.g. "Polars cannot read this storage itself."
+    choices : mapping of str to Any
+        The labels shown, in order, and the values ``factory`` is given.
+    factory : callable
+        Makes the view, as ``factory(value)``.
+    style : {"radio", "dropdown", "button"}, default "radio"
+        Radio buttons, for a few choices, or a dropdown menu, each with
+        ``button``; or a button of each label, which answers at once, for two
+        or three short choices.
+    default : str or None, default None
+        The label chosen at first; by default the first. With "button", the
+        primary button.
+    button : str, default "View"
+        Not shown with "button".
+    with_cancel : bool, default False
+        Also a Cancel button, which shows nothing: for choices of how to
+        read, where not reading is a choice too.
+
+    Raises
+    ------
+    ValueError
+        If there are no choices, ``style`` is unknown, or ``default`` is no
+        label.
+
+    Examples
+    --------
+    >>> return ViewWithChoice(
+    ...     message="The file is 586 MB.",
+    ...     choices={"The whole file": None, "Its first 10 MB": 10 * 2**20},
+    ...     factory=lambda size: QueryView(data=read(size)),
+    ...     style="button",
+    ...     with_cancel=True,
+    ... )
+    """
+
+    kind: ClassVar[str] = "choice"
+    choices: Mapping[str, Any]
+    factory: Callable[[Any], View]
+    style: Literal["radio", "dropdown", "button"] = "radio"
+    default: str | None = None
+    with_cancel: bool = False
+
+    def __post_init__(self) -> None:
+        if not self.choices:
+            raise ValueError("a choice needs at least one label")
+        if self.style not in ("radio", "dropdown", "button"):
+            raise ValueError(
+                f'style must be "radio", "dropdown" or "button", not {self.style!r}'
+            )
+        if self.default is not None and self.default not in self.choices:
+            raise ValueError(f"default {self.default!r} is not one of the labels")
+
+    def _make(self, value: Any) -> View:
+        if value not in self.choices:
+            raise ValueError(f"{value!r} is not one of the choices")
+        return self.factory(self.choices[value])
+
+
+@dataclass(frozen=True, kw_only=True)
+class ViewWithInput(ViewWithPrompt):
+    """A text to enter: the view is made of what the user enters.
+
+    Parameters
+    ----------
+    message : str
+        What to enter, e.g. "The workbook's password".
+    factory : callable
+        Makes the view, as ``factory(text)``.
+    value : str, default ""
+        The text at first.
+    placeholder : str, default ""
+        Shown in the empty field.
+    button : str, default "View"
+    """
+
+    kind: ClassVar[str] = "input"
+    factory: Callable[[str], View]
+    value: str = ""
+    placeholder: str = ""
+
+    def _make(self, value: Any) -> View:
+        return self.factory("" if value is None else str(value))

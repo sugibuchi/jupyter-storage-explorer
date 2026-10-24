@@ -267,7 +267,6 @@ class _PandasByUrl(FormatSupport):
 class CsvByPandas(_PandasByUrl):
     format = Csv
     options_model = CsvByPandasOptions
-    capabilities = ("view", "recipe")
 
     def view(
         self,
@@ -304,7 +303,6 @@ class CsvByPandas(_PandasByUrl):
 class JsonLinesByPandas(_PandasByUrl):
     format = JsonLines
     options_model = JsonLinesByPandasOptions
-    capabilities = ("view", "recipe")
 
     def view(
         self,
@@ -338,7 +336,6 @@ class JsonByPandas(_PandasByUrl):
 
     format = Json
     options_model = JsonByPandasOptions
-    capabilities = ("recipe",)
 
     data_frame_template = cleandoc("""
         import pandas as pd
@@ -371,7 +368,6 @@ class ExcelByPandas(_PandasByUrl):
     format = Excel
     options_model = ExcelByPandasOptions
     additional_requirements = (Openpyxl(),)  # pandas' Excel engine
-    capabilities = ("view", "recipe")
 
     def view(
         self,
@@ -430,7 +426,6 @@ class ParquetByPandas(_PandasByUrl):
     format = Parquet
     options_model = ParquetByPandasOptions
     additional_requirements = (PyArrow(),)  # pandas' Parquet engine
-    capabilities = ("view", "recipe")
 
     def view(
         self,

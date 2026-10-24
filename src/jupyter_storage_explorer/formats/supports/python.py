@@ -36,6 +36,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from jupyter_storage_explorer.formats.base import ItemContext
+    from jupyter_storage_explorer.formats.support import Task
     from jupyter_storage_explorer.formats.view import View, ViewLimits
 
 
@@ -120,7 +121,6 @@ class TextByPython(OpenedByFsspec):
     extension; their text read with fsspec."""
 
     format = Text
-    capabilities = ("view", "recipe")
 
     def view(
         self, fmt: Text, ctx: ItemContext, options: SupportOptions, limits: ViewLimits
@@ -151,7 +151,6 @@ class MarkdownByPython(FormatSupport):
     Markdown is a Text format."""
 
     format = Markdown
-    capabilities = ("view",)
 
     def view(
         self,
@@ -170,7 +169,6 @@ class JsonByPython(OpenedByFsspec):
     loaded with fsspec and Python's json."""
 
     format = Json
-    capabilities = ("view", "recipe")
 
     def view(
         self, fmt: Json, ctx: ItemContext, options: SupportOptions, limits: ViewLimits
@@ -208,7 +206,6 @@ class ImageByPython(FormatSupport):
     those too large to send through the kernel."""
 
     format = Image
-    capabilities = ("view",)
 
     def view(
         self, fmt: Image, ctx: ItemContext, options: SupportOptions, limits: ViewLimits
@@ -233,7 +230,6 @@ class ImageByPillow(OpenedByFsspec):
 
     format = Image
     additional_requirements = (Fsspec(), Pillow())
-    capabilities = ("recipe",)
 
     image_template = cleandoc("""
         import fsspec
@@ -245,11 +241,13 @@ class ImageByPillow(OpenedByFsspec):
         img
         """)
 
+    def supports(self, fmt: Image, ctx: ItemContext, task: Task) -> bool:
+        svg = fmt.mime_type(ctx.path) == "image/svg+xml"
+        return super().supports(fmt, ctx, task) and not svg
+
     def recipe(
         self, fmt: Image, ctx: ItemContext, options: FsspecOptions
     ) -> dict[str, str]:
-        if fmt.mime_type(ctx.path) == "image/svg+xml":
-            raise self.NotSupported
         return {
             OPEN_IMAGE: self.image_template.format(
                 url=repr(ctx.library_url), kwargs=options.code_kwargs()

@@ -144,6 +144,45 @@
   border: 1px solid var(--jse-border);
 }
 
+/* Prompts before a view (renderPrompt), and notices instead of one. */
+.jse-prompt,
+.jse-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 0;
+}
+
+.jse-notice {
+  color: var(--jse-fg-muted);
+}
+
+.jse-prompt-message {
+  overflow-wrap: anywhere;
+}
+
+.jse-prompt-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.jse-prompt-select,
+.jse-prompt-input {
+  max-width: 360px;
+}
+
+.jse-prompt-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.jse-prompt-buttons .jse-btn {
+  padding: 4px 12px;
+  background: var(--jp-layout-color2, #eee);
+}
+
 .jse-recipe {
   margin-bottom: 10px;
 }

@@ -84,9 +84,10 @@ function createItemMenu(x) {
     } else if (!msg.recipes.length) {
       items = [{ label: "No code for this item", disabled: true }];
     } else {
-      // Each recipe, with the engine it loads with: "Load as DataFrame (Polars)".
+      // Each recipe, with the engine it loads with: "Load as DataFrame (Polars)";
+      // an engine whose code failed shows why.
       items = msg.recipes.map((recipe) => {
-        const title = `${recipe.title} (${recipe.engine})`;
+        const title = `${recipe.error ? "Cannot make code" : recipe.title} (${recipe.engine})`;
         return { label: title, action: () => x.modal.show(title, recipeBlocks(recipe)) };
       });
     }

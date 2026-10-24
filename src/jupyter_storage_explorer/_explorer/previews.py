@@ -27,6 +27,8 @@ from jupyter_storage_explorer.formats import (
     TableSetView,
     TableView,
     View,
+    ViewWithChoice,
+    ViewWithPrompt,
 )
 from jupyter_storage_explorer.formats.base import matching_formats
 
@@ -45,6 +47,15 @@ log = logging.getLogger(__name__)
 # short enough that files changed elsewhere show on the next click.
 _DETECTED_SECONDS = 5.0
 
+# What the preview panel or a view tab shows instead of a view: a notice
+# ("again": with a button previewing the item again) or an error.
+_LOADING = {"kind": "notice", "text": "Loading…"}
+
+
+def _not_viewed(verb: str) -> dict[str, Any]:
+    """What shows that the user cancelled a prompt."""
+    return {"kind": "notice", "text": f"Not {verb}", "again": verb == "previewed"}
+
 
 class _Detected(NamedTuple):
     """An item of the storage shown with a location, as formats and supports
@@ -55,11 +66,71 @@ class _Detected(NamedTuple):
     formats: list[DataFormat]
 
 
+class _Viewer:
+    """Views an item as a format with an engine, each time it is called: the
+    first time with the context it was detected with; later (the data
+    browser's reload) with one read again, so the view is of the item as it
+    is now. The answers given to its prompts (``ViewWithPrompt``) are kept,
+    and given again to those of later views, so a reload asks nothing."""
+
+    def __init__(self, view: Callable[[bool], View]) -> None:
+        # The support's view, of the context read again if True.
+        self._view = view
+        self._viewed = False
+        self.answers: list[Any] = []
+
+    def __call__(self) -> View:
+        view = self._view(self._viewed)
+        self._viewed = True
+        for value in self.answers:
+            if not isinstance(view, ViewWithPrompt):
+                break
+            view = _answered(view, value)
+        return view
+
+    def answer(self, prompt: ViewWithPrompt, value: Any) -> View:
+        """The view of the user's answer to ``prompt``, one of this viewer's,
+        kept for later views."""
+        view = _answered(prompt, value)
+        self.answers.append(value)
+        return view
+
+
+def _answered(prompt: ViewWithPrompt, value: Any) -> View:
+    """The view ``prompt`` makes of ``value``, closing the prompt with it: the
+    prompt's ``on_close`` may release what the view reads. The prompt is
+    closed at once if that fails."""
+    try:
+        view = prompt.answer(value)
+    except Exception:
+        prompt.close()
+        raise
+    view.on_close(lambda _view: prompt.close())
+    return view
+
+
+class _Asking(NamedTuple):
+    """A prompt shown, waiting for the user's answer: the viewer and item it
+    came from, which view its answer, and its id in what the frontend
+    shows, so that an answer to a prompt no longer shown is ignored."""
+
+    view: ViewWithPrompt
+    viewer: _Viewer
+    item: _Detected
+    id: int
+
+    def close(self) -> None:
+        self.view.close()
+
+    def section(self) -> dict[str, Any]:
+        return {**section(self.view), "prompt": self.id}
+
+
 class _Loaded(NamedTuple):
     """What a preview's load read (see ``PreviewsMixin._open_preview``): what
     shows it (None if nothing does) and the ``_preview`` to show."""
 
-    shown: View | DataQuery | TableSet | None
+    shown: View | DataQuery | TableSet | _Asking | None
     preview: dict[str, Any]
 
 
@@ -80,16 +151,20 @@ atexit.register(_close_views_at_exit)
 
 def section(view: View) -> dict[str, Any]:
     """A view other than a ``QueryView`` as JSON for the frontend (a section
-    of the preview panel or a view tab); media bytes are base64-encoded."""
+    of the preview panel or a view tab); media bytes are base64-encoded. A
+    prompt's function stays in the kernel, and a choice's values too: the
+    frontend answers with a label."""
     data = {
         f.name: getattr(view, f.name)
         for f in dataclasses.fields(view)
-        if not f.name.startswith("_")
+        if not f.name.startswith("_") and f.name != "factory"
     }
     if isinstance(view, MediaView) and view.data is not None:
         data["data"] = base64.b64encode(view.data).decode("ascii")
     if isinstance(view, TableView):
         data["note"] = "; ".join(filter(None, [_rows_note(view), view.note]))
+    if isinstance(view, ViewWithChoice):
+        data["choices"] = list(view.choices)
     return {"kind": view.kind, **jsonable(data)}
 
 
@@ -187,29 +262,38 @@ class PreviewsMixin:
     def _view_engine(
         self,
         fmt: DataFormat,
-        name: str,
+        ctx: ItemContext,
         engine: str | EllipsisType | None,
         chosen: str | None,
     ) -> str | None:
-        """The engine viewing an item named ``name`` as ``fmt``: ``engine``
-        (a key; None for the built-in views) if given, "Preview as"; by
-        default (...), the one chosen (``chosen``, ``_engine`` when the view
-        was asked for), or the built-in views for formats it does not handle.
+        """The engine viewing the item of ``ctx`` as ``fmt``: ``engine`` (a
+        key; None for the built-in views) if given, "Preview as"; by default
+        (...), the one chosen (``chosen``, ``_engine`` when the view was asked
+        for), or the built-in views for formats it does not handle.
         ValueError if that cannot view it. Safe in a worker thread."""
+        name = ctx.name
+        viewers = self._supports.viewers(fmt, ctx)
         if engine is not ...:
-            if engine not in self._supports.viewers(fmt):
+            if engine not in viewers:
                 with_ = self._engine_label(engine) or "the built-in views"
                 raise ValueError(f"{name} cannot be viewed as {fmt.label} with {with_}")
             return engine
         try:
-            return self._supports.engine_for(fmt, chosen)
+            return self._supports.engine_for(fmt, ctx, chosen)
         except LookupError:
-            if not self._supports.viewers(fmt):
+            if not self._supports.installed(fmt, "view"):
                 # Nothing installed views it: the engines come with plugins.
                 raise ValueError(
                     f"{name} cannot be viewed as {fmt.label}: no library viewing "
                     f"it is installed, e.g. pip install "
                     f'"jupyter-storage-explorer[polars]"'
+                ) from None
+            if not viewers:
+                # The supports installed refuse it, e.g. on a storage their
+                # libraries cannot read.
+                raise ValueError(
+                    f"{name} cannot be viewed as {fmt.label} where it is stored "
+                    f"with the libraries installed"
                 ) from None
             raise ValueError(
                 f"{name} cannot be viewed as {fmt.label} with "
@@ -217,33 +301,32 @@ class PreviewsMixin:
                 f'"Preview as"'
             ) from None
 
-    def _viewable(self, fmt: DataFormat) -> bool:
-        """Whether ``fmt`` can be viewed with the engine chosen (or the
-        built-in views): the Preview button's, and the menu's."""
+    def _viewable(self, fmt: DataFormat, ctx: ItemContext) -> bool:
+        """Whether the item of ``ctx`` can be viewed as ``fmt`` with the
+        engine chosen (or the built-in views): the Preview button's, and the
+        menu's. On the main thread: a support failing to tell is logged, and
+        offers nothing."""
         try:
-            self._supports.engine_for(fmt, self._engine or None)
+            self._supports.engine_for(fmt, ctx, self._engine or None)
         except LookupError:
+            return False
+        except Exception:
+            log.exception("Telling whether %s can be viewed failed", ctx.name)
             return False
         return True
 
-    def _viewer(
-        self, fmt: DataFormat, item: _Detected, engine: str | None
-    ) -> Callable[[], View]:
+    def _viewer(self, fmt: DataFormat, item: _Detected, engine: str | None) -> _Viewer:
         """Views ``item`` as ``fmt`` with ``engine`` (a key; None for the
         built-in views; see ``_view_engine``), each time it is called: on
-        the storage it is on (its context's), also after switching storages.
-        The first time with the context ``item`` was detected with; later (the
-        data browser's reload) with one read again (``_refreshed``), so the
-        view is of the item as it is now."""
+        the storage it is on (its context's), also after switching storages;
+        a context read again (``_refreshed``) after the first time."""
         limits = self._view_limits
-        viewed = [False]
 
-        def view() -> View:
-            ctx = self._refreshed(fmt, item.ctx) if viewed[0] else item.ctx
-            viewed[0] = True
+        def view(again: bool) -> View:
+            ctx = self._refreshed(fmt, item.ctx) if again else item.ctx
             return self._supports.view(fmt, ctx, limits, engine)
 
-        return view
+        return _Viewer(view)
 
     def _refreshed(self, fmt: DataFormat, ctx: ItemContext) -> ItemContext:
         """``ctx`` with the item's info and listing read again, on its own
@@ -312,6 +395,13 @@ class PreviewsMixin:
                 chosen=chosen,
             )
 
+        self._submit_preview(path, work)
+
+    def _submit_preview(self, path: str, work: Callable[[], _Loaded]) -> None:
+        """Run a preview's reads, ``work``, as a load, then show what it read
+        in the panel: a preview of ``path``, or the view of a prompt's
+        answer."""
+
         def done(loaded: _Loaded) -> None:
             # The previous preview's, closed once the new one is open.
             self._release_preview()
@@ -330,6 +420,48 @@ class PreviewsMixin:
 
         self._preview_load = self._loader.submit(work, done, discard)
 
+    def _preview_answer(self, content: dict[str, Any]) -> None:
+        """The user answered the prompt the preview panel shows (see
+        ``ViewWithPrompt``): "value", the answer, or "cancel". The view of
+        the answer is read as a preview is; cancelling shows nothing. Ignored
+        if the panel no longer shows that prompt ("path", "prompt")."""
+        asking, preview = self._preview_view, self._preview
+        if (
+            not isinstance(asking, _Asking)
+            or preview.get("loading")
+            or content.get("path") != preview.get("path")
+            or content.get("prompt") != asking.id
+        ):
+            return
+        self._preview_view = None
+        if content.get("cancel"):
+            asking.close()
+            self._preview = {**preview, "sections": [_not_viewed("previewed")]}
+            return
+        base = {**preview, "sections": [], "error": ""}
+        self._preview = {**base, "loading": True}
+        value = content.get("value")
+        self._submit_preview(
+            preview["path"], lambda: self._read_answer(dict(base), asking, value)
+        )
+
+    def _read_answer(
+        self, preview: dict[str, Any], asking: _Asking, value: Any
+    ) -> _Loaded:
+        """In a worker thread, as ``_read_preview``: fill ``preview`` with the
+        view of ``value``, the answer to ``asking``."""
+        shown: View | DataQuery | TableSet | _Asking | None = None
+        try:
+            view = asking.viewer.answer(asking.view, value)
+            shown = view
+            shown = self._show(view, asking.viewer, asking.item, preview)
+        except Exception as exc:
+            preview["error"] = error_text(exc)
+            if shown is not None:
+                shown.close()
+            shown = None
+        return _Loaded(shown, preview)
+
     def _read_preview(
         self,
         preview: dict[str, Any],
@@ -345,8 +477,9 @@ class PreviewsMixin:
         viewed with ``chosen`` the engine chosen. Its errors say it cannot be
         ``verb``."""
         path = preview["path"]
-        # What shows it: the view, else its query or tables, which own it.
-        shown: View | DataQuery | TableSet | None = None
+        # What shows it: the view, else its query or tables, which own it, or
+        # the prompt asking for it.
+        shown: View | DataQuery | TableSet | _Asking | None = None
         try:
             item = detection.result()
             if item is None:
@@ -359,7 +492,7 @@ class PreviewsMixin:
             if formats:
                 fmt = formats[0]
                 preview["format"] = fmt.name
-                key = self._view_engine(fmt, item.ctx.name, engine, chosen)
+                key = self._view_engine(fmt, item.ctx, engine, chosen)
                 preview["engine"] = key
                 preview["engine_label"] = self._engine_label(key)
                 viewer = self._viewer(fmt, item, key)
@@ -376,15 +509,20 @@ class PreviewsMixin:
     def _show(
         self,
         view: View,
-        viewer: Callable[[], View],
+        viewer: _Viewer,
         item: _Detected,
         preview: dict[str, Any],
-    ) -> View | DataQuery | TableSet:
+    ) -> View | DataQuery | TableSet | _Asking:
         """Set what ``preview`` shows of ``view``, which ``viewer`` gave of
         ``item``: "query" (the data browser's) for a ``QueryView``,
-        "table_set" for a ``TableSetView``, else "sections". Returns what
-        then owns the view: its query, its tables, or the view. The view is
-        closed if they cannot be made."""
+        "table_set" for a ``TableSetView``, else "sections", a prompt's
+        with its id. Returns what then owns the view: its query, its tables,
+        the prompt waiting for its answer, or the view. The view is closed if
+        they cannot be made."""
+        if isinstance(view, ViewWithPrompt):
+            asking = _Asking(view, viewer, item, next(self._prompt_ids))
+            preview["sections"] = [asking.section()]
+            return asking
         try:
             if isinstance(view, QueryView):
                 data = self._new_query(view, viewer, item)
@@ -606,6 +744,12 @@ class PreviewsMixin:
         (``_loader``), as a preview's; then {"type": "view_tab", "load_id"}
         is sent, with the widget's "model_id" or an "error". Closing the tab
         before cancels the load: what it read is closed.
+
+        A prompt (``ViewWithPrompt``) is shown in a ``ViewTab`` first, sent
+        as the view is, with "asking": the tab keeps waiting. The view of the
+        answer is read as the first, then sent for the same "load_id": the
+        tab shows its widget instead, and lets the prompt's go. The prompt's
+        widget shows the errors after an answer, and that it was cancelled.
         """
         path = content.get("path")
         location = self._location_of(path)
@@ -637,12 +781,32 @@ class PreviewsMixin:
                 verb="viewed",
             )
 
+        self._submit_view_tab(load_id, title, work)
+        return {"load_id": load_id, "title": title, "url": location.url}
+
+    def _submit_view_tab(
+        self,
+        load_id: str,
+        title: str,
+        work: Callable[[], _Loaded],
+        asked: ViewTab | None = None,
+    ) -> None:
+        """Run a view tab's reads, ``work``, as a load, then send what it
+        read (see ``_view_tab_request``). ``asked``: the widget of the prompt
+        whose answer is read, which shows the errors and a next prompt."""
+
         def done(loaded: _Loaded) -> None:
             self._view_tab_loads.pop(load_id, None)
+            if isinstance(loaded.shown, _Asking):
+                self._view_tab_ask(load_id, title, loaded, asked)
+                return
             try:
                 widget = self._view_tab_widget(loaded, title)
             except Exception as exc:
                 discard(loaded, popped=True)
+                if asked is not None:
+                    asked._show({"kind": "error", "text": error_text(exc)})
+                    return
                 self.send(
                     {"type": "view_tab", "load_id": load_id, "error": error_text(exc)}
                 )
@@ -661,7 +825,77 @@ class PreviewsMixin:
         load = self._loader.submit(work, done, discard)
         if not load.ended:  # without a loop, it has ended already
             self._view_tab_loads[load_id] = load
-        return {"load_id": load_id, "title": title, "url": location.url}
+
+    def _view_tab_ask(
+        self, load_id: str, title: str, loaded: _Loaded, asked: ViewTab | None
+    ) -> None:
+        """Show the prompt a view tab's load read, in the widget of the
+        previous prompt, ``asked``, else in a new one sent to the tab."""
+        asking = loaded.shown
+        assert isinstance(asking, _Asking)
+        widget = (
+            asked
+            if asked is not None
+            else ViewTab(_LOADING, title=title, label=self._tab_label(loaded.preview))
+        )
+
+        def answered(content: dict[str, Any]) -> None:
+            self._view_tab_answer(
+                load_id,
+                title,
+                loaded.preview,
+                asking=asking,
+                widget=widget,
+                content=content,
+            )
+
+        widget._show(asking.section(), on_close=asking.close, on_answer=answered)
+        if asked is not None:
+            return
+        self._view_tabs[widget.model_id] = widget
+        self.send(
+            {
+                "type": "view_tab",
+                "load_id": load_id,
+                "model_id": widget.model_id,
+                "asking": True,
+            }
+        )
+
+    def _view_tab_answer(
+        self,
+        load_id: str,
+        title: str,
+        preview: dict[str, Any],
+        *,
+        asking: _Asking,
+        widget: ViewTab,
+        content: dict[str, Any],
+    ) -> None:
+        """The user answered the prompt of a view tab, which ``widget``
+        shows: read the view of the answer for the tab (see
+        ``_view_tab_request``). Ignored if the widget no longer shows it."""
+        if content.get("prompt") != asking.id or widget.view.get("prompt") != asking.id:
+            return
+        if content.get("cancel"):
+            widget._show(_not_viewed("viewed"))
+            asking.close()
+            return
+        # The load owns the prompt now: the widget no longer closes it.
+        widget._show(_LOADING)
+        base = {**preview, "sections": [], "error": ""}
+        value = content.get("value")
+        self._submit_view_tab(
+            load_id,
+            title,
+            lambda: self._read_answer(dict(base), asking, value),
+            asked=widget,
+        )
+
+    def _tab_label(self, preview: dict[str, Any]) -> str:
+        """A view tab's label: the format's, and the engine's."""
+        fmt = next(f for f in self._formats if f.name == preview["format"])
+        return " · ".join(filter(None, [fmt.label, preview["engine_label"]]))
 
     def _view_tab_widget(
         self, loaded: _Loaded, title: str
@@ -673,8 +907,7 @@ class PreviewsMixin:
             raise ValueError(preview["error"])
         if shown is None:
             raise ValueError(f"{title} cannot be viewed in any format")
-        fmt = next(f for f in self._formats if f.name == preview["format"])
-        label = " · ".join(filter(None, [fmt.label, preview["engine_label"]]))
+        label = self._tab_label(preview)
         if isinstance(shown, DataQuery):
             return DataExplorer._of_query(
                 shown, self._states, shown.key, title=title, label=label, height="fill"
@@ -741,43 +974,54 @@ class PreviewsMixin:
         detection (``_detection``); the reply is made on the main thread."""
         detection = self._detection(content["path"], self._fs)
         engines = self._code_engines
+        chosen = self._engine or None
 
-        def work() -> tuple[list[DataFormat], list[Recipe]] | dict[str, Any]:
+        def work() -> dict[str, Any]:
             try:
                 item = detection.result()
-                formats = item.formats if item is not None else []
+                if item is None:
+                    return self._menu_info([], [], None, chosen)
+                formats = item.formats
                 recipes = (
                     self._supports.recipes(formats[0], item.ctx)
                     if formats and engines != frozenset()
                     else []
                 )
+                # Only the engines code_snippet names, if it names some.
+                if engines is not None:
+                    recipes = [r for r in recipes if _recipe_engine(r) in engines]
+                return self._menu_info(formats, recipes, item.ctx, chosen)
             except Exception as exc:
                 return {"error": error_text(exc)}
-            # Only the engines code_snippet names, if it names some.
-            if engines is not None:
-                recipes = [r for r in recipes if _recipe_engine(r) in engines]
-            return formats, recipes
 
-        def reply(read: tuple[list[DataFormat], list[Recipe]] | dict[str, Any]) -> None:
-            answer = read if isinstance(read, dict) else self._menu_info(*read)
+        def reply(answer: dict[str, Any]) -> None:
             self.send({"type": "reply", "rid": content["rid"], **answer})
 
         self._loader.submit(work, reply, reply)
 
     def _menu_info(
-        self, formats: list[DataFormat], recipes: list[Recipe]
+        self,
+        formats: list[DataFormat],
+        recipes: list[Recipe],
+        ctx: ItemContext | None,
+        chosen: str | None,
     ) -> dict[str, Any]:
-        """The reply to "menu_info" for an item matching ``formats``, best
-        first, with ``recipes`` the best format's: "formats", the names of
-        those matching; "view", the best format and the engine viewing it
-        ("Preview", "View in a new tab"; None if the engine chosen cannot);
-        "views", each format and engine that can ("Preview as", "View in new
-        tab as"); "recipes", the load code ("Python code"), with their
-        engine's label."""
+        """The reply to "menu_info" for the item of ``ctx`` matching
+        ``formats``, best first, with ``recipes`` the best format's, and
+        ``chosen`` the engine chosen: "formats", the names of those matching;
+        "view", the best format and the engine viewing it ("Preview", "View
+        in a new tab"; None if the engine chosen cannot); "views", each
+        format and engine that can ("Preview as", "View in new tab as");
+        "recipes", the load code ("Python code"), with their engine's label,
+        or the error of a support's. Safe in a worker thread."""
         view = None
-        if formats and self._viewable(formats[0]):
-            key = self._supports.engine_for(formats[0], self._engine or None)
-            view = {"format": formats[0].name, "engine": key}
+        if formats and ctx is not None:
+            try:
+                key = self._supports.engine_for(formats[0], ctx, chosen)
+            except LookupError:
+                pass
+            else:
+                view = {"format": formats[0].name, "engine": key}
         return {
             "formats": [f.name for f in formats],
             "view": view,
@@ -793,7 +1037,8 @@ class PreviewsMixin:
                     ),
                 }
                 for f in formats
-                for key in self._supports.viewers(f)
+                if ctx is not None
+                for key in self._supports.viewers(f, ctx)
             ],
             # The frontend gets the packages' names, listed under the code.
             "recipes": [
@@ -802,6 +1047,7 @@ class PreviewsMixin:
                     "engine": r.engine.label if r.engine is not None else "Python",
                     "packages": [p.package for p in r.requirements],
                     "code": r.code,
+                    **({"error": r.error} if r.error else {}),
                 }
                 for r in recipes
             ],
