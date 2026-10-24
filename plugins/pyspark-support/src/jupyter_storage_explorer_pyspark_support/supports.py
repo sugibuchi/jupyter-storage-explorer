@@ -11,9 +11,12 @@ from dataclasses import dataclass, field, fields
 from inspect import cleandoc
 from typing import TYPE_CHECKING, Any
 
+import narwhals as nw
+
 from jupyter_storage_explorer.formats.delta import DeltaLake
 from jupyter_storage_explorer.formats.engine import Engine
 from jupyter_storage_explorer.formats.package import PythonPackage
+from jupyter_storage_explorer.formats.packages import PyArrow
 from jupyter_storage_explorer.formats.parquet import Parquet
 from jupyter_storage_explorer.formats.support import (
     FormatSupport,
@@ -106,12 +109,44 @@ def _url(ctx: ItemContext) -> str:
     return spark_url(ctx.location.url)
 
 
+def spark_rows(lf: Any, offset: int, length: int) -> Any:
+    """Rows ``offset`` to ``offset + length`` of a Spark query, for the data
+    browser (``QueryView.fetch``): skipped by Spark itself with
+    ``DataFrame.offset`` (Spark 3.4 and later, Spark Connect too), rather
+    than all rows up to ``offset + length`` read and the first dropped, the
+    explorer's default. None, so the default reads them, with a Spark
+    without it.
+
+    Pages are separate Spark jobs: they line up only if Spark gives the
+    result in the same order each time, e.g. sorted by columns telling all
+    rows apart.
+
+    Parameters
+    ----------
+    lf : narwhals.LazyFrame
+        The query, on a Spark DataFrame.
+    offset, length : int
+        The first row, and the most rows.
+
+    Returns
+    -------
+    narwhals.DataFrame or None
+    """
+    native = lf.to_native()
+    # On the class: a DataFrame's attributes are also its columns.
+    if offset and not callable(getattr(type(native), "offset", None)):
+        return None
+    page = (native.offset(offset) if offset else native).limit(length)
+    return nw.from_native(page).collect()
+
+
 class PySparkEngine(Engine):
     """Spark's Python API, with pyspark."""
 
     key = "pyspark"
     label = "PySpark"
-    requirements = (PySpark(),)
+    # PyArrow: the data browser reads Spark's rows into it, through narwhals.
+    requirements = (PySpark(), PyArrow())
 
 
 # The fields of PySparkOptions that are not one reader option each.
@@ -436,7 +471,8 @@ class CsvByPySpark(_BySpark):
             text, _ = ctx.head_text(limits.max_bytes)
             defaults["sep"] = fmt.separator(ctx.name, text)
         spark = self.session(ctx, options)
-        return QueryView(data=options.reader(spark, defaults).csv(_url(ctx)))
+        data = options.reader(spark, defaults).csv(_url(ctx))
+        return QueryView(data=data, fetch=spark_rows)
 
     data_frame_template = cleandoc("""
         {session_import}
@@ -471,7 +507,8 @@ class JsonLinesByPySpark(_BySpark):
         limits: ViewLimits,
     ) -> View:
         spark = self.session(ctx, options)
-        return QueryView(data=options.reader(spark).json(_url(ctx)))
+        data = options.reader(spark).json(_url(ctx))
+        return QueryView(data=data, fetch=spark_rows)
 
     # Spark reads JSON Lines (one record per line) by default.
     data_frame_template = cleandoc("""
@@ -506,7 +543,8 @@ class ParquetByPySpark(_BySpark):
     ) -> View:
         # A file or a folder of them; Spark finds partitions itself.
         spark = self.session(ctx, options)
-        return QueryView(data=options.reader(spark).parquet(_url(ctx)))
+        data = options.reader(spark).parquet(_url(ctx))
+        return QueryView(data=data, fetch=spark_rows)
 
     # A file or a folder of them; Spark finds partitions itself.
     data_frame_template = cleandoc("""
@@ -543,7 +581,7 @@ class DeltaLakeByPySpark(_BySpark):
     ) -> View:
         spark = self.session(ctx, options)
         data = options.reader(spark).format("delta").load(_url(ctx))
-        return QueryView(data=data)
+        return QueryView(data=data, fetch=spark_rows)
 
     data_frame_template = cleandoc("""
         {session_import}

@@ -144,11 +144,30 @@ class QueryView(View):
         first rows (e.g. ``ViewLimits.max_memory_rows`` of them, read with
         pandas), lazy data e.g. a file's first bytes. The data browser says
         so.
+    fetch : callable or None, default None
+        How the data browser reads rows of lazy ``data`` from its library,
+        when the library has a cheaper way than the explorer's default: as
+        ``fetch(lf, offset, length)``, rows ``offset`` to ``offset + length``
+        of ``lf``, a narwhals LazyFrame of the data with the browser's
+        filters, sort and hidden columns applied, as a narwhals DataFrame;
+        or None to leave them to the default. Called for the first rows when
+        the data opens and for each page of live queries, in worker threads.
+        The explorer's ``fetch_rows``, the user's, comes first.
+
+    Examples
+    --------
+    Spark (3.4 and later) skips rows itself:
+
+    >>> def spark_rows(lf, offset, length):
+    ...     page = lf.to_native().offset(offset).limit(length)
+    ...     return nw.from_native(page).collect()
+    >>> QueryView(data=spark.read.parquet(url), fetch=spark_rows)
     """
 
     kind: ClassVar[str] = "query"
     data: Any
     more: bool = False
+    fetch: Callable[[Any, int, int], Any] | None = None
 
 
 @dataclass(frozen=True, kw_only=True)

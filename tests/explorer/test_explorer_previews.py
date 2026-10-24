@@ -7,6 +7,8 @@ import dataclasses
 import itertools
 import threading
 
+import narwhals as nw
+import polars as pl
 import pytest
 from all_supports import installed_only
 from explorers import entries, make, path_of
@@ -23,6 +25,7 @@ from jupyter_storage_explorer.data_explorer import DataExplorer
 from jupyter_storage_explorer.formats import (
     FormatSupport,
     PythonPackage,
+    QueryView,
     TableView,
     Text,
     TextView,
@@ -355,7 +358,11 @@ class TestQueriesInTheBackground:
 
         monkeypatch.setattr(SupportChain, "view", closing)
 
+        holding = []  # the page only, not the first rows read when opening
+
         def held(lf, offset, length):
+            if not holding:
+                return None
             assert release.wait(5)
 
         async def main():
@@ -365,6 +372,7 @@ class TestQueriesInTheBackground:
             path = path_of(explorer, "data.parquet")
             explorer.message({"type": "preview", "path": path})
             await until(lambda: not explorer._preview.get("loading"))
+            holding.append(True)
             explorer.sent = []
             request = {"type": "query_rows", "rid": 5, "path": path, "window": 2}
             explorer.message(request)
@@ -713,3 +721,37 @@ def test_vendor(mem_explorer):
         "unknown library"
         in mem_explorer.request({"type": "vendor", "rid": 1, "name": "../x"})["error"]
     )
+
+
+def test_the_views_own_reads(memfs):
+    # A support's QueryView(fetch=...): the data browser reads its rows so,
+    # when opening and for each live page, after the explorer's fetch_rows.
+    reads = []
+
+    def fetch(lf, offset, length):
+        reads.append((offset, length))
+        return lf.to_native().slice(offset, length).collect().pipe(nw.from_native)
+
+    class Fetching(FormatSupport):
+        format = Text
+
+        def view(self, fmt, ctx, options, limits):
+            data = pl.LazyFrame({"n": list(range(30))})
+            return QueryView(data=data, fetch=fetch)
+
+    memfs.pipe_file("/data/a.txt", b"a")
+    explorer = make(
+        "/data", fs=memfs, supports=[Fetching], view_limits=ViewLimits(max_live_rows=10)
+    )
+    explorer.message({"type": "preview", "path": "/data/a.txt"})
+    reply = explorer.request(
+        {
+            "type": "query_rows",
+            "rid": 1,
+            "path": "/data/a.txt",
+            "offset": 20,
+            "window": 2,
+        }
+    )
+    assert reply["rows"] == [[20], [21]]
+    assert reads == [(0, 11), (20, 3)]

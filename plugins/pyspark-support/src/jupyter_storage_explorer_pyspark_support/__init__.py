@@ -19,6 +19,7 @@ from jupyter_storage_explorer_pyspark_support.supports import (
     PySpark,
     PySparkEngine,
     PySparkOptions,
+    spark_rows,
     spark_session,
     spark_url,
 )
@@ -51,6 +52,7 @@ __all__ = [
     "PySparkEngine",
     "PySparkOptions",
     "PySparkSupport",
+    "spark_rows",
     "spark_session",
     "spark_url",
 ]

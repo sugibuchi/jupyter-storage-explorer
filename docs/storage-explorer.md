@@ -293,8 +293,10 @@ StorageExplorer("s3://my-bucket/lake", engine_preference=["pandas", "polars"])
 
 ### Reading pages
 
-`fetch_rows=` customizes how live queries read each page of rows. Tables can be read by different libraries, so check
-the library of the data, handle those you want to, and return `None` for the others to read them the default way:
+`fetch_rows=` customizes how the data browser reads rows of lazy data: the first rows when it opens, and each page of
+live queries. Tables can be read by different libraries, so check the library of the data, handle those you want to,
+and return `None` for the others. Those are read the way their engine's plugin chose, e.g. Spark's skipping rows with
+`offset`, else the default way:
 
 ```python
 import narwhals as nw

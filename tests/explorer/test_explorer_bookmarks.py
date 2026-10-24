@@ -211,4 +211,4 @@ class TestStatesFile:
             {"type": "query_rows", "rid": 1, "path": path, "offset": 5998, "window": 5}
         )
         assert reply["rows"] == [[5998], [5999]]
-        assert fetched == [(5998, 6)]
+        assert fetched == [(0, 5001), (5998, 6)]  # opening, then the page

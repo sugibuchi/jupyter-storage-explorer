@@ -251,7 +251,7 @@ and opens the data browser on the one chosen. The others show what was read:
 
 | View                               | Fields                                                                 | Shown as                          |
 |------------------------------------|------------------------------------------------------------------------|-----------------------------------|
-| `QueryView(data=..., more=False)`  | Any dataframe narwhals supports, best lazy; `more`: only the item's first part (rows or bytes) | The data browser                  |
+| `QueryView(data=..., more=False, fetch=None)`  | Any dataframe narwhals supports, best lazy; `more`: only the item's first part (rows or bytes); `fetch`: how the browser reads rows of the data, see below | The data browser                  |
 | `TableSetView(nodes, loader, selector="tree")` | `nodes`: tables (`Leaf(label, id)`), maybe in groups (`Node(label, children)`); `loader(id)`: a table's dataframe, as `QueryView`'s `data` | The tables in a tree (`"tree"`) or on tabs (`"tab"`, tables only), and the data browser on the one chosen |
 | `TableView(columns, rows, ...)`    | `dtypes`, `more`, `total`, `unit` ("rows", "records")                  | A table, with a note of the counts |
 | `TextView(text, language=None)`    | `html`: highlighted text (optional)                                    | Text                              |
@@ -261,6 +261,16 @@ and opens the data browser on the one chosen. The others show what was read:
 | `ViewWithConfirmation(message, factory)` | `factory()`: the view; `button` ("View")                         | The message, Cancel and `button`  |
 | `ViewWithChoice(message, choices, factory, style="radio")` | `choices`: labels to values; `factory(value)`: the view; `default`; `with_cancel` (False) | Radio buttons or a dropdown with `button`, or a button of each label (`"button"`); Cancel only `with_cancel` |
 | `ViewWithInput(message, factory)`  | `factory(text)`: the view; `value`, `placeholder`                      | A text field and `button`         |
+
+The data browser reads rows of lazy data with `fetch(lf, offset, length)`: the first rows when the data opens, and each
+page of live queries. `lf` is a narwhals LazyFrame of the data with the browser's filters, sort and hidden columns
+applied, and `fetch` returns rows `offset` to `offset + length` as a narwhals DataFrame, or None to pass them on:
+
+1. the explorer's `fetch_rows`, the user's;
+2. the view's `fetch`, a support's, for a library with a cheaper way than the default, e.g. pyspark-support's
+   `spark_rows`, which skips rows with Spark's `offset`;
+3. the core's default, which skips rows itself for polars and DuckDB, reads Dask partition by partition, and reads
+   all rows up to `offset + length` for others.
 
 Every view has `title` and `note`. `limits` (`ViewLimits`) says how much to read: `max_bytes`, `max_display_rows`,
 `max_whole_file_bytes`, `max_live_rows`, `max_memory_rows`. Lazy data (a polars LazyFrame, a DuckDB relation, a Spark
@@ -417,7 +427,8 @@ A library reads the item in one of five ways. Choose per storage in `supports`, 
   `fsspec.filesystem(protocol, **ctx.fs.storage_options) is ctx.fs`, and refuse the view if it is not, or raises (the
   `DirFileSystem` above does). That reads nothing: fsspec returns the instance it cached.
 - Lazy is not enough. Some lazy data reads all of the file, or of every partition, for each query of the data
-  browser: Dask's `head(n)` through narwhals does. Measure what each query reads, and ask first as for whole files.
+  browser: Dask's `head(n)` through narwhals does. Measure what each query reads. Give the view a `fetch` reading
+  only what a page needs, if the library can; else ask first as for whole files.
 - Reading bytes whole, ask first above `limits.max_whole_file_bytes`, with a `ViewWithChoice` or a
   `ViewWithConfirmation`.
 

@@ -40,7 +40,7 @@ pip install "jupyter-storage-explorer[polars-support]"  # the plugin only, with 
 |----------------------------------------------------|--------------|----------------------|-------------------------------------------------|
 | [polars-support](polars-support/README.md)         | `polars`     | `polars-support`     | polars, deltalake, fastexcel, pyarrow           |
 | [pandas-support](pandas-support/README.md)         | `pandas`     | `pandas-support`     | pandas, pyarrow, openpyxl                       |
-| [pyspark-support](pyspark-support/README.md)       | `pyspark`    | `pyspark-support`    | pyspark, delta-spark                            |
+| [pyspark-support](pyspark-support/README.md)       | `pyspark`    | `pyspark-support`    | pyspark, delta-spark, pyarrow                   |
 | [abfs-support](abfs-support/README.md)             | `abfs`       | `abfs-support`       | adlfs, azure-storage-file-datalake              |
 | [databricks-support](databricks-support/README.md) | `databricks` | `databricks-support` | fsspec-databricks, databricks-connect           |
 | All but the experimental ones                      | `all`        | `all-supports`       | All of the above, but the experimental plugins' |
