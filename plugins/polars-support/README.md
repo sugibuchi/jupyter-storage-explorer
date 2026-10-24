@@ -19,8 +19,9 @@ The first command installs them, as does `jupyter-storage-explorer-polars-suppor
 | `polars`    | Mandatory: the engine                      |
 | `deltalake` | Delta Lake tables                          |
 | `fastexcel` | Excel workbooks, read by polars' `calamine` |
+| `pyarrow`   | Parquet on storages polars cannot read itself |
 
-Without `deltalake` or `fastexcel`, the other formats still work.
+Without `deltalake`, `fastexcel` or `pyarrow`, the other formats still work.
 
 ### Prerequisites
 
@@ -37,7 +38,10 @@ Without `deltalake` or `fastexcel`, the other formats still work.
 - On other storages, such as SFTP, the explorer reads CSV and JSON Lines files into memory for polars.
   - Files up to `max_whole_file_bytes`, 10 MB by default, are read at once.
   - For larger files, you choose between the whole file and its first 10 MB.
-- On those storages, polars cannot view Delta Lake tables. Its Parquet views fail there: view Parquet files with pandas.
+- On those storages, Parquet files and folders are read as PyArrow datasets through fsspec.
+  - They are still read lazily: PyArrow reads only the columns and row groups needed, and some ahead.
+  - The Parquet [engine options](#engine-options) do not apply there.
+- polars cannot view Delta Lake tables on those storages.
 
 ## Plugin options
 

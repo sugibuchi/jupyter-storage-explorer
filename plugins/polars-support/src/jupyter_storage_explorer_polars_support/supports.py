@@ -13,7 +13,7 @@ from jupyter_storage_explorer.formats.engine import Engine
 from jupyter_storage_explorer.formats.excel import Excel
 from jupyter_storage_explorer.formats.package import PythonPackage
 from jupyter_storage_explorer.formats.packages import DeltaLake as DeltaLakePackage
-from jupyter_storage_explorer.formats.packages import Fsspec
+from jupyter_storage_explorer.formats.packages import Fsspec, PyArrow
 from jupyter_storage_explorer.formats.parquet import Parquet
 from jupyter_storage_explorer.formats.support import (
     LIBRARY_DEFAULT,
@@ -37,6 +37,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
 
     from jupyter_storage_explorer.formats.base import ItemContext
+    from jupyter_storage_explorer.formats.parquet import ParquetLayout
     from jupyter_storage_explorer.formats.support import Task
     from jupyter_storage_explorer.formats.view import View, ViewLimits
 
@@ -558,9 +559,40 @@ class ExcelByPolars(FormatSupport):
         return {AS_DATA_FRAME: code}
 
 
+def _pyarrow_dataset(ctx: ItemContext, layout: ParquetLayout | None) -> Any:
+    """A LazyFrame over the Parquet file or folder of ``ctx``, on a storage
+    polars cannot read itself: a PyArrow dataset read through the explorer's
+    filesystem. Lazy, unlike polars' readers given a file object, which read
+    the file whole: columns, filters and the first rows are pushed down to
+    PyArrow, which reads only the row groups needed, and some ahead. Names
+    starting with "." or "_" are skipped, PyArrow's default; partition
+    folders give columns, as detected."""
+    pa_fs = PyArrow().load("fs")
+    dataset = (
+        PyArrow()
+        .load("dataset")
+        .dataset(
+            ctx.path,
+            filesystem=pa_fs.PyFileSystem(pa_fs.FSSpecHandler(ctx.fs)),
+            format="parquet",
+            partitioning="hive" if layout is not None and layout.keys else None,
+        )
+    )
+    return Polars().load().scan_pyarrow_dataset(dataset)
+
+
 class ParquetByPolars(_PolarsByUrl):
+    """Parquet with polars: lazily by URL where polars reads the storage
+    itself; elsewhere through a PyArrow dataset over the explorer's
+    filesystem, if PyArrow is installed (its engine options then do not
+    apply)."""
+
     format = Parquet
     options_model = ParquetByPolarsOptions
+
+    def supports(self, fmt: Parquet, ctx: ItemContext, task: Task) -> bool:
+        reachable = task != "view" or reads_itself(ctx) or PyArrow().is_installed()
+        return super().supports(fmt, ctx, task) and reachable
 
     def view(
         self,
@@ -577,6 +609,8 @@ class ParquetByPolars(_PolarsByUrl):
         writes "_SUCCESS" and ".crc" checksums next to the data.
         """
         layout = fmt.layout(ctx) if ctx.is_dir else None
+        if not reads_itself(ctx):
+            return QueryView(data=_pyarrow_dataset(ctx, layout))
         defaults = {
             "hive_partitioning": layout is not None and bool(layout.keys),
             "hidden_file_prefix": [".", "_"],

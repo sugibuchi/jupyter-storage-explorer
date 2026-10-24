@@ -39,6 +39,7 @@ from jupyter_storage_explorer.formats import (
     ViewLimits,
     ViewWithChoice,
 )
+from jupyter_storage_explorer.formats.packages import PyArrow
 from jupyter_storage_explorer.testing import local_item
 
 LIMITS = ViewLimits(max_display_rows=2)
@@ -433,3 +434,25 @@ class TestStoragesPolarsCannotRead:
         assert not support.supports(DeltaLake(), make_item("/t"), "view")
         assert support.supports(DeltaLake(), make_item("/t"), "recipe")
         assert support.supports(DeltaLake(), local_item(tmp_path), "view")
+
+    def test_parquet_as_a_pyarrow_dataset(self, make_item):
+        item = make_item("/a.parquet", parquet_bytes(pl.DataFrame({"a": [1, 2, 3]})))
+        frame = data(ParquetByPolars(), Parquet(), item)
+        assert isinstance(frame, pl.LazyFrame)  # still lazy
+        assert frame.head(2).collect()["a"].to_list() == [1, 2]
+
+    def test_partitioned_parquet_as_a_pyarrow_dataset(self, make_item):
+        part = parquet_bytes(pl.DataFrame({"a": [1]}))
+        make_item("/ds/year=2026/part-0.parquet", part)
+        make_item("/ds/_SUCCESS", b"")  # skipped
+        fmt = Parquet()
+        item = make_item("/ds")
+        assert fmt.matches(item)
+        frame = data(ParquetByPolars(), fmt, item).collect()
+        assert frame.to_dicts() == [{"a": 1, "year": 2026}]
+
+    def test_parquet_needs_pyarrow_there(self, make_item, tmp_path, monkeypatch):
+        monkeypatch.setattr(PyArrow, "is_installed", lambda self: False)
+        support = ParquetByPolars()
+        assert not support.supports(Parquet(), make_item("/a.parquet", b""), "view")
+        assert support.supports(Parquet(), local_item(tmp_path), "view")
