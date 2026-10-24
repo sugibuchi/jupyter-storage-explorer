@@ -34,7 +34,7 @@ class _Copy:
     path: Path
     # The remote file's modification time and size when it was downloaded.
     version: tuple[float | None, int | None]
-    # The callers using it: get() counts one, invalidate_file releases one.
+    # The callers using it: get() counts one, release releases one.
     users: int = 0
     # The pending deletion, once no caller uses it.
     timer: threading.Timer | None = None
@@ -54,7 +54,7 @@ class LocalFileCache:
     A copy is downloaded by ``get`` and stays valid while the remote file's
     modification time is the same; one of a file changed since is invalid,
     and ``get`` downloads it again. ``get`` counts its caller as a user of
-    the copy, until ``invalidate_file`` releases it: a view takes the copy
+    the copy, until ``release`` releases it: a view takes the copy
     when made, and releases it in its ``on_close``, maybe with a delay, so
     that viewing the file again soon reuses the copy.
 
@@ -72,15 +72,24 @@ class LocalFileCache:
 
     Examples
     --------
-    In a support's ``view()``, asking first before a large download:
+    In a support's ``view()``, asking first before a large download, or one
+    of an unknown size:
 
     >>> cache = local_file_cache()
     >>> def open_copy():
-    ...     con = duckdb.connect(str(cache.get(ctx)), read_only=True)
+    ...     path = cache.get(ctx)
+    ...     try:
+    ...         con = duckdb.connect(str(path), read_only=True)
+    ...     except Exception:
+    ...         cache.release(ctx.location)  # get() counted this view
+    ...         raise
     ...     view = TableSetView(...)
-    ...     view.on_close(lambda view: (con.close(), cache.invalidate_file(ctx.location, delay=600)))
+    ...     # Closed first: a file still open cannot be deleted on Windows.
+    ...     view.on_close(lambda view: con.close())
+    ...     view.on_close(lambda view: cache.release(ctx.location, delay=600))
     ...     return view
-    >>> if cache.status(ctx) != "cached" and ctx.size > limits.max_whole_file_bytes:
+    >>> large = ctx.size is None or ctx.size > limits.max_whole_file_bytes
+    >>> if cache.status(ctx) != "cached" and large:
     ...     return ViewWithConfirmation(message="Download it?", factory=open_copy)
     >>> return open_copy()
     """
@@ -90,7 +99,7 @@ class LocalFileCache:
         self._own_folder = folder is None
         self._copies: dict[Location, _Copy] = {}
         # Copies replaced by a newer download while used, deleted when the
-        # cache next can (``_sweep``) or at exit.
+        # cache next deletes a copy (``_delete``) or at exit.
         self._stale: list[Path] = []
         # Guards the copies; downloads hold the lock of their location only.
         self._lock = threading.Lock()
@@ -123,8 +132,8 @@ class LocalFileCache:
     def get(self, ctx: ItemContext) -> Path:
         """The local path of the item's copy, downloaded first if there is
         none or it is invalid (see ``status``), and counted as used until
-        ``invalidate_file`` releases it. A deletion pending for the copy is
-        cancelled.
+        ``release`` releases it: also when what follows fails, e.g. opening
+        the copy. A deletion pending for the copy is cancelled.
 
         Downloads read the file whole, through the explorer's filesystem:
         call it in a view's work (a worker thread), not on the main thread.
@@ -174,10 +183,11 @@ class LocalFileCache:
                 self._copies[ctx.location] = copy
                 return self._use(copy)
 
-    def invalidate_file(self, location: Location, delay: float = 0) -> None:
+    def release(self, location: Location, delay: float = 0) -> None:
         """Release one use of the file's copy (see ``get``): once no caller
         uses it, the copy is deleted after ``delay`` seconds, unless ``get``
-        takes it again meanwhile.
+        takes it again meanwhile. Close what reads the copy first: on
+        Windows, a file still open cannot be deleted.
 
         Parameters
         ----------
@@ -233,7 +243,7 @@ class LocalFileCache:
             copy.timer = None
 
     def _expire(self, location: Location, copy: _Copy) -> None:
-        """The delay of ``invalidate_file`` is over: delete the copy if still
+        """The delay of ``release`` is over: delete the copy if still
         unused and still the file's."""
         with self._lock:
             if self._copies.get(location) is copy and not copy.users:
