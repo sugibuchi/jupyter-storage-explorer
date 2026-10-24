@@ -1045,6 +1045,20 @@ Functions given to a view's `on_close` are called once, when the explorer no lon
 
 A `QueryView`'s `DataQuery` owns it. A reload's view replaces it, and the previous one is closed.
 
+#### Local copies
+
+Libraries that open only local files, such as DuckDB for its databases, view a local copy. `LocalFileCache`, in
+`formats/local_files.py`, keeps them, and `local_file_cache()` is the kernel's:
+
+- A copy is keyed by the item's location, and downloaded whole by `get` with the explorer's filesystem.
+- It stays valid while the remote file's modification time and size, from the item's info, are the same.
+- `get` counts a user, and `invalidate_file` releases one. An unused copy is deleted after the delay given, by a timer,
+  unless `get` takes it again first.
+- A copy replaced while still used is kept until it can be deleted, at the latest at exit.
+- The copies live in a temporary folder of the kernel's, removed at exit.
+
+A local file is its own copy, so nothing is downloaded.
+
 #### Loading views
 
 A preview's reads can take minutes, e.g. while a Spark session starts. So they run in a worker thread of a `Loader`, in
