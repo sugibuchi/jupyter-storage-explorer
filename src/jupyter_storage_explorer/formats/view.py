@@ -140,9 +140,10 @@ class QueryView(View):
     data : dataframe
         The data.
     more : bool, default False
-        ``data`` is eager and holds only the first rows of the item's (e.g.
-        ``ViewLimits.max_memory_rows`` of them, read with pandas): the data
-        browser says so.
+        ``data`` holds only the first part of the item's: eager data its
+        first rows (e.g. ``ViewLimits.max_memory_rows`` of them, read with
+        pandas), lazy data e.g. a file's first bytes. The data browser says
+        so.
     """
 
     kind: ClassVar[str] = "query"

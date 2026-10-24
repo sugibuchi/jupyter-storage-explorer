@@ -96,8 +96,9 @@ function createQueryPanel(host, path, data) {
     columns: data.columns, // {name, dtype, kind, input, ops}
     settings: data.settings, // remembered by the kernel
     // Where queries run: {mode: "live" | "memory", fixed: why it cannot be
-    // switched (or ""), memory: {rows, cut} in memory mode, live_limit: the
-    // most rows a live query gives (or null), max_memory_rows}. See DataQuery.
+    // switched (or ""), memory: {rows, cut} in memory mode, partial: lazy data
+    // of only the item's first part, live_limit: the most rows a live query
+    // gives (or null), max_memory_rows}. See DataQuery.
     mode: data.mode,
     pageRows: data.page_rows ?? 100, // rows of a page
     start: 0, // first row of the fetched window
@@ -155,11 +156,19 @@ function createQueryPanel(host, path, data) {
     );
   }
 
-  // A note on rows left out: in memory, only the first rows of the data
-  // (also when only those were read, e.g. by pandas: the mode is fixed); live,
-  // only the first rows of the result.
+  // A note on rows left out: lazy data of only the item's first part (e.g. a
+  // file's first bytes), in either mode; in memory, only the first rows of
+  // the data (also when only those were read, e.g. by pandas: the mode is
+  // fixed); live, only the first rows of the result.
   function modeNote() {
     const m = view.mode;
+    if (m.partial) {
+      return h("span", {
+        className: "jse-query-mode-note",
+        textContent: "First part of the data",
+        title: "Only the first part of the item was read: filters and sorting apply to it, in either mode.",
+      });
+    }
     if (m.mode === "memory" && m.memory?.cut) {
       const n = m.memory.rows.toLocaleString();
       const live = m.fixed ? "" : " Switch to Live to query all the data.";

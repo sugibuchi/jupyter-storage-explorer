@@ -349,6 +349,7 @@ class TestModes:
             "mode": "live",
             "fixed": "",
             "memory": None,
+            "partial": False,
             "live_limit": 20,  # max_memory_rows
             "max_memory_rows": 20,
         }
@@ -416,6 +417,14 @@ class TestModes:
         # noted as rows held in memory are.
         query = mode_query(BIG.to_pandas(), cut=lambda: True)
         assert query.memory == {"rows": 50, "cut": True}
+        assert query.mode_state()["partial"] is False  # counted instead
+
+    @pytest.mark.parametrize("mode", ["live", "memory"])
+    def test_lazy_data_of_the_first_part(self, mode):
+        # E.g. a file's first bytes: said in either mode, as live reads no more.
+        query = mode_query(mode=mode, cut=lambda: True)
+        assert query.mode_state()["partial"] is True
+        assert mode_query(mode=mode).mode_state()["partial"] is False
 
     def test_unknown_mode(self):
         with pytest.raises(ValueError, match="mode must be one of"):

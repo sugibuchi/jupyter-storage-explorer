@@ -1379,10 +1379,13 @@ def prompts(lab: Lab, page: Page) -> None:
     prompt.get_by_role("button", name="Cancel").click()
     expect(x.preview.locator(".jse-notice")).to_contain_text("Not previewed")
     x.preview.get_by_role("button", name="Preview again").click()
-    # Its first KB: the data browser says it holds the first rows only.
+    # Its first KB: the data browser says it holds the first part only.
     x.preview.get_by_role("button", name="Its first 1 KB").click()
     expect(x.preview.locator(".jse-query tbody tr").first).to_be_visible()
     expect(x.preview.locator(".jse-prompt")).to_have_count(0)
+    expect(x.preview.locator(".jse-query-mode-note")).to_have_text(
+        "First part of the data"
+    )
     # In a new tab, the tab asks, then shows the data instead.
     x.menu(x.row("large.csv"), "View CSV in new tab")
     tab = x.page.locator(".jse-query-tab")

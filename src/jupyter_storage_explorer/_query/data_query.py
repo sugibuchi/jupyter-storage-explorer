@@ -116,9 +116,11 @@ class DataQuery:
     raises ValueError for it. When all the data is in memory, the mode cannot
     be switched.
 
-    ``cut``, if given, tells whether eager data the source gave holds only
-    the first rows of the data (e.g. read with pandas, which reads eagerly):
-    the browser then says so, as it does of rows read into memory.
+    ``cut``, if given, tells whether the data the source gave holds only the
+    first part of the item's: eager data its first rows (e.g. read with
+    pandas, which reads eagerly), which the browser counts as it does rows
+    read into memory; lazy data, e.g. a file's first bytes, which the browser
+    says in either mode (``partial``), as switching to live reads no more.
 
     ``on_close`` is called by ``close()``, once nothing shows the query any
     more, to release what its data holds (the explorer closes the views
@@ -169,10 +171,13 @@ class DataQuery:
         Sets ``implementation`` (the data's library), ``source`` (the lazy
         data, or None for eager data), ``mode``,
         ``lf`` (what queries run on), ``schema``, ``memory`` ({"rows",
-        "cut"}: rows held and whether there are more, or None in live mode)
-        and ``fixed`` (why the mode cannot be switched, or "").
+        "cut"}: rows held and whether there are more, or None in live mode),
+        ``partial`` (lazy data holding only the item's first part, see
+        ``cut``) and ``fixed`` (why the mode cannot be switched, or "").
         """
         native = self.scan()
+        # Asked once the source has given the data: a reload's view may differ.
+        cut_short = self.cut is not None and self.cut()
         data = nw.from_native(native)
         # The data as given (or as the function returned it), for ``result``.
         self.native = native
@@ -188,10 +193,12 @@ class DataQuery:
                     f"memory"
                 )
             self.source = None
-            self._hold(data, cut=self.cut is not None and self.cut())
+            self.partial = False  # counted as rows in memory instead
+            self._hold(data, cut=cut_short)
             self.fixed = "The data is a dataframe in memory."
             return
         self.source = data
+        self.partial = cut_short
         if mode == "memory":
             self._load_memory()
         elif not self._fits_live_rows():
@@ -244,12 +251,13 @@ class DataQuery:
         return self.max_memory_rows if self.mode == "live" else None
 
     def mode_state(self) -> dict[str, Any]:
-        """The mode for the frontend: {"mode", "fixed", "memory", "live_limit",
-        "max_memory_rows"} (see ``_open``)."""
+        """The mode for the frontend: {"mode", "fixed", "memory", "partial",
+        "live_limit", "max_memory_rows"} (see ``_open``)."""
         return {
             "mode": self.mode,
             "fixed": self.fixed,
             "memory": self.memory,
+            "partial": self.partial,
             "live_limit": self.live_limit,
             "max_memory_rows": self.max_memory_rows,
         }
