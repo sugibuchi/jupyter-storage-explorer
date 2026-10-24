@@ -18,7 +18,6 @@ from jupyter_storage_explorer_dask_support.supports import (
     JsonLinesByDaskOptions,
     ParquetByDask,
     ParquetByDaskOptions,
-    dask_rows,
 )
 
 
@@ -41,5 +40,4 @@ __all__ = [
     "JsonLinesByDaskOptions",
     "ParquetByDask",
     "ParquetByDaskOptions",
-    "dask_rows",
 ]

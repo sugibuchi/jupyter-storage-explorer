@@ -1115,7 +1115,8 @@ order, until one gives rows:
 1. the explorer's `fetch_rows`, the user's;
 2. the `fetch` of the `QueryView` the data came from, a support's, asked at each read, as a reload's view may differ;
 3. `fetch_rows`, the default: polars and DuckDB skip rows themselves, and Dask is read partition by partition, as
-   narwhals' `head` would read every partition. Others read all rows up to `offset + length`.
+   narwhals' `head` would read every partition. Sorted Dask data, found in its expression, is read in one pass:
+   computed one by one, each partition would sort all the data again. Others read all rows up to `offset + length`.
 
 `ViewLimits` sets the browser's page size, `max_display_rows`, and its limits for live and memory modes.
 

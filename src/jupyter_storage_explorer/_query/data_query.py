@@ -46,9 +46,9 @@ def fetch_rows(lf: nw.LazyFrame, offset: int, length: int) -> nw.DataFrame:
     for; a view's ``fetch`` comes between them (``QueryView``). polars and
     DuckDB skip the rows before ``offset`` themselves. Dask reads partition
     by partition until it has the rows (narwhals' ``head`` would read every
-    partition). Other libraries (e.g. Spark) have no portable way to skip
-    rows, so all rows up to ``offset + length`` are read and the first ones
-    dropped.
+    partition), and sorted data in one pass. Other libraries (e.g. Spark)
+    have no portable way to skip rows, so all rows up to ``offset + length``
+    are read and the first ones dropped.
 
     Parameters
     ----------
@@ -89,12 +89,28 @@ def fetch_rows(lf: nw.LazyFrame, offset: int, length: int) -> nw.DataFrame:
     return df.tail(max(0, len(df) - offset))
 
 
+def _dask_sorted(native: Any) -> bool:
+    """Whether a Dask DataFrame is sorted (a ``SortValues`` in its
+    expression): False if the expressions cannot tell, e.g. an older Dask's."""
+    try:
+        return any(type(e).__name__ == "SortValues" for e in native.expr.walk())
+    except Exception:
+        return False
+
+
 def _dask_rows(native: Any, offset: int, length: int) -> nw.DataFrame:
     """Rows ``offset`` to ``offset + length`` of a Dask DataFrame, computing
     its partitions in order until there are enough: the first page of a
-    large file reads its first block, not all of them. A sort still reads
-    every partition, as Dask's sorting does."""
-    needed, have, parts = offset + length, 0, []
+    large file reads its first block, not all of them.
+
+    Sorted data is read in one pass instead, Dask's ``head`` of every
+    partition (the smallest rows of each, then of those): computed one by
+    one, each partition would sort all the data again."""
+    needed = offset + length
+    if _dask_sorted(native):
+        rows = native.head(needed, npartitions=-1)
+        return nw.from_native(rows, eager_only=True)[offset:needed]
+    have, parts = 0, []
     for i in range(native.npartitions):
         part = nw.from_native(native.partitions[i].compute(), eager_only=True)
         parts.append(part)

@@ -606,6 +606,15 @@ class TestDaskRows:
         assert page == list(range(15, 25))
         assert computed == [0, 1, 2]
 
+    def test_sorted_in_one_pass(self, frame):
+        # Computed one by one, each partition of sorted data would sort all
+        # of it again: Dask's head of every partition reads each once.
+        ddf, computed = frame
+        lf = nw.from_native(ddf).sort("n", descending=True)
+        page = data_query.fetch_rows(lf, 15, 10)["n"].to_list()
+        assert page == list(range(34, 24, -1))
+        assert sorted(computed) == [0, 1, 2, 3, 4]
+
     def test_beyond_the_end(self, frame):
         ddf, _ = frame
         assert len(data_query.fetch_rows(nw.from_native(ddf), 45, 10)) == 5
