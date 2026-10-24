@@ -306,7 +306,7 @@ def test_one_engine_class_per_key():
     other = type(
         "CsvByCopy",
         (FormatSupport,),
-        {"format": Csv, "engine": copy, "capabilities": ("recipe",)},
+        {"format": Csv, "engine": copy, "recipe": lambda self, *args: {}},
     )
     with pytest.raises(ValueError, match="engine 'sample' is defined twice"):
         SupportChain([AvroBySample, other])

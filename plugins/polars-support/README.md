@@ -32,8 +32,12 @@ Without `deltalake` or `fastexcel`, the other formats still work.
   [GCP](https://docs.rs/object_store/latest/object_store/gcp/enum.GoogleConfigKey.html) and
   [Azure](https://docs.rs/object_store/latest/object_store/azure/enum.AzureConfigKey.html). For Delta Lake tables, see
   [delta-rs' storage options](https://delta-io.github.io/delta-rs/latest/usage/loading-table/).
-- polars reads only what its own readers reach: local disks, S3, Google Cloud Storage, Azure, HTTP(S) and Hugging Face.
-  On other storages, such as SFTP, view the data with pandas.
+- polars reads lazily only what its own readers reach: local disks, S3, Google Cloud Storage, Azure, HTTP(S) and
+  Hugging Face.
+- On other storages, such as SFTP, the explorer reads CSV and JSON Lines files into memory for polars.
+  - Files up to `max_whole_file_bytes`, 10 MB by default, are read at once.
+  - For larger files, you choose between the whole file and its first 10 MB.
+- On those storages, polars cannot view Delta Lake tables. Its Parquet views fail there: view Parquet files with pandas.
 
 ## Plugin options
 

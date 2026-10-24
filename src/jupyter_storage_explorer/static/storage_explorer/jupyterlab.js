@@ -87,7 +87,10 @@ function createJupyterLab(x) {
   // with the model id of a widget of the view (a DataExplorer for data to
   // query, a TableSetTab, else a ViewTab), which the tab shows with this
   // widget's kernel connection, or with the error. Closing the tab lets the
-  // widget go, or drops the view still loading.
+  // widget go, or drops the view still loading. A view asking the user first
+  // (ViewWithPrompt) comes as a ViewTab of the prompt, "asking": the tab
+  // keeps waiting, then shows the view's widget instead, and lets the
+  // prompt's go.
   const canOpenViewTab = () => Boolean(globalThis[JUPYTERLAB]?.openViewTab);
   // The tabs waiting for their view: load id -> the extension's handle.
   const loadingTabs = new Map();
@@ -109,8 +112,10 @@ function createJupyterLab(x) {
       const tab = globalThis[JUPYTERLAB].openViewTab({ title: reply.title, caption: reply.url, owner: x.el, onClose: closed });
       loadingTabs.set(loadId, {
         show: (id) => {
+          const previous = modelId;
           modelId = id;
-          return tab.show(id);
+          // The prompt's widget, replaced once the view's is shown.
+          return tab.show(id).finally(() => previous && model.send({ type: "view_tab_closed", model_id: previous }));
         },
         fail: tab.fail,
       });
@@ -128,7 +133,8 @@ function createJupyterLab(x) {
       if (msg.model_id) model.send({ type: "view_tab_closed", model_id: msg.model_id });
       return;
     }
-    loadingTabs.delete(msg.load_id);
+    // A prompt: the view of its answer comes for the same load.
+    if (!msg.asking) loadingTabs.delete(msg.load_id);
     if (msg.error) tab.fail(msg.error);
     else tab.show(msg.model_id).catch((err) => tab.fail(`Cannot show the view: ${err.message ?? err}`));
   }

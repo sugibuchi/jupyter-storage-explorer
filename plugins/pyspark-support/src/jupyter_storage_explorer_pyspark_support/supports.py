@@ -383,7 +383,6 @@ AS_DATA_FRAME = "Load as DataFrame"
 class CsvByPySpark(_BySpark):
     format = Csv
     options_model = CsvByPySparkOptions
-    capabilities = ("view", "recipe")
 
     def view(
         self,
@@ -425,7 +424,6 @@ class CsvByPySpark(_BySpark):
 class JsonLinesByPySpark(_BySpark):
     format = JsonLines
     options_model = JsonLinesByPySparkOptions
-    capabilities = ("view", "recipe")
 
     def view(
         self,
@@ -460,7 +458,6 @@ class JsonLinesByPySpark(_BySpark):
 class ParquetByPySpark(_BySpark):
     format = Parquet
     options_model = ParquetByPySparkOptions
-    capabilities = ("view", "recipe")
 
     def view(
         self,
@@ -498,7 +495,6 @@ class DeltaLakeByPySpark(_BySpark):
     options_model = DeltaLakeByPySparkOptions
     # Delta Lake set up in the Spark session (on Databricks, it is).
     additional_requirements = (DeltaSpark(),)
-    capabilities = ("view", "recipe")
 
     def view(
         self,

@@ -93,7 +93,12 @@ function createPreview(x) {
       queryPanel = createTableSetPanel({ request: x.request, ask: x.ask, answer: x.answer, flash: x.flash }, preview.path, preview.table_set);
       children = [queryPanel.el];
     } else {
-      children = preview.sections.map(renderSection);
+      // A prompt's answer goes to the kernel, which previews the view of it.
+      const actions = {
+        answer: (content) => model.send({ type: "preview_answer", path: preview.path, ...content }),
+        again: () => open(preview.path, preview.format, preview.engine),
+      };
+      children = preview.sections.map((section) => renderSection(section, actions));
     }
     body.replaceChildren(...children);
     el.hidden = false;

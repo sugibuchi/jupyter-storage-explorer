@@ -23,7 +23,6 @@ class SampleEngine(Engine):
 class AvroBySample(FormatSupport):
     format = AvroFormat
     engine = SampleEngine
-    capabilities = ("recipe",)
 
     def recipe(self, fmt, ctx, options):
         return {"Load": "sample"}

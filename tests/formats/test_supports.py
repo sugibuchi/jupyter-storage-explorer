@@ -28,7 +28,6 @@ from jupyter_storage_explorer._explorer.supports import SupportChain
 from jupyter_storage_explorer.filesystems import AbfsLocation
 from jupyter_storage_explorer.formats import (
     LIBRARY_DEFAULT,
-    Capability,
     Csv,
     DeltaLake,
     Engine,
@@ -43,6 +42,7 @@ from jupyter_storage_explorer.formats import (
     PythonPackage,
     QueryView,
     SupportOptions,
+    Task,
     Text,
     ViewLimits,
     format_arguments,
@@ -76,9 +76,10 @@ class Duck(Engine):
     requirements = ()
 
 
-def support(fmt=Csv, engine=None, capabilities=("view",), **methods):
-    """A support class of ``capabilities``, its methods ``methods``."""
-    attributes = {"format": fmt, "engine": engine, "capabilities": capabilities}
+def support(fmt=Csv, engine=None, **methods):
+    """A support class, its methods ``methods``: those it implements, and
+    maybe ``supports``."""
+    attributes = {"format": fmt, "engine": engine}
     return type("Fake", (FormatSupport,), {**attributes, **methods})
 
 
@@ -119,14 +120,17 @@ def test_formats_are_the_supports():
 
 
 @pytest.mark.parametrize("cls", ALL_SUPPORTS)
-def test_capabilities_are_the_methods_implemented(cls):
-    # The rule FormatSupport states for subclasses, kept by the defaults.
-    implemented = {
-        method
-        for method in get_args(Capability)
-        if getattr(cls, method) is not getattr(FormatSupport, method)
-    }
-    assert implemented == set(cls.capabilities)
+def test_supports_implement_a_task(cls):
+    assert any(cls.implements(task) for task in get_args(Task))
+
+
+def test_supports_what_it_implements_by_default(make_item):
+    coder = support(recipe=lambda *a, **k: {})()
+    item = make_item("/a.csv", b"")
+    assert coder.supports(Csv(), item, "recipe")
+    assert not coder.supports(Csv(), item, "view")
+    with pytest.raises(NotImplementedError):
+        coder.view(Csv(), item, SupportOptions(), LIMITS)
 
 
 class TestOptions:
@@ -206,7 +210,6 @@ class TestOptions:
 
         duck = support(
             engine=Duck,
-            capabilities=("recipe",),
             recipe=lambda self, fmt, ctx, options: seen.append(options) or {},
         )
         duck.options_model = DuckOptions
@@ -282,7 +285,6 @@ class TestOptionsByLocation:
         seen = []
         recording = support(
             engine=Duck,
-            capabilities=("recipe",),
             recipe=lambda self, fmt, ctx, options: seen.append(options) or {},
         )
         recording.options_model = FsspecOptions
@@ -368,7 +370,8 @@ class TestSecrets:
 class TestChain:
     def view(self, chain, item):
         """The view by the first engine viewing CSV, else the built-in views."""
-        return chain.view(Csv(), item, LIMITS, (chain.viewers(Csv()) or [None])[0])
+        engine = (chain.viewers(Csv(), item) or [None])[0]
+        return chain.view(Csv(), item, LIMITS, engine)
 
     def test_first_installed_views(self, make_item):
         missing = support(engine=Missing, view=lambda *a, **k: "missing")
@@ -377,44 +380,75 @@ class TestChain:
         chain = SupportChain([missing(), first(), second()])
         assert self.view(chain, make_item("/a.csv", b"")) == "first"
 
-    def test_not_supported_tries_the_next(self, make_item):
-        def refuse(self, *args, **kwargs):
-            raise self.NotSupported
+    def test_the_first_supporting_the_item(self, make_item):
+        def only_b(self, fmt, ctx, task):
+            return ctx.name == "b.csv"
 
-        chain = SupportChain(
-            [support(view=refuse)(), support(view=lambda *a, **k: "next")()]
-        )
-        assert self.view(chain, make_item("/a.csv", b"")) == "next"
-
-    def test_only_its_capabilities(self, make_item):
-        # A method not in capabilities is never called.
         chain = SupportChain(
             [
-                support(capabilities=(), view=lambda *a, **k: "not listed")(),
-                support(view=lambda *a, **k: "listed")(),
+                support(view=lambda *a, **k: "b only", supports=only_b)(),
+                support(view=lambda *a, **k: "any")(),
             ]
         )
-        assert self.view(chain, make_item("/a.csv", b"")) == "listed"
+        assert self.view(chain, make_item("/a.csv", b"")) == "any"
+        assert self.view(chain, make_item("/b.csv", b"")) == "b only"
 
-    def test_of_lists_the_installed_only(self, monkeypatch):
+    def test_only_what_it_implements(self, make_item):
+        # A support without view() is never asked to view.
+        chain = SupportChain(
+            [
+                support(recipe=lambda *a, **k: {})(),
+                support(view=lambda *a, **k: "viewer")(),
+            ]
+        )
+        assert self.view(chain, make_item("/a.csv", b"")) == "viewer"
+
+    def test_errors_are_the_items(self, make_item):
+        # Once a support supports the item, no other is tried.
+        def fail(self, *args, **kwargs):
+            raise ValueError("broken file")
+
+        chain = SupportChain(
+            [support(view=fail)(), support(view=lambda *a, **k: "next")()]
+        )
+        with pytest.raises(ValueError, match="broken file"):
+            self.view(chain, make_item("/a.csv", b""))
+
+    def test_of_lists_the_installed_only(self, make_item, monkeypatch):
         chain = SupportChain(all_supports())
+        item = make_item("/a.csv", b"")
         # In the supports' order: the plugins', by key.
-        assert [type(s) for s in chain.of(Csv(), "view")] == [CsvByPandas, CsvByPolars]
+        assert [type(s) for s in chain.of(Csv(), item, "view")] == [
+            CsvByPandas,
+            CsvByPolars,
+        ]
         monkeypatch.setattr(PythonPackage, "is_installed", lambda self: False)
-        assert chain.of(Csv(), "view") == []  # none of the registered supports can
+        # None of the registered supports can.
+        assert chain.of(Csv(), item, "view") == []
+        assert not chain.installed(Csv(), "view")
 
     def test_view_without_a_support_is_an_error_of_the_caller(self, make_item):
         # Callers check of() first: none at all is not the item's fault.
         with pytest.raises(RuntimeError, match=r"check viewers\(\) first"):
             self.view(SupportChain([]), make_item("/a.csv", b""))
 
-    def test_none_can_view_the_item(self, make_item):
-        def refuse(self, *args, **kwargs):
-            raise self.NotSupported
+    def test_a_recipe_failing(self, make_item):
+        def fail(self, *args, **kwargs):
+            raise ValueError("no code")
 
-        chain = SupportChain([support(view=refuse)()])
-        with pytest.raises(ValueError, match="cannot be viewed as CSV"):
-            self.view(chain, make_item("/a.csv", b""))
+        chain = SupportChain(
+            [
+                support(engine=Missing, recipe=fail)(),
+                support(engine=Duck, recipe=fail)(),
+                support(recipe=lambda *a, **k: {"Read": "code"})(),
+            ]
+        )
+        recipes = chain.recipes(Csv(), make_item("/a.csv", b""))
+        # Shown in place of its code; the others' still shown.
+        assert [(r.title, r.code, r.error) for r in recipes] == [
+            ("Read", "code", ""),
+            ("", "", "no code"),
+        ]
 
     def test_format_subclasses(self, tmp_path):
         """A subclass of a format is viewed by its supports."""
@@ -444,7 +478,6 @@ class TestChain:
 
     def test_recipes_by_title(self, make_item):
         several = support(
-            capabilities=("recipe",),
             recipe=lambda *a, **k: {"Load lazily": "lazy", "Load eagerly": "eager"},
         )
         recipes = SupportChain([several()]).recipes(Csv(), make_item("/a.csv", b""))
@@ -488,7 +521,6 @@ class TestExplorer:
         duck = support(
             fmt=Parquet,
             engine=Duck,
-            capabilities=("recipe",),
             recipe=lambda *a, **k: {"Load as a duck": "duck"},
         )
         explorer = StorageExplorer(fs=mem_explorer._fs, supports=[duck])

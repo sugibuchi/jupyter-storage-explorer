@@ -6,6 +6,8 @@
 // starting). The kernel then creates a widget of the view, a DataExplorer, a
 // TableSetTab or a ViewTab, and tells its model id (see
 // static/storage_explorer/jupyterlab.js, `openViewTab`), or why it failed.
+// A view asking the user first comes as the widget of its prompt, which the
+// tab shows until the view's widget replaces it.
 // The tab shows that widget with the output renderers of the notebook or
 // console holding the explorer, as JupyterLab's "Create New View for Output"
 // does: ipywidgets ties widgets to that document's kernel connection, so the
@@ -49,7 +51,7 @@ interface IViewTab {
 
 // What the explorer does with the tab once the kernel has answered.
 interface IViewTabHandle {
-  show(modelId: string): Promise<void>; // the widget's model id
+  show(modelId: string): Promise<void>; // the widget's model id; replaces the one shown
   fail(message: string): void;
 }
 
@@ -117,6 +119,8 @@ function openTab(app: JupyterFrontEnd, tab: IViewTab): IViewTabHandle {
   const inMain = Array.from(app.shell.widgets('main')).includes(owner);
   app.shell.add(panel, 'main', inMain ? { mode: 'tab-after', ref: owner.id } : {});
   app.shell.activateById(panel.id);
+  // The widget shown: a prompt's is replaced by its view's (see `show`).
+  let shown: Widget | null = null;
   return {
     async show(modelId: string): Promise<void> {
       if (panel.isDisposed) {
@@ -134,6 +138,8 @@ function openTab(app: JupyterFrontEnd, tab: IViewTab): IViewTabHandle {
         return;
       }
       message.dispose();
+      shown?.dispose();
+      shown = renderer;
       content.addWidget(renderer);
       BoxPanel.setStretch(renderer, 1);
     },

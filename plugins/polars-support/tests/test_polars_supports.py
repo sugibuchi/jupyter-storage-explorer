@@ -24,6 +24,7 @@ from jupyter_storage_explorer_polars_support import (
     PolarsOptions,
     PolarsSupport,
 )
+from jupyter_storage_explorer_polars_support.supports import reads_itself
 
 from jupyter_storage_explorer.filesystems import S3Location
 from jupyter_storage_explorer.formats import (
@@ -36,6 +37,7 @@ from jupyter_storage_explorer.formats import (
     QueryView,
     TableSetView,
     ViewLimits,
+    ViewWithChoice,
 )
 from jupyter_storage_explorer.testing import local_item
 
@@ -386,3 +388,48 @@ class TestReaderOptions:
         options = DeltaLakeByPolarsOptions(version=0)
         frame = data(DeltaLakeByPolars(), DeltaLake(), local_item(table), options)
         assert frame.collect()["a"].to_list() == [1]
+
+
+class TestStoragesPolarsCannotRead:
+    """Text formats on a storage polars does not read itself (here memory://)
+    are read through the explorer's filesystem; large files once chosen."""
+
+    def test_reads_itself(self, make_item, tmp_path):
+        assert reads_itself(local_item(tmp_path))
+        assert reads_itself(
+            make_item("/a.csv", b"", location=S3Location(bucket="b", key="a.csv"))
+        )
+        assert not reads_itself(make_item("/a.csv", b""))
+
+    def test_small_files_read_at_once(self, make_item):
+        item = make_item("/a.csv", b"a;b\n1;2\n")
+        frame = data(CsvByPolars(), Csv(), item).collect()
+        assert frame.columns == ["a", "b"]  # the separator detected
+        lines = make_item("/a.jsonl", b'{"a": 1}\n{"a": 2}\n')
+        assert data(JsonLinesByPolars(), JsonLines(), lines).collect()[
+            "a"
+        ].to_list() == [1, 2]
+
+    @pytest.mark.parametrize(
+        ("label", "rows", "more"),
+        [("Its first 1 KB", 1, True), ("The whole file (2 KB)", 2, False)],
+    )
+    def test_large_files_once_chosen(self, make_item, label, rows, more):
+        # Two lines of 1 KB: larger than the files read whole at once.
+        line = b"x" * 1023 + b"\n"
+        item = make_item("/a.csv", b"name\n" + line + line)
+        limits = ViewLimits(max_whole_file_bytes=1100)
+        prompt = CsvByPolars().view(Csv(), item, CsvByPolarsOptions(), limits)
+        assert isinstance(prompt, ViewWithChoice)
+        assert (prompt.style, prompt.with_cancel) == ("button", True)
+        assert list(prompt.choices) == ["Its first 1 KB", "The whole file (2 KB)"]
+        view = prompt.answer(label)
+        assert isinstance(view, QueryView)
+        assert (view.data.collect().height, view.more) == (rows, more)
+
+    def test_delta_viewed_only_where_delta_rs_reads(self, make_item, tmp_path):
+        make_item("/t/_delta_log/0.json", b"{}")
+        support = DeltaLakeByPolars()
+        assert not support.supports(DeltaLake(), make_item("/t"), "view")
+        assert support.supports(DeltaLake(), make_item("/t"), "recipe")
+        assert support.supports(DeltaLake(), local_item(tmp_path), "view")

@@ -60,7 +60,7 @@ if TYPE_CHECKING:
     import narwhals as nw
     from fsspec import AbstractFileSystem
 
-    from jupyter_storage_explorer._explorer.previews import _Detected
+    from jupyter_storage_explorer._explorer.previews import _Asking, _Detected
     from jupyter_storage_explorer._jobs.loader import Load
     from jupyter_storage_explorer._query.data_query import DataQuery
     from jupyter_storage_explorer._query.table_set import TableSet
@@ -69,7 +69,7 @@ if TYPE_CHECKING:
     from jupyter_storage_explorer.data_explorer import DataExplorer
     from jupyter_storage_explorer.filesystems.mapper import FileSystemMapper
     from jupyter_storage_explorer.filesystems.operation import FileSystemOperations
-    from jupyter_storage_explorer.formats import EngineOptions, View
+    from jupyter_storage_explorer.formats import EngineOptions, ItemContext, View
     from jupyter_storage_explorer.location import Location
 
     # A request's handler: the reply to its content (see _requests).
@@ -589,8 +589,11 @@ class StorageExplorer(
         # A table set previewed (TableSetView): path -> its tables.
         self._table_sets: dict[str, TableSet] = {}
         # The view the preview panel shows, if not the data browser's (whose
-        # query owns its view): closed when the panel shows something else.
-        self._preview_view: View | None = None
+        # query owns its view), or the prompt asking for it: closed when the
+        # panel shows something else.
+        self._preview_view: View | _Asking | None = None
+        # The ids of the prompts shown (see _explorer/previews.py's _Asking).
+        self._prompt_ids = itertools.count(1)
         # Views in tabs of their own ("view_tab"): model id -> widget,
         # kept here while the tab is open.
         self._view_tabs: dict[str, DataExplorer | TableSetTab | ViewTab] = {}
@@ -615,8 +618,9 @@ class StorageExplorer(
         # unsafe_mode as given, which the kernel decides by (see _unsafe):
         # not the trait, which the page could set.
         self._unsafe_setting = unsafe_mode
-        # The folder shown's format, if any (see _show_current_format).
-        self._current_dir_format: DataFormat | None = None
+        # The folder shown's format, if any, and the folder as it was
+        # detected (see _show_current_format).
+        self._current_dir_format: tuple[DataFormat, ItemContext] | None = None
         self._view_limits = view_limits or ViewLimits()
         # Files being received from the user's computer (see _jobs/incoming.py).
         self._incoming = IncomingFiles(max_upload_bytes)
@@ -1111,6 +1115,7 @@ class StorageExplorer(
             "expand": lambda c: self._load_children(c["path"]),
             "refresh": lambda c: self._refresh(),
             "preview": self._preview_notice,
+            "preview_answer": self._preview_answer,
             # Answered with one "download" message per file, its bytes attached.
             "download": lambda c: self._download(c["paths"]),
             "job_cancel": self._cancel_job,
@@ -1157,15 +1162,15 @@ class StorageExplorer(
         path = selected[0]
         detection = self._detection(path, self._fs)
 
-        def work() -> list[DataFormat]:
+        def work() -> _Detected | None:
             try:
-                item = detection.result()
+                return detection.result()
             except Exception:
-                return []  # detection is best-effort; a failure just means no preview
-            return item.formats if item is not None else []
+                return None  # detection is best-effort; a failure just means no preview
 
-        def done(formats: list[DataFormat]) -> None:
-            viewable = bool(formats) and self._viewable(formats[0])
+        def done(item: _Detected | None) -> None:
+            formats = item.formats if item is not None else []
+            viewable = bool(formats) and self._viewable(formats[0], item.ctx)
             self._selected_format = {
                 "path": path,
                 "format": formats[0].name if viewable else "",

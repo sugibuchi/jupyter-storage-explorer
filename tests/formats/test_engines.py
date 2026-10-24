@@ -47,12 +47,10 @@ def engine(key, requirements=INSTALLED):
     )
 
 
-def support(fmt, engine_, capabilities=("view",)):
-    return type(
-        "Fake",
-        (FormatSupport,),
-        {"format": fmt, "engine": engine_, "capabilities": capabilities},
-    )
+def support(fmt, engine_, tasks=("view",)):
+    """A support class of ``fmt`` and ``engine_`` implementing ``tasks``."""
+    methods = {task: lambda self, *args: None for task in tasks}
+    return type("Fake", (FormatSupport,), {"format": fmt, "engine": engine_, **methods})
 
 
 class TestEngine:
@@ -105,7 +103,7 @@ class TestOrder:
         supports = [
             support(Csv, engine("viewer")),
             support(Csv, engine("absent", (Missing(),))),
-            support(Csv, engine("coder"), capabilities=("recipe",)),
+            support(Csv, engine("coder"), tasks=("recipe",)),
         ]
         # Listed but not installed: left out.
         assert self.keys(supports, ["absent", "viewer"]) == ["viewer"]
@@ -118,25 +116,40 @@ class TestOrder:
 class TestWhichEngineViews:
     chain = SupportChain(all_supports())
 
-    def test_the_engine_chosen(self):
-        assert self.chain.engine_for(Parquet(), "pandas") == "pandas"
-        assert self.chain.engine_for(Parquet(), "polars") == "polars"
+    @pytest.fixture
+    def item(self, make_item):
+        return make_item("/a.csv", b"a\n")
 
-    def test_built_in_views_for_formats_the_engine_does_not_handle(self):
-        assert self.chain.engine_for(Markdown(), "polars") is None
+    def test_the_engine_chosen(self, item):
+        assert self.chain.engine_for(Parquet(), item, "pandas") == "pandas"
+        assert self.chain.engine_for(Parquet(), item, "polars") == "polars"
 
-    def test_no_fallback_to_another_engine(self, monkeypatch):
+    def test_built_in_views_for_formats_the_engine_does_not_handle(self, item):
+        assert self.chain.engine_for(Markdown(), item, "polars") is None
+
+    def test_no_fallback_to_another_engine(self, item, monkeypatch):
         # Polars handles Delta tables, but needs deltalake: pandas, which
         # does not handle them, is not used instead.
         monkeypatch.setattr(
             DeltaLakeByPolars, "is_installed", classmethod(lambda cls: False)
         )
         with pytest.raises(LookupError):
-            self.chain.engine_for(DeltaLake(), "polars")
+            self.chain.engine_for(DeltaLake(), item, "polars")
 
-    def test_viewers(self):
-        assert self.chain.viewers(Csv()) == ["polars", "pandas"]
-        assert self.chain.viewers(Markdown()) == [None]
+    def test_no_fallback_for_an_item_it_does_not_support(self, make_item):
+        refusing = support(Csv, engine("picky"))
+        refusing.supports = lambda self, fmt, ctx, task: ctx.name != "b.csv"
+        chain = SupportChain([refusing, support(Csv, None)])
+        a, b = make_item("/a.csv", b""), make_item("/b.csv", b"")
+        assert chain.engine_for(Csv(), a, "picky") == "picky"
+        with pytest.raises(LookupError):
+            chain.engine_for(Csv(), b, "picky")
+        assert chain.viewers(Csv(), a) == ["picky", None]
+        assert chain.viewers(Csv(), b) == [None]
+
+    def test_viewers(self, item):
+        assert self.chain.viewers(Csv(), item) == ["polars", "pandas"]
+        assert self.chain.viewers(Markdown(), item) == [None]
 
 
 class TestExplorer:
@@ -208,7 +221,7 @@ class TestExplorer:
         assert [v["label"] for v in text["views"]] == ["Text"]
 
     def test_not_viewable_with_the_engine_chosen(self, local, monkeypatch):
-        def cannot(self, fmt, engine):
+        def cannot(self, fmt, ctx, engine):
             raise LookupError(engine)
 
         # As when the engine chosen handles the format, but cannot view it.

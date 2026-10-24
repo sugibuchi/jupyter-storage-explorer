@@ -26,10 +26,11 @@ if TYPE_CHECKING:
     from jupyter_storage_explorer.formats.package import PythonPackage
     from jupyter_storage_explorer.formats.view import View, ViewLimits
 
-# What a support can do with a format's data, each the name of the method
+# What a support can be asked to do with an item, each the name of the method
 # doing it: view it (the preview panel, a tab), give recipes, the code
-# loading it ("Python code").
-Capability: TypeAlias = Literal["view", "recipe"]
+# loading it ("Python code"). FormatSupport.supports tells whether it does.
+Task: TypeAlias = Literal["view", "recipe"]
+TASKS: tuple[Task, ...] = ("view", "recipe")
 
 # StorageExplorer's engine_options: {engine key: {format name or "*": options}},
 # the options a dict, or a function of the item's location returning one
@@ -307,18 +308,22 @@ class FormatSupport:
     defaults. To view an item (the preview panel, "View in a new tab"), an
     explorer uses the first support for the format (``isinstance`` of
     ``format``) of the engine chosen (by the user, or the first of
-    ``engine_preference``) whose packages are installed and that lists
-    "view" in ``capabilities``; "Preview as" offers the other engines. "Python
-    code" shows the recipes of the first support listing "recipe" of each
-    engine whose packages are installed.
+    ``engine_preference``) whose packages are installed and whose
+    ``supports`` says it views the item; "Preview as" offers the other
+    engines. "Python code" shows the recipes of the first such support of
+    each engine for "recipe".
 
     Rules for a subclass:
 
-    - List in ``capabilities`` the name of every method the class
-      implements: "view", "recipe". The explorer reads only
-      ``capabilities`` to decide what to offer: a method not listed there is
-      never called, and a capability listed there must have its method
-      implemented. A subclass adding a method extends ``capabilities``.
+    - Implement ``view``, ``recipe`` or both. By default, ``supports`` says
+      a support does what it implements, for every item.
+    - Override ``supports`` to refuse items it cannot handle, e.g. an image
+      format the library cannot read, or a storage the library cannot reach.
+      It decides from the item's location, path and info, never by reading
+      the storage: it runs for each item clicked.
+    - Once ``supports`` has said yes, the explorer calls the method and
+      tries no other support: what the method raises is shown as the item's
+      error.
     - ``view()`` returns a ``QueryView`` of the data for the data browser
       (filters, sort, pages), or a view of what it read, e.g. a
       ``TableView`` of the first rows, a ``TextView``. A view holding
@@ -326,9 +331,10 @@ class FormatSupport:
       a function given to its ``on_close()``, which the explorer calls once
       it no longer shows the view; until then, a ``QueryView``'s data must
       stay readable.
-    - A method may raise ``NotSupported`` for a particular item (e.g. an
-      image format the library cannot read): the next support is then
-      tried, and for "recipe", the support's code is left out.
+    - Before reading much, e.g. a whole large file, ``view()`` can ask the
+      user first: it returns a ``ViewWithConfirmation``, a
+      ``ViewWithChoice`` or a ``ViewWithInput``, whose function makes the
+      view once the user answers.
     - Each method gets the detected format, then the item as an
       ``ItemContext`` (``ctx``): its location (where it is, for libraries
       doing their own I/O and for the code: ``ctx.library_url``, for Spark
@@ -358,21 +364,14 @@ class FormatSupport:
     additional_requirements : tuple of PythonPackage
         Other packages it needs besides its engine's, as instances, e.g.
         ``(DeltaSpark(),)`` for Spark reading Delta Lake tables.
-    capabilities : tuple of str
-        The methods it implements: "view", "recipe" (see above).
     options_model : type of SupportOptions, default SupportOptions
         Its options (see ``SupportOptions``); by default none.
     """
-
-    class NotSupported(Exception):
-        """Raised by a capability's method for an item it cannot handle: the
-        next support is tried."""
 
     # See the class docstring.
     format: ClassVar[type[DataFormat]]
     engine: ClassVar[type[Engine] | None] = None
     additional_requirements: ClassVar[tuple[PythonPackage, ...]] = ()
-    capabilities: ClassVar[tuple[Capability, ...]] = ()
     options_model: ClassVar[type[SupportOptions]] = SupportOptions
 
     @classmethod
@@ -394,6 +393,49 @@ class FormatSupport:
         """Its engine's ``key`` ("python" for the built-in views): its
         options' key in ``engine_options``."""
         return cls.engine.key if cls.engine is not None else "python"
+
+    @classmethod
+    def implements(cls, task: Task) -> bool:
+        """Whether the class implements ``task``'s method (overrides
+        ``FormatSupport``'s): what the explorer offers before knowing the
+        item, e.g. the engines users choose from."""
+        return getattr(cls, task) is not getattr(FormatSupport, task)
+
+    def supports(self, fmt: DataFormat, ctx: ItemContext, task: Task) -> bool:
+        """Whether it does ``task`` for the item: the explorer calls the
+        method of a task only for the items it supports, and then tries no
+        other support.
+
+        Override it to refuse what the library cannot handle, e.g. an image
+        format it cannot read, or a storage it cannot reach (from
+        ``ctx.location``). It runs on the kernel's main thread for each item
+        clicked, so it decides from the format, the location, the path and
+        the info: never by reading the storage.
+
+        Parameters
+        ----------
+        fmt : DataFormat
+            The format detected, an instance of ``format``.
+        ctx : ItemContext
+            The file or folder (see ``view``).
+        task : {"view", "recipe"}
+            The method the explorer would call.
+
+        Returns
+        -------
+        bool
+            By default, whether the class implements the method
+            (``implements``).
+
+        Examples
+        --------
+        Code for the images Pillow opens, not SVG:
+
+        >>> def supports(self, fmt, ctx, task):
+        ...     svg = fmt.mime_type(ctx.path) == "image/svg+xml"
+        ...     return super().supports(fmt, ctx, task) and not svg
+        """
+        return self.implements(task)
 
     def view(
         self,
@@ -438,14 +480,15 @@ class FormatSupport:
         -------
         View
             E.g. a ``QueryView`` of a LazyFrame, a ``TableView`` of the first
-            rows, a ``TextView``.
+            rows, a ``TextView``; or a ``ViewWithConfirmation``,
+            ``ViewWithChoice`` or ``ViewWithInput`` asking the user first.
 
         Raises
         ------
-        FormatSupport.NotSupported
-            By default, or for an item it cannot view.
+        NotImplementedError
+            By default: a support viewing items implements it.
         """
-        raise self.NotSupported
+        raise NotImplementedError
 
     def recipe(
         self, fmt: DataFormat, ctx: ItemContext, options: SupportOptions
@@ -487,7 +530,7 @@ class FormatSupport:
 
         Raises
         ------
-        FormatSupport.NotSupported
-            By default, or for an item it has no code for.
+        NotImplementedError
+            By default: a support giving code implements it.
         """
-        raise self.NotSupported
+        raise NotImplementedError

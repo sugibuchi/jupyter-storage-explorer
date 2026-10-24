@@ -111,8 +111,9 @@ the code. The traps:
 - A format's `matches` reads nothing: it runs for every file listed. A signature check goes in `sniff`.
 - `formats` never imports `_explorer`. Supports import their libraries only inside methods, through
   `PythonPackage.load()`, so that plugins load without them.
-- The explorer calls only the methods a support lists in `capabilities`. Keep
-  `test_capabilities_are_the_methods_implemented` passing for the defaults.
+- The explorer calls a support's method only for items its `supports()` accepts, and then tries no other support. Its
+  errors are the item's. `supports()` never reads the storage: it runs on the main thread for each item clicked.
+- A view reading much, such as a whole large file, asks first: it returns a `ViewWithPrompt`.
 - Supports never check their packages, and take no `__init__` arguments.
 - A recipe's title never names the library.
 - Generated code gets options only through `SupportOptions.code_value`, which leaves out secrets.

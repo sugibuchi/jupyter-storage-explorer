@@ -43,10 +43,12 @@ Each component can be tried in an explorer before packaging it: see
    dependency group (see [Packaging a plugin](#packaging-a-plugin)).
 3. **Format supports take no `__init__` arguments.** Their options are the fields of their `options_model`, set
    through `engine_options`. Explorers create them from their classes.
-4. **List every implemented method in `capabilities`** (`"view"`, `"recipe"`), and implement every method listed. The
-   explorer reads only `capabilities`: a method not listed is never called.
-5. **Raise `NotSupported`** (`FormatSupport.NotSupported`, `FileSystemOperations.NotSupported`) for what a component
-   cannot handle, so that the next one is tried. Never raise it for real errors: raise those as they are.
+4. **Refuse what a component cannot handle**, so that the next one is tried:
+   - A format support overrides `supports(fmt, ctx, task)`, without reading the storage. Once it accepts an item, no
+     other support is tried, and what its method raises is the item's error.
+   - File operations raise `FileSystemOperations.NotSupported`. Never raise it for real errors: raise those as they are.
+5. **Ask before reading much.** A view reading a whole large file returns a `ViewWithConfirmation` or a
+   `ViewWithChoice`, which reads once the user answers.
 6. **Never put credentials in locations or generated code.** Locations are sent to the browser. Declare secret options
    with `secret_field` or `secret_dict_field`, and give code its options through `options.code_value(name)`.
 7. **Use frozen, keyword-only dataclasses for options and locations**, each field with a default (options).
@@ -176,6 +178,7 @@ A `FormatSupport` handles one format's data with one engine:
 ```python
 from inspect import cleandoc
 
+from jupyter_storage_explorer.filesystems import LocalLocation, S3Location
 from jupyter_storage_explorer.formats import FormatSupport, Parquet, QueryView, format_kwargs
 
 
@@ -185,8 +188,12 @@ class ParquetByDuckDB(FormatSupport):
     format = Parquet                   # matched with isinstance: subclasses too
     engine = DuckDBEngine
     additional_requirements = ()       # other PythonPackage instances it needs
-    capabilities = ("view", "recipe")  # the methods below
     options_model = DuckDBOptions      # see "Options"; SupportOptions (none) by default
+
+    def supports(self, fmt, ctx, task):
+        # By default, what the class implements. Here only what DuckDB reads itself.
+        reachable = isinstance(ctx.location, (LocalLocation, S3Location))
+        return super().supports(fmt, ctx, task) and reachable
 
     def view(self, fmt, ctx, options, limits):
         duckdb = DuckDB().load()
@@ -222,6 +229,9 @@ and opens the data browser on the one chosen. The others show what was read:
 | `MarkdownView(text)`               |                                                                        | Rendered Markdown (sanitized)     |
 | `TreeView(value)`                  | A JSON-like value                                                      | A collapsible tree                |
 | `MediaView(mime, data=None, src=None)` | The bytes, or a URL                                                | An image (`image/*`)              |
+| `ViewWithConfirmation(message, factory)` | `factory()`: the view; `button` ("View")                         | The message, Cancel and `button`  |
+| `ViewWithChoice(message, choices, factory, style="radio")` | `choices`: labels to values; `factory(value)`: the view; `default`; `with_cancel` (False) | Radio buttons or a dropdown with `button`, or a button of each label (`"button"`); Cancel only `with_cancel` |
+| `ViewWithInput(message, factory)`  | `factory(text)`: the view; `value`, `placeholder`                      | A text field and `button`         |
 
 Every view has `title` and `note`. `limits` (`ViewLimits`) says how much to read: `max_bytes`, `max_display_rows`,
 `max_whole_file_bytes`, `max_live_rows`, `max_memory_rows`. Lazy data (a polars LazyFrame, a DuckDB relation, a Spark
@@ -245,6 +255,26 @@ view = TableSetView(
     loader=con.table,
 )
 view.on_close(lambda view: con.close())
+```
+
+The last three ask the user before the view is made, e.g. before reading a whole large file:
+
+- The question shows where the view would be, in the preview panel or the tab.
+- Once the user answers, the explorer calls `factory` in a worker thread, as it calls `view`. It may return another
+  prompt.
+- When the data browser reads the data again, the same answers are given without asking.
+- The prompt is closed with the view of its answer, so its `on_close` may release what that view reads.
+
+polars-support asks so for CSV and JSON Lines files on storages polars cannot read itself:
+
+```python
+return ViewWithChoice(
+    message="Polars cannot read this storage itself: the file is read into memory, then queried there.",
+    choices={"Its first 10 MB": 10 * 2**20, "The whole file (586 MB)": None},
+    factory=read,  # read(first): a QueryView of the first bytes, or of the whole file
+    style="button",
+    with_cancel=True,  # not reading is a choice too
+)
 ```
 
 `view` runs in a worker thread, so that a slow view leaves the kernel free:
@@ -762,7 +792,7 @@ from jupyter_storage_explorer.testing import make_item, memfs  # noqa: F401
 The tests' libraries go in the `dev` group, so that `uv run pytest` runs them with the plugin's dependencies only:
 
 ```python
-from jupyter_storage_explorer.formats import FormatSupport, Parquet, QueryView, ViewLimits
+from jupyter_storage_explorer.formats import Parquet, QueryView, ViewLimits
 from jupyter_storage_explorer.testing import local_item
 
 
@@ -779,9 +809,10 @@ def test_code(make_item):
     assert "read_parquet('memory:///a.parquet')" in code["Load as relation"]
 
 
-def test_capabilities_are_implemented():
-    for name in ParquetByDuckDB.capabilities:
-        assert getattr(ParquetByDuckDB, name) is not getattr(FormatSupport, name)
+def test_supports_what_duckdb_reads(tmp_path, make_item):
+    support = ParquetByDuckDB()
+    assert support.supports(Parquet(), local_item(tmp_path), "view")
+    assert not support.supports(Parquet(), make_item("/a.parquet", b""), "view")  # memory://
 
 
 def test_plugin_registered():
@@ -830,8 +861,10 @@ StorageExplorer(
 ```
 
 What an explorer is given comes first, then the plugins' components, then the defaults. For each job, the first that
-can do it does it. So the component tried handles what it can, and what it raises `NotSupported` for is left to the
-others.
+can do it does it. So the component tried handles what it can, and leaves the rest to the others:
+
+- a support, the items its `supports` refuses;
+- an operation, what it raises `NotSupported` for.
 
 Restart the kernel after changing the component's module: Python imports a module only once.
 
@@ -868,7 +901,9 @@ def filesystem_mappers():
 - [ ] `dependencies`: the explorer only; the backend libraries in the `full` extra and the `dev` group.
 - [ ] Entry point in `jupyter_storage_explorer.plugins`, named by the plugin's `key`.
 - [ ] No backend import at module level; packages through `PythonPackage.load()` inside methods.
-- [ ] Supports: `format`, `engine`, `capabilities` matching the methods, `options_model`; no `__init__` arguments.
+- [ ] Supports: `format`, `engine`, `options_model`; no `__init__` arguments.
+- [ ] Supports refuse in `supports()` the items their library cannot handle, without reading the storage.
+- [ ] Views reading a whole large file ask first, with a `ViewWithPrompt`.
 - [ ] Secrets declared with `secret_field` / `secret_dict_field`; code options through `options.code_value`.
 - [ ] A model per format whose fields are its reader's arguments (default `LIBRARY_DEFAULT`), passed with `arguments()`
       and `code_arguments()`, and tabled in the README with the library's descriptions.
