@@ -615,7 +615,7 @@ function createQueryPanel(host, path, data) {
 // A table set (TableSetView): its tables in a tree beside the data browser
 // ("tree"), or on tabs below it, as a spreadsheet's sheets ("tab"), and the
 // data browser on the one chosen. `data` is the kernel's TableSet.opening():
-// {selector, nodes: [{label, id} for tables, {label, children} for groups],
+// {selector, nodes: [{label, icon, id} for tables, {label, icon, children} for groups],
 // table, query (or error)}. `path` names the item in requests
 // ("table_set_open"); the data browser's also name the table (query_path in
 // table_set.py), so that a table no longer shown is never answered for.
@@ -666,6 +666,12 @@ function createTableSetPanel(host, path, data) {
     show("table" in reply ? reply : { table: id, error: reply.error });
   }
 
+  // A node's icon (Node.icon): a table's is a spreadsheet, as a CSV file's.
+  function nodeIcon(node) {
+    const key = { folder: "folder", database: "database", table: "spreadsheet" }[node.icon] ?? "file";
+    return h("span", { className: "jse-table-set-icon" }, fileIcon(node.label, key === "folder", key));
+  }
+
   // A table's row in the tree, or its tab.
   function tableItem(node, depth) {
     const item = tabs
@@ -674,7 +680,7 @@ function createTableSetPanel(host, path, data) {
           "div",
           { className: "jse-table-set-row jse-table-set-leaf", role: "treeitem", title: visible(node.label) },
           h("span", { className: "jse-table-set-twisty" }),
-          h("span", { className: "jse-table-set-icon" }, fileIcon(node.label, false, "spreadsheet")),
+          nodeIcon(node),
           h("span", { className: "jse-table-set-label", textContent: visible(node.label) }),
         );
     if (!tabs) item.style.paddingLeft = `${depth * 14 + 4}px`;
@@ -691,7 +697,7 @@ function createTableSetPanel(host, path, data) {
       "div",
       { className: "jse-table-set-row jse-table-set-group", role: "treeitem", title: visible(node.label) },
       twisty,
-      h("span", { className: "jse-table-set-icon" }, fileIcon(node.label, true)),
+      nodeIcon(node),
       h("span", { className: "jse-table-set-label", textContent: visible(node.label) }),
     );
     row.style.paddingLeft = `${depth * 14 + 4}px`;

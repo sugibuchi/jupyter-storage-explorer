@@ -104,6 +104,15 @@ class TestView:
         assert [leaf.id for leaf in view.leaves()] == ["1", "2", "3"]
         assert view.selector == "tree"
 
+    def test_icons(self):
+        assert Node(label="g").icon == "folder"
+        assert Leaf(label="t", id="t").icon == "table"
+        assert Node(label="s", icon="database").icon == "database"
+        with pytest.raises(ValueError, match='icon must be one of "folder"'):
+            Node(label="g", icon="schema")
+        with pytest.raises(ValueError, match="icon must be one of"):
+            Leaf(label="t", id="t", icon="view")
+
     def test_a_table_holds_no_tables(self):
         with pytest.raises(ValueError, match="cannot have children"):
             Leaf(label="t", id="t", children=[Leaf(label="u", id="u")])
@@ -129,10 +138,11 @@ class TestPreview:
         assert table_set["nodes"] == [
             {
                 "label": "main",
+                "icon": "folder",
                 "children": [
-                    {"label": "A", "id": "a"},
-                    {"label": "B", "id": "b"},
-                    {"label": "BROKEN", "id": "broken"},
+                    {"label": "A", "icon": "table", "id": "a"},
+                    {"label": "B", "icon": "table", "id": "b"},
+                    {"label": "BROKEN", "icon": "table", "id": "broken"},
                 ],
             }
         ]

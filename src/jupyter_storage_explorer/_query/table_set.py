@@ -28,12 +28,16 @@ def query_path(path: str, table: str) -> str:
 
 
 def _nodes_json(nodes: Sequence[Node]) -> list[dict[str, Any]]:
-    """The tree for the frontend: {"label", "id"} for tables, {"label",
-    "children"} for groups."""
+    """The tree for the frontend: {"label", "icon", "id"} for tables,
+    {"label", "icon", "children"} for groups."""
     return [
-        {"label": node.label, "id": node.id}
+        {"label": node.label, "icon": node.icon, "id": node.id}
         if isinstance(node, Leaf)
-        else {"label": node.label, "children": _nodes_json(node.children)}
+        else {
+            "label": node.label,
+            "icon": node.icon,
+            "children": _nodes_json(node.children),
+        }
         for node in nodes
     ]
 

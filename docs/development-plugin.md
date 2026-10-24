@@ -252,7 +252,7 @@ and opens the data browser on the one chosen. The others show what was read:
 | View                               | Fields                                                                 | Shown as                          |
 |------------------------------------|------------------------------------------------------------------------|-----------------------------------|
 | `QueryView(data=..., more=False, fetch=None)`  | Any dataframe narwhals supports, best lazy; `more`: only the item's first part (rows or bytes); `fetch`: how the browser reads rows of the data, see below | The data browser                  |
-| `TableSetView(nodes, loader, selector="tree")` | `nodes`: tables (`Leaf(label, id)`), maybe in groups (`Node(label, children)`); `loader(id)`: a table's dataframe, as `QueryView`'s `data` | The tables in a tree (`"tree"`) or on tabs (`"tab"`, tables only), and the data browser on the one chosen |
+| `TableSetView(nodes, loader, selector="tree")` | `nodes`: tables (`Leaf(label, id)`), maybe in groups (`Node(label, children)`), each with an `icon` (`"folder"`, `"database"` or `"table"`); `loader(id)`: a table's dataframe, as `QueryView`'s `data` | The tables in a tree (`"tree"`) or on tabs (`"tab"`, tables only), and the data browser on the one chosen |
 | `TableView(columns, rows, ...)`    | `dtypes`, `more`, `total`, `unit` ("rows", "records")                  | A table, with a note of the counts |
 | `TextView(text, language=None)`    | `html`: highlighted text (optional)                                    | Text                              |
 | `MarkdownView(text)`               |                                                                        | Rendered Markdown (sanitized)     |
@@ -296,7 +296,11 @@ sql = {f"{s}.{t}": f"select * from {quoted(s)}.{quoted(t)}" for s, t in tables}
 schemas = sorted({schema for schema, _ in tables})
 view = TableSetView(
     nodes=[
-        Node(label=s, children=[Leaf(label=t, id=f"{s}.{t}") for schema, t in tables if schema == s])
+        Node(
+            label=s,
+            children=[Leaf(label=t, id=f"{s}.{t}") for schema, t in tables if schema == s],
+            icon="database",  # a schema; groups are folders by default
+        )
         for s in schemas
     ],
     loader=lambda id: con.sql(sql[id]),

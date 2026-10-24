@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, ClassVar, Literal
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, get_args
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
@@ -171,6 +171,11 @@ class QueryView(View):
     fetch: Callable[[Any, int, int], Any] | None = None
 
 
+# The icons of a TableSetView's tree (Node.icon).
+NodeIcon = Literal["folder", "database", "table"]
+NODE_ICONS: tuple[str, ...] = get_args(NodeIcon)
+
+
 @dataclass(frozen=True, kw_only=True)
 class Node:
     """A group of tables in a ``TableSetView``'s tree, e.g. a database's
@@ -182,10 +187,23 @@ class Node:
         Shown in the tree.
     children : sequence of Node, default ()
         The groups and tables (``Leaf``) in it.
+    icon : {"folder", "database", "table"}, default "folder"
+        Shown before the label, e.g. "database" for a database's schema.
+
+    Raises
+    ------
+    ValueError
+        If ``icon`` is unknown.
     """
 
     label: str
     children: Sequence[Node] = ()
+    icon: NodeIcon = "folder"
+
+    def __post_init__(self) -> None:
+        if self.icon not in NODE_ICONS:
+            known = ", ".join(f'"{icon}"' for icon in NODE_ICONS)
+            raise ValueError(f"icon must be one of {known}, not {self.icon!r}")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -198,16 +216,20 @@ class Leaf(Node):
         Shown in the tree or on its tab.
     id : str
         What ``loader`` is given, unique in the view (e.g. "sales.orders").
+    icon : {"folder", "database", "table"}, default "table"
+        Shown before the label in the tree.
 
     Raises
     ------
     ValueError
-        If given ``children``: a table holds none.
+        If given ``children``: a table holds none. If ``icon`` is unknown.
     """
 
     id: str
+    icon: NodeIcon = "table"
 
     def __post_init__(self) -> None:
+        super().__post_init__()
         if self.children:
             raise ValueError(f"table {self.label!r} cannot have children")
 
@@ -257,10 +279,9 @@ class TableSetView(View):
 
     >>> con = duckdb.connect(path, read_only=True)
     >>> sql = {"sales.orders": 'select * from "sales"."orders"'}
+    >>> orders = Leaf(label="orders", id="sales.orders")
     >>> view = TableSetView(
-    ...     nodes=[
-    ...         Node(label="sales", children=[Leaf(label="orders", id="sales.orders")]),
-    ...     ],
+    ...     nodes=[Node(label="sales", children=[orders], icon="database")],
     ...     loader=lambda id: con.sql(sql[id]),
     ... )
     >>> view.on_close(lambda view: con.close())

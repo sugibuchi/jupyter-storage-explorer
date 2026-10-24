@@ -1557,6 +1557,9 @@ def table_set_tree(lab: Lab, page: Page) -> None:
     tree = tables.locator(".jse-table-set-tree")
     rows = tree.locator(".jse-table-set-row")
     expect(rows).to_have_text(["workbook", "Budget 2026", "Notes"])
+    icons = tree.locator(".jse-table-set-icon .jse-svg")
+    expect(icons.first).to_have_attribute("data-icon", "folder")
+    expect(icons.nth(1)).to_have_attribute("data-icon", "spreadsheet")
     tree.locator(".jse-table-set-leaf", has_text="Notes").click()
     expect(tree.locator(".jse-table-set-leaf.jse-active")).to_have_text("Notes")
     expect(tables.locator(".jse-query thead")).to_contain_text("Figures in EUR")
@@ -1606,6 +1609,10 @@ def duckdb_engine(lab: Lab, page: Page) -> None:
     expect(tree.locator(".jse-table-set-row")).to_have_text(
         ["main", "customers", "sales", "orders"]
     )
+    # Schemas get a database's icon, tables a spreadsheet's.
+    icons = tree.locator(".jse-table-set-icon .jse-svg")
+    expect(icons.first).to_have_attribute("data-icon", "database")
+    expect(icons.nth(1)).to_have_attribute("data-icon", "spreadsheet")
     tree.locator(".jse-table-set-leaf", has_text="orders").click()
     expect(tables.locator(".jse-query-status")).to_have_text("Rows 1–100 / 250")
     x.row("orders.parquet").click()

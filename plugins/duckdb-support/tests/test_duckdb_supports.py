@@ -380,6 +380,8 @@ class TestDatabase:
             ("main", ["t", "v"]),
             ("sales", ["orders"]),
         ]
+        assert {n.icon for n in view.nodes} == {"database"}
+        assert {c.icon for n in view.nodes for c in n.children} == {"table"}
         assert rows(view.loader('"sales"."orders"')) == [
             {"id": 0},
             {"id": 1},
