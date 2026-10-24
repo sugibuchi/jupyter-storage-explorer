@@ -1567,6 +1567,67 @@ def table_set_tree(lab: Lab, page: Page) -> None:
     x.back_to_notebook()
 
 
+# duckdb-support's engine on a storage DuckDB cannot read itself: a database
+# (copied to the kernel's disk), a SQLite file of the same extension, and a
+# Parquet file (read through the explorer's filesystem).
+DUCKDB = """\
+import pathlib
+import tempfile
+import duckdb
+import fsspec
+from jupyter_storage_explorer import StorageExplorer
+
+folder = pathlib.Path(tempfile.mkdtemp())
+con = duckdb.connect(str(folder / "shop.db"))
+con.sql("create schema sales; create table sales.orders as select range as id from range(250)")
+con.sql("create table main.customers as select range as id from range(10)")
+con.sql(f"copy (select range as id from range(300)) to '{(folder / 'o.parquet').as_posix()}'")
+con.close()
+memory = fsspec.filesystem("memory")
+memory.pipe_file("/duck/shop.db", (folder / "shop.db").read_bytes())
+memory.pipe_file("/duck/orders.parquet", (folder / "o.parquet").read_bytes())
+memory.pipe_file("/duck/other.db", b"SQLite format 3\\0" + bytes(100))
+StorageExplorer("/duck", fs=memory, engine_preference=["duckdb"])"""
+
+
+@lab_check
+def duckdb_engine(lab: Lab, page: Page) -> None:
+    # A database's tables and views in a tree, by schema, the data browser on
+    # the one chosen; Parquet with DuckDB; a ".db" of SQLite has no format.
+    x = Explorer(lab, page, DUCKDB)
+    expect(x.el.locator(".jse-engine-btn")).to_have_text("DuckDB")
+    x.row("shop.db").click()
+    link = x.el.locator(".jse-status-bar .jse-preview-btn")
+    expect(link).to_have_text("Preview (DuckDB database)")
+    link.click()
+    expect(x.preview.locator(".jse-badge")).to_have_text("DuckDB database · DuckDB")
+    tables = x.preview.locator(".jse-table-set")
+    tree = tables.locator(".jse-table-set-tree")
+    expect(tree.locator(".jse-table-set-row")).to_have_text(
+        ["main", "customers", "sales", "orders"]
+    )
+    tree.locator(".jse-table-set-leaf", has_text="orders").click()
+    expect(tables.locator(".jse-query-status")).to_have_text("Rows 1–100 / 250")
+    x.row("orders.parquet").click()
+    expect(x.preview.locator(".jse-badge")).to_have_text("Parquet · DuckDB")
+    expect(x.preview.locator(".jse-query-status")).to_have_text("Rows 1–100 / 300")
+    x.preview.press("Escape")
+    x.row("other.db").click()
+    expect(link).to_be_disabled()
+    expect(link).to_have_text("Preview")
+    # The code downloads the database, as DuckDB opens only local ones.
+    x.row("shop.db").click(button="right")
+    x.menu_item("Python code").hover()
+    x.el.locator(
+        ".jse-submenu .jse-menu-item:visible", has_text="Open the database (DuckDB)"
+    ).click()
+    dialog = x.el.locator(".jse-dialog:visible")
+    expect(dialog).to_contain_text(
+        "fsspec.open_local('simplecache::memory:///duck/shop.db')"
+    )
+    dialog.press("Escape")
+
+
 @lab_check
 def python_callbacks(lab: Lab, page: Page) -> None:
     x = Explorer(lab, page, CALLBACKS)

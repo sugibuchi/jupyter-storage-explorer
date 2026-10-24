@@ -1,0 +1,63 @@
+# Release, part 3: once release-explorer.yaml has succeeded for a version tag
+# (so jupyter-storage-explorer, which the plugin depends on, is on PyPI),
+# build jupyter-storage-explorer-duckdb-support for the same tag, add it to the GitHub
+# release (_release-plugin.yaml), and publish it to PyPI. It can also be run
+# by hand for a tag (Actions > Release duckdb-support > Run workflow), e.g. to retry.
+#
+# PyPI publishing uses trusted publishing (no token): the PyPI project
+# jupyter-storage-explorer-duckdb-support needs a trusted publisher for this
+# repository, workflow `release-duckdb-support.yaml` and environment `pypi` (see
+# DEVELOPMENT.md). A workflow publishes one project: PyPI refuses one
+# workflow for several.
+name: Release duckdb-support
+
+on:
+  # The jobs check that the run came from a tag pushed here (see their if).
+  workflow_run: # zizmor: ignore[dangerous-triggers]
+    workflows: ["Release explorer"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Version tag to release, e.g. v0.14.0"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    # Only after a successful explorer release, run for a tag pushed to this
+    # repository: a workflow of the same name in a fork's pull request also
+    # ends with workflow_run, and must not release.
+    if: >-
+      github.event_name == 'workflow_dispatch' || (
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_repository.full_name == github.repository &&
+        github.event.workflow_run.path == '.github/workflows/release-explorer.yaml'
+      )
+    uses: ./.github/workflows/_release-plugin.yaml
+    permissions:
+      contents: write
+    with:
+      plugin: duckdb-support
+      # The tag the explorer was released for (a tag push's "branch"), or the one given.
+      tag: ${{ inputs.tag || github.event.workflow_run.head_branch }}
+
+  pypi:
+    needs: release
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/jupyter-storage-explorer-duckdb-support/
+    permissions:
+      id-token: write  # trusted publishing
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          name: dist-duckdb-support
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086  # v1.14.3

@@ -57,6 +57,8 @@ abfs-support = ["jupyter-storage-explorer-abfs-support"]
 # Experimental, as fsspec-databricks is: not in "all" or "all-supports".
 databricks = ["jupyter-storage-explorer-databricks-support[full]"]
 databricks-support = ["jupyter-storage-explorer-databricks-support"]
+duckdb = ["jupyter-storage-explorer-duckdb-support[full]"]
+duckdb-support = ["jupyter-storage-explorer-duckdb-support"]
 pandas = ["jupyter-storage-explorer-pandas-support[full]"]
 pandas-support = ["jupyter-storage-explorer-pandas-support"]
 polars = ["jupyter-storage-explorer-polars-support[full]"]
@@ -64,8 +66,8 @@ polars-support = ["jupyter-storage-explorer-polars-support"]
 pyspark = ["jupyter-storage-explorer-pyspark-support[full]"]
 pyspark-support = ["jupyter-storage-explorer-pyspark-support"]
 # Every plugin: with their libraries, or alone.
-all = ["jupyter-storage-explorer[abfs,pandas,polars,pyspark]"]
-all-supports = ["jupyter-storage-explorer[abfs-support,pandas-support,polars-support,pyspark-support]"]
+all = ["jupyter-storage-explorer[abfs,duckdb,pandas,polars,pyspark]"]
+all-supports = ["jupyter-storage-explorer[abfs-support,duckdb-support,pandas-support,polars-support,pyspark-support]"]
 
 [project.urls]
 Homepage = "https://github.com/sugibuchi/jupyter-storage-explorer"
@@ -99,6 +101,7 @@ dev = [
     "fastexcel>=0.21.0",
     "jupyter-storage-explorer-abfs-support",
     "jupyter-storage-explorer-databricks-support",
+    "jupyter-storage-explorer-duckdb-support",
     "jupyter-storage-explorer-launcher",
     "jupyter-storage-explorer-pandas-support",
     "jupyter-storage-explorer-polars-support",
@@ -130,6 +133,7 @@ members = ["launcher", "plugins/*"]
 jupyter-storage-explorer-launcher = { workspace = true }
 jupyter-storage-explorer-abfs-support = { workspace = true }
 jupyter-storage-explorer-databricks-support = { workspace = true }
+jupyter-storage-explorer-duckdb-support = { workspace = true }
 jupyter-storage-explorer-pandas-support = { workspace = true }
 jupyter-storage-explorer-polars-support = { workspace = true }
 jupyter-storage-explorer-pyspark-support = { workspace = true }

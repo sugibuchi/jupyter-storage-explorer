@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from all_supports import NO_PLUGINS
 
 from jupyter_storage_explorer import StorageExplorer
 from jupyter_storage_explorer._explorer.icons import format_icons
@@ -27,10 +28,10 @@ class TestFileIcons:
 
     def explorer(self, icon):
         """An explorer with a support of an Avro format: its format is the
-        explorer's."""
+        explorer's. Without plugins, whose formats have icons of their own."""
         fmt = type(self.avro(icon))
         avro = type("AvroByPython", (FormatSupport,), {"format": fmt})
-        return StorageExplorer(fs=None, supports=[avro])
+        return StorageExplorer(fs=None, supports=[avro], plugin_options=NO_PLUGINS)
 
     def test_default_formats(self):
         assert format_icons(

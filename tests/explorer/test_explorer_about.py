@@ -47,6 +47,7 @@ def test_the_plugins(memfs):
     assert sorted(plugins) == [
         "abfs-support",
         "databricks-support",
+        "duckdb-support",
         "pandas-support",
         "polars-support",
         "pyspark-support",

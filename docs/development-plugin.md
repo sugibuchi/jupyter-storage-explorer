@@ -72,7 +72,7 @@ Point it at the plugin of this repository closest to the task, to copy:
 
 | Plugin to write           | Closest example                                                                             |
 |---------------------------|---------------------------------------------------------------------------------------------|
-| An engine                 | [polars-support](../plugins/polars-support) or [pandas-support](../plugins/pandas-support)  |
+| An engine                 | [polars-support](../plugins/polars-support), [pandas-support](../plugins/pandas-support) or [duckdb-support](../plugins/duckdb-support) |
 | An engine on a cluster    | [pyspark-support](../plugins/pyspark-support)                                               |
 | File operations           | [abfs-support](../plugins/abfs-support)                                                     |
 | A storage with locations  | [databricks-support](../plugins/databricks-support)                                         |
@@ -170,7 +170,7 @@ class DuckDBEngine(Engine):
 
 `DuckDB().is_installed()` checks without importing; `DuckDB().load()` imports it (`load("submodule")` a submodule).
 An engine is defined once, by one plugin: another plugin using it imports its class (two classes of one key are an
-error). The predefined ones are `PolarsEngine`, `PandasEngine`, `PySparkEngine` and `DatabricksConnectEngine`, from
+error). The predefined ones are `PolarsEngine`, `PandasEngine`, `DuckDBEngine`, `PySparkEngine` and `DatabricksConnectEngine`, from
 their plugins' packages (`jupyter_storage_explorer_polars_support`, ...). The explorer offers the engines installed
 that view something.
 
@@ -1050,7 +1050,7 @@ def filesystem_mappers():
 
 ## Plugins of this repository
 
-The plugins in [`plugins/`](../plugins) (polars, pandas, pyspark, abfs, databricks) follow these conventions and are released with the
+The plugins in [`plugins/`](../plugins) (polars, pandas, duckdb, pyspark, abfs, databricks) follow these conventions and are released with the
 explorer, at its version: each requires the explorer of exactly its own version (its `hatch_build.py`: the version comes from git), and the
 explorer's extras install them (`polars`: with its libraries; `polars-support`: alone). databricks-support also
 requires pyspark-support of its own version, whose supports its engine extends. To add one:
