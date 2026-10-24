@@ -14,6 +14,7 @@ It also adds a **side panel**, a narrow explorer next to your notebooks:
 - The same storages as the tab; a folder's list, without the tree or the preview panel.
 - Files you view (**View**, a double-click) open in new tabs.
 - The filter button, left of ⚙, shows the filter.
+- If it stops responding, see [Restart the side panel](#restart-the-side-panel).
 
 <img src="https://raw.githubusercontent.com/sugibuchi/jupyter-storage-explorer/main/launcher/figs/side-panel.png" width="867" alt="The side panel in JupyterLab's left side bar, a Parquet file selected, beside the tab its View button opened in the data browser">
 
@@ -90,7 +91,25 @@ def parameters():
     return {"preview_panel": "open"}
 ```
 
-The file has some of these functions, all optional:
+## Troubleshooting
+
+### Restart the side panel
+
+The side panel runs in a kernel of its own. If the panel stops responding, restart that kernel:
+
+1. Open JupyterLab's **Running Terminals and Kernels** panel in the left side bar.
+2. Under **Kernels**, hover over the kernel named **Storage Explorer (side panel)**, followed by its id.
+3. Click its **Shut Down** button, a cross at the right.
+
+<img src="https://raw.githubusercontent.com/sugibuchi/jupyter-storage-explorer/main/launcher/figs/side-panel-restart.png" width="422" alt="JupyterLab's Running Terminals and Kernels panel, the Storage Explorer (side panel) kernel hovered, its Shut Down button at the right">
+
+The side panel then starts a new kernel and shows the explorer again.
+
+Reloading the page is not enough when the kernel is stuck: the panel reconnects to the same kernel.
+
+## Configuration details
+
+The configuration file, `launcher.py`, has some of these functions, all optional:
 
 | Function            | Returns                                                                                                                                                                                                                   |
 |---------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -100,30 +119,9 @@ The file has some of these functions, all optional:
 | `transfer_policy()` | Rules of a [transfer policy](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#transfer-policy)                                                                                    |
 | `parameters()`      | Other `StorageExplorer` arguments ([StorageExplorer options](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#storageexplorer-options)), e.g. `{"engine_preference": ["pandas"]}` |
 
-The side panel uses the same settings, except its own layout: `height`, `tree_view`, `preview_panel` and `layout` are
-not taken from `parameters()` there.
-
 If your file has an error, the tab still opens, without your settings. The error shows above the explorer and in its
 status bar. Fix the file with the ⚙ button, then open the tab again. This covers errors raised by the file, settings
 that do not exist, and values the explorer refuses.
-
-### Other configuration files
-
-Your files are in Jupyter's configuration directory, which `jupyter --config-dir` prints: `~/.jupyter` by default (on
-Windows, `%USERPROFILE%\.jupyter`), or `$JUPYTER_CONFIG_DIR` where that is set. `launcher.py` is in its
-`storage-explorer` folder.
-
-#### Icons
-
-To change the explorer's icons, use JupyterLab's `custom.css` (see
-[Icons](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/DEVELOPMENT.md#icons)), which applies to the
-launcher's tabs and to explorers in notebooks alike.
-
-#### Bookmarks and query settings
-
-The tabs share bookmarks, the data browser's query settings, the engine chosen and the list's columns. They keep them
-in `storage-explorer/states.json` in the same directory, unless `parameters()` sets `states` (another file's path, or
-`None`: in each tab's memory).
 
 ### Layers of the configuration file
 
@@ -131,15 +129,7 @@ Administrators can set up the tab for everyone: a `storage-explorer/launcher.py`
 directories (`jupyter --paths`, *config* section) is read, e.g. `/etc/jupyter/storage-explorer/launcher.py` for the
 whole system or `<environment>/etc/jupyter/storage-explorer/launcher.py` for one Python environment (e.g. a
 JupyterHub image). Each file is a layer, applied from the system's to the user's, so users' files usually come last.
-A later layer changes an earlier one's settings this way:
-
-| Function            | Merged with earlier layers                      |
-|---------------------|-------------------------------------------------|
-| `filesystems()`     | By name: added or replaced; `None` removes one  |
-| `plugin_options()`  | By plugin, then option                          |
-| `parameters()`      | By name                                         |
-| `engine_options()`  | By engine, format, then option                  |
-| `transfer_policy()` | Later layers' rules first, so they decide first |
+A later layer adds to an earlier one's settings or replaces them.
 
 `final()` returns the settings later layers cannot change: function names (except `parameters`) and parameter names.
 For example, `/etc/jupyter/storage-explorer/launcher.py`:
@@ -171,4 +161,22 @@ def final():
 Final settings are not a security boundary: users can still create explorers in notebooks.
 
 An error in any file other than the user's stops the tab: it shows only the error, naming the file. Users' files are
-left out instead (see [Configuration](#configuration)).
+left out instead (see [Configuration details](#configuration-details)).
+
+### Other configuration files
+
+Your files are in Jupyter's configuration directory, which `jupyter --config-dir` prints: `~/.jupyter` by default (on
+Windows, `%USERPROFILE%\.jupyter`), or `$JUPYTER_CONFIG_DIR` where that is set. `launcher.py` is in its
+`storage-explorer` folder.
+
+#### Icons
+
+To change the explorer's icons, use JupyterLab's `custom.css` (see
+[Icons](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/DEVELOPMENT.md#icons)), which applies to the
+launcher's tabs and to explorers in notebooks alike.
+
+#### Bookmarks and query settings
+
+The tabs share bookmarks, the data browser's query settings, the engine chosen and the list's columns. They keep them
+in `storage-explorer/states.json` in the same directory, unless `parameters()` sets `states` (another file's path, or
+`None`: in each tab's memory).
