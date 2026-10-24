@@ -55,8 +55,8 @@ Each component can be tried in an explorer before packaging it: see
 8. **Name things by convention:** supports `<Format>By<Library>` (e.g. `ParquetByDuckDB`), their options
    `<Library>Options`, engines `<Library>Engine`, plugins `<Name>Support`, packages
    `jupyter-storage-explorer-<name>-support`.
-9. **Read files through the item's context** (`ctx.head_text`, `ctx.read_whole`) unless the library reads by URL
-   itself (`ctx.library_url`), so that any storage the explorer reaches works.
+9. **Reach any storage the explorer reaches.** Where the library cannot read the item's URL itself, hand it the
+   explorer's filesystem, or read through the item's context: see [Reading the item](#reading-the-item).
 10. **Write docstrings** for every public class and method, in numpy style (`Parameters`, `Returns`, `Raises`).
 
 ## Writing a plugin with an AI assistant
@@ -106,12 +106,15 @@ from jupyter_storage_explorer.formats import DataFormat
 
 
 class Avro(DataFormat):
-    name = "avro"            # identifier: lower case, "-" between words; used in engine_options and CSS
+    name = "avro"            # identifier: lower case, "-" between words, unique; used in engine_options and CSS
     label = "Avro"           # shown to users
     priority = 0             # the highest-priority match wins (Delta 20 > Parquet 10 > 0 > Text -10)
     extensions = (".avro",)  # the default matches() checks these (lower case)
     file_icon = "file"       # optional: one of FILE_ICONS, or (name, "<svg ...>") of its own
 ```
+
+Two format classes of one name are an error: explorers choose formats by name, in `engine_options`, previews and
+menus. A subclass of a format, e.g. a TSV of `Csv`, takes a name of its own.
 
 The default `matches(ctx)` checks `extensions`. A folder format (a table of files) overrides it and looks at the
 folder's listing (`ctx.children`, `ctx.child_names`).
@@ -178,8 +181,9 @@ A `FormatSupport` handles one format's data with one engine:
 ```python
 from inspect import cleandoc
 
-from jupyter_storage_explorer.filesystems import LocalLocation, S3Location
+from jupyter_storage_explorer.filesystems import LocalLocation
 from jupyter_storage_explorer.formats import FormatSupport, Parquet, QueryView, format_kwargs
+from jupyter_storage_explorer.formats.packages import PyArrow
 
 
 class ParquetByDuckDB(FormatSupport):
@@ -187,19 +191,27 @@ class ParquetByDuckDB(FormatSupport):
 
     format = Parquet                   # matched with isinstance: subclasses too
     engine = DuckDBEngine
-    additional_requirements = ()       # other PythonPackage instances it needs
+    additional_requirements = (PyArrow(),)  # other packages it needs: here, the data browser's (see below)
     options_model = DuckDBOptions      # see "Options"; SupportOptions (none) by default
 
     def supports(self, fmt, ctx, options, task):
-        # By default, what the class implements. Here only what DuckDB reads itself.
-        reachable = isinstance(ctx.location, (LocalLocation, S3Location))
-        return super().supports(fmt, ctx, options, task) and reachable
+        # By default, what the class implements. Here local files only: DuckDB reads cloud storage only with its
+        # extensions configured, and other storages through the explorer's filesystem (see "Reading the item").
+        local = isinstance(ctx.location, LocalLocation)
+        return super().supports(fmt, ctx, options, task) and local
+
+    def data_url(self, fmt, ctx):
+        url = fmt.data_url(ctx)  # a file's path, or a glob of a folder's data files
+        if ctx.is_dir and fmt.layout(ctx).files == "*":
+            # Data files without an extension (Hive's): not "_SUCCESS" or ".crc" checksums, which DuckDB would read.
+            url = url.removesuffix("*") + "[!_.]*"
+        return url
 
     def view(self, fmt, ctx, options, limits):
         duckdb = DuckDB().load()
         partitioned = ctx.is_dir and bool(fmt.layout(ctx).keys)
         con = duckdb.connect(**options.connect_kwargs())
-        relation = con.read_parquet(fmt.data_url(ctx), hive_partitioning=partitioned)
+        relation = con.read_parquet(self.data_url(fmt, ctx), hive_partitioning=partitioned)
         view = QueryView(data=relation)
         view.on_close(lambda view: con.close())  # once the explorer no longer shows it
         return view
@@ -212,8 +224,13 @@ class ParquetByDuckDB(FormatSupport):
 
     def recipe(self, fmt, ctx, options):
         kwargs = format_kwargs(hive_partitioning=True if ctx.is_dir else None)
-        return {"Load as relation": self.relation_template.format(url=repr(fmt.data_url(ctx)), kwargs=kwargs)}
+        url = repr(self.data_url(fmt, ctx))
+        return {"Load as relation": self.relation_template.format(url=url, kwargs=kwargs)}
 ```
+
+`additional_requirements` gate the whole support: without them, neither its views nor its code are offered. List
+there what the data browser needs too. In memory mode, it collects lazy data into the library narwhals collects it
+into, e.g. PyArrow for a DuckDB relation.
 
 ### `view(fmt, ctx, options, limits)`
 
@@ -244,8 +261,11 @@ Until then, a `QueryView`'s data must stay readable, as must a `TableSetView`'s 
 time a table is chosen or read again, e.g. a database's tables from one connection, closed in `on_close`:
 
 ```python
-con = duckdb.connect(path, read_only=True)
-tables = con.sql("select table_schema, table_name from information_schema.tables").fetchall()
+con = duckdb.connect(path, read_only=True)  # a local file's path: DuckDB opens databases itself
+# Tables only: con.table cannot read views, which information_schema.tables lists too.
+tables = con.sql(
+    "select table_schema, table_name from information_schema.tables where table_type = 'BASE TABLE'"
+).fetchall()
 schemas = sorted({schema for schema, _ in tables})
 view = TableSetView(
     nodes=[
@@ -361,8 +381,23 @@ code = f"con.read_parquet({url!r}{format_arguments(options.code_arguments())})" 
 | `ctx.info`, `ctx.size`     | Its fsspec info; its size                                                                  |
 | `ctx.children`, `ctx.child_names`, `ctx.is_dir` | A folder's listing, its names, whether it is a folder                 |
 
-Libraries doing their own I/O (polars, DuckDB, Spark) read `ctx.library_url` with their own credentials (the
-environment, or options); others read through `ctx.fs`, so that any storage the explorer reaches works.
+A library reads the item in one of three ways. Choose per storage in `supports`, as polars-support does:
+
+| Way | When | Examples |
+|---|---|---|
+| By URL, `ctx.library_url` | The library reads the storage itself, with its own credentials: the environment, or options | polars on S3 (object_store), Spark |
+| The explorer's filesystem, `ctx.fs` | The library takes an fsspec filesystem and reads lazily through it | PyArrow's `FSSpecHandler` (polars-support's Parquet), DuckDB's `register_filesystem` |
+| Bytes, `ctx.head(n)`, `ctx.read_whole(limits)` | The library reads only a file object or bytes, so the file is read whole | pandas, polars' CSV elsewhere, images |
+
+- Check what the library really reads before relying on it. Lazy through fsspec for one format may be whole for
+  another: DuckDB reads Parquet lazily through fsspec, but reads a CSV file again for each query.
+- Handing `ctx.fs` over, pass `ctx.path`, the item's path in it, not `ctx.location.url`. The location's URL may not be
+  the filesystem's: a `DirFileSystem`'s paths are relative, and a mapper's URL may name the storage otherwise (adlfs
+  reads `abfs://container@account...` as `container/...`).
+- A library registering filesystems by protocol may already read that protocol itself (DuckDB's `s3://`). Register
+  the explorer's under a name of its own, so that both work.
+- Reading bytes whole, ask first above `limits.max_whole_file_bytes`, with a `ViewWithChoice` or a
+  `ViewWithConfirmation`.
 
 ## File operations
 
@@ -749,7 +784,8 @@ format: each option, its default and its meaning, from the library's documentati
 - **Installation** tables every library of the `full` extra, with what it is needed for. The engine's comes first,
   marked "Mandatory"; for a storage plugin, the storage's packages are.
 - **Prerequisites** say what the environment must already provide, e.g. the library's access to storage. Link the
-  configuration reference of a library that does not use fsspec, as polars-support links object_store's.
+  configuration reference of a library that does not use fsspec, as polars-support links object_store's. Say which
+  storages it reads itself, and how it reads the others, e.g. through the explorer's filesystem.
 - **Plugin options** shows one example for `StorageExplorer` and one for `launcher.py`, then the options' table.
 - Code blocks are formatted as ruff formats Python. Nothing checks this: format them by hand.
 
@@ -804,9 +840,11 @@ def test_view(tmp_path):
     view.close()
 
 
-def test_code(make_item):
-    code = ParquetByDuckDB().recipe(Parquet(), make_item("/a.parquet", b""), DuckDBOptions())
-    assert "read_parquet('memory:///a.parquet')" in code["Load as relation"]
+def test_code(tmp_path):
+    path = tmp_path / "a.parquet"
+    ...  # write a Parquet file
+    code = ParquetByDuckDB().recipe(Parquet(), local_item(path), DuckDBOptions())
+    assert f"read_parquet({path.as_posix()!r})" in code["Load as relation"]
 
 
 def test_supports_what_duckdb_reads(tmp_path, make_item):
@@ -937,3 +975,10 @@ requires pyspark-support of its own version, whose supports its engine extends. 
    table.
 5. Write its README as [The README](#the-readme) says, with the explorer's extras in its commands.
    `tests/test_plugin_readmes.py` checks it with the others.
+6. Update the core's tests that list what is installed: `uv run pytest` at the root runs them with every plugin. They
+   name the plugins, engines, formats and extras, and some use names that may now be taken, such as a sample format.
+   Search them for another plugin's key, e.g. `polars-support`, and for the new engine's and formats' names.
+7. Add it to DEVELOPMENT.md's tables of the packages and of the PyPI projects. Add its engine, formats and engine
+   options to [storage-explorer.md](storage-explorer.md), where it lists those.
+
+A plugin of an experimental library stays out of `all` and `all-supports`, as databricks-support does.

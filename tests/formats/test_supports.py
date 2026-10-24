@@ -124,6 +124,15 @@ def test_formats_are_the_supports():
     assert all(f not in other for f in chain.formats)
 
 
+def test_one_format_class_per_name():
+    # A name is what engine_options, previews and menus choose a format by.
+    other_csv = type("OtherCsv", (Csv,), {})  # still named "csv"
+    with pytest.raises(ValueError, match="format 'csv' is defined twice"):
+        SupportChain([support(other_csv), *DEFAULT_SUPPORTS], formats=DEFAULT_FORMATS)
+    tsv = type("Tsv", (Csv,), {"name": "tsv"})
+    assert SupportChain([support(tsv), *DEFAULT_SUPPORTS], formats=DEFAULT_FORMATS)
+
+
 @pytest.mark.parametrize("cls", ALL_SUPPORTS)
 def test_supports_implement_a_task(cls):
     assert any(cls.implements(task) for task in get_args(Task))

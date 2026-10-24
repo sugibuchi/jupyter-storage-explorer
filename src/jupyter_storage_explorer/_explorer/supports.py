@@ -92,9 +92,9 @@ class SupportChain:
 
     ValueError for an engine key no support has (in ``engine_preference``
     or ``engine_options``), two engine classes of one key (an engine is
-    defined once, e.g. by its plugin, and imported by others), a format of
-    no support, or an option no support of the engine (for that format) takes:
-    a typo would otherwise be ignored. A function's options are checked when
+    defined once, e.g. by its plugin, and imported by others), two format
+    classes of one name, a format of no support, or an option no support of
+    the engine (for that format) takes: a typo would otherwise be ignored. A function's options are checked when
     it is called. TypeError for an item that is no FormatSupport.
     """
 
@@ -121,6 +121,7 @@ class SupportChain:
             for cls in dict.fromkeys([*(s.format for s in self.supports), *formats])
         ]
         self._format_names = [f.name for f in self.formats]
+        _check_format_names(self.formats)
         _check_options(self.engine_options, self._libraries, self._format_names)
         if engine_preference is None:
             engine_preference = DEFAULT_ENGINE_PREFERENCE
@@ -336,6 +337,21 @@ def _check_engine_options(
         raise ValueError(
             f"{where}: unknown options {sorted(unknown)}; choose from {sorted(taken)}"
         )
+
+
+def _check_format_names(formats: Sequence[DataFormat]) -> None:
+    """ValueError for two format classes of one name: a name is what
+    ``engine_options``, previews and the menus choose a format by."""
+    classes: dict[str, type[DataFormat]] = {}
+    for fmt in formats:
+        cls = type(fmt)
+        known = classes.setdefault(fmt.name, cls)
+        if known is not cls:
+            raise ValueError(
+                f"format {fmt.name!r} is defined twice: by "
+                f"{known.__module__}.{known.__qualname__} and "
+                f"{cls.__module__}.{cls.__qualname__}; rename one"
+            )
 
 
 def _check_engine_keys(supports: Sequence[FormatSupport]) -> None:

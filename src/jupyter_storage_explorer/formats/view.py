@@ -232,7 +232,8 @@ class TableSetView(View):
     ...     selector="tab",
     ... )
 
-    A database's schemas and tables, the connection closed with the view:
+    A local database's schemas and tables (``con.table`` reads tables, not
+    views), the connection closed with the view:
 
     >>> con = duckdb.connect(path, read_only=True)
     >>> view = TableSetView(
