@@ -51,7 +51,11 @@ from jupyter_storage_explorer.formats import (
     Text,
     ViewLimits,
 )
-from jupyter_storage_explorer.formats.defaults import DEFAULT_FORMATS, DEFAULT_SUPPORTS
+from jupyter_storage_explorer.formats.defaults import (
+    DEFAULT_ACTIONS,
+    DEFAULT_FORMATS,
+    DEFAULT_SUPPORTS,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
@@ -629,6 +633,7 @@ class StorageExplorer(
                 *(actions or ()),
                 *(supports or ()),
                 *components.actions,
+                *self.default_actions(),
                 *self.default_supports(),
             ],
             engine_options,
@@ -729,18 +734,28 @@ class StorageExplorer(
         return _default_operations()
 
     @staticmethod
-    def default_supports() -> list[type[FormatSupport] | FormatSupport]:
-        """The supports tried after those given as ``supports``; override it
+    def default_actions() -> list[Action[Any]]:
+        """The actions tried after those given and the plugins'; override it
         in a subclass to change them.
 
         Returns
         -------
+        list of Action
+            By default ``jupyter_storage_explorer.formats.supports.BUILT_IN_ACTIONS``:
+            those needing no engine (views of text, Markdown, JSON and
+            images, and code reading them); the engines' come with their
+            plugins. Each gets its options from ``engine_options``.
+        """
+        return list(DEFAULT_ACTIONS)
+
+    @staticmethod
+    def default_supports() -> list[type[FormatSupport] | FormatSupport]:
+        """Supports of the former interface tried after ``default_actions()``:
+        none. To be removed with ``FormatSupport``.
+
+        Returns
+        -------
         list of FormatSupport classes or objects
-            By default the classes of
-            ``jupyter_storage_explorer.formats.default_supports()``: those
-            needing no engine (text, Markdown, JSON and images, and code
-            reading them); the engines' come with their plugins. Each gets its
-            options from ``engine_options``.
         """
         return list(DEFAULT_SUPPORTS)
 

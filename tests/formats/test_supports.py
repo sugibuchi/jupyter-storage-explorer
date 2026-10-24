@@ -51,8 +51,8 @@ from jupyter_storage_explorer.formats import (
     secret_dict_field,
     secret_field,
 )
-from jupyter_storage_explorer.formats.defaults import DEFAULT_FORMATS, DEFAULT_SUPPORTS
-from jupyter_storage_explorer.formats.supports import FsspecOptions, TextByPython
+from jupyter_storage_explorer.formats.defaults import DEFAULT_ACTIONS, DEFAULT_FORMATS
+from jupyter_storage_explorer.formats.supports import FsspecOptions, text_code
 
 LIMITS = ViewLimits(max_display_rows=2)
 
@@ -100,7 +100,11 @@ def options_by_class(engine_options=None, location=ACCOUNT_A):
     """The default supports' options for ``location``, by class, made from
     ``engine_options``."""
     chain = ActionChain(ALL_SUPPORTS, engine_options)
-    return {type(s): chain.options_of(s, location) for s in chain.supports}
+    return {
+        **{type(s): chain.options_of(s, location) for s in chain.supports},
+        # The core's actions, by themselves.
+        **{a: chain.options_of(a, location) for a in DEFAULT_ACTIONS},
+    }
 
 
 def test_formats_are_the_supports():
@@ -108,7 +112,7 @@ def test_formats_are_the_supports():
     avro = type("Avro", (Csv,), {"name": "avro"})
     # The supports' formats, then those given (the standard ones, as the
     # explorer gives them, detected even without a support).
-    chain = ActionChain([support(avro), *DEFAULT_SUPPORTS], formats=DEFAULT_FORMATS)
+    chain = ActionChain([support(avro), *DEFAULT_ACTIONS], formats=DEFAULT_FORMATS)
     assert [type(f) for f in chain.formats] == [
         avro,
         Json,
@@ -130,12 +134,12 @@ def test_one_format_class_per_name():
     # A name is what engine_options, previews and menus choose a format by.
     other_csv = type("OtherCsv", (Csv,), {})  # still named "csv"
     with pytest.raises(ValueError, match="format 'csv' is defined twice"):
-        ActionChain([support(other_csv), *DEFAULT_SUPPORTS], formats=DEFAULT_FORMATS)
+        ActionChain([support(other_csv), *DEFAULT_ACTIONS], formats=DEFAULT_FORMATS)
     tsv = type("Tsv", (Csv,), {"name": "tsv"})
-    assert ActionChain([support(tsv), *DEFAULT_SUPPORTS], formats=DEFAULT_FORMATS)
+    assert ActionChain([support(tsv), *DEFAULT_ACTIONS], formats=DEFAULT_FORMATS)
 
 
-@pytest.mark.parametrize("cls", ALL_SUPPORTS)
+@pytest.mark.parametrize("cls", [s for s in ALL_SUPPORTS if isinstance(s, type)])
 def test_supports_implement_a_task(cls):
     assert any(cls.implements(task) for task in get_args(Task))
 
@@ -167,14 +171,14 @@ class TestOptions:
         # Only the options a support's model has: Excel's code reads with fsspec.
         assert options[ExcelByPolars] == ExcelByPolarsOptions()
         assert options[CsvByPandas] == CsvByPandasOptions()  # pandas' own
-        assert options[TextByPython] == FsspecOptions()  # "python"'s
+        assert options[text_code] == FsspecOptions()  # "python"'s
 
     def test_by_library(self):
         # The supports without an engine take "python"'s.
         options = options_by_class(
             {"python": {"text": {"storage_options": {"anon": True}}}}
         )
-        assert options[TextByPython].storage_options == {"anon": True}
+        assert options[text_code].storage_options == {"anon": True}
 
     def test_python_is_no_engine(self):
         with pytest.raises(ValueError, match=r"unknown engines \['python'\]"):

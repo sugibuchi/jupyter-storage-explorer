@@ -211,6 +211,13 @@ ignore = [
     "SIM117",
 ]
 
+[tool.ruff.lint.flake8-type-checking]
+# Actions' decorators read the options class from the annotation at run time.
+runtime-evaluated-decorators = [
+    "jupyter_storage_explorer.formats.actions.code",
+    "jupyter_storage_explorer.formats.actions.view",
+]
+
 [tool.ruff.lint.flake8-bugbear]
 # Options' field specifiers, dataclasses.field with metadata (RUF009, B008).
 extend-immutable-calls = [

@@ -534,7 +534,7 @@ class JsonLinesByPolars(_PolarsByUrl):
 
 
 class JsonByPolars(_PolarsByUrl):
-    """Load code only: JSON is viewed as a tree (``JsonByPython``)."""
+    """Load code only: JSON is viewed as a tree (the built-in ``json_view``)."""
 
     format = Json
     options_model = JsonByPolarsOptions
