@@ -138,7 +138,7 @@ class TestWhichEngineViews:
 
     def test_no_fallback_for_an_item_it_does_not_support(self, make_item):
         refusing = support(Csv, engine("picky"))
-        refusing.supports = lambda self, fmt, ctx, task: ctx.name != "b.csv"
+        refusing.supports = lambda self, fmt, ctx, options, task: ctx.name != "b.csv"
         chain = SupportChain([refusing, support(Csv, None)])
         a, b = make_item("/a.csv", b""), make_item("/b.csv", b"")
         assert chain.engine_for(Csv(), a, "picky") == "picky"

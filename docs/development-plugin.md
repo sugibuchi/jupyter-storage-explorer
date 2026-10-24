@@ -44,7 +44,7 @@ Each component can be tried in an explorer before packaging it: see
 3. **Format supports take no `__init__` arguments.** Their options are the fields of their `options_model`, set
    through `engine_options`. Explorers create them from their classes.
 4. **Refuse what a component cannot handle**, so that the next one is tried:
-   - A format support overrides `supports(fmt, ctx, task)`, without reading the storage. Once it accepts an item, no
+   - A format support overrides `supports(fmt, ctx, options, task)`, without reading the storage. Once it accepts an item, no
      other support is tried, and what its method raises is the item's error.
    - File operations raise `FileSystemOperations.NotSupported`. Never raise it for real errors: raise those as they are.
 5. **Ask before reading much.** A view reading a whole large file returns a `ViewWithConfirmation` or a
@@ -190,10 +190,10 @@ class ParquetByDuckDB(FormatSupport):
     additional_requirements = ()       # other PythonPackage instances it needs
     options_model = DuckDBOptions      # see "Options"; SupportOptions (none) by default
 
-    def supports(self, fmt, ctx, task):
+    def supports(self, fmt, ctx, options, task):
         # By default, what the class implements. Here only what DuckDB reads itself.
         reachable = isinstance(ctx.location, (LocalLocation, S3Location))
-        return super().supports(fmt, ctx, task) and reachable
+        return super().supports(fmt, ctx, options, task) and reachable
 
     def view(self, fmt, ctx, options, limits):
         duckdb = DuckDB().load()
@@ -811,8 +811,8 @@ def test_code(make_item):
 
 def test_supports_what_duckdb_reads(tmp_path, make_item):
     support = ParquetByDuckDB()
-    assert support.supports(Parquet(), local_item(tmp_path), "view")
-    assert not support.supports(Parquet(), make_item("/a.parquet", b""), "view")  # memory://
+    assert support.supports(Parquet(), local_item(tmp_path), DuckDBOptions(), "view")
+    assert not support.supports(Parquet(), make_item("/a.parquet", b""), DuckDBOptions(), "view")
 
 
 def test_plugin_registered():

@@ -24,10 +24,11 @@ from jupyter_storage_explorer.formats.text import Csv, JsonLines
 from jupyter_storage_explorer.formats.view import QueryView
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Mapping, Sequence
     from dataclasses import Field
 
-    from jupyter_storage_explorer.formats.base import ItemContext
+    from jupyter_storage_explorer.formats.base import DataFormat, ItemContext
+    from jupyter_storage_explorer.formats.support import Task
     from jupyter_storage_explorer.formats.view import View, ViewLimits
 
 # Spark (Hadoop) names for storage URLs: TLS "abfss" for Azure, as Spark
@@ -114,7 +115,24 @@ class PySparkEngine(Engine):
 
 
 # The fields of PySparkOptions that are not one reader option each.
-_NOT_READER_OPTIONS = frozenset({"session_options", "reader_options"})
+_NOT_READER_OPTIONS = frozenset(
+    {"session_options", "reader_options", "supported_protocols"}
+)
+
+# The URL schemes Spark reads by default, as Spark names them (``spark_url``):
+# local files, HDFS, S3 (s3a), Google Cloud Storage, Azure (ABFS, WASB) and
+# Databricks (dbfs). Each needs its connector in the session, as configured.
+SPARK_PROTOCOLS = (
+    "file",
+    "hdfs",
+    "s3a",
+    "gs",
+    "abfss",
+    "abfs",
+    "wasbs",
+    "wasb",
+    "dbfs",
+)
 # Field metadata: the reader option's name in Spark, when it is not the
 # field's name in camel case (e.g. "timestampNTZFormat").
 SPARK_NAME = "spark_name"
@@ -158,10 +176,24 @@ class PySparkOptions(SupportOptions):
         Spark's generic file source options (``{"recursiveFileLookup":
         True}``) or those of a newer Spark; they override the fields and the
         defaults (for CSV, the separator detected).
+    supported_protocols : sequence of str or None, default SPARK_PROTOCOLS
+        The URL schemes Spark reads, as Spark names them (e.g. "s3a",
+        "abfss", "dbfs"): items elsewhere, e.g. on SFTP or in fsspec's memory
+        filesystem, are neither viewed nor given code with Spark. None for
+        any.
     """
 
     session_options: Mapping[str, Any] | None = None
     reader_options: Mapping[str, Any] | None = None
+    supported_protocols: Sequence[str] | None = SPARK_PROTOCOLS
+
+    def reads(self, ctx: ItemContext) -> bool:
+        """Whether Spark reads the item, by its URL's scheme as Spark names
+        it (``supported_protocols``)."""
+        if self.supported_protocols is None:
+            return True
+        scheme = spark_url(ctx.location.url).partition(":")[0].lower()
+        return scheme in {p.lower() for p in self.supported_protocols}
 
     def spark_options(self) -> dict[str, Any]:
         """The reader options the fields set (those not None), by Spark's
@@ -367,6 +399,12 @@ class _BySpark(FormatSupport):
     options_model = PySparkOptions
     # The code's import of what ``session_code`` uses.
     session_import = "from pyspark.sql import SparkSession"
+
+    def supports(
+        self, fmt: DataFormat, ctx: ItemContext, options: PySparkOptions, task: Task
+    ) -> bool:
+        # Spark reads the item's URL itself, for the view and the code alike.
+        return super().supports(fmt, ctx, options, task) and options.reads(ctx)
 
     def session(self, ctx: ItemContext, options: PySparkOptions) -> Any:
         """The Spark session to read ``ctx``'s item with."""

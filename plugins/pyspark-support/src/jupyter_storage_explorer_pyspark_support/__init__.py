@@ -7,6 +7,7 @@ The plugin, ``PySparkSupport``, is found by explorers through its entry point
 
 from jupyter_storage_explorer import StorageExplorerPlugin
 from jupyter_storage_explorer_pyspark_support.supports import (
+    SPARK_PROTOCOLS,
     CsvByPySpark,
     CsvByPySparkOptions,
     DeltaLakeByPySpark,
@@ -37,6 +38,7 @@ class PySparkSupport(StorageExplorerPlugin):
 
 
 __all__ = [
+    "SPARK_PROTOCOLS",
     "CsvByPySpark",
     "CsvByPySparkOptions",
     "DeltaLakeByPySpark",

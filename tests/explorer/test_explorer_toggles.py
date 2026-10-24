@@ -75,6 +75,10 @@ class TestCodeSnippet:
         installed_only(monkeypatch, "polars", "pandas", "pyspark")
         assert self.engines(explorer) == ["Polars", "PySpark", "pandas"]
         installed_only(monkeypatch, "polars", "databricks-connect")
+        # Not Databricks Connect: its cluster cannot read the kernel's files.
+        assert self.engines(explorer) == ["Polars"]
+        anywhere = {"databricks-connect": {"*": {"supported_protocols": None}}}
+        explorer = make(folder, engine_options=anywhere)
         assert self.engines(explorer) == ["Databricks Connect", "Polars"]
 
     def test_disabled(self, folder):

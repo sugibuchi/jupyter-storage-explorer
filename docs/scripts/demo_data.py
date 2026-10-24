@@ -446,8 +446,8 @@ def supports() -> list[Any]:
     for support in result:
         # Whether polars supports the item is decided by its copy's location too.
         supported = support.supports
-        support.supports = lambda fmt, ctx, task, supported=supported: supported(
-            fmt, local(ctx), task
+        support.supports = lambda fmt, ctx, options, task, supported=supported: (
+            supported(fmt, local(ctx), options, task)
         )
         if support.implements("view"):
             view = support.view

@@ -30,6 +30,7 @@ from jupyter_storage_explorer_pyspark_support import (
 )
 from jupyter_storage_explorer_pyspark_support import supports as pyspark
 
+from jupyter_storage_explorer._explorer.supports import SupportChain
 from jupyter_storage_explorer.filesystems import S3Location
 from jupyter_storage_explorer.formats import (
     Csv,
@@ -174,6 +175,46 @@ def test_json_lines(tmp_path, session):
         JsonLines(), local_item(path), JsonLinesByPySparkOptions(), LIMITS
     )
     assert rows(view) == [(1,), (2,)]
+
+
+class TestSupportedProtocols:
+    """Spark reads the item's URL itself: only those of its protocols."""
+
+    def supports(self, item, options=None, task="view"):
+        options = options or ParquetByPySparkOptions()
+        return ParquetByPySpark().supports(Parquet(), item, options, task)
+
+    def test_by_default(self, make_item, tmp_path):
+        on_s3 = make_item("/a.parquet", b"", location=S3Location(bucket="b", key="a"))
+        assert self.supports(on_s3)  # s3 read as s3a
+        assert self.supports(local_item(tmp_path))
+        # fsspec's memory filesystem: no view, no code.
+        assert not self.supports(make_item("/a.parquet", b""))
+        assert not self.supports(make_item("/a.parquet", b""), task="recipe")
+
+    def test_given(self, make_item, tmp_path):
+        options = ParquetByPySparkOptions(supported_protocols=["S3A"])
+        on_s3 = make_item("/a.parquet", b"", location=S3Location(bucket="b", key="a"))
+        assert self.supports(on_s3, options)  # whatever the case
+        assert not self.supports(local_item(tmp_path), options)
+
+    def test_any(self, make_item):
+        options = ParquetByPySparkOptions(supported_protocols=None)
+        assert self.supports(make_item("/a.parquet", b""), options)
+
+    def test_not_a_reader_option(self):
+        assert "supportedProtocols" not in PySparkOptions().spark_options()
+        assert ".option" not in PySparkOptions().reader_code()
+
+    def test_by_engine_options(self, make_item, monkeypatch):
+        monkeypatch.setattr(PySpark, "is_installed", lambda self: True)
+        chain = SupportChain(
+            [ParquetByPySpark], {"pyspark": {"*": {"supported_protocols": None}}}
+        )
+        item = make_item("/a.parquet", b"")
+        assert [type(s) for s in chain.of(Parquet(), item, "recipe")] == [
+            ParquetByPySpark
+        ]
 
 
 class TestOptions:

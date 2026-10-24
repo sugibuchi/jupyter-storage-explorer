@@ -241,9 +241,11 @@ class ImageByPillow(OpenedByFsspec):
         img
         """)
 
-    def supports(self, fmt: Image, ctx: ItemContext, task: Task) -> bool:
+    def supports(
+        self, fmt: Image, ctx: ItemContext, options: SupportOptions, task: Task
+    ) -> bool:
         svg = fmt.mime_type(ctx.path) == "image/svg+xml"
-        return super().supports(fmt, ctx, task) and not svg
+        return super().supports(fmt, ctx, options, task) and not svg
 
     def recipe(
         self, fmt: Image, ctx: ItemContext, options: FsspecOptions
