@@ -986,7 +986,8 @@ The explorer's `SupportChain`, in `_explorer/supports.py`, holds its supports in
 3. `DEFAULT_SUPPORTS`, the core's.
 
 Its formats are an object of each support's format, in that order, then the plugins' own formats and the defaults.
-The explorer has no `formats=` argument.
+The explorer has no `formats=` argument. Two format classes of one name are a `ValueError`, as two engine classes of
+one key are.
 
 The chain answers:
 
