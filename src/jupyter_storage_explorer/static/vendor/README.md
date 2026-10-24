@@ -32,3 +32,6 @@ License 2.0. No cloud provider's own icons: their licences allow them in diagram
 (`@jupyterlab/ui-components`), and `FILE_ICON_EXTENSIONS` its default file types' extensions, for files whose format sets
 no icon (plus old Excel files, with its CSV icon). BSD-3-Clause,
 Copyright (c) 2015-2026 Project Jupyter Contributors, https://github.com/jupyterlab/jupyterlab/blob/main/LICENSE.
+
+`database` in `FILE_ICON_SVGS`, the icon of a database's schemas in a table set's tree, is Pictogrammers' `database`
+above, in the folder icon's grey.

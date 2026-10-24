@@ -837,8 +837,8 @@ class DeltaLakeByDuckDB(_DuckDBSupport):
 
 
 def _table_nodes(tables: Sequence[tuple[str, str]]) -> list[Node]:
-    """A database's tables and views, by schema; without the schema when
-    there is only one."""
+    """A database's tables and views, by schema, each with a database's
+    icon; without the schema when there is only one."""
     schemas = sorted({schema for schema, _ in tables})
     if len(schemas) == 1:
         return [Leaf(label=name, id=_quoted(schema, name)) for schema, name in tables]
@@ -850,6 +850,7 @@ def _table_nodes(tables: Sequence[tuple[str, str]]) -> list[Node]:
                 for s, name in tables
                 if s == schema
             ],
+            icon="database",
         )
         for schema in schemas
     ]
