@@ -6,22 +6,23 @@ Engines and storages come to Storage Explorer as plugins. Install one, and every
 
 An engine is a data library that the explorer views data with. Choose one from the status bar.
 
-| Plugin                                                 | Engine             | Formats                                         |
-|--------------------------------------------------------|--------------------|-------------------------------------------------|
-| [polars-support](polars-support/README.md)             | Polars             | Delta Lake, Parquet, CSV, JSON Lines, Excel     |
-| [pandas-support](pandas-support/README.md)             | pandas             | Parquet, CSV, JSON Lines, Excel                 |
-| [pyspark-support](pyspark-support/README.md)           | PySpark            | Delta Lake, Parquet, CSV, JSON Lines            |
-| [databricks-support](databricks-support/README.md)     | Databricks Connect | Delta Lake, Parquet, CSV, JSON Lines            |
+| Plugin                                             | Engine             | Formats                                                |
+|----------------------------------------------------|--------------------|--------------------------------------------------------|
+| [polars-support](polars-support/README.md)         | Polars             | Delta Lake, Parquet, CSV, JSON Lines, Excel            |
+| [pandas-support](pandas-support/README.md)         | pandas             | Parquet, CSV, JSON Lines, Excel                        |
+| [pyspark-support](pyspark-support/README.md)       | PySpark            | Delta Lake, Parquet, CSV, JSON Lines                   |
+| [databricks-support](databricks-support/README.md) | Databricks Connect | Delta Lake, Parquet, CSV, JSON Lines                   |
+| [duckdb-support](duckdb-support/README.md)         | DuckDB             | Delta Lake, Parquet, CSV, JSON Lines, DuckDB databases |
 
-Polars queries the data itself, lazily. pandas reads the first rows only. PySpark and Databricks Connect run the
-queries on Spark.
+Polars and DuckDB query the data themselves, lazily. pandas reads the first rows only. PySpark and Databricks Connect
+run the queries on Spark.
 
 ## Storages
 
 A storage plugin makes the explorer work better with one storage service.
 
-| Plugin                                             | Storage                      | What it adds                                                  |
-|----------------------------------------------------|------------------------------|---------------------------------------------------------------|
+| Plugin                                             | Storage                      | What it adds                                                   |
+|----------------------------------------------------|------------------------------|----------------------------------------------------------------|
 | [abfs-support](abfs-support/README.md)             | Azure Data Lake Storage Gen2 | Folders moved in one step, copies on the server, empty folders |
 | [databricks-support](databricks-support/README.md) | Databricks                   | Volumes, workspace files and legacy DBFS, by workspace         |
 
@@ -43,6 +44,7 @@ pip install "jupyter-storage-explorer[polars-support]"  # the plugin only, with 
 | [pyspark-support](pyspark-support/README.md)       | `pyspark`    | `pyspark-support`    | pyspark, delta-spark, pyarrow                   |
 | [abfs-support](abfs-support/README.md)             | `abfs`       | `abfs-support`       | adlfs, azure-storage-file-datalake              |
 | [databricks-support](databricks-support/README.md) | `databricks` | `databricks-support` | fsspec-databricks, databricks-connect           |
+| [duckdb-support](duckdb-support/README.md)         | `duckdb`     | `duckdb-support`     | duckdb, pyarrow                                 |
 | All but the experimental ones                      | `all`        | `all-supports`       | All of the above, but the experimental plugins' |
 
 [Installation](../docs/storage-explorer.md#installation) says when to choose each kind of extra. Each plugin's README

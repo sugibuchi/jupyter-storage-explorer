@@ -10,7 +10,7 @@ import threading
 import narwhals as nw
 import polars as pl
 import pytest
-from all_supports import installed_only
+from all_supports import NO_PLUGINS, installed_only
 from explorers import entries, make, path_of
 from format_samples import DUCKDB_BYTES, SQLITE_BYTES, DuckDB, SQLite
 from in_a_kernel import until
@@ -506,10 +506,16 @@ class TestClickDetectsOnce:
 
 
 def test_signatures_decide_formats_once_clicked(memfs):
-    # Two ".db" files: the listing reads neither, the menu reads each.
+    # Two ".db" files: the listing reads neither, the menu reads each. Without
+    # plugins: duckdb-support's format is named "duckdb" too.
     memfs.pipe_file("/dbs/a.db", SQLITE_BYTES)
     memfs.pipe_file("/dbs/b.db", DUCKDB_BYTES)
-    explorer = make("/dbs", fs=memfs, supports=[SqliteByPython, DuckdbByPython])
+    explorer = make(
+        "/dbs",
+        fs=memfs,
+        supports=[SqliteByPython, DuckdbByPython],
+        plugin_options=NO_PLUGINS,
+    )
     assert {e["name"]: e["format"] for e in entries(explorer)} == {
         "a.db": "",
         "b.db": "",

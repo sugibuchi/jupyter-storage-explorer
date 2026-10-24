@@ -58,6 +58,7 @@ def test_the_repository_plugins():
     assert keys(PLUGINS) == [
         "abfs-support",
         "databricks-support",
+        "duckdb-support",
         "pandas-support",
         "polars-support",
         "pyspark-support",
@@ -210,9 +211,9 @@ class TestLoading:
     def test_options_of_a_plugin_not_installed(self, installed):
         # Shared settings may name plugins an environment lacks: a warning.
         installed(**{"sample-support": "SampleSupport"})
-        plugins, problems = load_plugins({"duckdb-support": {"enabled": False}})
+        plugins, problems = load_plugins({"sqlite-support": {"enabled": False}})
         assert keys(plugins) == ["sample-support"]
-        assert problems == ["plugin_options: plugin 'duckdb-support' is not installed"]
+        assert problems == ["plugin_options: plugin 'sqlite-support' is not installed"]
 
     def test_unknown_option(self, installed):
         installed(**{"sample-support": "SampleSupport"})
@@ -283,6 +284,7 @@ class TestExplorer:
             "/",
             fs=memfs,
             plugin_options={
+                "duckdb-support": {"enabled": False},
                 "polars-support": {"enabled": False},
                 "pyspark-support": {"enabled": False},
             },

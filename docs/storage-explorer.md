@@ -118,7 +118,7 @@ storage. Needs the [launcher](../launcher/README.md) package.
 
 ### Switch engine
 
-Previews read data with an [engine](#engines), shown left of **Preview**: Polars, pandas or PySpark, each when
+Previews read data with an [engine](#engines), shown left of **Preview**: Polars, pandas, DuckDB or PySpark, each when
 installed. Click it to choose another; the preview open is shown again with it, and the choice is remembered.
 
 <img src="figs/using-engine.png" width="829" alt="The engines' menu, above the engine in the status bar">
@@ -279,9 +279,11 @@ tables side by side.
 
 ### Engines
 
-The engine is the library previews read data with: **Polars**, **pandas** or **PySpark**, each with its plugin (see
-[Installation](#installation)). Engines read storage with their own settings, not the explorer's: e.g. the
+The engine is the library previews read data with: **Polars**, **pandas**, **DuckDB** or **PySpark**, each with its
+plugin (see [Installation](#installation)). Engines read storage with their own settings, not the explorer's: e.g. the
 environment's credential setup, such as an AWS profile or an Azure CLI login. See [Engine options](#engine-options).
+DuckDB reads storages other than local disks through the explorer's filesystem, unless you configure DuckDB to read
+them itself.
 Text, Markdown, JSON and images are shown by the explorer itself. When the engine chosen cannot view an item, use
 **Preview as**.
 
@@ -327,12 +329,13 @@ StorageExplorer("s3://my-bucket/data", states=ExplorerStates("states.json", max_
 
 ## Supported formats
 
-| Format                                                       | Name         | Preview                       | Data browser | Load with                                           |
-|--------------------------------------------------------------|--------------|-------------------------------|--------------|-----------------------------------------------------|
-| Delta Lake tables                                            | `delta`      | First rows                    | ✓            | polars (with deltalake), PySpark (with delta-spark) |
-| Parquet files, and folders of them (e.g. Spark, Hive output) | `parquet`    | First rows                    | ✓            | polars, pandas, PySpark                             |
-| CSV, TSV                                                     | `csv`        | First rows                    | ✓            | polars, pandas, PySpark                             |
-| JSON Lines                                                   | `json-lines` | First records                 | ✓            | polars, pandas, PySpark                             |
+| Format                                                       | Name         | Preview                       | Data browser | Load with                                                                   |
+|--------------------------------------------------------------|--------------|-------------------------------|--------------|-----------------------------------------------------------------------------|
+| Delta Lake tables                                            | `delta`      | First rows                    | ✓            | polars (with deltalake), DuckDB (with its delta extension), PySpark (with delta-spark) |
+| Parquet files, and folders of them (e.g. Spark, Hive output) | `parquet`    | First rows                    | ✓            | polars, pandas, DuckDB, PySpark                                             |
+| CSV, TSV                                                     | `csv`        | First rows                    | ✓            | polars, pandas, DuckDB, PySpark                                             |
+| JSON Lines                                                   | `json-lines` | First records                 | ✓            | polars, pandas, DuckDB, PySpark                                             |
+| DuckDB databases                                             | `duckdb`     | Its tables and views, in a tree | ✓          | DuckDB                                                                      |
 | JSON                                                         | `json`       | Collapsible tree              |              | Python, polars, pandas                              |
 | Excel (`.xlsx`)                                              | `excel`      | Its sheets, on tabs           | ✓            | polars, pandas                                      |
 | Markdown                                                     | `markdown`   | Rendered                      |              | Python                                              |
@@ -369,6 +372,7 @@ StorageExplorer(
 |-----------|-----------------------------------------------------------------------------|----------------------------------------------------------|----------------------------------------------------------------------------------------------|
 | `polars`  | each format's reader's arguments (e.g. `scan_csv`'s), and `storage_options`  | `delta`, `parquet`, `csv`, `json-lines`, `json`, `excel` | See polars-support's [Engine options](../plugins/polars-support/README.md#engine-options).   |
 | `pandas`  | each format's reader's arguments (e.g. `read_csv`'s), and `storage_options`  | `parquet`, `csv`, `json-lines`, `json`, `excel`          | See pandas-support's [Engine options](../plugins/pandas-support/README.md#engine-options).   |
+| `duckdb`  | each format's reader's arguments (e.g. `read_csv`'s), `config` and `url_schemes` | `delta`, `parquet`, `csv`, `json-lines`, `duckdb`  | See duckdb-support's [Engine options](../plugins/duckdb-support/README.md#engine-options).   |
 | `pyspark` | the session's and each format's reader options                             | `delta`, `parquet`, `csv`, `json-lines`                  | See pyspark-support's [Engine options](../plugins/pyspark-support/README.md#engine-options). |
 | `python`  | `storage_options`                                                           | `json`, `text` (also Markdown's code), `image`           | `fsspec.open`'s keyword arguments, in the code.                                              |
 
