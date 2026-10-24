@@ -19,8 +19,8 @@ from jupyter_storage_explorer_polars_support import CsvByPolars
 
 from jupyter_storage_explorer._explorer import previews
 from jupyter_storage_explorer._explorer.supports import SupportChain
+from jupyter_storage_explorer._explorer.view_tab import ViewTab
 from jupyter_storage_explorer._query.settings import QuerySettings
-from jupyter_storage_explorer._view_tab import ViewTab
 from jupyter_storage_explorer.data_explorer import DataExplorer
 from jupyter_storage_explorer.formats import (
     FormatSupport,

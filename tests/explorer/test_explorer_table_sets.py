@@ -1,6 +1,6 @@
 """TableSetView: several tables of one item, one chosen at a time in a tree or
 on tabs and shown in the data browser (formats/view.py, _query/table_set.py,
-the explorer's previews and view tabs, _table_set_tab.py)."""
+the explorer's previews and view tabs, _explorer/table_set_tab.py)."""
 
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ import pytest
 from explorers import make, path_of
 
 from jupyter_storage_explorer._explorer.supports import SupportChain
+from jupyter_storage_explorer._explorer.table_set_tab import TableSetTab
 from jupyter_storage_explorer._query.table_set import query_path
-from jupyter_storage_explorer._table_set_tab import TableSetTab
 from jupyter_storage_explorer.formats import Leaf, Node, QueryView, TableSetView
 
 TABLES = {"a": pl.LazyFrame({"x": [1, 2, 3]}), "b": pl.LazyFrame({"y": ["p", "q"]})}

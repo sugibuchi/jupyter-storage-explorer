@@ -61,11 +61,11 @@ if TYPE_CHECKING:
     from fsspec import AbstractFileSystem
 
     from jupyter_storage_explorer._explorer.previews import _Asking, _Detected
+    from jupyter_storage_explorer._explorer.table_set_tab import TableSetTab
+    from jupyter_storage_explorer._explorer.view_tab import ViewTab
     from jupyter_storage_explorer._jobs.loader import Load
     from jupyter_storage_explorer._query.data_query import DataQuery
     from jupyter_storage_explorer._query.table_set import TableSet
-    from jupyter_storage_explorer._table_set_tab import TableSetTab
-    from jupyter_storage_explorer._view_tab import ViewTab
     from jupyter_storage_explorer.data_explorer import DataExplorer
     from jupyter_storage_explorer.filesystems.mapper import FileSystemMapper
     from jupyter_storage_explorer.filesystems.operation import FileSystemOperations

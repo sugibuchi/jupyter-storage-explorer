@@ -341,7 +341,8 @@ The widgets are `anywidget.AnyWidget` subclasses:
 
 - `StorageExplorer`, in `storage_explorer.py`;
 - `DataExplorer`, in `data_explorer.py`;
-- `ViewTab` and `TableSetTab`, private, which "View in a new tab" opens.
+- `ViewTab` and `TableSetTab`, private, which "View in a new tab" opens, in `_explorer/view_tab.py` and
+  `_explorer/table_set_tab.py`.
 
 They talk to the frontend in two ways:
 
