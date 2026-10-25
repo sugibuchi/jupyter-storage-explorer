@@ -245,9 +245,7 @@ class TestSupportedProtocols:
         assert self.supports(make_item("/a.parquet", b""), options)
 
     def test_not_a_reader_option(self):
-        assert "supportedProtocols" not in pyspark.spark_reader_options(
-            PySparkOptions()
-        )
+        assert "supportedProtocols" not in PySparkOptions().spark_options()
         assert ".option" not in pyspark.spark_reader_code(PySparkOptions())
 
     def test_by_engine_options(self, make_item, monkeypatch):
@@ -303,12 +301,12 @@ class TestOptions:
         options = CsvByPySparkOptions(
             null_value="NA", timestamp_ntz_format="yyyy", header=None
         )
-        assert pyspark.spark_reader_options(options) == {
+        assert options.spark_options() == {
             "inferSchema": True,
             "nullValue": "NA",
             "timestampNTZFormat": "yyyy",
         }
-        assert pyspark.spark_reader_options(PySparkOptions()) == {}
+        assert PySparkOptions().spark_options() == {}
 
     @pytest.mark.parametrize("model", FORMAT_OPTIONS)
     def test_options_left_to_spark_by_default(self, model):
@@ -320,7 +318,7 @@ class TestOptions:
             if model is CsvByPySparkOptions
             else {}
         )
-        assert pyspark.spark_reader_options(model()) == expected
+        assert model().spark_options() == expected
 
     def test_code(self, make_item):
         options = CsvByPySparkOptions(

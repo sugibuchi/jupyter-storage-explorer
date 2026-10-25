@@ -141,11 +141,6 @@ class PySparkEngine(Engine):
     requirements = (PySpark(), PyArrow())
 
 
-# The fields of PySparkOptions that are not one reader option each.
-_NOT_READER_OPTIONS = frozenset(
-    {"session_options", "reader_options", "supported_protocols"}
-)
-
 # The URL schemes Spark reads by default, as Spark names them (``spark_url``):
 # local files, HDFS, S3 (s3a), Google Cloud Storage, Azure (ABFS, WASB) and
 # Databricks (dbfs). Each needs its connector in the session, as configured.
@@ -214,31 +209,32 @@ class PySparkOptions(SupportOptions):
     reader_options: Mapping[str, Any] | None = None
     supported_protocols: Sequence[str] | None = SPARK_PROTOCOLS
 
+    def spark_options(self, *, in_code: bool = False) -> dict[str, Any]:
+        """The reader options the fields set, by Spark's names: the fields of
+        each format's subclass, those not None.
+
+        Parameters
+        ----------
+        in_code : bool, default False
+            Only those fit to show in code (``code_value``).
+
+        Returns
+        -------
+        dict
+            E.g. ``{"header": True, "inferSchema": True}``.
+        """
+        own = {f.name for f in fields(PySparkOptions)}
+        return {
+            _spark_name(f): value
+            for f in fields(self)
+            if f.name not in own
+            and (value := self.code_value(f.name) if in_code else getattr(self, f.name))
+            is not None
+        }
+
 
 # What the actions do with the options: functions of them, so that the
 # options stay data.
-
-
-def spark_reader_options(options: PySparkOptions) -> dict[str, Any]:
-    """The reader options the fields of ``options`` set (those not None), by
-    Spark's names.
-
-    Parameters
-    ----------
-    options : PySparkOptions
-        A format's options, e.g. ``CsvByPySparkOptions``.
-
-    Returns
-    -------
-    dict
-        E.g. ``{"header": True, "inferSchema": True}``.
-    """
-    return {
-        _spark_name(f): value
-        for f in fields(options)
-        if f.name not in _NOT_READER_OPTIONS
-        and (value := getattr(options, f.name)) is not None
-    }
 
 
 def spark_reader(
@@ -263,7 +259,7 @@ def spark_reader(
     """
     reader = spark.read
     settings = _merged(
-        defaults or {}, spark_reader_options(options), options.reader_options or {}
+        defaults or {}, options.spark_options(), options.reader_options or {}
     )
     for key, value in settings.items():
         reader = reader.option(key, value)
@@ -313,12 +309,7 @@ def spark_reader_code(
         reader option; only those fit to show.
     """
     overridden = {key.lower() for key in options.reader_options or {}}
-    shown = {
-        _spark_name(f): value
-        for f in fields(options)
-        if f.name not in _NOT_READER_OPTIONS
-        and (value := options.code_value(f.name)) is not None
-    }
+    shown = options.spark_options(in_code=True)
     settings = {
         key: value
         for key, value in _merged(defaults or {}, shown).items()
