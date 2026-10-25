@@ -143,6 +143,8 @@ widget on sample data.
   widget for dataframes.
 - **[Launcher](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/launcher/README.md)**: StorageExplorer
   integrated into JupyterLab.
+- **[Plugins](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/plugins/README.md)**: the engines and
+  storages you can add, with their extras.
 - **[Writing actions](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/action-development-guide.md)**:
   menu items of your own, for views, code snippets and more.
 - **[Writing plugins](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/plugin-development-guide.md)**:
