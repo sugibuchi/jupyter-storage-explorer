@@ -1084,6 +1084,9 @@ others' code still shows.
 - A `ViewWithPrompt` asks the user first: `ViewWithConfirmation`, `ViewWithChoice` or `ViewWithInput`.
 - The others, `TableView`, `TextView`, `TreeView`, `MarkdownView` and `MediaView`, are sent to the frontend as a
   section, which it renders by kind.
+- A `JupyterWidgetView` is a section with its widget's model id. The frontend renders the widget with the page's widget
+  manager, anywidget's `model.widget_manager`, in the preview panel and in view tabs alike. The view closes the widget
+  when it is closed.
 
 A prompt is a section too, without its function or a choice's values: the frontend answers with a label. Where it is
 shown:

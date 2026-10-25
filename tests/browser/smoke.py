@@ -1517,6 +1517,38 @@ def views_by_name(lab: Lab, page: Page) -> None:
     x.preview.press("Escape")
 
 
+# A view returning a Jupyter widget: an ipywidgets slider, shown as it is.
+WIDGET_VIEW = """\
+import fsspec
+import ipywidgets
+from jupyter_storage_explorer import StorageExplorer
+from jupyter_storage_explorer.formats import file_format
+from jupyter_storage_explorer.formats.actions import view
+
+@view(file_format(".wdg"), label="Slider")
+def slider(name):
+    return ipywidgets.IntSlider(value=7, description=name)
+
+memory = fsspec.filesystem("memory")
+memory.pipe_file("/widgets/a.wdg", b"")
+StorageExplorer("/widgets", fs=memory, actions=[slider], preview_panel="open")"""
+
+
+@lab_check
+def widget_view(lab: Lab, page: Page) -> None:
+    # The widget renders in the preview panel, and in a tab of its own.
+    x = Explorer(lab, page, WIDGET_VIEW)
+    x.row("a.wdg").click()
+    slider = x.preview.locator(".jse-jupyter-widget .widget-slider")
+    expect(slider).to_be_visible()
+    expect(slider).to_contain_text("a.wdg")
+    x.preview.locator("button[title='View in a new tab']").click()
+    tab = page.locator(".jse-view-tab .jse-jupyter-widget .widget-slider")
+    expect(tab).to_be_visible()
+    expect(tab).to_contain_text("a.wdg")
+    x.back_to_notebook()
+
+
 # A user's actions file, in the Jupyter configuration folder: an explorer
 # created in a notebook uses it, after the built-in view.
 USER_ACTIONS_FILE = """\

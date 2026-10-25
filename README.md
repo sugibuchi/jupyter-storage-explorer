@@ -47,6 +47,7 @@ Storage Explorer. See
   - Another data library, or code snippets of your own? Write a few functions as
     [actions](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/action-development-guide.md),
     offered beside the explorer's own.
+  - A chart or a map of a file? Return any Jupyter widget from an action: the explorer shows it.
   - A complete extension, for another storage or data framework? Develop a
     [plugin](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/plugin-development-guide.md) with
     your AI assistant: its guide is written for both of you.

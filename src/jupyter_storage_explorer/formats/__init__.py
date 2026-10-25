@@ -31,6 +31,7 @@ from jupyter_storage_explorer.formats.parquet import Parquet, ParquetLayout
 from jupyter_storage_explorer.formats.text import Csv, Json, JsonLines, Markdown, Text
 from jupyter_storage_explorer.formats.user_defined import UserDefinedFormat, file_format
 from jupyter_storage_explorer.formats.views import (
+    JupyterWidgetView,
     Leaf,
     MarkdownView,
     MediaView,
@@ -62,6 +63,7 @@ __all__ = [
     "ItemContext",
     "Json",
     "JsonLines",
+    "JupyterWidgetView",
     "Leaf",
     "LocalFileCache",
     "Markdown",

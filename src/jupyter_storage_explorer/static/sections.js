@@ -31,6 +31,28 @@ function renderMedia(section) {
   return h("div", { textContent: `Cannot show ${section.mime}` });
 }
 
+// --- Jupyter widgets (JupyterWidgetView): the widget's own view, made by the
+// page's widget manager from its model, as a notebook's output would be. The
+// manager is anywidget's model.widget_manager, beyond the model's documented
+// API: where it cannot make views, the widget is not shown. The kernel closes
+// the widget with the view, which removes this view of it. ---
+
+function renderWidget(section, actions) {
+  const box = h("div", { className: "jse-jupyter-widget", textContent: "Loading the widget…" });
+  const manager = actions.widgetManager;
+  if (typeof manager?.create_view !== "function") {
+    box.replaceChildren(errorBlock("This page cannot show Jupyter widgets in the explorer."));
+    return box;
+  }
+  (async () => {
+    const view = await manager.create_view(await manager.get_model(section.model_id));
+    box.replaceChildren(view.el);
+    // Widgets that size or draw themselves once on the page, e.g. charts.
+    view.trigger?.("displayed");
+  })().catch((err) => box.replaceChildren(errorBlock(`Cannot show the widget: ${err.message ?? err}`)));
+  return box;
+}
+
 // --- Markdown: rendered with marked, sanitized with DOMPurify ---
 // Both are vendored in static/vendor. An anywidget module cannot import files
 // next to it, so the kernel sends their source, imported once per page.
@@ -163,6 +185,7 @@ const sectionRenderers = {
   text: (s) => (s.html ? h("pre", { className: "jse-text jse-highlight", innerHTML: s.html }) : h("pre", { className: "jse-text", textContent: s.text })),
   tree: (s) => h("div", { className: "jse-json" }, renderJson(s.value, null, 0)),
   media: renderMedia,
+  widget: renderWidget,
   confirmation: renderPrompt,
   choice: renderPrompt,
   input: renderPrompt,
@@ -170,7 +193,8 @@ const sectionRenderers = {
   error: (s) => errorBlock(s.text),
 };
 
-// `actions`: what prompts and notices do (see renderPrompt, renderNotice).
+// `actions`: what prompts and notices do (see renderPrompt, renderNotice), and
+// the widget manager rendering Jupyter widgets (renderWidget).
 function renderSection(section, actions = {}) {
   // The kind class lets the preview panel stretch tables, text etc. to its height.
   const box = h("div", { className: `jse-section jse-section-${section.kind}` });

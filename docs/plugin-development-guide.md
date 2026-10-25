@@ -292,8 +292,11 @@ The rules for the functions:
 - They take the parameters they name, in any order: `fmt`, `ctx`, `options`, and `limits` for a view, or parts of
   the item, `url`, `url_or_local_path`, `name`, `path`, `size`, `is_dir` and `fs`. The decorator checks them; another needs a default.
   A plugin's actions take `fmt, ctx, options, limits`, as the examples here.
-- A view returns a `View`. A user's may also return plain data: a dataframe, a `str` or a `dict` or `list`, shown
-  in the data browser, as text or as a tree.
+- A view returns a `View`. A user's may also return other values, made views:
+  - a dataframe, shown in the data browser;
+  - a `str`, shown as text;
+  - a `dict` or `list`, shown as a tree;
+  - a Jupyter widget, shown as it is in a `JupyterWidgetView`.
 - The class of `options` comes from the parameter's annotation, read when the function is decorated. Import that class
   at run time, not only for type checkers, and define it at the module's top level.
 - A label is unique for its kind, format and engine, whatever plugin it comes from: two actions of one label are an
@@ -327,6 +330,7 @@ and opens the data browser on the one chosen. The others show what was read:
 | `MarkdownView(text)`               |                                                                        | Rendered Markdown (sanitized)     |
 | `TreeView(value)`                  | A JSON-like value                                                      | A collapsible tree                |
 | `MediaView(mime, data=None, src=None)` | The bytes, or a URL                                                | An image (`image/*`)              |
+| `JupyterWidgetView(widget)`        | An `ipywidgets.DOMWidget`, new for the view, which closes it           | The widget, by the page's widget manager |
 | `ViewWithConfirmation(message, factory)` | `factory()`: the view; `button` ("View")                         | The message, Cancel and `button`  |
 | `ViewWithChoice(message, choices, factory, style="radio")` | `choices`: labels to values; `factory(value)`: the view; `default`; `with_cancel` (False) | Radio buttons or a dropdown with `button`, or a button of each label (`"button"`); Cancel only `with_cancel` |
 | `ViewWithInput(message, factory)`  | `factory(text)`: the view; `value`, `placeholder`                      | A text field and `button`         |

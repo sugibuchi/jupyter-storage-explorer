@@ -82,6 +82,7 @@ the code. The traps:
   is gone after 1.5 seconds.
 - anywidget's `model` has only `get`, `set`, `save_changes`, `on`, `off` and `send`. Backbone methods such as
   `previous()` throw inside `set` and silently break syncing.
+- `model.widget_manager` is used only to render Jupyter widgets, in `sections.js`. Check that it can make views first.
 - A new frontend file in `static/` is joined into the module only if `_static.esm` names it. A part in
   `static/<widget>/` is joined automatically.
 - Mappers match classes by qualified name: never import an optional package to map it.

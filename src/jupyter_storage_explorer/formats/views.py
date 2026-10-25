@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
 
 __all__ = [
+    "JupyterWidgetView",
     "Leaf",
     "MarkdownView",
     "MediaView",
@@ -395,6 +396,54 @@ class MediaView(View):
     mime: str
     data: bytes | None = None
     src: str | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class JupyterWidgetView(View):
+    """A Jupyter widget, shown as it is: an ipywidgets control, a chart's
+    or a map's widget, or an anywidget of your own.
+
+    The page renders it with its widget manager, as a notebook's output
+    would be. The view owns the widget: closing the view closes it, so
+    that the kernel lets it go. Return a new widget each time, never one
+    shown elsewhere.
+
+    Parameters
+    ----------
+    widget : ipywidgets.DOMWidget
+        The widget shown.
+
+    Raises
+    ------
+    TypeError
+        If ``widget`` is no ``ipywidgets.DOMWidget``.
+
+    Examples
+    --------
+    In a view action:
+
+    >>> import ipywidgets
+    >>> return JupyterWidgetView(widget=ipywidgets.HTML(f"<b>{name}</b>"))
+    """
+
+    kind: ClassVar[str] = "widget"
+    widget: Any
+
+    def __post_init__(self) -> None:
+        if not is_jupyter_widget(self.widget):
+            raise TypeError(
+                f"a JupyterWidgetView shows an ipywidgets.DOMWidget, not "
+                f"{type(self.widget).__name__}"
+            )
+        self.on_close(lambda view: view.widget.close())
+
+
+def is_jupyter_widget(value: Any) -> bool:
+    """Whether ``value`` is a widget the page can render: an
+    ``ipywidgets.DOMWidget``, anywidgets included."""
+    import ipywidgets  # noqa: PLC0415  # imported once a widget is shown
+
+    return isinstance(value, ipywidgets.DOMWidget)
 
 
 @dataclass(frozen=True, kw_only=True)

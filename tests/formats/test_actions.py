@@ -7,6 +7,7 @@ import dataclasses
 import inspect
 from typing import TYPE_CHECKING, Any
 
+import ipywidgets
 import polars as pl
 import pytest
 
@@ -17,6 +18,7 @@ from jupyter_storage_explorer.formats import (
     Csv,
     Engine,
     Json,
+    JupyterWidgetView,
     Parquet,
     PythonPackage,
     QueryView,
@@ -238,6 +240,14 @@ class TestPlainDataViews:
         shown = self.viewed(data, make_item)
         assert (type(shown), shown.data) == (QueryView, data)
 
+    def test_a_jupyter_widget(self, make_item):
+        # Shown as it is; the view owns it, and closes it with itself.
+        widget = ipywidgets.IntSlider(value=3)
+        shown = self.viewed(widget, make_item)
+        assert (type(shown), shown.widget) == (JupyterWidgetView, widget)
+        shown.close()
+        assert widget.comm is None
+
     def test_a_view_as_it_is(self, make_item):
         given = TextView(text="mine")
         assert self.viewed(given, make_item) is given
@@ -245,6 +255,13 @@ class TestPlainDataViews:
     def test_anything_else(self, make_item):
         with pytest.raises(TypeError, match="a view returns a View"):
             self.viewed(42, make_item)
+        # A widget that is no DOMWidget cannot be shown.
+        with pytest.raises(TypeError, match="a view returns a View"):
+            self.viewed(ipywidgets.Layout(), make_item)
+
+    def test_only_dom_widgets_as_views(self):
+        with pytest.raises(TypeError, match=r"shows an ipywidgets\.DOMWidget"):
+            JupyterWidgetView(widget="<b>not a widget</b>")
 
 
 class TestFileFormat:

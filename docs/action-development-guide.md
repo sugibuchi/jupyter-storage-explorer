@@ -147,6 +147,7 @@ A view returns what to show:
 | A `str`                            | As text.                                                      |
 | A `dict` or a `list`               | As a collapsible tree.                                        |
 | A dataframe                        | In the data browser, to page, sort and filter. Best lazy.     |
+| A Jupyter widget, e.g. ipywidgets' | As it is, as a notebook shows it: see [Views](#views).        |
 | A view object                      | As the object says: see [Views](#views).                      |
 
 For example, this view shows text files in upper case:
@@ -178,8 +179,27 @@ A view object shows more than plain data, e.g. highlighted text. The view classe
 | `TableView(columns=..., rows=...)`    | A small table of values, without the data browser.          |
 | `MediaView(mime=..., data=...)`       | An image, from its bytes.                                   |
 | `TableSetView(nodes=..., loader=...)` | Several tables, e.g. a database's, in a tree or on tabs.    |
+| `JupyterWidgetView(widget=...)`       | A Jupyter widget, e.g. a chart's or a map's.                |
 
 Each also takes a `title`, shown above the view, and a `note`, shown under it.
+
+A Jupyter widget is any `ipywidgets.DOMWidget`, anywidgets included. Returning one shows it in a `JupyterWidgetView`:
+
+```python
+import ipywidgets
+
+from jupyter_storage_explorer.formats import Csv
+from jupyter_storage_explorer.formats.actions import view
+
+
+@view(format=Csv, label="Size")
+def size_gauge(name, size):
+    return ipywidgets.FloatProgress(value=size or 0, max=10_000_000, description=name)
+```
+
+- Create a new widget in the function, and never display it yourself.
+- The view owns the widget: closing the view closes the widget.
+- JupyterLab shows widgets in the explorer. Other front ends, e.g. some IDEs, may not, and show an error instead.
 
 #### Views with inputs
 

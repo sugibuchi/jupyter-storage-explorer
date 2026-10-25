@@ -28,10 +28,12 @@ from jupyter_storage_explorer.formats.base import DataFormat
 from jupyter_storage_explorer.formats.engine import Engine
 from jupyter_storage_explorer.formats.packages import PythonPackage
 from jupyter_storage_explorer.formats.views import (
+    JupyterWidgetView,
     QueryView,
     TextView,
     TreeView,
     View,
+    is_jupyter_widget,
 )
 from jupyter_storage_explorer.util import (
     IS_SECRET,
@@ -336,9 +338,12 @@ def view(
       data browser, as a ``QueryView`` of it.
     - A ``str`` is shown as text (``TextView``).
     - A ``dict`` or ``list`` is shown as a tree (``TreeView``).
+    - A Jupyter widget, an ``ipywidgets.DOMWidget``, is shown as it is
+      (``JupyterWidgetView``).
 
     Explorers call it in a worker thread, so that a slow read leaves the
-    kernel free; it never touches widgets or displays anything. What it
+    kernel free. It displays nothing, and touches no widget shown: it may
+    create the widget it returns, which the view then owns. What it
     raises is the item's error: no other action is tried.
 
     Rules for the function:
@@ -731,8 +736,9 @@ def _label_of(function: Callable[..., Any]) -> str:
 
 def _as_view(value: Any) -> View:
     """What a view action's function returned, as a view: a ``View`` as it
-    is; a ``str`` as text, a ``dict`` or ``list`` as a tree, and a dataframe
-    in the data browser. TypeError for anything else."""
+    is; a ``str`` as text, a ``dict`` or ``list`` as a tree, a dataframe in
+    the data browser, and a Jupyter widget as it is. TypeError for anything
+    else."""
     if isinstance(value, View):
         return value
     if isinstance(value, str):
@@ -741,9 +747,11 @@ def _as_view(value: Any) -> View:
         return TreeView(value=value)
     if nw.from_native(value, pass_through=True) is not value:
         return QueryView(data=value)
+    if is_jupyter_widget(value):
+        return JupyterWidgetView(widget=value)
     raise TypeError(
-        "a view returns a View, a str, a dict or list, or a dataframe, "
-        f"not {type(value).__name__}"
+        "a view returns a View, a str, a dict or list, a dataframe, or a "
+        f"Jupyter widget, not {type(value).__name__}"
     )
 
 

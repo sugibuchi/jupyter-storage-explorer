@@ -7,6 +7,7 @@ import dataclasses
 import itertools
 import threading
 
+import ipywidgets
 import narwhals as nw
 import polars as pl
 import pytest
@@ -27,6 +28,7 @@ from jupyter_storage_explorer.formats import (
     Text,
     TextView,
     ViewLimits,
+    file_format,
 )
 from jupyter_storage_explorer.formats.actions import ViewAction, code, view
 from jupyter_storage_explorer.formats.python import PythonEngine
@@ -38,6 +40,29 @@ class TestPreview:
         assert local._preview["format"] == "text"
         [section] = local._preview["sections"]
         assert (section["kind"], section["text"]) == ("text", "hello\n")
+
+    def test_a_jupyter_widget(self, memfs):
+        # The page renders the widget's model; closing the preview closes it.
+        widgets = []
+
+        @view(file_format(".wdg"), label="Slider")
+        def slider(name):
+            widgets.append(ipywidgets.IntSlider(description=name))
+            return widgets[-1]
+
+        memfs.pipe_file("/data/a.wdg", b"")
+        explorer = make("/data", fs=memfs, actions=[slider])
+        explorer.message({"type": "preview", "path": "/data/a.wdg"})
+        [section] = explorer._preview["sections"]
+        [widget] = widgets
+        assert section == {
+            "kind": "widget",
+            "title": "",
+            "note": "",
+            "model_id": widget.model_id,
+        }
+        explorer._preview = {}
+        assert widget.comm is None
 
     def test_query_view_opens_the_data_browser(self, local):
         path = path_of(local, "data.parquet")
