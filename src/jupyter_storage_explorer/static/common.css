@@ -153,6 +153,21 @@
   display: none;
 }
 
+/* The page's layer of a dialog shown over the whole window (common.js'
+   dialogLayer, for the side panel): the window, which the dialog's backdrop
+   dims, above JupyterLab's panels. It has the widget's class for the colours
+   and font, not its box. */
+.jse-widget.jse-dialog-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: block;
+  border: none;
+  border-radius: 0;
+  background: none;
+  overflow: visible;
+}
+
 .jse-modal {
   display: flex;
   flex-direction: column;

@@ -58,18 +58,15 @@ function createBusy() {
 // click on the backdrop closes it.
 //
 // With `onPage` (the side panel, too narrow for it), it is shown over the
-// whole browser window instead, as JupyterLab's dialogs are: in a layer of
-// the page's own, with the widget's class for its colours and font, on the
-// page only while it is open. `el` is then null: nothing to add to the widget.
+// whole browser window instead (common.js' dialogLayer), on the page only
+// while it is open. `el` is then null: nothing to add to the widget.
 function createModal(widgetEl, onPage = false) {
   const closeBtn = iconButton("close", "Close (Esc)");
   const head = h("div", { className: "jse-dialog-head" });
   const body = h("div", { className: "jse-dialog-body" });
   const el = h("div", { className: "jse-dialog", tabIndex: -1, hidden: true }, h("div", { className: "jse-modal" }, head, body));
-  const layer = onPage ? h("div", { className: "jse-widget jse-dialog-layer" }, el) : null;
+  const layer = onPage ? dialogLayer(el) : null;
   if (layer) {
-    // As the widget: JupyterLab's shortcuts do not fire on keys pressed in it.
-    layer.dataset.lmSuppressShortcuts = "true";
     // Outside the widget, whose own handler closes it on Esc.
     el.addEventListener("keydown", (ev) => {
       if (ev.key !== "Escape") return;

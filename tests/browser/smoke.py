@@ -2266,6 +2266,18 @@ def side_panel(lab: Lab, page: Page) -> None:
     )
     page.keyboard.press("Escape")
     expect(dialog).to_have_count(0)
+    # So does a confirmation, e.g. creating the user's actions file.
+    settings.click()
+    menu.filter(has_text="Edit actions").click()
+    question = page.locator(".jse-dialog-layer .jse-confirm")
+    expect(question).to_contain_text("Create your actions file")
+    question_box = question.bounding_box()
+    assert question_box is not None and question_box["width"] > panel["width"], (
+        panel,
+        question_box,
+    )
+    question.get_by_role("button", name="Cancel").click()
+    expect(question).to_have_count(0)
     # View, in the status bar, views the selected item in a new tab; so does a
     # double-click.
     row.filter(has=page.get_by_text("orders.parquet", exact=True)).click()

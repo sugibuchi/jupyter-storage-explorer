@@ -6,8 +6,9 @@
 function render({ model, el }) {
   // Requests answered by a {"type": "reply", "rid"} message.
   const { request, onReply } = createRequester(model);
-  // Small confirmation dialog, e.g. "Upload sales.csv? [Cancel] [Upload]".
-  const confirm = createConfirm();
+  // Small confirmation dialog, e.g. "Upload sales.csv? [Cancel] [Upload]";
+  // over the whole window in the side panel, which is too narrow for it.
+  const confirm = createConfirm(model.get("_layout") === "sidebar");
 
   // The explorer: what its features share, and the features themselves (set
   // below), which use each other through it once all are made.
@@ -122,7 +123,7 @@ function render({ model, el }) {
     x.preview.el,
     grip,
     ...(x.modal.el ? [x.modal.el] : []),
-    confirm.el,
+    ...(confirm.el ? [confirm.el] : []),
     x.busy.el,
   );
 
