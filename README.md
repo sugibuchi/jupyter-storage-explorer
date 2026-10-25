@@ -150,11 +150,7 @@ The `notebooks` folder has a demo of each widget on sample data.
 
 ## Technologies
 
-Storage Explorer stands on these projects' shoulders:
-
-- **[fsspec](https://filesystem-spec.readthedocs.io/)**: one interface to many storages. The explorer lists, reads,
-  copies and moves files through it, on any storage it reaches.
-- **[narwhals](https://narwhals-dev.github.io/narwhals/)**: one dataframe API over many libraries. The data browser
-  pages, sorts and filters pandas, polars, Spark, DuckDB and other data through it.
-- **[anywidget](https://anywidget.dev/)**: Jupyter widgets in plain JavaScript modules. The explorers are anywidgets,
-  shown in JupyterLab and other Jupyter frontends.
+- **[fsspec](https://filesystem-spec.readthedocs.io/)**: filesystem interfaces for Python. Used for all storage access.
+- **[narwhals](https://narwhals-dev.github.io/narwhals/)**: a compatibility layer between dataframe libraries. Used for
+  the data browser's queries.
+- **[anywidget](https://anywidget.dev/)**: a framework for custom Jupyter widgets. Used for both explorers' frontends.
