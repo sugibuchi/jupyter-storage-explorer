@@ -17,7 +17,7 @@ default; the formats files are detected as are those of the supports.
 from jupyter_storage_explorer.formats.base import FILE_ICONS, DataFormat, ItemContext
 from jupyter_storage_explorer.formats.defaults import default_supports
 from jupyter_storage_explorer.formats.delta import DeltaLake
-from jupyter_storage_explorer.formats.engine import Engine, PythonEngine
+from jupyter_storage_explorer.formats.engine import Engine
 from jupyter_storage_explorer.formats.excel import Excel
 from jupyter_storage_explorer.formats.images import Image
 from jupyter_storage_explorer.formats.local_files import (
@@ -57,7 +57,6 @@ from jupyter_storage_explorer.formats.view import (
     ViewWithConfirmation,
     ViewWithInput,
     ViewWithPrompt,
-    format_size,
 )
 
 __all__ = [
@@ -85,7 +84,6 @@ __all__ = [
     "Node",
     "Parquet",
     "ParquetLayout",
-    "PythonEngine",
     "PythonPackage",
     "QueryView",
     "SupportOptions",
@@ -104,7 +102,6 @@ __all__ = [
     "default_supports",
     "format_arguments",
     "format_kwargs",
-    "format_size",
     "local_file_cache",
     "secret_dict_field",
     "secret_field",

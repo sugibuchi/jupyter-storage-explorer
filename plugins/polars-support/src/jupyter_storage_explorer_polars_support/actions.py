@@ -38,8 +38,8 @@ from jupyter_storage_explorer.formats.view import (
     View,
     ViewLimits,
     ViewWithChoice,
-    format_size,
 )
+from jupyter_storage_explorer.util import format_size
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
@@ -594,11 +594,7 @@ def excel_view(
     import fastexcel
     import polars as pl
 
-    size = ctx.info.get("size")
-    if size is not None and size > limits.max_whole_file_bytes:
-        limit = limits.max_whole_file_bytes // (1024 * 1024)
-        raise ValueError(f"too large to view (over {limit} MB)")
-    workbook = ctx.fs.cat_file(ctx.path)
+    workbook = ctx.read_whole(limits)
     arguments = options.arguments()
     if {"sheet_id", "sheet_name", "table_name"} & arguments.keys():
         # The sheets (or table) asked for: several make a dict.

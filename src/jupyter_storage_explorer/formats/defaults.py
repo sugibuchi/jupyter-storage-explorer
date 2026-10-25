@@ -11,7 +11,7 @@ from jupyter_storage_explorer.formats.delta import DeltaLake
 from jupyter_storage_explorer.formats.excel import Excel
 from jupyter_storage_explorer.formats.images import Image
 from jupyter_storage_explorer.formats.parquet import Parquet
-from jupyter_storage_explorer.formats.supports.python import BUILT_IN_ACTIONS
+from jupyter_storage_explorer.formats.python import BUILT_IN_ACTIONS
 from jupyter_storage_explorer.formats.text import Csv, Json, JsonLines, Markdown, Text
 
 if TYPE_CHECKING:

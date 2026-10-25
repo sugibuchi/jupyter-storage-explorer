@@ -1,5 +1,5 @@
-"""The engines handling formats' data: the ``Engine`` interface, and
-``PythonEngine``, the built-in actions' (plugins define the others)."""
+"""The engines handling formats' data: the ``Engine`` interface (python.py
+has ``PythonEngine``, the built-in actions'; plugins define the others)."""
 
 from __future__ import annotations
 
@@ -45,14 +45,3 @@ class Engine:
     def is_installed(cls) -> bool:
         """Whether its packages are all installed."""
         return all(p.is_installed() for p in cls.requirements)
-
-
-class PythonEngine(Engine):
-    """Python alone, with the explorer's own packages: the engine of the
-    built-in actions (text, Markdown, JSON and images). Explorers offer it
-    in no menu: its views are those of formats no engine chosen handles.
-    Its actions' options are ``engine_options["python"]``."""
-
-    key = "python"
-    label = "Python"
-    requirements = ()

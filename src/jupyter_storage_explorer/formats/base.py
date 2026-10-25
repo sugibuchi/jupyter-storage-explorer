@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from jupyter_storage_explorer import _paths
 from jupyter_storage_explorer.filesystems.locations import LocalLocation
+from jupyter_storage_explorer.util import format_size
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
@@ -61,7 +62,7 @@ class ItemContext:
         Where most libraries read it (polars, pandas, DuckDB, ...): its
         location's URL, but a local file's plain path, which they all take
         (not all of them read ``file://`` URLs). Spark reads its own
-        spelling of ``location.url`` (``supports.pyspark.spark_url``).
+        spelling of ``location.url`` (pyspark-support's ``spark_url``).
     """
 
     location: Location
@@ -128,8 +129,8 @@ class ItemContext:
         """The whole file, for formats that cannot be read in part.
         ValueError if it is larger than ``limits.max_whole_file_bytes``."""
         if self.size is not None and self.size > limits.max_whole_file_bytes:
-            limit = limits.max_whole_file_bytes // (1024 * 1024)
-            raise ValueError(f"too large to view (over {limit} MB)")
+            limit = format_size(limits.max_whole_file_bytes)
+            raise ValueError(f"too large to view (over {limit})")
         return self.fs.cat_file(self.path)
 
 

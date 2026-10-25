@@ -6,7 +6,7 @@ The plugin, ``PySparkSupport``, is found by explorers through its entry point
 (``pyspark-support``); its libraries are installed with the "full" extra."""
 
 from jupyter_storage_explorer import StorageExplorerPlugin
-from jupyter_storage_explorer_pyspark_support.supports import (
+from jupyter_storage_explorer_pyspark_support.actions import (
     PYSPARK_ACTIONS,
     PYSPARK_SESSIONS,
     SPARK_PROTOCOLS,
@@ -35,8 +35,12 @@ from jupyter_storage_explorer_pyspark_support.supports import (
     spark_json_lines_view,
     spark_parquet_code,
     spark_parquet_view,
+    spark_reader,
+    spark_reader_code,
+    spark_reader_options,
     spark_rows,
     spark_session,
+    spark_session_code,
     spark_url,
 )
 
@@ -79,7 +83,11 @@ __all__ = [
     "spark_json_lines_view",
     "spark_parquet_code",
     "spark_parquet_view",
+    "spark_reader",
+    "spark_reader_code",
+    "spark_reader_options",
     "spark_rows",
     "spark_session",
+    "spark_session_code",
     "spark_url",
 ]

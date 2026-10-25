@@ -47,17 +47,10 @@ class PySpark(PythonPackage):
 
     package = "pyspark"
     import_name = "pyspark"
-
-    def is_installed(self) -> bool:
-        # Databricks Connect brings a pyspark of its own, whose builder makes
-        # no session (databricks-support's engine uses it): not this one.
-        return super().is_installed() and not _DatabricksConnect().is_installed()
-
-
-class _DatabricksConnect(PythonPackage):
-    package = "databricks-connect"
-    # "databricks" alone is a namespace other packages share (databricks-sdk).
-    import_name = "databricks.connect"
+    # A package may bring a pyspark module of its own, under its own
+    # distribution, e.g. Databricks Connect, whose builder makes no local
+    # session: the module counts only with pyspark's own distribution.
+    own_distribution = True
 
 
 class DeltaSpark(PythonPackage):
@@ -221,60 +214,121 @@ class PySparkOptions(SupportOptions):
     reader_options: Mapping[str, Any] | None = None
     supported_protocols: Sequence[str] | None = SPARK_PROTOCOLS
 
-    def spark_options(self) -> dict[str, Any]:
-        """The reader options the fields set (those not None), by Spark's
-        names, e.g. ``{"header": True, "inferSchema": True}``."""
-        return {
-            _spark_name(f): value
-            for f in fields(self)
-            if f.name not in _NOT_READER_OPTIONS
-            and (value := getattr(self, f.name)) is not None
-        }
 
-    def reader(self, spark: Any, defaults: Mapping[str, Any] | None = None) -> Any:
-        """``spark.read`` with ``defaults``, then the fields' options, then
-        ``reader_options``, each overriding the previous ones."""
-        reader = spark.read
-        settings = _merged(
-            defaults or {}, self.spark_options(), self.reader_options or {}
-        )
-        for key, value in settings.items():
-            reader = reader.option(key, value)
-        return reader
+# What the actions do with the options: functions of them, so that the
+# options stay data.
 
-    def session_code(self) -> str:
-        """The code's line creating the session, with ``session_options``
-        (those fit to show)."""
-        config = self.code_value("session_options") or {}
-        if not config:
-            return "spark = SparkSession.builder.getOrCreate()"
-        lines = [f"    .config({key!r}, {value!r})" for key, value in config.items()]
-        return "\n".join(
-            ["spark = (", "    SparkSession.builder", *lines, "    .getOrCreate()", ")"]
-        )
 
-    def reader_code(self, defaults: Mapping[str, Any] | None = None) -> str:
-        """What follows ``spark.read`` in the code: ``.options(...)`` with
-        ``defaults`` and the fields' options but those ``reader_options``
-        override, then an ``.option(key, value)`` per reader option (those fit
-        to show)."""
-        overridden = {key.lower() for key in self.reader_options or {}}
-        shown = {
-            _spark_name(f): value
-            for f in fields(self)
-            if f.name not in _NOT_READER_OPTIONS
-            and (value := self.code_value(f.name)) is not None
-        }
-        settings = {
-            key: value
-            for key, value in _merged(defaults or {}, shown).items()
-            if value is not None and key.lower() not in overridden
-        }
-        options = format_kwargs(**settings).removeprefix(", ")
-        reader = self.code_value("reader_options") or {}
-        return (f".options({options})" if options else "") + "".join(
-            f".option({key!r}, {value!r})" for key, value in reader.items()
-        )
+def spark_reader_options(options: PySparkOptions) -> dict[str, Any]:
+    """The reader options the fields of ``options`` set (those not None), by
+    Spark's names.
+
+    Parameters
+    ----------
+    options : PySparkOptions
+        A format's options, e.g. ``CsvByPySparkOptions``.
+
+    Returns
+    -------
+    dict
+        E.g. ``{"header": True, "inferSchema": True}``.
+    """
+    return {
+        _spark_name(f): value
+        for f in fields(options)
+        if f.name not in _NOT_READER_OPTIONS
+        and (value := getattr(options, f.name)) is not None
+    }
+
+
+def spark_reader(
+    options: PySparkOptions, spark: Any, defaults: Mapping[str, Any] | None = None
+) -> Any:
+    """``spark.read`` with the reader options.
+
+    Parameters
+    ----------
+    options : PySparkOptions
+        A format's options.
+    spark : SparkSession
+        The session to read with.
+    defaults : mapping, optional
+        Reader options the action sets, e.g. CSV's separator detected.
+
+    Returns
+    -------
+    DataFrameReader
+        ``spark.read`` with ``defaults``, then the fields' options, then
+        ``reader_options``, each overriding the previous ones.
+    """
+    reader = spark.read
+    settings = _merged(
+        defaults or {}, spark_reader_options(options), options.reader_options or {}
+    )
+    for key, value in settings.items():
+        reader = reader.option(key, value)
+    return reader
+
+
+def spark_session_code(options: PySparkOptions) -> str:
+    """The code's lines creating the session with pyspark's builder, with
+    ``session_options`` (those fit to show).
+
+    Parameters
+    ----------
+    options : PySparkOptions
+        A format's options.
+
+    Returns
+    -------
+    str
+        E.g. ``"spark = SparkSession.builder.getOrCreate()"``.
+    """
+    config = options.code_value("session_options") or {}
+    if not config:
+        return "spark = SparkSession.builder.getOrCreate()"
+    lines = [f"    .config({key!r}, {value!r})" for key, value in config.items()]
+    return "\n".join(
+        ["spark = (", "    SparkSession.builder", *lines, "    .getOrCreate()", ")"]
+    )
+
+
+def spark_reader_code(
+    options: PySparkOptions, defaults: Mapping[str, Any] | None = None
+) -> str:
+    """What follows ``spark.read`` in the code.
+
+    Parameters
+    ----------
+    options : PySparkOptions
+        A format's options.
+    defaults : mapping, optional
+        Reader options the action sets, e.g. CSV's separator detected.
+
+    Returns
+    -------
+    str
+        ``.options(...)`` with ``defaults`` and the fields' options but those
+        ``reader_options`` override, then an ``.option(key, value)`` per
+        reader option; only those fit to show.
+    """
+    overridden = {key.lower() for key in options.reader_options or {}}
+    shown = {
+        _spark_name(f): value
+        for f in fields(options)
+        if f.name not in _NOT_READER_OPTIONS
+        and (value := options.code_value(f.name)) is not None
+    }
+    settings = {
+        key: value
+        for key, value in _merged(defaults or {}, shown).items()
+        if value is not None and key.lower() not in overridden
+    }
+    arguments = format_kwargs(**settings).removeprefix(", ")
+    reader = options.code_value("reader_options") or {}
+    return (f".options({arguments})" if arguments else "") + "".join(
+        f".option({key!r}, {value!r})" for key, value in reader.items()
+    )
 
 
 # The formats' reader options, from Spark's documentation of its data sources
@@ -446,7 +500,7 @@ def _pyspark_session(ctx: ItemContext, options: PySparkOptions) -> Any:
 
 
 def _pyspark_session_code(ctx: ItemContext, options: PySparkOptions) -> str:
-    return options.session_code()
+    return spark_session_code(options)
 
 
 PYSPARK_SESSIONS = SparkSessions(
@@ -476,7 +530,7 @@ def _spark_view(
     """The data browser on ``read(reader, url)``, a Spark DataFrame: each
     page a Spark job."""
     spark = sessions.session(ctx, options)
-    data = read(options.reader(spark, defaults), _url(ctx))
+    data = read(spark_reader(options, spark, defaults), _url(ctx))
     return QueryView(data=data, fetch=spark_rows)
 
 
@@ -506,7 +560,7 @@ def _spark_code(
         code_import=sessions.code_import,
         note=note,
         session=sessions.code(ctx, options),
-        reader=options.reader_code(defaults),
+        reader=spark_reader_code(options, defaults),
         read=call.format(url=repr(_url(ctx))),
     )
 

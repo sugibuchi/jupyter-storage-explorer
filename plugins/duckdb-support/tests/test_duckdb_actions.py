@@ -37,8 +37,8 @@ from jupyter_storage_explorer_duckdb_support import (
     parquet_as_relation,
     parquet_view,
 )
-from jupyter_storage_explorer_duckdb_support import supports as duckdb_supports
-from jupyter_storage_explorer_duckdb_support.supports import _read_by_duckdb
+from jupyter_storage_explorer_duckdb_support import actions as duckdb_actions
+from jupyter_storage_explorer_duckdb_support.actions import _read_by_duckdb
 
 from jupyter_storage_explorer.filesystems import (
     AbfsLocation,
@@ -69,7 +69,7 @@ SQLITE_BYTES = b"SQLite format 3\0" + b"\0" * 100
 def cache(tmp_path, monkeypatch) -> LocalFileCache:
     """The actions' local copies, in a cache of each test's own."""
     cache = LocalFileCache(tmp_path / "copies")
-    monkeypatch.setattr(duckdb_supports, "local_file_cache", lambda: cache)
+    monkeypatch.setattr(duckdb_actions, "local_file_cache", lambda: cache)
     return cache
 
 
@@ -451,7 +451,7 @@ class TestDatabase:
         view.close()
 
     def test_copy_released_on_close(self, tmp_path, make_item, cache, monkeypatch):
-        monkeypatch.setattr(duckdb_supports, "_COPY_KEPT", 0)
+        monkeypatch.setattr(duckdb_actions, "_COPY_KEPT", 0)
         database(tmp_path / "a.duckdb", self.SQL)
         item = make_item("/dbs/a.duckdb", (tmp_path / "a.duckdb").read_bytes())
         view = database_view(DuckDBDatabase(), item, DuckDBOptions(), ViewLimits())

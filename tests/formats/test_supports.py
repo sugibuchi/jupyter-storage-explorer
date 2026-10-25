@@ -56,7 +56,7 @@ from jupyter_storage_explorer.formats import (
     secret_field,
 )
 from jupyter_storage_explorer.formats.defaults import DEFAULT_ACTIONS, DEFAULT_FORMATS
-from jupyter_storage_explorer.formats.supports import FsspecOptions, text_code
+from jupyter_storage_explorer.formats.python import FsspecOptions, text_code
 
 LIMITS = ViewLimits(max_display_rows=2)
 

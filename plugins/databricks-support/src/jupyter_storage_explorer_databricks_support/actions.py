@@ -33,7 +33,7 @@ from jupyter_storage_explorer_pyspark_support import (
     spark_parquet_code,
     spark_parquet_view,
 )
-from jupyter_storage_explorer_pyspark_support.supports import AS_DATA_FRAME
+from jupyter_storage_explorer_pyspark_support.actions import AS_DATA_FRAME
 
 from jupyter_storage_explorer.formats.actions import code, register_actions, view
 from jupyter_storage_explorer.formats.base import ItemContext

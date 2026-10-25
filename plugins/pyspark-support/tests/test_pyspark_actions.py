@@ -6,6 +6,8 @@ session's builder, faked; its engine and entry point."""
 from __future__ import annotations
 
 import concurrent.futures
+import importlib.metadata
+import importlib.util
 import os
 import shutil
 import sys
@@ -34,7 +36,7 @@ from jupyter_storage_explorer_pyspark_support import (
     spark_rows,
     spark_url,
 )
-from jupyter_storage_explorer_pyspark_support import supports as pyspark
+from jupyter_storage_explorer_pyspark_support import actions as pyspark
 
 from jupyter_storage_explorer._explorer.supports import ActionChain
 from jupyter_storage_explorer.filesystems import S3Location
@@ -132,10 +134,14 @@ def test_one_options_class_per_format():
     assert all(len(models) == 1 for models in by_format.values())
 
 
-def test_engine_not_with_databricks_connects_pyspark(monkeypatch):
-    # Its pyspark makes no session with SparkSession.builder: databricks-
-    # support's engine uses it instead.
-    monkeypatch.setattr(pyspark._DatabricksConnect, "is_installed", lambda self: True)
+def test_engine_not_with_another_packages_pyspark(monkeypatch):
+    # A pyspark module of another distribution, e.g. Databricks Connect's,
+    # makes no session with SparkSession.builder.
+    def missing(name):
+        raise importlib.metadata.PackageNotFoundError(name)
+
+    monkeypatch.setattr(importlib.util, "find_spec", lambda name: object())
+    monkeypatch.setattr(importlib.metadata, "distribution", missing)
     assert not PySpark().is_installed()
     assert not PySparkEngine.is_installed()
     assert [p.package for p in PySparkEngine.requirements] == ["pyspark", "pyarrow"]
@@ -239,8 +245,10 @@ class TestSupportedProtocols:
         assert self.supports(make_item("/a.parquet", b""), options)
 
     def test_not_a_reader_option(self):
-        assert "supportedProtocols" not in PySparkOptions().spark_options()
-        assert ".option" not in PySparkOptions().reader_code()
+        assert "supportedProtocols" not in pyspark.spark_reader_options(
+            PySparkOptions()
+        )
+        assert ".option" not in pyspark.spark_reader_code(PySparkOptions())
 
     def test_by_engine_options(self, make_item, monkeypatch):
         monkeypatch.setattr(PySpark, "is_installed", lambda self: True)
@@ -273,7 +281,7 @@ class TestOptions:
         options = CsvByPySparkOptions(
             null_value="NA", reader_options={"nullvalue": "-"}
         )
-        options.reader(SimpleNamespace(read=Reader()), {"sep": ";"})
+        pyspark.spark_reader(options, SimpleNamespace(read=Reader()), {"sep": ";"})
         # The defaults, the fields, then the reader options, which override
         # them whatever their case.
         assert given == [
@@ -295,12 +303,12 @@ class TestOptions:
         options = CsvByPySparkOptions(
             null_value="NA", timestamp_ntz_format="yyyy", header=None
         )
-        assert options.spark_options() == {
+        assert pyspark.spark_reader_options(options) == {
             "inferSchema": True,
             "nullValue": "NA",
             "timestampNTZFormat": "yyyy",
         }
-        assert PySparkOptions().spark_options() == {}
+        assert pyspark.spark_reader_options(PySparkOptions()) == {}
 
     @pytest.mark.parametrize("model", FORMAT_OPTIONS)
     def test_options_left_to_spark_by_default(self, model):
@@ -312,7 +320,7 @@ class TestOptions:
             if model is CsvByPySparkOptions
             else {}
         )
-        assert model().spark_options() == expected
+        assert pyspark.spark_reader_options(model()) == expected
 
     def test_code(self, make_item):
         options = CsvByPySparkOptions(
@@ -362,7 +370,7 @@ class TestOptions:
         parquet = ParquetByPySparkOptions(
             merge_schema=True, reader_options={"MERGESCHEMA": False}
         )
-        assert parquet.reader_code() == ".option('MERGESCHEMA', False)"
+        assert pyspark.spark_reader_code(parquet) == ".option('MERGESCHEMA', False)"
 
 
 class TestRecipes:

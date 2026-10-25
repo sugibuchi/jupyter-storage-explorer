@@ -47,7 +47,9 @@ construct, subclass, call or annotate with.
 
 - `jupyter_storage_explorer`, the top level: the widgets, `Location` and `StorageExplorerPlugin`;
 - `jupyter_storage_explorer.filesystems`: locations, mappers and operations;
-- `jupyter_storage_explorer.formats` and `formats.supports`.
+- `jupyter_storage_explorer.formats`, `formats.actions` and `formats.python`: formats, actions, views and the built-in
+  actions with their engine, `PythonEngine`;
+- `jupyter_storage_explorer.util`: helpers such as `format_size`.
 
 The explorer's machinery stays out of them, such as `SupportChain`, `OperationChain` and `detect`. The package and the
 tests import it from its modules.

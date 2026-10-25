@@ -63,8 +63,8 @@ writing tests. The traps:
   for each new feature. Drag and drop works only in a browser, not in IntelliJ's notebook view.
 - The launcher and the plugins pin the explorer of their exact version in their `hatch_build.py`. Add their new
   dependencies there.
-- Users import only from the top level, `filesystems`, `formats`, `formats.actions`, `formats.supports` and the
-  plugins' packages. Keep
+- Users import only from the top level, `filesystems`, `formats`, `formats.actions`, `formats.python`, `util` and
+  the plugins' packages. Keep
   the explorer's machinery out of their `__all__`.
 - `static/storage-explorer.svg` is a copy of the launcher's icon: change both.
 

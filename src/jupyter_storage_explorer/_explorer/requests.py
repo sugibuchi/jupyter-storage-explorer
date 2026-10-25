@@ -14,6 +14,7 @@ from jupyter_storage_explorer._jobs import properties
 from jupyter_storage_explorer._jobs.tasks import FileTasks, Plan
 from jupyter_storage_explorer._jobs.transfer_policy import computer_url
 from jupyter_storage_explorer.location import Location
+from jupyter_storage_explorer.util import format_size
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -55,7 +56,7 @@ class FileRequestsMixin:
                 size = info.get("size")
                 if size is not None and size > _MAX_DOWNLOAD_BYTES:
                     raise ValueError(
-                        f"too large to download (over {_MAX_DOWNLOAD_BYTES // (1024 * 1024)} MB)"
+                        f"too large to download (over {format_size(_MAX_DOWNLOAD_BYTES)})"
                     )
                 data = self._read_bytes(path)
             except Exception as exc:

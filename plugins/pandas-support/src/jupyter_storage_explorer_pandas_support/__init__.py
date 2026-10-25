@@ -6,7 +6,7 @@ The plugin, ``PandasSupport``, is found by explorers through its entry point
 (``pandas-support``); its libraries are installed with the "full" extra."""
 
 from jupyter_storage_explorer import StorageExplorerPlugin
-from jupyter_storage_explorer_pandas_support.supports import (
+from jupyter_storage_explorer_pandas_support.actions import (
     PANDAS_ACTIONS,
     CsvByPandasOptions,
     ExcelByPandasOptions,

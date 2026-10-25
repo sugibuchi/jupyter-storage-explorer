@@ -31,7 +31,7 @@ from jupyter_storage_explorer.formats import (
     ViewWithPrompt,
 )
 from jupyter_storage_explorer.formats.base import matching_formats
-from jupyter_storage_explorer.formats.engine import PythonEngine
+from jupyter_storage_explorer.formats.python import PythonEngine
 
 if TYPE_CHECKING:
     from collections.abc import Callable

@@ -741,7 +741,7 @@ class StorageExplorer(
         Returns
         -------
         list of Action
-            By default ``jupyter_storage_explorer.formats.supports.BUILT_IN_ACTIONS``:
+            By default ``jupyter_storage_explorer.formats.python.BUILT_IN_ACTIONS``:
             those needing no engine (views of text, Markdown, JSON and
             images, and code reading them); the engines' come with their
             plugins. Each gets its options from ``engine_options``.

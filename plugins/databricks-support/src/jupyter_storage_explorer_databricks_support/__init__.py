@@ -11,11 +11,7 @@ point (``databricks-support``); its libraries are installed with the "full"
 extra."""
 
 from jupyter_storage_explorer import StorageExplorerPlugin
-from jupyter_storage_explorer_databricks_support.mapper import (
-    DatabricksLocation,
-    DatabricksWorkspaceMapper,
-)
-from jupyter_storage_explorer_databricks_support.supports import (
+from jupyter_storage_explorer_databricks_support.actions import (
     DATABRICKS_ACTIONS,
     DATABRICKS_PROTOCOLS,
     DATABRICKS_SESSIONS,
@@ -34,6 +30,10 @@ from jupyter_storage_explorer_databricks_support.supports import (
     json_lines_view,
     parquet_as_data_frame,
     parquet_view,
+)
+from jupyter_storage_explorer_databricks_support.mapper import (
+    DatabricksLocation,
+    DatabricksWorkspaceMapper,
 )
 
 

@@ -975,7 +975,7 @@ Checks opening view tabs need the launcher's JupyterLab extension built: `uv run
 in `launcher/labextension`, then `uv sync`.
 
 Plugins outside this repository use only the public API: the top level, `filesystems`, `formats`, `formats.actions`,
-`formats.supports` and `testing`. This repository's plugins may also use the explorer's internals, as they are released with it.
+`formats.python`, `util` and `testing`. This repository's plugins may also use the explorer's internals, as they are released with it.
 
 ### Trying components in an explorer
 

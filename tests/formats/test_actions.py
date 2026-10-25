@@ -15,7 +15,6 @@ from jupyter_storage_explorer.formats import (
     Engine,
     FormatSupport,
     Parquet,
-    PythonEngine,
     PythonPackage,
     SupportOptions,
     TextView,
@@ -30,6 +29,7 @@ from jupyter_storage_explorer.formats.actions import (
     register_actions,
     view,
 )
+from jupyter_storage_explorer.formats.python import PythonEngine
 
 if TYPE_CHECKING:
     from collections.abc import Mapping

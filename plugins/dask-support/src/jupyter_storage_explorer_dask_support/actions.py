@@ -66,8 +66,8 @@ from jupyter_storage_explorer.formats.view import (
     View,
     ViewLimits,
     ViewWithConfirmation,
-    format_size,
 )
+from jupyter_storage_explorer.util import format_size
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence

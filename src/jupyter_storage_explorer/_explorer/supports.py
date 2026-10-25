@@ -19,7 +19,7 @@ from jupyter_storage_explorer.formats.actions import (
     ViewAction,
     check_actions,
 )
-from jupyter_storage_explorer.formats.engine import PythonEngine
+from jupyter_storage_explorer.formats.python import PythonEngine
 from jupyter_storage_explorer.formats.support import FormatSupport
 
 if TYPE_CHECKING:

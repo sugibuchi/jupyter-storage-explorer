@@ -1,8 +1,9 @@
-"""The built-in actions, which need no engine, only the explorer's own
-packages: views of text and code (highlighted), Markdown and JSON from the
-beginning of the file, and of images, which the browser shows; and code
-reading text and JSON with fsspec, and images with Pillow, for any storage.
-Their options are the "python" entry of ``engine_options``.
+"""Python alone as an engine (``PythonEngine``) and its actions, the
+built-in ones, which need only the explorer's own packages: views of text and
+code (highlighted), Markdown and JSON from the beginning of the file, and of
+images, which the browser shows; and code reading text and JSON with fsspec,
+and images with Pillow, for any storage. Their options are the "python"
+entry of ``engine_options``.
 
 They are the models of actions for plugins: each a function, its options
 class imported at run time (``FsspecOptions`` here), registered in order in
@@ -22,7 +23,7 @@ from pygments.util import ClassNotFound
 
 from jupyter_storage_explorer.formats.actions import code, register_actions, view
 from jupyter_storage_explorer.formats.base import ItemContext
-from jupyter_storage_explorer.formats.engine import PythonEngine
+from jupyter_storage_explorer.formats.engine import Engine
 from jupyter_storage_explorer.formats.images import Image
 from jupyter_storage_explorer.formats.packages import Fsspec, Pillow
 from jupyter_storage_explorer.formats.support import (
@@ -39,15 +40,40 @@ from jupyter_storage_explorer.formats.view import (
     View,
     ViewLimits,
 )
+from jupyter_storage_explorer.util import format_size
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
+__all__ = [
+    "BUILT_IN_ACTIONS",
+    "FsspecOptions",
+    "PythonEngine",
+    "image_code",
+    "image_view",
+    "json_code",
+    "json_view",
+    "markdown_view",
+    "text_code",
+    "text_view",
+]
+
+
+class PythonEngine(Engine):
+    """Python alone, with the explorer's own packages: the engine of the
+    built-in actions. Explorers offer it in no menu: its views are those of
+    formats no engine chosen handles. Its actions' options are
+    ``engine_options["python"]``."""
+
+    key = "python"
+    label = "Python"
+    requirements = ()
+
 
 def _size_note(ctx: ItemContext, limits: ViewLimits) -> str:
     """The note under a view of the file's beginning."""
-    total = f" of {ctx.size:,} bytes" if ctx.size is not None else ""
-    return f"First {limits.max_bytes // 1024} KB{total}"
+    total = f" of {format_size(ctx.size)}" if ctx.size is not None else ""
+    return f"First {format_size(limits.max_bytes)}{total}"
 
 
 def _highlight(text: str, language: str | None) -> str | None:
@@ -211,8 +237,8 @@ def image_view(
     try:
         return MediaView(mime=mime, src=ctx.fs.sign(ctx.path))
     except NotImplementedError:
-        limit = limits.max_whole_file_bytes // (1024 * 1024)
-        raise ValueError(f"too large to view (over {limit} MB)") from None
+        limit = format_size(limits.max_whole_file_bytes)
+        raise ValueError(f"too large to view (over {limit})") from None
 
 
 def _not_svg(fmt: Image, ctx: ItemContext, options: SupportOptions) -> bool:

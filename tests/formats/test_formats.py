@@ -206,7 +206,7 @@ class TestViews:
             Text(), make_item("/a.txt", b"ab\ncd\nef\n"), ViewLimits(max_bytes=4)
         )
         assert text.text == "ab\n"
-        assert text.note.startswith("First 0 KB of 9 bytes")
+        assert text.note == "First 4 B of 9 B"
 
     def test_markdown(self, make_item):
         md = view(Markdown(), make_item("/a.md", b"# Title\n"))

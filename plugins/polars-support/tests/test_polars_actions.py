@@ -33,7 +33,7 @@ from jupyter_storage_explorer_polars_support import (
     parquet_as_lazy_frame,
     parquet_view,
 )
-from jupyter_storage_explorer_polars_support.supports import _read_by_polars
+from jupyter_storage_explorer_polars_support.actions import _read_by_polars
 
 from jupyter_storage_explorer.filesystems import S3Location
 from jupyter_storage_explorer.formats import (

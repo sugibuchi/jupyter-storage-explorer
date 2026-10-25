@@ -1461,8 +1461,9 @@ def readable_errors(lab: Lab, page: Page) -> None:
 VIEWS_BY_NAME = """\
 import fsspec
 from jupyter_storage_explorer import StorageExplorer
-from jupyter_storage_explorer.formats import PythonEngine, Text, TextView
+from jupyter_storage_explorer.formats import Text, TextView
 from jupyter_storage_explorer.formats.actions import view
+from jupyter_storage_explorer.formats.python import PythonEngine
 
 @view(format=Text, engine=PythonEngine, name="Shout")
 def shout(fmt, ctx, options, limits):

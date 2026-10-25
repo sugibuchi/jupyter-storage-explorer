@@ -7,7 +7,7 @@ The plugin, ``DuckDBSupport``, is found by explorers through its entry point
 (``duckdb-support``); its libraries are installed with the "full" extra."""
 
 from jupyter_storage_explorer import StorageExplorerPlugin
-from jupyter_storage_explorer_duckdb_support.supports import (
+from jupyter_storage_explorer_duckdb_support.actions import (
     DUCKDB_ACTIONS,
     CsvByDuckDBOptions,
     DeltaLakeByDuckDBOptions,

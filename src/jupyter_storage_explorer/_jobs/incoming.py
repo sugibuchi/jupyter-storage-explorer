@@ -15,7 +15,7 @@ import os
 import tempfile
 from typing import TYPE_CHECKING
 
-from jupyter_storage_explorer.formats.view import format_size
+from jupyter_storage_explorer.util import format_size
 
 if TYPE_CHECKING:
     from fsspec import AbstractFileSystem

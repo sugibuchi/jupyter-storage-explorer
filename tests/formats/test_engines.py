@@ -1,4 +1,4 @@
-"""Engines (formats/engine.py, the predefined ones in formats/supports/): which are offered, in which order,
+"""Engines (formats/engine.py, PythonEngine in formats/python.py, the others in the plugins): which are offered, in which order,
 which views an item, and the explorer's choice of one."""
 
 from __future__ import annotations
@@ -20,11 +20,11 @@ from jupyter_storage_explorer.formats import (
     FormatSupport,
     Markdown,
     Parquet,
-    PythonEngine,
     PythonPackage,
     package,
 )
 from jupyter_storage_explorer.formats.packages import DeltaLake as DeltaLakePackage
+from jupyter_storage_explorer.formats.python import PythonEngine
 
 
 class Installed(PythonPackage):
