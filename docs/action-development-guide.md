@@ -123,7 +123,8 @@ Case is ignored.
 
 The function takes the parameters it names, in any order, of these:
 
-- `url`: where libraries read the item, its URL or a local file's plain path;
+- `url`: the item's URL, e.g. `"s3://bucket/a.csv"`, which fsspec opens, also for a local file (`file://`);
+- `url_or_local_path`: the item's URL, but a local file's plain path, which most libraries read, e.g. polars or pandas;
 - `name`: the item's name, e.g. `"a.csv"`;
 - `path`: its path in its storage;
 - `size`: its size in bytes, if known;
@@ -264,10 +265,10 @@ from jupyter_storage_explorer_polars_support import PolarsEngine
 
 
 @view(Parquet, PolarsEngine, label="Latest orders ({engine})")
-def latest_orders(url):
+def latest_orders(url_or_local_path):
     import polars as pl
 
-    return pl.scan_parquet(url).sort("order_date", descending=True)
+    return pl.scan_parquet(url_or_local_path).sort("order_date", descending=True)
 ```
 
 - The action is offered only when its engine's packages are installed.
@@ -313,8 +314,8 @@ The `ctx` parameter is the item, an `ItemContext`. It has what the other paramet
 
 | `ctx.`               | What                                                                               |
 |----------------------|------------------------------------------------------------------------------------|
-| `url`, `name`, `path`, `size`, `is_dir`, `fs` | As the parameters of the same names.                      |
-| `location`           | Where the item is, independently of fsspec; `location.url` is its URL, also of a local file. |
+| `url`, `url_or_local_path`, `name`, `path`, `size`, `is_dir`, `fs` | As the parameters of the same names. |
+| `location`           | Where the item is, independently of fsspec, e.g. an S3 bucket and key.             |
 | `info`               | fsspec's info of the item, e.g. its modification time.                             |
 | `children`           | A folder's listing, as fsspec's entries; `None` for a file.                        |
 | `child_names`        | The names of a folder's items.                                                     |

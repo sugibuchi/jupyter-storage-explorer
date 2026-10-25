@@ -35,6 +35,7 @@ from jupyter_storage_explorer.formats.actions import (
 )
 from jupyter_storage_explorer.formats.base import matching_formats
 from jupyter_storage_explorer.formats.python import PythonEngine
+from jupyter_storage_explorer.testing import local_item
 from jupyter_storage_explorer.util import secret_dict_field, secret_field
 
 if TYPE_CHECKING:
@@ -155,14 +156,26 @@ class TestDecorators:
             code(Csv, label="Code")(lambda url, limits: "")
 
     def test_the_parameters_it_names(self, make_item):
-        # In any order; url is the item's ItemContext.url.
+        # In any order, as the item's ItemContext gives them.
         @code(Csv, label="Names")
         def names(name, url, size):
             return f"{name} {url} {size}"
 
         item = make_item("/a.csv", b"abc")
         assert names(Csv(), item, ActionOptions()) == "a.csv memory:///a.csv 3"
-        assert item.url == item.url_or_local_path
+
+    def test_a_local_files_url_or_plain_path(self, tmp_path):
+        # url is the location's URL; url_or_local_path a local file's plain
+        # path, which not every library reads as a file:// URL.
+        @code(Csv, label="Both")
+        def both(url, url_or_local_path):
+            return f"{url}|{url_or_local_path}"
+
+        (tmp_path / "a.csv").write_bytes(b"abc")
+        item = local_item(tmp_path / "a.csv")
+        url, path = both(Csv(), item, ActionOptions()).split("|")
+        assert (url, path) == (item.location.url, item.location.path)
+        assert url.startswith("file://") and not path.startswith("file:")
 
     def test_the_light_style(self, make_item):
         # A format, positionally; PythonEngine, and the function's name as

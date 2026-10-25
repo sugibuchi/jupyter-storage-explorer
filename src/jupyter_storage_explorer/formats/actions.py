@@ -193,6 +193,7 @@ _ARGUMENTS: dict[str, Callable[[Any, Any, Any, Any], Any]] = {
     "options": lambda fmt, ctx, options, limits: options,
     "limits": lambda fmt, ctx, options, limits: limits,
     "url": lambda fmt, ctx, options, limits: ctx.url,
+    "url_or_local_path": lambda fmt, ctx, options, limits: ctx.url_or_local_path,
     "path": lambda fmt, ctx, options, limits: ctx.path,
     "name": lambda fmt, ctx, options, limits: ctx.name,
     "size": lambda fmt, ctx, options, limits: ctx.size,
@@ -344,7 +345,9 @@ def view(
 
     - It takes the parameters it names, in any order, of these:
 
-      - ``url``, where libraries read the item (``ItemContext.url``);
+      - ``url``, the item's URL, also of a local file, which fsspec opens;
+      - ``url_or_local_path``, where most libraries read the item: its URL,
+        but a local file's plain path;
       - ``path``, ``name``, ``size``, ``is_dir`` and ``fs``, those of the
         item (see ``ItemContext``);
       - ``ctx``, the item as an ``ItemContext``;
@@ -411,16 +414,16 @@ def view(
     Examples
     --------
     >>> @view(Parquet, PolarsEngine, label="First rows ({engine})")
-    ... def head(url):
+    ... def head(url_or_local_path):
     ...     import polars as pl
     ...
-    ...     return pl.scan_parquet(url).head(100)
+    ...     return pl.scan_parquet(url_or_local_path).head(100)
 
     >>> @view(format=Parquet, engine=PolarsEngine)
     ... def parquet_by_polars(fmt, ctx, options: ParquetByPolarsOptions, limits):
     ...     import polars as pl
     ...
-    ...     return QueryView(pl.scan_parquet(ctx.url, **options.arguments()))
+    ...     return QueryView(pl.scan_parquet(ctx.url_or_local_path, **options.arguments()))
     """
     format, engine = _format_and_engine(types, format, engine)
 
@@ -460,7 +463,7 @@ def code(
     The code runs as it is in a new notebook: its imports first, and what
     else it needs, e.g. a Spark session. Installing the packages and
     configuring access to the storage are left to the user. It reads the
-    location (``url``). The function reads the item only for what the code
+    location (``url`` or ``url_or_local_path``). The function reads the item only for what the code
     needs to know, e.g. a CSV file's separator. Options go into the code
     only through ``ActionOptions.code_value`` and ``code_arguments``, which
     leave secrets out.
@@ -506,9 +509,9 @@ def code(
     ...     return f"import fsspec, json\\n\\nprint(json.dumps(json.loads(fsspec.open({url!r}).open().read()), indent=4))"
 
     >>> @code(format=Parquet, engine=PolarsEngine, label="Load as LazyFrame")
-    ... def parquet_as_lazy_frame(url, options: ParquetByPolarsOptions):
+    ... def parquet_as_lazy_frame(url_or_local_path, options: ParquetByPolarsOptions):
     ...     kwargs = format_arguments(options.code_arguments())
-    ...     return f"import polars as pl\\n\\ndf = pl.scan_parquet({url!r}{kwargs})"
+    ...     return f"import polars as pl\\n\\ndf = pl.scan_parquet({url_or_local_path!r}{kwargs})"
     """
     format, engine = _format_and_engine(types, format, engine)
 

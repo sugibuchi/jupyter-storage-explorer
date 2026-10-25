@@ -290,7 +290,7 @@ The decorators' arguments:
 The rules for the functions:
 
 - They take the parameters they name, in any order: `fmt`, `ctx`, `options`, and `limits` for a view, or parts of
-  the item, `url`, `name`, `path`, `size`, `is_dir` and `fs`. The decorator checks them; another needs a default.
+  the item, `url`, `url_or_local_path`, `name`, `path`, `size`, `is_dir` and `fs`. The decorator checks them; another needs a default.
   A plugin's actions take `fmt, ctx, options, limits`, as the examples here.
 - A view returns a `View`. A user's may also return plain data: a dataframe, a `str` or a `dict` or `list`, shown
   in the data browser, as text or as a tree.
@@ -503,6 +503,7 @@ code = f"con.read_parquet({url!r}{format_arguments(options.code_arguments())})" 
 | `ctx`                      | What                                                                                       |
 |----------------------------|--------------------------------------------------------------------------------------------|
 | `ctx.url_or_local_path`    | The location as libraries read it: a local file's plain path, else its URL                 |
+| `ctx.url`                  | The location's URL, also a local file's (`file://`), as fsspec opens it: `ctx.location.url` |
 | `ctx.location`             | Where it is (`AbfsLocation`, `S3Location`, `LocalLocation`, ...): `ctx.location.url`       |
 | `ctx.fs`, `ctx.path`       | The explorer's fsspec filesystem (with its credentials) and the item's path in it         |
 | `ctx.head(n)`, `ctx.head_text(n)` | The first bytes; the first text and whether it was cut                             |

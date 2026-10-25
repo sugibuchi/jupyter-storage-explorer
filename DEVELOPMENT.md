@@ -987,7 +987,7 @@ A view action may name its `code`, the code action reproducing it. An action tak
 signature, so it reads as the function.
 
 The explorer calls every action as `(fmt, ctx, options, limits)`, `limits` for views only. The function takes the
-parameters it names of those and of the item's parts, `url`, `name`, `path`, `size`, `is_dir` and `fs` (`_ARGUMENTS`),
+parameters it names of those and of the item's parts, `url`, `url_or_local_path`, `name`, `path`, `size`, `is_dir` and `fs` (`_ARGUMENTS`),
 given by keyword. The decorator checks them; an action reads them again in `__post_init__`, for `dataclasses.replace`.
 The format and the engine may be given positionally, the engine defaulting to `PythonEngine`, and a code action's label
 to its function's name.

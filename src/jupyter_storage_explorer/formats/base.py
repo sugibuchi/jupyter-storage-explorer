@@ -65,9 +65,9 @@ class ItemContext:
         (not all of them read ``file://`` URLs). Spark reads its own
         spelling of ``location.url`` (pyspark-support's ``spark_url``).
     url : str
-        ``url_or_local_path``, under a shorter name for actions (an action's
-        function takes it as ``url``). The location's own URL, also of a
-        local file, is ``location.url``.
+        Its location's URL, ``location.url``, also of a local file
+        (``file://``): what fsspec opens. Libraries reading a local file
+        by its plain path take ``url_or_local_path``.
     """
 
     location: Location
@@ -104,7 +104,7 @@ class ItemContext:
 
     @property
     def url(self) -> str:
-        return self.url_or_local_path
+        return self.location.url
 
     def head(self, size: int) -> bytes:
         """The first ``size`` bytes of the file, without reading the rest.
