@@ -678,7 +678,9 @@ def _create_explorer(
         # The settings the explorer has, for the warnings launch() shows.
         settings.__dict__.update(without.__dict__)
         settings.user_error = f"{user}: the explorer cannot be created with it: {error}"
-    explorer._offer_settings(user_launcher_file(), create_user_launcher_file)
+    explorer._offer_config_file(
+        "launcher", user_launcher_file(), create_user_launcher_file
+    )
     if settings.user_error:
         # Also in the explorer, until it lists another folder.
         explorer._error = _left_out(settings.user_error)

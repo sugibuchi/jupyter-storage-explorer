@@ -282,10 +282,38 @@ class TestMerging:
             "disabled",
             "disabled",
         )
-        assert explorer._settings_path  # "Edit configuration" there too
+        assert explorer._config_paths["launcher"]  # "Edit configuration" there too
 
 
 class TestFinal:
+    def test_user_actions_made_final(self, tmp_path):
+        # An administrator turns the user's action files off for the tabs.
+        system = layer(
+            tmp_path,
+            "system",
+            """
+            def parameters():
+                return {"user_actions": "disabled"}
+
+            def final():
+                return ["user_actions"]
+            """,
+        )
+        user = layer(
+            tmp_path,
+            "user",
+            """
+            def parameters():
+                return {"user_actions": "enabled"}
+            """,
+        )
+        settings = load_settings([user, system])
+        _, kwargs = settings.explorer_arguments()
+        assert kwargs["user_actions"] == "disabled"
+        assert [w.split(": ", 1)[1] for w in settings.warnings] == [
+            f"user_actions is ignored: it is final in {system}"
+        ]
+
     def test_final_settings_cannot_be_changed(self, tmp_path):
         system = layer(
             tmp_path,
@@ -766,7 +794,7 @@ class TestUserFile:
     def test_offered_to_the_tabs_explorer(self, config_dir):
         explorer = launcher._create_explorer(load_settings([]), None)
         path = config_dir / "storage-explorer" / "launcher.py"
-        assert explorer._settings_path == str(path)
+        assert explorer._config_paths["launcher"] == str(path)
         assert not path.exists()  # created when the button is clicked
 
     def test_created_from_the_template(self, config_dir):

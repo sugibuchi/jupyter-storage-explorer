@@ -1959,6 +1959,40 @@ def launcher_settings_with_an_error(lab: Lab, page: Page) -> None:
 
 
 @lab_check
+def edit_actions(lab: Lab, page: Page) -> None:
+    # The settings menu's "Edit actions" opens the user's actions.py in
+    # JupyterLab's editor, created from the template once the user agrees;
+    # an action added there is used by the next explorer.
+    path = lab.folder / "config" / "storage-explorer" / "actions.py"
+    try:
+        tab = open_launcher_tab(lab, page)
+        assert not path.exists()
+        tab.locator(".jse-settings-btn").click()
+        tab.locator(
+            ".jse-menu:not(.jse-submenu) > .jse-menu-item:visible",
+            has_text="Edit actions",
+        ).click()
+        dialog = tab.locator(".jse-dialog:visible")
+        expect(dialog).to_contain_text("Create your actions file")
+        dialog.get_by_role("button", name="Create").click()
+        editor = page.locator(".jp-FileEditor .cm-content").first
+        expect(editor).to_contain_text("Storage Explorer actions: yours.")
+        expect(page.locator(".lm-TabBar-tab.jp-mod-current")).to_contain_text(
+            "actions.py"
+        )
+        editor.click()
+        page.keyboard.press("Control+End")
+        page.keyboard.insert_text("\n" + USER_ACTIONS_FILE)
+        page.keyboard.press("Control+s")
+        wait_for(lambda: "Reversed" in path.read_text(encoding="utf-8"), "the save")
+        x = Explorer(lab, page, USER_ACTIONS)
+        x.row("a.txt").click()
+        expect(x.preview.locator(".jse-text")).to_have_text("desserts")
+    finally:
+        path.unlink(missing_ok=True)
+
+
+@lab_check
 def launcher_tab_reload(lab: Lab, page: Page) -> None:
     # The tab reopens where it was after a page reload: the storage shown, and
     # each storage's folder (index.ts saves them with the workspace).

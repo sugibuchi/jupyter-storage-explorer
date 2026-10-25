@@ -1,34 +1,39 @@
-"""Actions of the user's own, from files: ``storage-explorer/actions/*.py`` in
-Jupyter's configuration directories (``jupyter --paths``, config section),
-which every explorer loads, in notebooks, the launcher's tabs and the side
-panel alike.
+"""Actions of the user's own, from files: ``storage-explorer/actions.py`` and
+``storage-explorer/actions/*.py`` in Jupyter's configuration directories
+(``jupyter --paths``, config section), which every explorer loads, in
+notebooks, the launcher's tabs and the side panel alike.
 
 The user's directory comes first, then the environment's and the system's;
-in each, the files by name, but those whose names start with "_". A file
-gives the actions defined at its top level, in order, or its ``ACTIONS``, a
-sequence of actions, if it has one (e.g. ``register_actions(...)``, to
-order them or leave some out). A file that cannot be imported, gives
-something else, or whose actions cannot be used with those before it (e.g.
-two of one label) is left out, with its reason: a broken file must not keep
-the explorer from opening."""
+in each, ``actions.py``, then the folder's files by name, but those whose
+names start with "_". A file gives the actions defined at its top level, in
+order, or its ``ACTIONS``, a sequence of actions, if it has one (e.g.
+``register_actions(...)``, to order them or leave some out). A file that
+cannot be imported, gives something else, or whose actions cannot be used
+with those before it (e.g. two of one label) is left out, with its reason:
+a broken file must not keep the explorer from opening.
+
+The user's ``actions.py`` can be created from ``actions_template.py`` and
+opened from the explorer's settings menu (see ``user_actions_file``)."""
 
 from __future__ import annotations
 
 import hashlib
+import importlib.resources
 import importlib.util
 import pathlib
 import sys
 import warnings
 from typing import TYPE_CHECKING, Any
 
-from jupyter_core.paths import jupyter_config_path
+from jupyter_core.paths import jupyter_config_dir, jupyter_config_path
 
 from jupyter_storage_explorer.formats.actions import Action, check_actions
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-# Looked for in each Jupyter configuration directory.
+# Looked for in each Jupyter configuration directory: a file, then a folder.
+USER_ACTIONS_FILE = pathlib.Path("storage-explorer", "actions.py")
 USER_ACTIONS_DIR = pathlib.Path("storage-explorer", "actions")
 
 
@@ -36,6 +41,9 @@ def action_files() -> list[pathlib.Path]:
     """The user's action files, in the order their actions are tried."""
     files: list[pathlib.Path] = []
     for directory in jupyter_config_path():
+        single = pathlib.Path(directory) / USER_ACTIONS_FILE
+        if single.is_file():
+            files.append(single)
         folder = pathlib.Path(directory) / USER_ACTIONS_DIR
         if folder.is_dir():
             files += sorted(
@@ -44,6 +52,25 @@ def action_files() -> list[pathlib.Path]:
                 if p.is_file() and not p.name.startswith("_")
             )
     return files
+
+
+def user_actions_file() -> pathlib.Path:
+    """The user's own ``actions.py``, in the user's Jupyter configuration
+    directory (``~/.jupyter``), which the settings menu opens."""
+    return pathlib.Path(jupyter_config_dir()) / USER_ACTIONS_FILE
+
+
+def create_user_actions_file() -> None:
+    """Create the user's ``actions.py`` from ``actions_template.py``, if it is
+    missing; it gives no action until the user writes some."""
+    path = user_actions_file()
+    if path.exists():
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    template = importlib.resources.files("jupyter_storage_explorer").joinpath(
+        "actions_template.py"
+    )
+    path.write_text(template.read_text(encoding="utf-8"), encoding="utf-8")
 
 
 def load_user_actions(

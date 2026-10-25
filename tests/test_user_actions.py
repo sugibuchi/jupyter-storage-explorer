@@ -64,6 +64,13 @@ class TestFiles:
         assert labels(actions) == ["Shout (a)", "Shout (b)", "Shout (system)"]
         assert problems == []
 
+    def test_actions_py_before_the_folder(self, user):
+        # storage-explorer/actions.py, then storage-explorer/actions/*.py.
+        write(user, "a.py", SHOUT.format(suffix=" (folder)"))
+        write(user.parent, "actions.py", SHOUT.format(suffix=" (file)"))
+        actions, _ = load_user_actions()
+        assert labels(actions) == ["Shout (file)", "Shout (folder)"]
+
     def test_actions_given_as_ACTIONS(self, user):
         source = SHOUT.format(suffix="") + textwrap.dedent("""\
 
@@ -143,8 +150,13 @@ class TestExplorer:
 
     def test_not_used(self, user, memfs):
         write(user, "shout.py", SHOUT.format(suffix=""))
-        explorer = StorageExplorer(fs=memfs, user_actions=False)
+        explorer = StorageExplorer(fs=memfs, user_actions="disabled")
         assert "Shout" not in labels(explorer._actions.actions)
+
+    @pytest.mark.parametrize("setting", [True, False, "on", None])
+    def test_enabled_or_disabled(self, memfs, setting):
+        with pytest.raises(ValueError, match="user_actions must be one of"):
+            StorageExplorer(fs=memfs, user_actions=setting)
 
     def test_a_file_left_out_with_a_warning(self, user, memfs):
         write(user, "broken.py", "raise RuntimeError('no')\n")

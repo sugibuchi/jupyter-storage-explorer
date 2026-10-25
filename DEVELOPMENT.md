@@ -1007,17 +1007,25 @@ runs on all its actions, refuses two cases:
 The explorer's `ActionChain`, in `_explorer/actions.py`, holds its actions in order:
 
 1. the explorer's `actions=`;
-2. the actions of the user's files, unless `user_actions=False` (see below);
+2. the actions of the user's files, unless `user_actions="disabled"` (see below);
 3. the plugins' actions;
 4. `default_actions()`, by default `DEFAULT_ACTIONS`, the built-in ones.
 
-`load_user_actions`, in `_user_actions.py`, reads `storage-explorer/actions/*.py` in Jupyter's configuration
-directories: the user's first, then by file name, without those starting with `_`. Each file is imported as a module
-of its own, registered in `sys.modules`, as dataclasses and type hints look modules up. A file gives its `ACTIONS`, or
-else the actions whose functions it defines, not those it imports. A file that cannot be imported, or whose actions
-`check_actions` refuses with the explorer's others, is left out with a warning. The files are read again for each
-explorer, so a change applies to the next one. Tests never read the user's: `tests/conftest.py` replaces the folders
-with a list of each test's own.
+`load_user_actions`, in `_user_actions.py`, reads the user's action files in Jupyter's configuration directories, the
+user's first. In each, `storage-explorer/actions.py` comes first, then `storage-explorer/actions/*.py` by name, without
+those starting with `_`.
+
+- Each file is imported as a module of its own, registered in `sys.modules`, as dataclasses and type hints look
+  modules up.
+- A file gives its `ACTIONS`, or else the actions whose functions it defines, not those it imports.
+- A file that cannot be imported, or whose actions `check_actions` refuses with the explorer's others, is left out
+  with a warning.
+- The files are read again for each explorer, so a change applies to the next one.
+
+The settings menu opens configuration files in JupyterLab's editor, by key, through the launcher's drive
+(`_offer_config_file`, in `_explorer/jupyterlab.py`): "launcher", the launcher's `launcher.py`, in its tabs only, and
+"actions", the user's `actions.py`, created from `actions_template.py`. Tests never read nor write the user's folders:
+`tests/conftest.py` replaces them with folders of each test's own.
 
 Its formats are an object of each action's format, in that order, then the plugins' own formats and the defaults.
 The explorer has no `formats=` argument. Two format classes of one name are a `ValueError`, as two engine classes of

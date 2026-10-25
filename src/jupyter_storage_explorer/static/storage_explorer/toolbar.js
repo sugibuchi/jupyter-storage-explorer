@@ -78,8 +78,9 @@ function createToolbar(x) {
   });
   refreshBtn.addEventListener("click", () => model.send({ type: "refresh" }));
   // "Edit configuration" opens the launcher's settings file in JupyterLab's
-  // editor: only in its tabs (the kernel sets _settings_path), with the
-  // launcher's extension.
+  // editor, only in its tabs; "Edit actions" the user's actions file, unless
+  // user_actions is disabled. Both need the launcher's extension, and come
+  // from the kernel's _config_paths.
   function showSettingsMenu() {
     const items = [];
     if (sidebar && x.unsafe.switchable()) {
@@ -119,14 +120,24 @@ function createToolbar(x) {
           ),
         ),
     });
-    const path = model.get("_settings_path");
-    if (path && x.jupyterlab.canOpenSettings()) {
-      items.push({
-        label: "Edit configuration",
-        icon: "edit",
-        title: `${visible(path)}\nOpen a new Storage Explorer tab, or reload the page, to apply the changes.`,
-        action: () => void x.jupyterlab.openSettings(),
-      });
+    const paths = model.get("_config_paths");
+    if (x.jupyterlab.canOpenSettings()) {
+      if (paths.launcher) {
+        items.push({
+          label: "Edit configuration",
+          icon: "edit",
+          title: `${visible(paths.launcher)}\nOpen a new Storage Explorer tab, or reload the page, to apply the changes.`,
+          action: () => void x.jupyterlab.openSettings("launcher"),
+        });
+      }
+      if (paths.actions) {
+        items.push({
+          label: "Edit actions",
+          icon: "edit",
+          title: `${visible(paths.actions)}\nCreate the explorer again, e.g. a new tab, to apply the changes.`,
+          action: () => void x.jupyterlab.openSettings("actions"),
+        });
+      }
     }
     items.push({ label: "About", icon: "info", action: () => void x.about.show() });
     x.menu.showBelow(settingsBtn, items);

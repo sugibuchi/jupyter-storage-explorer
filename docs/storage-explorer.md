@@ -359,11 +359,13 @@ To handle a format with another library, see [Actions](development-plugin.md#act
 
 ## Actions of your own
 
-Views and code of your own, written as [actions](development-plugin.md#actions), can go in Python files in a folder
-`storage-explorer/actions` of a Jupyter configuration directory. `jupyter --paths` lists them, under "config".
+Views and code of your own, written as [actions](development-plugin.md#actions), can go in Python files of a Jupyter
+configuration directory: `storage-explorer/actions.py`, and any file in the folder `storage-explorer/actions`.
+`jupyter --paths` lists the directories, under "config".
 
-Every explorer uses them: in notebooks, the launcher's tabs and the side panel. For example,
-`~/.jupyter/storage-explorer/actions/shout.py`:
+Every explorer uses them: in notebooks, the launcher's tabs and the side panel. The ⚙ menu's **Edit actions** opens
+your `~/.jupyter/storage-explorer/actions.py` in JupyterLab's editor, created from a commented example if it is
+missing. For example:
 
 ```python
 from jupyter_storage_explorer.formats import Text, TextView
@@ -379,13 +381,14 @@ def shout(fmt, ctx, options, limits):
 Text files are then previewed in upper case. **Preview as** offers "Shout" and the explorer's own view of them.
 
 - A file gives the actions defined in it, in order. An `ACTIONS` list in the file gives those it names instead.
-- Your folder comes first, then the environment's and the system's. In each, files are read by name, except those
-  whose names start with `_`, which can hold shared code.
+- Your directory comes first, then the environment's and the system's. In each, `actions.py` comes first, then the
+  folder's files by name, except those whose names start with `_`, which can hold shared code.
 - Your actions come after those given to the explorer's `actions`, and before the plugins' and the explorer's own.
   The first view of an engine that does an item is its default.
 - A file with an error, or with an action of the same label as another for the same format and engine, is left out,
   with a warning. Change the file, then create the explorer again.
-- `StorageExplorer(user_actions=False)` uses none of them.
+- `StorageExplorer(user_actions="disabled")` uses none of them, and its menu has no **Edit actions**. In the launcher,
+  an administrator can set it in `parameters()` and name `"user_actions"` in `final()`.
 
 ## Engine options
 
@@ -524,7 +527,7 @@ Storages and data:
 |---------------------------|------------------------------------------------------------------------------------------------------------|
 | `filesystems={...}`       | Several named storages; see [Several storages in one explorer](#several-storages-in-one-explorer).         |
 | `plugin_options={...}`    | The plugins' options, by key, e.g. `{"pandas-support": {"enabled": False}}`; see each plugin's README. |
-| `user_actions=True`       | Whether to use the actions of your files; see [Actions of your own](#actions-of-your-own).                 |
+| `user_actions="enabled"`  | `"disabled"`: no actions of your files; see [Actions of your own](#actions-of-your-own).                   |
 | `engine_options={...}`    | The engines' options; see [Engine options](#engine-options).                                               |
 | `engine_preference=[...]` | The engines in the order they are offered, the first chosen until the user chooses; see [Engines](#engines). |
 

@@ -6,7 +6,7 @@ import itertools
 import os
 import uuid
 import warnings
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import anywidget
 import traitlets
@@ -36,7 +36,11 @@ from jupyter_storage_explorer._jobs.operation_chain import OperationChain
 from jupyter_storage_explorer._jobs.runner import JobRunner
 from jupyter_storage_explorer._jobs.transfer_policy import TransferPolicy
 from jupyter_storage_explorer._plugins import PluginComponents, load_plugins
-from jupyter_storage_explorer._user_actions import users_actions_warned
+from jupyter_storage_explorer._user_actions import (
+    create_user_actions_file,
+    user_actions_file,
+    users_actions_warned,
+)
 from jupyter_storage_explorer.filesystems import (
     LocalLocation,
     MapperChain,
@@ -98,6 +102,9 @@ _LAYOUTS = ("standard", "sidebar")
 
 # The values of unsafe_mode: offered by the user's switch, always, or never.
 _UNSAFE_MODES = ("on_demand", "always", "blocked")
+
+# The values of user_actions: the actions of the user's files used, or not.
+_USER_ACTIONS = ("enabled", "disabled")
 
 
 def _code_engines(
@@ -253,15 +260,17 @@ class StorageExplorer(
         a warning; an option a plugin does not have is a ValueError. What
         plugins give is used after the ``actions``, ``operations`` and
         ``filesystem_mappers`` given, and before the defaults.
-    user_actions : bool, default True
+    user_actions : {"enabled", "disabled"}, default "enabled"
         Whether to use the actions of the user's files,
-        ``storage-explorer/actions/*.py`` in Jupyter's configuration
-        directories (``jupyter --paths``): the user's first, then the
-        environment's and the system's. Each file gives the actions defined
-        at its top level, or its ``ACTIONS``. They are tried after
-        ``actions`` and before the plugins'. A file that cannot be used,
-        e.g. with an error or an action of the same label as another, is
-        left out with a warning.
+        ``storage-explorer/actions.py`` and ``storage-explorer/actions/*.py``
+        in Jupyter's configuration directories (``jupyter --paths``): the
+        user's first, then the environment's and the system's. Each file
+        gives the actions defined at its top level, or its ``ACTIONS``. They
+        are tried after ``actions`` and before the plugins'. A file that
+        cannot be used, e.g. with an error or an action of the same label as
+        another, is left out with a warning. Enabled, the settings menu
+        offers to edit the user's ``actions.py``, created from a template if
+        it is missing.
     actions : sequence of Action, optional
         Actions of your own, functions decorated with
         ``formats.actions.view`` or ``code``, tried in order before the
@@ -482,10 +491,10 @@ class StorageExplorer(
     _explorer_id = traitlets.Unicode().tag(sync=True)
     # Absolute folder on the kernel's machine "Download to JupyterLab" copies into.
     _download_to_jupyterlab_path = traitlets.Unicode().tag(sync=True)
-    # The settings file the settings menu's "Edit settings" opens in
-    # JupyterLab; "" (no such item) unless the launcher offers it
-    # (_offer_settings).
-    _settings_path = traitlets.Unicode().tag(sync=True)
+    # The configuration files the settings menu opens in JupyterLab, by key
+    # (see _explorer/jupyterlab.py's CONFIG_FILES): the user's actions, and in
+    # the launcher's tabs their settings (_offer_config_file).
+    _config_paths = traitlets.Dict().tag(sync=True)
     # The engines to choose from in the settings menu, in order:
     # [{"key", "label"}]; and the key of the one chosen ("" if there is none),
     # which previews use. The frontend sets _engine when the user chooses.
@@ -506,7 +515,7 @@ class StorageExplorer(
         unsafe_mode: str = "on_demand",
         code_snippet: str | Sequence[str] = "enabled",
         plugin_options: Mapping[str, Mapping[str, Any]] | None = None,
-        user_actions: bool = True,
+        user_actions: Literal["enabled", "disabled"] = "enabled",
         actions: Sequence[Action[Any]] | None = None,
         engine_options: EngineOptions | None = None,
         engine_preference: Sequence[str] | None = None,
@@ -622,18 +631,16 @@ class StorageExplorer(
         # Their loads still running, by "load_id": cancelled if the tab closes.
         self._view_tab_loads: dict[str, Load[Any]] = {}
         self._view_tab_ids = itertools.count(1)
-        # The launcher's settings file and the function creating it (see
-        # _offer_settings); None in notebooks.
-        self._settings_file: tuple[str, Callable[[], Any]] | None = None
+        # The configuration files the settings menu opens, by key, with the
+        # functions creating them (see _offer_config_file).
+        self._config_files: dict[str, tuple[str, Callable[[], Any]]] = {}
         # What is done with the formats' data: the actions in order, the first
         # installed that does an item its default, with their options (see
         # _explorer/actions.py); the formats files are detected as are the
         # actions', and the standard ones.
         given = list(actions or ())
         others = [*given, *components.actions, *self.default_actions()]
-        # The user's files' actions, each file left out with a warning if
-        # it cannot be used.
-        mine = users_actions_warned(others) if user_actions else []
+        mine = self._users_actions(user_actions, others)
         self._actions = ActionChain(
             [*given, *mine, *components.actions, *self.default_actions()],
             engine_options,
@@ -732,6 +739,24 @@ class StorageExplorer(
             can always do them.
         """
         return _default_operations()
+
+    def _users_actions(
+        self, setting: str, others: Sequence[Action[Any]]
+    ) -> list[Action[Any]]:
+        """The actions of the user's files, with ``user_actions="enabled"``,
+        each file left out with a warning if it cannot be used with
+        ``others``; and the user's ``actions.py`` offered in the settings
+        menu. None with ``"disabled"``."""
+        if setting not in _USER_ACTIONS:
+            raise ValueError(
+                f"user_actions must be one of {_USER_ACTIONS}, not {setting!r}"
+            )
+        if setting == "disabled":
+            return []
+        self._offer_config_file(
+            "actions", user_actions_file(), create_user_actions_file
+        )
+        return users_actions_warned(others)
 
     @staticmethod
     def default_actions() -> list[Action[Any]]:
