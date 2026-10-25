@@ -1117,6 +1117,10 @@ that plugin with `plugin_options` to replace its actions.
 
 Restart the kernel after changing the component's module: Python imports a module only once.
 
+Actions can also go in a file of `storage-explorer/actions/` in a Jupyter configuration directory, which every
+explorer reads when it is created: see [Actions of your own](storage-explorer.md#actions-of-your-own). A changed file
+applies to the next explorer, without a restart.
+
 The launcher's tab and side panel take the same components from functions of the same names in `launcher.py`:
 
 ```python

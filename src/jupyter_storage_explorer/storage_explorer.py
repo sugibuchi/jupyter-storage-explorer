@@ -36,6 +36,7 @@ from jupyter_storage_explorer._jobs.operation_chain import OperationChain
 from jupyter_storage_explorer._jobs.runner import JobRunner
 from jupyter_storage_explorer._jobs.transfer_policy import TransferPolicy
 from jupyter_storage_explorer._plugins import PluginComponents, load_plugins
+from jupyter_storage_explorer._user_actions import users_actions_warned
 from jupyter_storage_explorer.filesystems import (
     LocalLocation,
     MapperChain,
@@ -252,14 +253,24 @@ class StorageExplorer(
         a warning; an option a plugin does not have is a ValueError. What
         plugins give is used after the ``actions``, ``operations`` and
         ``filesystem_mappers`` given, and before the defaults.
+    user_actions : bool, default True
+        Whether to use the actions of the user's files,
+        ``storage-explorer/actions/*.py`` in Jupyter's configuration
+        directories (``jupyter --paths``): the user's first, then the
+        environment's and the system's. Each file gives the actions defined
+        at its top level, or its ``ACTIONS``. They are tried after
+        ``actions`` and before the plugins'. A file that cannot be used,
+        e.g. with an error or an action of the same label as another, is
+        left out with a warning.
     actions : sequence of Action, optional
         Actions of your own, functions decorated with
         ``formats.actions.view`` or ``code``, tried in order before the
-        plugins' and ``default_actions()``: for an item, the first view of
-        the engine chosen that does it is its default. An action of the same
-        kind, format, engine and name as another is a ValueError. The
-        formats files are detected as are those of the actions (their
-        ``format``, one object of each), and the standard ones.
+        user's files', the plugins' and ``default_actions()``: for an item,
+        the first view of the engine chosen that does it is its default. An
+        action of the same kind, format, engine and label as another is a
+        ValueError. The formats files are detected as are those of the
+        actions (their ``format``, one object of each), and the standard
+        ones.
     engine_options : mapping, optional
         The actions' options, by engine key (``"python"`` for
         ``PythonEngine``'s, the built-in ones), then format name or ``"*"``
@@ -495,6 +506,7 @@ class StorageExplorer(
         unsafe_mode: str = "on_demand",
         code_snippet: str | Sequence[str] = "enabled",
         plugin_options: Mapping[str, Mapping[str, Any]] | None = None,
+        user_actions: bool = True,
         actions: Sequence[Action[Any]] | None = None,
         engine_options: EngineOptions | None = None,
         engine_preference: Sequence[str] | None = None,
@@ -617,8 +629,13 @@ class StorageExplorer(
         # installed that does an item its default, with their options (see
         # _explorer/actions.py); the formats files are detected as are the
         # actions', and the standard ones.
+        given = list(actions or ())
+        others = [*given, *components.actions, *self.default_actions()]
+        # The user's files' actions, each file left out with a warning if
+        # it cannot be used.
+        mine = users_actions_warned(others) if user_actions else []
         self._actions = ActionChain(
-            [*(actions or ()), *components.actions, *self.default_actions()],
+            [*given, *mine, *components.actions, *self.default_actions()],
             engine_options,
             formats=[*components.formats, *DEFAULT_FORMATS],
             engine_preference=engine_preference,

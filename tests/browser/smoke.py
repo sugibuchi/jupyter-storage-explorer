@@ -1500,6 +1500,46 @@ def views_by_name(lab: Lab, page: Page) -> None:
     x.preview.press("Escape")
 
 
+# A user's actions file, in the Jupyter configuration folder: an explorer
+# created in a notebook uses it, before the built-in view.
+USER_ACTIONS_FILE = """\
+from jupyter_storage_explorer.formats import Text, TextView
+from jupyter_storage_explorer.formats.actions import view
+from jupyter_storage_explorer.formats.python import PythonEngine
+
+
+@view(format=Text, engine=PythonEngine, label="Reversed")
+def reversed_text(fmt, ctx, options, limits):
+    return TextView(text=ctx.head_text(100)[0][::-1])
+"""
+
+USER_ACTIONS = """\
+import fsspec
+from jupyter_storage_explorer import StorageExplorer
+
+memory = fsspec.filesystem("memory")
+memory.pipe_file("/mine/a.txt", b"stressed")
+StorageExplorer("/mine", fs=memory, preview_panel="open")"""
+
+
+@lab_check
+def user_actions(lab: Lab, page: Page) -> None:
+    # The user's file gives a view of text files, tried before the built-in
+    # one, so the default; "Preview as" offers both.
+    with lab.user_actions("reversed.py", USER_ACTIONS_FILE):
+        x = Explorer(lab, page, USER_ACTIONS)
+    text = x.preview.locator(".jse-text")
+    x.row("a.txt").click()
+    expect(text).to_have_text("desserts")
+    x.row("a.txt").click(button="right")
+    x.menu_item("Preview as").hover()
+    views = x.el.locator(".jse-submenu .jse-menu-item:visible")
+    expect(views).to_have_text(["Reversed", "View as Text (Python)"])
+    views.last.click()
+    expect(text).to_have_text("stressed")
+    x.preview.press("Escape")
+
+
 # Explorers of the toggles: folder operations never or always, "Python code"
 # of no engine or one.
 TOGGLES = """\

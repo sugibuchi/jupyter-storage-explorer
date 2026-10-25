@@ -1007,8 +1007,17 @@ runs on all its actions, refuses two cases:
 The explorer's `ActionChain`, in `_explorer/actions.py`, holds its actions in order:
 
 1. the explorer's `actions=`;
-2. the plugins' actions;
-3. `default_actions()`, by default `DEFAULT_ACTIONS`, the built-in ones.
+2. the actions of the user's files, unless `user_actions=False` (see below);
+3. the plugins' actions;
+4. `default_actions()`, by default `DEFAULT_ACTIONS`, the built-in ones.
+
+`load_user_actions`, in `_user_actions.py`, reads `storage-explorer/actions/*.py` in Jupyter's configuration
+directories: the user's first, then by file name, without those starting with `_`. Each file is imported as a module
+of its own, registered in `sys.modules`, as dataclasses and type hints look modules up. A file gives its `ACTIONS`, or
+else the actions whose functions it defines, not those it imports. A file that cannot be imported, or whose actions
+`check_actions` refuses with the explorer's others, is left out with a warning. The files are read again for each
+explorer, so a change applies to the next one. Tests never read the user's: `tests/conftest.py` replaces the folders
+with a list of each test's own.
 
 Its formats are an object of each action's format, in that order, then the plugins' own formats and the defaults.
 The explorer has no `formats=` argument. Two format classes of one name are a `ValueError`, as two engine classes of
