@@ -3,6 +3,9 @@
 *Explore your data lake without leaving Jupyter: built for data professionals*
 
 [![PyPI - Version](https://img.shields.io/pypi/v/jupyter-storage-explorer?color=blue)](https://pypi.org/project/jupyter-storage-explorer/)
+[![Python versions](https://img.shields.io/pypi/pyversions/jupyter-storage-explorer)](https://pypi.org/project/jupyter-storage-explorer/)
+[![License](https://img.shields.io/pypi/l/jupyter-storage-explorer)](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/LICENSE)
+[![CI](https://github.com/sugibuchi/jupyter-storage-explorer/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/sugibuchi/jupyter-storage-explorer/actions/workflows/ci.yaml)
 [![codecov](https://codecov.io/gh/sugibuchi/jupyter-storage-explorer/graph/badge.svg?token=TFA12UL1IQ)](https://codecov.io/gh/sugibuchi/jupyter-storage-explorer)
 [![Try it on Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/sugibuchi/jupyter-storage-explorer/v0.22.0?urlpath=lab/tree/binder/demo.ipynb)
 
