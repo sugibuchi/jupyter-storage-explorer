@@ -1528,6 +1528,16 @@ from jupyter_storage_explorer.formats.python import PythonEngine
 @view(format=Text, engine=PythonEngine, label="Reversed")
 def reversed_text(fmt, ctx, options, limits):
     return TextView(text=ctx.head_text(100)[0][::-1])
+
+
+# The light style: a format of the user's own, the parameters named, text
+# returned.
+from jupyter_storage_explorer.formats import file_format
+
+
+@view(file_format(".abc"))
+def shouted(fs, path):
+    return fs.cat_file(path).decode().upper()
 """
 
 USER_ACTIONS = """\
@@ -1536,6 +1546,7 @@ from jupyter_storage_explorer import StorageExplorer
 
 memory = fsspec.filesystem("memory")
 memory.pipe_file("/mine/a.txt", b"stressed")
+memory.pipe_file("/mine/b.abc", b"quiet")
 StorageExplorer("/mine", fs=memory, preview_panel="open")"""
 
 
@@ -1545,6 +1556,9 @@ def user_actions(lab: Lab, page: Page) -> None:
     # which stays the default; "Preview as" offers both.
     with lab.user_actions("reversed.py", USER_ACTIONS_FILE):
         x = Explorer(lab, page, USER_ACTIONS)
+    # A file of the user's format: its only view, the default.
+    x.row("b.abc").click()
+    expect(x.preview.locator(".jse-text")).to_have_text("QUIET")
     reversed_view(x)
 
 

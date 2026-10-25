@@ -29,6 +29,7 @@ from jupyter_storage_explorer.formats.local_files import (
 from jupyter_storage_explorer.formats.packages import PythonPackage
 from jupyter_storage_explorer.formats.parquet import Parquet, ParquetLayout
 from jupyter_storage_explorer.formats.text import Csv, Json, JsonLines, Markdown, Text
+from jupyter_storage_explorer.formats.user_defined import UserDefinedFormat, file_format
 from jupyter_storage_explorer.formats.views import (
     Leaf,
     MarkdownView,
@@ -76,11 +77,13 @@ __all__ = [
     "Text",
     "TextView",
     "TreeView",
+    "UserDefinedFormat",
     "View",
     "ViewLimits",
     "ViewWithChoice",
     "ViewWithConfirmation",
     "ViewWithInput",
     "ViewWithPrompt",
+    "file_format",
     "local_file_cache",
 ]

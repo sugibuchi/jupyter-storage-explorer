@@ -28,71 +28,108 @@ editor, and creates it from a commented example if it is missing.
 **Edit actions** needs the launcher's JupyterLab extension, which `jupyter-storage-explorer-launcher` installs. Without
 it, edit the file in any editor.
 
-## A first view
+## A first action
 
-A view is a function decorated with `@view`. It takes the item and returns what to show:
+An action is a function decorated with `@code` or `@view`, given the format it acts on:
 
 ```python
-from jupyter_storage_explorer.formats import Text, TextView
-from jupyter_storage_explorer.formats.actions import view
-from jupyter_storage_explorer.formats.python import PythonEngine
+from jupyter_storage_explorer.formats import file_format
+from jupyter_storage_explorer.formats.actions import code
 
 
-@view(format=Text, engine=PythonEngine, label="Shout")
-def shout(fmt, ctx, options, limits):
-    text, _ = ctx.head_text(limits.max_bytes)
-    return TextView(text=text.upper())
+@code(file_format(".abc"))
+def pretty_print_json(url):
+    return f"import json, fsspec\n\nwith fsspec.open({url!r}) as f:\n    print(json.dumps(json.load(f), indent=4))"
 ```
 
-Right-click a text file: **Preview as** now offers "Shout" after the explorer's own view.
+Right-click a file named `*.abc`: **Python code** now offers "Pretty print json", the function's name.
 
-The function's four parameters are always given in this order:
+- The function names the parameters it needs, here `url`: see [Parameters](#parameters).
+- The format is one of the explorer's or a plugin's, e.g. `Json` or `Parquet`, or one of yours: see
+  [Formats](#formats).
+- A view is the same, with `@view`, and returns what to show: see [Views](#views).
 
-- `fmt`, the format the item was detected as, here a `Text`;
-- `ctx`, the item, an `ItemContext`, which reads it;
-- `options`, its options (see [Options](#options));
-- `limits`, how much to read and show, a `ViewLimits`.
+## Parameters
 
-`ctx` gives what a view needs of the item:
+An action's function takes the parameters it names, in any order, of these:
 
-| `ctx.`                 | What                                                                                       |
-|------------------------|--------------------------------------------------------------------------------------------|
-| `name`, `path`, `size` | The item's name, its path in its storage, and its size in bytes, if known.                 |
-| `is_dir`               | Whether it is a folder.                                                                    |
-| `url_or_local_path`    | Where libraries read it: its URL, or a local file's plain path.                            |
-| `head_text(n)`         | Its first `n` bytes as text, and whether the file is longer.                               |
-| `head(n)`              | Its first `n` bytes.                                                                       |
-| `read_whole(limits)`   | The whole file, or an error if it is larger than `limits.max_whole_file_bytes`.            |
-| `fs`                   | The explorer's fsspec filesystem the item is on, with its credentials.                     |
+| Parameter | What                                                                                         |
+|-----------|----------------------------------------------------------------------------------------------|
+| `url`     | Where libraries read the item: its URL, or a local file's plain path.                        |
+| `name`    | The item's name, e.g. `"a.csv"`.                                                             |
+| `path`    | Its path in its storage.                                                                     |
+| `size`    | Its size in bytes, if known.                                                                 |
+| `is_dir`  | Whether it is a folder.                                                                      |
+| `fs`      | The explorer's fsspec filesystem the item is on, with its credentials.                      |
+| `ctx`     | The item, an `ItemContext`: all of the above, and how to read it (see below).                |
+| `fmt`     | The format it was detected as, e.g. a `Parquet`.                                             |
+| `options` | Its options: see [Options](#options).                                                        |
+| `limits`  | For views only: how much to read and show, a `ViewLimits`.                                   |
 
-## Views of data
+Any other parameter needs a default, which it keeps. `ctx` also reads the item:
 
-A view of a dataframe opens the data browser, where you page, sort and filter it. Return a `QueryView` of any
-dataframe the data browser reads, best a lazy one, e.g. a polars LazyFrame:
+| `ctx.`               | What                                                                               |
+|----------------------|------------------------------------------------------------------------------------|
+| `head_text(n)`       | Its first `n` bytes as text, and whether the file is longer.                       |
+| `head(n)`            | Its first `n` bytes.                                                               |
+| `read_whole(limits)` | The whole file, or an error if it is larger than `limits.max_whole_file_bytes`.    |
+
+## Formats
+
+The first argument of `@code` and `@view` is the format, a class:
+
+- the explorer's, from `jupyter_storage_explorer.formats`: `Text`, `Markdown`, `Json`, `JsonLines`, `Csv`,
+  `Parquet`, `DeltaLake`, `Excel` and `Image`;
+- a plugin's, from its package;
+- or yours, made by `file_format`, for files no format covers.
 
 ```python
-from jupyter_storage_explorer.formats import Parquet, QueryView
+file_format(".abc")                            # files named *.abc
+file_format([".yml", ".yaml"])                 # either ending
+file_format(names="Dockerfile")                # files of that name
+file_format(names="*.zarr", is_dir=True)       # folders, by name
+file_format(".log", label="Logs", name="logs") # with a label and a name of your own
+```
+
+- Case is ignored, and the same arguments give the same format, also in several files.
+- Its label is its patterns by default, e.g. "Files (.abc)". Its name, for `engine_options`, is "user-format-1",
+  "user-format-2" and so on, unless you give one.
+- Yours rank below the explorer's and the plugins' formats. A file they recognise keeps their format, and yours is
+  offered beside it in **Preview as**.
+
+## Views
+
+A view returns what to show, in the preview panel or a tab:
+
+- a dataframe opens in the data browser, where you page, sort and filter it: best a lazy one, e.g. a polars
+  LazyFrame;
+- a `str` is shown as text;
+- a `dict` or a `list` is shown as a collapsible tree;
+- a view object shows more, e.g. highlighted text: see below.
+
+```python
+from jupyter_storage_explorer.formats import Parquet
 from jupyter_storage_explorer.formats.actions import view
 from jupyter_storage_explorer_polars_support import PolarsEngine
 
 
-@view(format=Parquet, engine=PolarsEngine, label="Latest orders ({engine})")
-def latest_orders(fmt, ctx, options, limits):
+@view(Parquet, PolarsEngine, label="Latest orders ({engine})")
+def latest_orders(url):
     import polars as pl
 
-    data = pl.scan_parquet(ctx.url_or_local_path).sort("order_date", descending=True)
-    return QueryView(data=data)
+    return pl.scan_parquet(url).sort("order_date", descending=True)
 ```
 
-- `engine` is the library the view uses, as the explorer's engine menu shows it. `PythonEngine` is for Python
-  alone; each engine plugin has its own, e.g. `PolarsEngine` from polars-support.
+- The second argument is the engine: the library the view uses, as the explorer's engine menu shows it. Each engine
+  plugin has its own, e.g. `PolarsEngine` from polars-support. Without one, it is `PythonEngine`, Python alone.
 - Import libraries inside the function, as above. Your file is read by every explorer, also in kernels without them.
 - The view is offered only when its engine's packages are installed.
 
-The other views:
+The view objects:
 
 | View                   | Shows                                                                                      |
 |------------------------|--------------------------------------------------------------------------------------------|
+| `QueryView(data=...)`  | A dataframe, in the data browser.                                                          |
 | `TextView(text=...)`   | Text; with `language`, e.g. `"sql"`, highlighted.                                          |
 | `MarkdownView(text=...)` | Markdown, rendered.                                                                      |
 | `TreeView(value=...)`  | A JSON-like value, as a collapsible tree.                                                  |
@@ -108,15 +145,14 @@ All views are in `jupyter_storage_explorer.formats`.
 
 ## Code snippets
 
-A code action is a function decorated with `@code`. It returns a snippet of Python, which **Python code** shows under
-its engine:
+A code action returns a snippet of Python, which **Python code** shows under its engine. For code of several lines, a
+template reads best:
 
 ```python
 from inspect import cleandoc
 
 from jupyter_storage_explorer.formats import Csv
 from jupyter_storage_explorer.formats.actions import code
-from jupyter_storage_explorer.formats.python import PythonEngine
 
 READ_ROWS = cleandoc("""
     import csv
@@ -128,12 +164,11 @@ READ_ROWS = cleandoc("""
     """)
 
 
-@code(format=Csv, engine=PythonEngine, label="Read as dicts")
-def csv_as_dicts(fmt, ctx, options):
-    return READ_ROWS.format(url=repr(ctx.url_or_local_path))
+@code(Csv, label="Read as dicts")
+def csv_as_dicts(url):
+    return READ_ROWS.format(url=repr(url))
 ```
 
-- Its parameters are those of a view, without `limits`.
 - The code must run as it is in a new notebook: its imports first.
 - The label says what the code does, e.g. "Read as dicts". **Python code** shows the engine already.
 - Never put secrets in the code: it gets copied and shared. With options, see [Options](#options).
@@ -146,7 +181,8 @@ The label is what you see in the menus:
 - a code action's label is its title in **Python code**.
 
 `{format}` and `{engine}` in a label are replaced by the labels of the format and the engine. A view's default label is
-`"View as {format} ({engine})"`, e.g. "View as CSV (Polars)". Code actions need a label.
+`"View as {format} ({engine})"`, e.g. "View as CSV (Polars)". A code action's is its function's name, e.g.
+"Read as dicts" for `read_as_dicts`.
 
 Two actions of one kind, format, engine and label are an error: you could not tell them apart in the menus. Give
 yours a label of its own.
@@ -164,13 +200,13 @@ def _small(fmt, ctx, options):
     return ctx.size is not None and ctx.size < 1024 * 1024
 
 
-@view(format=Text, engine=PythonEngine, label="Shout", check=_small)
-def shout(fmt, ctx, options, limits):
-    ...
+@view(Text, label="Shout", check=_small)
+def shout(ctx, limits):
+    return ctx.head_text(limits.max_bytes)[0].upper()
 ```
 
-`check(fmt, ctx, options)` runs for each item you click, so it decides from what is known: the format, the name, the
-path, the size and the options. It never reads the file.
+`check` always takes `(fmt, ctx, options)`. It runs for each item you click, so it decides from what is known: the
+format, the name, the path, the size and the options. It never reads the file.
 
 ## Options
 
@@ -180,9 +216,8 @@ dataclass subclassing `ActionOptions`, and annotate the `options` parameter with
 ```python
 from dataclasses import dataclass
 
-from jupyter_storage_explorer.formats import ActionOptions, Text, TextView
+from jupyter_storage_explorer.formats import ActionOptions, Text
 from jupyter_storage_explorer.formats.actions import view
-from jupyter_storage_explorer.formats.python import PythonEngine
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -190,10 +225,10 @@ class ShoutOptions(ActionOptions):
     exclamations: int = 1
 
 
-@view(format=Text, engine=PythonEngine, label="Shout")
-def shout(fmt, ctx, options: ShoutOptions, limits):
+@view(Text, label="Shout")
+def shout(ctx, limits, options: ShoutOptions):
     text, _ = ctx.head_text(limits.max_bytes)
-    return TextView(text=text.upper() + "!" * options.exclamations)
+    return text.upper() + "!" * options.exclamations
 ```
 
 ```python

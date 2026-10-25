@@ -82,7 +82,7 @@ class ThreadsOptions(ActionOptions):
 
 
 def viewer(result, *, name, fmt=Csv, engine=PythonEngine, check=None):
-    """A view action returning ``result`` as it is."""
+    """A view action returning ``result``: a string is shown as text."""
 
     @view(format=fmt, engine=engine, label=name, check=check)
     def viewing(fmt, ctx, options, limits):
@@ -323,9 +323,10 @@ class TestSecretsInCode:
 
 class TestChain:
     def view(self, chain, item):
-        """The view by the first engine viewing CSV, else the built-in views."""
+        """The text of the view by the first engine viewing CSV, else the
+        built-in views: ``viewer``'s strings are shown as text."""
         engine = (chain.viewers(Csv(), item) or [None])[0]
-        return chain.view(Csv(), item, LIMITS, engine)
+        return chain.view(Csv(), item, LIMITS, engine).text
 
     def test_first_installed_views(self, make_item):
         chain = ActionChain(

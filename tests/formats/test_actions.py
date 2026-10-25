@@ -7,6 +7,7 @@ import dataclasses
 import inspect
 from typing import TYPE_CHECKING, Any
 
+import polars as pl
 import pytest
 
 from jupyter_storage_explorer import StorageExplorer
@@ -15,10 +16,15 @@ from jupyter_storage_explorer.formats import (
     ActionOptions,
     Csv,
     Engine,
+    Json,
     Parquet,
     PythonPackage,
+    QueryView,
+    Text,
     TextView,
+    TreeView,
     ViewLimits,
+    file_format,
 )
 from jupyter_storage_explorer.formats.actions import (
     CodeAction,
@@ -27,6 +33,7 @@ from jupyter_storage_explorer.formats.actions import (
     register_actions,
     view,
 )
+from jupyter_storage_explorer.formats.base import matching_formats
 from jupyter_storage_explorer.formats.python import PythonEngine
 from jupyter_storage_explorer.util import secret_dict_field, secret_field
 
@@ -131,17 +138,137 @@ class TestDecorators:
         assert plain.engine.key == "python"
 
     @pytest.mark.parametrize(
-        "function",
+        ("function", "message"),
         [
-            lambda fmt, ctx, options: None,
-            lambda fmt, ctx, options, limits, more: None,
-            lambda fmt, ctx, options, *limits: None,
-            lambda fmt, ctx, options, limits, **more: None,
+            (lambda fmt, more: None, "cannot be given 'more'"),
+            (lambda fmt, /, ctx: None, "parameters are given by name"),
+            (lambda *limits: None, "parameters are given by name"),
+            (lambda **more: None, "parameters are given by name"),
         ],
     )
-    def test_fixed_positional_parameters(self, function):
-        with pytest.raises(TypeError, match="takes 4 positional parameters"):
+    def test_parameters_given_by_name(self, function, message):
+        with pytest.raises(TypeError, match=message):
             view(format=Csv, engine=Duck)(function)
+
+    def test_limits_for_views_only(self):
+        with pytest.raises(TypeError, match="cannot be given 'limits'"):
+            code(Csv, label="Code")(lambda url, limits: "")
+
+    def test_the_parameters_it_names(self, make_item):
+        # In any order; url is the item's ItemContext.url.
+        @code(Csv, label="Names")
+        def names(name, url, size):
+            return f"{name} {url} {size}"
+
+        item = make_item("/a.csv", b"abc")
+        assert names(Csv(), item, ActionOptions()) == "a.csv memory:///a.csv 3"
+        assert item.url == item.url_or_local_path
+
+    def test_the_light_style(self, make_item):
+        # A format, positionally; PythonEngine, and the function's name as
+        # the label, by default.
+        @code(file_format(".abc"))
+        def pretty_print(url):
+            return f"print({url!r})"
+
+        assert (pretty_print.format.label, pretty_print.engine) == (
+            "Files (.abc)",
+            PythonEngine,
+        )
+        assert pretty_print.label == "Pretty print"
+        item = make_item("/a.abc", b"")
+        assert pretty_print(Csv(), item, ActionOptions()) == "print('memory:///a.abc')"
+
+    def test_format_and_engine_in_any_order(self):
+        @view(Duck, Csv, label="Either")
+        def either(url):
+            return ""
+
+        assert (either.format, either.engine) == (Csv, Duck)
+
+    @pytest.mark.parametrize(
+        ("types", "keywords", "message"),
+        [
+            ((), {}, "no format given"),
+            ((Csv, Parquet), {}, "two formats given"),
+            ((Csv,), {"format": Parquet}, "two formats given"),
+            ((Csv, Duck, Duck), {}, "two engines given"),
+            ((Csv, "label"), {}, "not a DataFormat or Engine class"),
+        ],
+    )
+    def test_format_and_engine_given_wrong(self, types, keywords, message):
+        with pytest.raises(TypeError, match=message):
+            view(*types, **keywords)
+
+
+class TestPlainDataViews:
+    """A view may return plain data, made a view."""
+
+    def viewed(self, value, make_item):
+        @view(Csv, label="Plain")
+        def plain():
+            return value
+
+        return plain(Csv(), make_item("/a.csv", b""), ActionOptions(), LIMITS)
+
+    def test_text(self, make_item):
+        shown = self.viewed("hello", make_item)
+        assert (type(shown), shown.text) == (TextView, "hello")
+
+    @pytest.mark.parametrize("value", [{"a": [1, 2]}, [1, {"b": 2}]])
+    def test_a_tree(self, make_item, value):
+        shown = self.viewed(value, make_item)
+        assert (type(shown), shown.value) == (TreeView, value)
+
+    def test_a_dataframe(self, make_item):
+        data = pl.LazyFrame({"a": [1, 2]})
+        shown = self.viewed(data, make_item)
+        assert (type(shown), shown.data) == (QueryView, data)
+
+    def test_a_view_as_it_is(self, make_item):
+        given = TextView(text="mine")
+        assert self.viewed(given, make_item) is given
+
+    def test_anything_else(self, make_item):
+        with pytest.raises(TypeError, match="a view returns a View"):
+            self.viewed(42, make_item)
+
+
+class TestFileFormat:
+    """file_format: formats of the user's own, by name."""
+
+    def test_the_same_arguments_the_same_format(self):
+        assert file_format(".abc") is file_format(["abc"])
+        assert file_format(".abc") is not file_format(".abd")
+
+    def test_names_labels_and_matches(self, make_item, memfs):
+        abc = file_format([".ABC", ".abd"])
+        assert abc.name.startswith("user-format-")
+        assert abc.label == "Files (.abc, .abd)"
+        assert abc().matches(make_item("/x.Abc", b""))
+        assert not abc().matches(make_item("/x.csv", b""))
+        docker = file_format(names="Dockerfile", label="Dockerfiles", name="docker")
+        assert (docker.name, docker.label) == ("docker", "Dockerfiles")
+        assert docker().matches(make_item("/app/dockerfile", b""))
+
+    def test_folders(self, make_item, memfs):
+        zarr = file_format(names="*.zarr", is_dir=True)
+        assert zarr.label == "Folders (*.zarr)"
+        memfs.pipe_file("/z.zarr/.zarray", b"{}")
+        assert zarr().matches(make_item("/z.zarr"))
+        assert not zarr().matches(make_item("/z.zarr/.zarray", b"{}"))
+
+    def test_below_every_other_format(self, make_item):
+        # A JSON file stays JSON; the user's format is another of its formats.
+        mine = file_format(".json", label="Mine")
+        found = matching_formats(
+            make_item("/a.json", b"{}"), formats=[mine(), Json(), Text()]
+        )
+        assert [type(f) for f in found] == [Json, Text, mine]
+
+    def test_needs_extensions_or_names(self):
+        with pytest.raises(TypeError, match="needs extensions or names"):
+            file_format()
 
     def test_keyword_only_parameters_with_defaults(self):
         @view(format=Csv, engine=Duck)

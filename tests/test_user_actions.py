@@ -3,6 +3,7 @@ in Jupyter's configuration folders, which every explorer loads."""
 
 from __future__ import annotations
 
+import importlib.resources
 import textwrap
 
 import pytest
@@ -140,6 +141,27 @@ class TestFiles:
         item = explorer._detect_now("/a.csv", memfs)
         view = explorer._actions.view(Csv(), item.ctx, ViewLimits(), None)
         assert view.text == "5"
+
+
+class TestTemplate:
+    """actions_template.py, which "Edit actions" creates actions.py from."""
+
+    def source(self):
+        template = importlib.resources.files("jupyter_storage_explorer")
+        return template.joinpath("actions_template.py").read_text(encoding="utf-8")
+
+    def test_no_actions_as_it_is(self, user):
+        (user.parent / "actions.py").write_text(self.source(), encoding="utf-8")
+        assert load_user_actions() == ([], [])
+
+    def test_its_example_uncommented(self, user):
+        # The commented lines after the header, uncommented, give its actions.
+        lines = self.source().splitlines()
+        start = next(i for i, line in enumerate(lines) if line.startswith("# from "))
+        code = "\n".join(line.removeprefix("# ") for line in lines[start:])
+        (user.parent / "actions.py").write_text(code + "\n", encoding="utf-8")
+        actions, problems = load_user_actions()
+        assert (labels(actions), problems) == (["Shout", "Read abc"], [])
 
 
 class TestExplorer:

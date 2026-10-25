@@ -280,17 +280,20 @@ The decorators' arguments:
 
 | Argument   | Of            | What                                                                                              |
 |------------|---------------|---------------------------------------------------------------------------------------------------|
-| `format`   | both          | The format, matched with `isinstance`: its subclasses too.                                        |
-| `engine`   | both          | The engine; `PythonEngine` for Python alone.                                                      |
-| `label`    | both          | What users see; `{format}` and `{engine}` are replaced by their labels. A view's default is `"View as {format} ({engine})"`; code has none. |
+| `format`   | both          | The format, matched with `isinstance`: its subclasses too. Also positional, e.g. `@view(Parquet, DuckDBEngine)`. |
+| `engine`   | both          | The engine; by default `PythonEngine`, Python alone. Also positional.                            |
+| `label`    | both          | What users see; `{format}` and `{engine}` are replaced by their labels. A view's default is `"View as {format} ({engine})"`; a code action's, its function's name. |
 | `requires` | both          | Packages needed besides the engine's, as instances. The action is offered only when they are installed. |
 | `check`    | both          | `check(fmt, ctx, options) -> bool`: whether the action does an item. By default, every item of `format`. |
 | `code`     | `@view` only  | The code action reproducing what the view shows, of the same format and engine.                    |
 
 The rules for the functions:
 
-- Their parameters are positional, in a fixed order, under any names: `(fmt, ctx, options, limits)` for a view,
-  `(fmt, ctx, options)` for code. The decorator checks it.
+- They take the parameters they name, in any order: `fmt`, `ctx`, `options`, and `limits` for a view, or parts of
+  the item, `url`, `name`, `path`, `size`, `is_dir` and `fs`. The decorator checks them; another needs a default.
+  A plugin's actions take `fmt, ctx, options, limits`, as the examples here.
+- A view returns a `View`. A user's may also return plain data: a dataframe, a `str` or a `dict` or `list`, shown
+  in the data browser, as text or as a tree.
 - The class of `options` comes from the parameter's annotation, read when the function is decorated. Import that class
   at run time, not only for type checkers, and define it at the module's top level.
 - A label is unique for its kind, format and engine, whatever plugin it comes from: two actions of one label are an

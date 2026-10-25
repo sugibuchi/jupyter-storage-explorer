@@ -986,9 +986,18 @@ An action is a function decorated with `view` or `code`, from `formats/actions.p
 A view action may name its `code`, the code action reproducing it. An action takes its function's name, docstring and
 signature, so it reads as the function.
 
-The decorator checks the function's parameters, positional in a fixed order: `(fmt, ctx, options, limits)` for a view,
-`(fmt, ctx, options)` for code. A view returns one `View` and runs in a worker thread. Code returns one snippet and
-runs in a worker thread too.
+The explorer calls every action as `(fmt, ctx, options, limits)`, `limits` for views only. The function takes the
+parameters it names of those and of the item's parts, `url`, `name`, `path`, `size`, `is_dir` and `fs` (`_ARGUMENTS`),
+given by keyword. The decorator checks them; an action reads them again in `__post_init__`, for `dataclasses.replace`.
+The format and the engine may be given positionally, the engine defaulting to `PythonEngine`, and a code action's label
+to its function's name.
+
+A view returns one `View`, or plain data `ViewAction.__call__` makes one: a dataframe a `QueryView`, a `str` a
+`TextView`, a `dict` or `list` a `TreeView`. Views and code run in a worker thread.
+
+`file_format`, in `formats/user_defined.py`, makes formats of the user's own by name: `UserDefinedFormat` classes,
+cached by their arguments, named "user-format-N" in the order made. Their priority, -20, is below Text's, the
+fallback, so the explorer's and the plugins' formats win an item they match.
 
 `check(fmt, ctx, options)` decides without reading the storage, as it runs on the main thread for each item clicked.
 Once an action is chosen, the chain tries no other. What it raises is shown as the item's error, so a failure is never
