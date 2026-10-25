@@ -118,10 +118,7 @@ file_format(names="*.zarr", is_dir=True)       # folders, by name
 file_format(".log", label="Logs", name="logs") # with a label and a name of your own
 ```
 
-- Case is ignored.
-- The same arguments give the same format, also in several files.
-- Yours rank below the explorer's and the plugins' formats. A file they recognise keeps their format, and yours is
-  offered beside it in **Preview as**.
+Case is ignored.
 
 ### The action function
 
@@ -238,10 +235,6 @@ format and the engine.
 Two actions of one kind, format, engine and label are an error: you could not tell them apart in the menus. Give
 yours a label of its own.
 
-Your actions come after those of the plugins and of the explorer. So the first view of an engine is the default one,
-e.g. what a double-click previews, and yours are offered beside it. A view of yours is the default only for a format or
-an engine nothing else views.
-
 ### Engines and options
 
 The second argument of `@view` and `@code` is the engine: the library the action uses, as the explorer's engine menu
@@ -292,8 +285,7 @@ StorageExplorer("s3://bucket/notes", engine_options={"python": {"text": {"exclam
 
 - Each option has a default, as users may set none.
 - Define the class at the top level of your file, not inside a function.
-- `PythonEngine`'s key is `"python"`. A format of yours is named by its `name`, or "user-format-1", "user-format-2"
-  and so on.
+- `PythonEngine`'s key is `"python"`. A format of yours is named by its `name`.
 - An engine's options also reach the plugin's actions of that format. A field of the same name must have the same type
   there.
 - Mark a credential with `secret_field()` or `secret_dict_field()`, from `jupyter_storage_explorer.util`.
