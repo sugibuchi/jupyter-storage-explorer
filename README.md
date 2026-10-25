@@ -10,12 +10,14 @@
 [![Try it on Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/sugibuchi/jupyter-storage-explorer/v0.23.2?urlpath=lab/tree/binder/demo.ipynb)
 
 **`StorageExplorer`** is a file explorer for cloud storage and data lakes, right inside Jupyter, in the spirit of Azure
-Storage Explorer. See
+Storage Explorer. It is built on [fsspec](https://filesystem-spec.readthedocs.io/), so it reaches every storage fsspec
+does: S3, Azure, Google Cloud Storage, SFTP, Hugging Face and many more. See
 [Using the explorer](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#using-the-explorer).
 
 ![Storage Explorer in JupyterLab: a Delta Lake table queried, files filtered, and a Markdown file edited in JupyterLab's editor and previewed](https://raw.githubusercontent.com/sugibuchi/jupyter-storage-explorer/main/docs/figs/storage-explorer.gif)
 
-**`DataExplorer`** browses any dataframe in your notebook: pandas, polars, Spark, DuckDB and more. See
+**`DataExplorer`** browses any dataframe in your notebook: pandas, polars, Spark, DuckDB and more, through
+[narwhals](https://narwhals-dev.github.io/narwhals/). See
 [Using the data browser](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/data-explorer.md#using-the-data-browser).
 
 ![DataExplorer in a notebook: a Parquet file paged through, columns hidden, filtered and sorted](https://raw.githubusercontent.com/sugibuchi/jupyter-storage-explorer/main/docs/figs/data-explorer.gif)
@@ -145,3 +147,14 @@ The `notebooks` folder has a demo of each widget on sample data.
 - JupyterLab 4.0 or later. Other Jupyter frontends show the widgets, without drag and drop from JupyterLab's file
   browser.
 - For querying data: an engine plugin, e.g. `jupyter-storage-explorer[polars]` (Polars, tested with 2.0)
+
+## Technologies
+
+Storage Explorer stands on these projects' shoulders:
+
+- **[fsspec](https://filesystem-spec.readthedocs.io/)**: one interface to many storages. The explorer lists, reads,
+  copies and moves files through it, on any storage it reaches.
+- **[narwhals](https://narwhals-dev.github.io/narwhals/)**: one dataframe API over many libraries. The data browser
+  pages, sorts and filters pandas, polars, Spark, DuckDB and other data through it.
+- **[anywidget](https://anywidget.dev/)**: Jupyter widgets in plain JavaScript modules. The explorers are anywidgets,
+  shown in JupyterLab and other Jupyter frontends.
