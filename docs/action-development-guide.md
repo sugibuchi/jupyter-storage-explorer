@@ -13,7 +13,10 @@ This guide covers actions for your own use. To package them for others, see the
 ## Your actions file
 
 Your actions go in `~/.jupyter/storage-explorer/actions.py`. The ⚙ menu's **Edit actions** opens it in JupyterLab's
-editor, and creates it from a commented example if it is missing. Without the launcher's JupyterLab extension, which
+editor, and creates it from a commented example if it is missing.
+
+<img src="figs/actions-menu.png" width="164" alt="The explorer's settings menu, open: Columns, Edit actions, Reload actions and About">
+ Without the launcher's JupyterLab extension, which
 `jupyter-storage-explorer-launcher` installs, edit the file in any editor.
 
 In addition, you can store actions in Python files under `~/.jupyter/storage-explorer/actions/`:
@@ -52,6 +55,9 @@ def pretty_print_json(url):
 
 Save it in your actions file, and choose **Reload actions** in the explorer's ⚙ menu. Right-click a file named
 `*.json`: **Python code** now offers "Pretty print json".
+
+<img src="figs/actions-first.png" width="417" alt="A JSON file's right-click menu, Python code open: Pretty print json (Python) beside the built-in snippets">
+
 
 The template is a multi-line string, with `{url!r}` where the file's URL goes, in quotes. `.strip()` removes the
 blank lines around it.

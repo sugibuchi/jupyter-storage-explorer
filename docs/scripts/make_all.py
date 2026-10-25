@@ -6,6 +6,7 @@ uv run --group docs docs/scripts/make_all.py
 from __future__ import annotations
 
 import _lab
+import actions_menu
 import browser
 import data_explorer
 import data_explorer_gif
@@ -22,6 +23,7 @@ SCRIPTS = (
     hero,
     using,
     unsafe,
+    actions_menu,
     browser,
     data_explorer,
     launcher_item,

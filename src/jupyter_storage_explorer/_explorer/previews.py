@@ -1093,6 +1093,14 @@ class PreviewsMixin:
         each of the engine's views by name if it has several;
         "recipes", the load code ("Python code"), with their engine's label,
         or the error of an action's. Safe in a worker thread."""
+        # A view of a format the item also matches is listed under that
+        # format only, e.g. the Text view of a Markdown file under Text, not
+        # under Markdown too (a view does its format's subclasses).
+        matched = {type(f) for f in formats}
+
+        def own(f: DataFormat, views: list[ViewAction]) -> list[ViewAction]:
+            return [v for v in views if v.format is type(f) or v.format not in matched]
+
         view = None
         if formats and ctx is not None:
             try:
@@ -1109,7 +1117,8 @@ class PreviewsMixin:
                 for f in formats
                 if ctx is not None
                 for key, views in self._actions.views_by_engine(f, ctx).items()
-                for view in self._view_entries(f, key, views)
+                if (shown := own(f, views))
+                for view in self._view_entries(f, key, shown)
             ],
             # The frontend gets the packages' names, listed under the code.
             "recipes": [
