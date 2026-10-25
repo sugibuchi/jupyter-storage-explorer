@@ -16,8 +16,9 @@ Your actions go in `~/.jupyter/storage-explorer/actions.py`. The âš™ menu's **Ed
 editor, and creates it from a commented example if it is missing.
 
 <img src="figs/actions-menu.png" width="164" alt="The explorer's settings menu, open: Columns, Edit actions, Reload actions and About">
- Without the launcher's JupyterLab extension, which
-`jupyter-storage-explorer-launcher` installs, edit the file in any editor.
+
+Without the launcher's JupyterLab extension, which `jupyter-storage-explorer-launcher` installs, edit the file in any
+editor.
 
 In addition, you can store actions in Python files under `~/.jupyter/storage-explorer/actions/`:
 
@@ -58,13 +59,12 @@ Save it in your actions file, and choose **Reload actions** in the explorer's âš
 
 <img src="figs/actions-first.png" width="417" alt="A JSON file's right-click menu, Python code open: Pretty print json (Python) beside the built-in snippets">
 
-
 The template is a multi-line string, with `{url!r}` where the file's URL goes, in quotes. `.strip()` removes the
 blank lines around it.
 
 ## Action basics
 
-### Views and code
+### `@view` and `@code`
 
 An action is a function decorated with one of these:
 
@@ -217,7 +217,7 @@ and a button where the view would be:
 - `ViewWithInput` asks for a text, e.g. a password, and makes the view of it.
 
 Each takes a `message` and a `factory`, the function making the view of the answer. The factory returns a view
-object, not plain data.
+object, not plain data. Its options are listed after the example.
 
 ```python
 from jupyter_storage_explorer.formats import Csv, TextView, ViewWithChoice, ViewWithConfirmation
@@ -245,13 +245,35 @@ def head(fs, path):
     )
 ```
 
-- `button` is the button's label, "View" by default.
-- `ViewWithChoice`'s `style` shows the choices:
-  - `"radio"`, the default, as radio buttons;
-  - `"dropdown"`, as a dropdown menu;
-  - `"button"`, as a button for each choice.
-- `with_cancel=True` adds a **Cancel** button to a choice, which shows nothing.
-- The answers are kept: when the data browser reads the data again, it asks no more.
+All three take these options:
+
+| Option    | Default  | What                                                          |
+|-----------|----------|---------------------------------------------------------------|
+| `message` | Required | The question, shown above the button.                         |
+| `factory` | Required | The function making the view of the answer.                   |
+| `button`  | `"View"` | The button's label.                                           |
+
+`ViewWithConfirmation` calls `factory()`, with no argument, and has no other options.
+
+`ViewWithChoice` calls `factory(value)` with the value of the choice made. Its other options:
+
+| Option        | Default   | What                                                                    |
+|---------------|-----------|-------------------------------------------------------------------------|
+| `choices`     | Required  | A `dict` of the labels shown, in order, to the values given `factory`.  |
+| `style`       | `"radio"` | `"radio"` buttons, a `"dropdown"` menu, or a `"button"` for each label. |
+| `default`     | `None`    | The label chosen at first. By default, the first one.                   |
+| `with_cancel` | `False`   | Whether to add a **Cancel** button, which shows nothing.                |
+
+With `style="button"`, a click on a label answers at once, and `button` is not shown.
+
+`ViewWithInput` calls `factory(text)` with the text entered. Its other options:
+
+| Option        | Default | What                               |
+|---------------|---------|------------------------------------|
+| `value`       | `""`    | The text in the field at first.    |
+| `placeholder` | `""`    | The hint shown in the empty field. |
+
+The answers are kept: when the data browser reads the data again, it asks no more.
 
 #### View limits
 
