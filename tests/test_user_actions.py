@@ -161,7 +161,7 @@ class TestTemplate:
         code = "\n".join(line.removeprefix("# ") for line in lines[start:])
         (user.parent / "actions.py").write_text(code + "\n", encoding="utf-8")
         actions, problems = load_user_actions()
-        assert (labels(actions), problems) == (["Shout", "Read abc"], [])
+        assert (labels(actions), problems) == (["Upper case", "Pretty print json"], [])
 
 
 class TestExplorer:

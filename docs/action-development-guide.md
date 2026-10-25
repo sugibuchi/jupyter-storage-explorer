@@ -129,7 +129,7 @@ The function takes the parameters it names, in any order, of these:
 - `size`: its size in bytes, if known;
 - `is_dir`: whether it is a folder;
 - `fs`: the explorer's fsspec filesystem the item is on, with its credentials;
-- `ctx`: the item, with all of the above and methods reading it, such as `ctx.head_text(n)`;
+- `ctx`: the item, with all of the above and methods reading it, for advanced uses;
 - `fmt`: the format it was detected as;
 - `options`: its options, see [Engines and options](#engines-and-options);
 - `limits`: for views only, how much to read and show.
@@ -155,10 +155,10 @@ from jupyter_storage_explorer.formats import Text
 from jupyter_storage_explorer.formats.actions import view
 
 
-@view(Text, label="Shout")
-def shout(ctx, limits):
-    text, _ = ctx.head_text(limits.max_bytes)
-    return text.upper()
+@view(format=Text, label="Upper case")
+def upper_case(fs, path):
+    with fs.open(path, "rt") as f:
+        return f.read(10_000).upper()
 ```
 
 ## Advanced actions
@@ -268,18 +268,18 @@ from jupyter_storage_explorer.formats.actions import view
 
 
 @dataclass(frozen=True, kw_only=True)
-class ShoutOptions(ActionOptions):
-    exclamations: int = 1
+class UpperCaseOptions(ActionOptions):
+    characters: int = 10_000
 
 
-@view(Text, label="Shout")
-def shout(ctx, limits, options: ShoutOptions):
-    text, _ = ctx.head_text(limits.max_bytes)
-    return text.upper() + "!" * options.exclamations
+@view(format=Text, label="Upper case")
+def upper_case(fs, path, options: UpperCaseOptions):
+    with fs.open(path, "rt") as f:
+        return f.read(options.characters).upper()
 ```
 
 ```python
-StorageExplorer("s3://bucket/notes", engine_options={"python": {"text": {"exclamations": 3}}})
+StorageExplorer("s3://bucket/notes", engine_options={"python": {"text": {"characters": 500}}})
 ```
 
 - Each option has a default, as users may set none.
@@ -299,9 +299,10 @@ def _small(fmt, ctx, options):
     return ctx.size is not None and ctx.size < 1024 * 1024
 
 
-@view(Text, label="Shout", check=_small)
-def shout(ctx, limits):
-    return ctx.head_text(limits.max_bytes)[0].upper()
+@view(format=Text, label="Upper case", check=_small)
+def upper_case(fs, path):
+    with fs.open(path, "rt") as f:
+        return f.read().upper()
 ```
 
 `check` always takes `(fmt, ctx, options)`. It runs for each item you click, so it decides from what is known: the
