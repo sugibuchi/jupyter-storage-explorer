@@ -5,8 +5,7 @@ Actions are what the explorer does with a file or a folder of a format:
 - a **view** shows it, in the preview panel or a tab of its own;
 - **code** gives a snippet of Python loading it, in the right-click menu's **Python code**.
 
-The explorer has actions of its own, and plugins add others. You can add yours with a few functions in a file. They
-are offered beside the others, in **Preview as** and **Python code**.
+You can add your own actions to the explorer.
 
 This guide covers actions for your own use. To package actions, engines or storages for others, see the
 [Plugin development guide](plugin-development-guide.md).
