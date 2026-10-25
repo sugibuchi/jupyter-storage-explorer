@@ -28,18 +28,6 @@ In addition, you can store actions in Python files under `~/.jupyter/storage-exp
     ...
 ```
 
-Every explorer reads these files when it is created, in notebooks, the launcher's tabs and the side panel. It reads
-`actions.py` first, then the folder's files by name. Files whose names start with `_` are not read, so they can hold
-code the others share.
-
-A file gives every action defined in it, in order. A list named `ACTIONS` in the file gives only the actions it names,
-in its order.
-
-After a change, create the explorer again: run its cell again, or open a new tab. The kernel needs no restart.
-
-The same files can also go in the other configuration directories, which `jupyter --paths` lists under "config".
-Files there serve every user of the environment or the system, after yours.
-
 ## A first action
 
 This action gives code pretty-printing a JSON file:
@@ -65,7 +53,7 @@ def pretty_print_json(url):
     return PRETTY_PRINT.format(url=repr(url))
 ```
 
-Save it in your actions file, and create the explorer again. Right-click a file named `*.json`: **Python code** now
+Save it in your actions file, and create the explorer again: run its cell again, or open a new tab. Right-click a file named `*.json`: **Python code** now
 offers "Pretty print json".
 
 The template is a multi-line string, with `{url}` where the file's URL goes. `cleandoc` removes its indentation, so
@@ -269,6 +257,15 @@ format, the name, the path, the size and the options. It never reads the file.
 - A file with an action of the same label as another one is left out too: give it another label.
 - What a view raises is shown in the preview panel as the item's error.
 - What a code action raises is shown in **Python code** in place of its snippet.
+
+## How the files are read
+
+- Every explorer reads the files when it is created, in notebooks, the launcher's tabs and the side panel.
+- It reads `actions.py` first, then the folder's files by name.
+- Files whose names start with `_` are not read, so they can hold code the others share.
+- A file gives every action defined in it, in order. A list named `ACTIONS` gives only the actions it names.
+- The same files can go in the other configuration directories, which `jupyter --paths` lists under "config". Files
+  there serve every user of the environment or the system, after yours.
 
 ## Turning them off
 
