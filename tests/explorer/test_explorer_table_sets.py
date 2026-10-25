@@ -8,7 +8,7 @@ import polars as pl
 import pytest
 from explorers import make, path_of
 
-from jupyter_storage_explorer._explorer.supports import SupportChain
+from jupyter_storage_explorer._explorer.supports import ActionChain
 from jupyter_storage_explorer._explorer.table_set_tab import TableSetTab
 from jupyter_storage_explorer._query.table_set import query_path
 from jupyter_storage_explorer.formats import Leaf, Node, QueryView, TableSetView
@@ -52,7 +52,7 @@ class Tables:
 @pytest.fixture
 def tables(monkeypatch):
     tables = Tables()
-    monkeypatch.setattr(SupportChain, "view", lambda self, *args, **kw: tables.view())
+    monkeypatch.setattr(ActionChain, "view", lambda self, *args, **kw: tables.view())
     return tables
 
 
@@ -191,7 +191,7 @@ class TestPreview:
         loader read with its view (e.g. a workbook's bytes) is read again."""
         views = []
         monkeypatch.setattr(
-            SupportChain,
+            ActionChain,
             "view",
             lambda self, *args, **kw: views.append(tables.view()) or views[-1],
         )

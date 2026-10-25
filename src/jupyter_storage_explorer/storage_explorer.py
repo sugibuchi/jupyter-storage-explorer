@@ -29,7 +29,7 @@ from jupyter_storage_explorer._explorer.mapper_css import mapper_key, mapper_sty
 from jupyter_storage_explorer._explorer.previews import PreviewsMixin
 from jupyter_storage_explorer._explorer.requests import FileRequestsMixin
 from jupyter_storage_explorer._explorer.states import ExplorerStates, explorer_states
-from jupyter_storage_explorer._explorer.supports import SupportChain
+from jupyter_storage_explorer._explorer.supports import ActionChain
 from jupyter_storage_explorer._jobs.incoming import IncomingFiles
 from jupyter_storage_explorer._jobs.loader import Loader
 from jupyter_storage_explorer._jobs.operation_chain import OperationChain
@@ -51,7 +51,11 @@ from jupyter_storage_explorer.formats import (
     Text,
     ViewLimits,
 )
-from jupyter_storage_explorer.formats.defaults import DEFAULT_FORMATS, DEFAULT_SUPPORTS
+from jupyter_storage_explorer.formats.defaults import (
+    DEFAULT_ACTIONS,
+    DEFAULT_FORMATS,
+    DEFAULT_SUPPORTS,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
@@ -70,6 +74,7 @@ if TYPE_CHECKING:
     from jupyter_storage_explorer.filesystems.mapper import FileSystemMapper
     from jupyter_storage_explorer.filesystems.operation import FileSystemOperations
     from jupyter_storage_explorer.formats import EngineOptions, ItemContext, View
+    from jupyter_storage_explorer.formats.actions import Action
     from jupyter_storage_explorer.location import Location
 
     # A request's handler: the reply to its content (see _requests).
@@ -97,13 +102,13 @@ _UNSAFE_MODES = ("on_demand", "always", "blocked")
 
 
 def _code_engines(
-    code_snippet: str | Sequence[str], supports: SupportChain
+    code_snippet: str | Sequence[str], supports: ActionChain
 ) -> frozenset[str] | None:
     """The engines' keys whose code "Python code" shows: None for all
-    ("enabled"), none for "disabled", else those named that a support has
-    (``FormatSupport.library()``, "python" for those without an engine);
-    names no support has are left out with a warning, as a launcher shared
-    by environments with other plugins may name them."""
+    ("enabled"), none for "disabled", else those named that an action has
+    (its engine's key, "python" for those without an engine); names no
+    action has are left out with a warning, as a launcher shared by
+    environments with other plugins may name them."""
     if code_snippet == "enabled":
         return None
     if code_snippet == "disabled":
@@ -115,7 +120,7 @@ def _code_engines(
             f'code_snippet must be "enabled", "disabled" or a list of engine keys, '
             f"not {code_snippet!r}"
         )
-    known = {support.library() for support in supports.supports}
+    known = supports.libraries()
     if unknown := sorted(set(code_snippet) - known):
         warnings.warn(
             f"code_snippet: no support of {', '.join(unknown)} (left out); "
@@ -247,8 +252,15 @@ class StorageExplorer(
         Every plugin installed is used unless disabled here. A plugin that
         cannot be loaded, or options of one not installed, are left out with
         a warning; an option a plugin does not have is a ValueError. What
-        plugins give is used after the ``supports``, ``operations`` and
-        ``filesystem_mappers`` given, and before the defaults.
+        plugins give is used after the ``actions``, ``supports``,
+        ``operations`` and ``filesystem_mappers`` given, and before the
+        defaults.
+    actions : sequence of Action, optional
+        Actions of your own, functions decorated with
+        ``formats.actions.view`` or ``code``, tried in order before the
+        plugins' and the defaults: for an item, the first view of the engine
+        chosen that does it is its default. An action of the same kind,
+        format, engine and name as another is a ValueError.
     supports : sequence of FormatSupport classes or objects, optional
         Libraries of your own handling formats' data (previews, the data
         browser, "Python code"), e.g. ``[ParquetByDuckDB]``, tried before
@@ -494,6 +506,7 @@ class StorageExplorer(
         unsafe_mode: str = "on_demand",
         code_snippet: str | Sequence[str] = "enabled",
         plugin_options: Mapping[str, Mapping[str, Any]] | None = None,
+        actions: Sequence[Action[Any]] | None = None,
         supports: Sequence[type[FormatSupport] | FormatSupport] | None = None,
         engine_options: EngineOptions | None = None,
         engine_preference: Sequence[str] | None = None,
@@ -615,8 +628,14 @@ class StorageExplorer(
         # How the formats' data is handled: each job by the first support
         # installed, with its options (see formats/support.py); the formats
         # files are detected as are the supports', and the standard ones.
-        self._supports = SupportChain(
-            [*(supports or ()), *components.supports, *self.default_supports()],
+        self._supports = ActionChain(
+            [
+                *(actions or ()),
+                *(supports or ()),
+                *components.actions,
+                *self.default_actions(),
+                *self.default_supports(),
+            ],
             engine_options,
             formats=[*components.formats, *DEFAULT_FORMATS],
             engine_preference=engine_preference,
@@ -715,18 +734,28 @@ class StorageExplorer(
         return _default_operations()
 
     @staticmethod
-    def default_supports() -> list[type[FormatSupport] | FormatSupport]:
-        """The supports tried after those given as ``supports``; override it
+    def default_actions() -> list[Action[Any]]:
+        """The actions tried after those given and the plugins'; override it
         in a subclass to change them.
 
         Returns
         -------
+        list of Action
+            By default ``jupyter_storage_explorer.formats.supports.BUILT_IN_ACTIONS``:
+            those needing no engine (views of text, Markdown, JSON and
+            images, and code reading them); the engines' come with their
+            plugins. Each gets its options from ``engine_options``.
+        """
+        return list(DEFAULT_ACTIONS)
+
+    @staticmethod
+    def default_supports() -> list[type[FormatSupport] | FormatSupport]:
+        """Supports of the former interface tried after ``default_actions()``:
+        none. To be removed with ``FormatSupport``.
+
+        Returns
+        -------
         list of FormatSupport classes or objects
-            By default the classes of
-            ``jupyter_storage_explorer.formats.default_supports()``: those
-            needing no engine (text, Markdown, JSON and images, and code
-            reading them); the engines' come with their plugins. Each gets its
-            options from ``engine_options``.
         """
         return list(DEFAULT_SUPPORTS)
 
@@ -1136,7 +1165,10 @@ class StorageExplorer(
         # the explorer never opens.
         if self._preview_panel != "disabled":
             self._open_preview(
-                content["path"], content.get("format"), content.get("engine", ...)
+                content["path"],
+                content.get("format"),
+                content.get("engine", ...),
+                content.get("action") or None,
             )
 
     # --- The folder shown and the selection, set by the frontend (here, as

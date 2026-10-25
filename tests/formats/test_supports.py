@@ -26,7 +26,7 @@ from jupyter_storage_explorer_polars_support import (
 )
 
 from jupyter_storage_explorer import StorageExplorer
-from jupyter_storage_explorer._explorer.supports import SupportChain
+from jupyter_storage_explorer._explorer.supports import ActionChain
 from jupyter_storage_explorer.filesystems import AbfsLocation, S3Location
 from jupyter_storage_explorer.formats import (
     LIBRARY_DEFAULT,
@@ -51,8 +51,8 @@ from jupyter_storage_explorer.formats import (
     secret_dict_field,
     secret_field,
 )
-from jupyter_storage_explorer.formats.defaults import DEFAULT_FORMATS, DEFAULT_SUPPORTS
-from jupyter_storage_explorer.formats.supports import FsspecOptions, TextByPython
+from jupyter_storage_explorer.formats.defaults import DEFAULT_ACTIONS, DEFAULT_FORMATS
+from jupyter_storage_explorer.formats.supports import FsspecOptions, text_code
 
 LIMITS = ViewLimits(max_display_rows=2)
 
@@ -99,8 +99,12 @@ def on_s3(key):
 def options_by_class(engine_options=None, location=ACCOUNT_A):
     """The default supports' options for ``location``, by class, made from
     ``engine_options``."""
-    chain = SupportChain(ALL_SUPPORTS, engine_options)
-    return {type(s): chain.options_of(s, location) for s in chain.supports}
+    chain = ActionChain(ALL_SUPPORTS, engine_options)
+    return {
+        **{type(s): chain.options_of(s, location) for s in chain.supports},
+        # The core's actions, by themselves.
+        **{a: chain.options_of(a, location) for a in DEFAULT_ACTIONS},
+    }
 
 
 def test_formats_are_the_supports():
@@ -108,7 +112,7 @@ def test_formats_are_the_supports():
     avro = type("Avro", (Csv,), {"name": "avro"})
     # The supports' formats, then those given (the standard ones, as the
     # explorer gives them, detected even without a support).
-    chain = SupportChain([support(avro), *DEFAULT_SUPPORTS], formats=DEFAULT_FORMATS)
+    chain = ActionChain([support(avro), *DEFAULT_ACTIONS], formats=DEFAULT_FORMATS)
     assert [type(f) for f in chain.formats] == [
         avro,
         Json,
@@ -122,7 +126,7 @@ def test_formats_are_the_supports():
         JsonLines,
     ]
     # Each chain has its own: formats keep what detection finds.
-    other = SupportChain(ALL_SUPPORTS).formats
+    other = ActionChain(ALL_SUPPORTS).formats
     assert all(f not in other for f in chain.formats)
 
 
@@ -130,12 +134,12 @@ def test_one_format_class_per_name():
     # A name is what engine_options, previews and menus choose a format by.
     other_csv = type("OtherCsv", (Csv,), {})  # still named "csv"
     with pytest.raises(ValueError, match="format 'csv' is defined twice"):
-        SupportChain([support(other_csv), *DEFAULT_SUPPORTS], formats=DEFAULT_FORMATS)
+        ActionChain([support(other_csv), *DEFAULT_ACTIONS], formats=DEFAULT_FORMATS)
     tsv = type("Tsv", (Csv,), {"name": "tsv"})
-    assert SupportChain([support(tsv), *DEFAULT_SUPPORTS], formats=DEFAULT_FORMATS)
+    assert ActionChain([support(tsv), *DEFAULT_ACTIONS], formats=DEFAULT_FORMATS)
 
 
-@pytest.mark.parametrize("cls", ALL_SUPPORTS)
+@pytest.mark.parametrize("cls", [s for s in ALL_SUPPORTS if isinstance(s, type)])
 def test_supports_implement_a_task(cls):
     assert any(cls.implements(task) for task in get_args(Task))
 
@@ -167,18 +171,18 @@ class TestOptions:
         # Only the options a support's model has: Excel's code reads with fsspec.
         assert options[ExcelByPolars] == ExcelByPolarsOptions()
         assert options[CsvByPandas] == CsvByPandasOptions()  # pandas' own
-        assert options[TextByPython] == FsspecOptions()  # "python"'s
+        assert options[text_code] == FsspecOptions()  # "python"'s
 
     def test_by_library(self):
         # The supports without an engine take "python"'s.
         options = options_by_class(
             {"python": {"text": {"storage_options": {"anon": True}}}}
         )
-        assert options[TextByPython].storage_options == {"anon": True}
+        assert options[text_code].storage_options == {"anon": True}
 
     def test_python_is_no_engine(self):
         with pytest.raises(ValueError, match=r"unknown engines \['python'\]"):
-            SupportChain(all_supports(), engine_preference=["python"])
+            ActionChain(all_supports(), engine_preference=["python"])
 
     @pytest.mark.parametrize(
         ("options", "error"),
@@ -201,13 +205,13 @@ class TestOptions:
     )
     def test_unknown(self, options, error):
         with pytest.raises(ValueError, match=error):
-            SupportChain(ALL_SUPPORTS, options)
+            ActionChain(ALL_SUPPORTS, options)
 
     def test_objects_get_options_as_classes(self):
         # Supports carry no options: objects given are used as they are, and
         # get theirs as classes do.
         given = CsvByPolars()
-        chain = SupportChain(
+        chain = ActionChain(
             [given, CsvByPolars], {"polars": {"*": {"storage_options": {"y": 2}}}}
         )
         assert chain.supports[0] is given
@@ -229,7 +233,7 @@ class TestOptions:
             recipe=lambda self, fmt, ctx, options: seen.append(options) or {},
         )
         duck.options_model = DuckOptions
-        chain = SupportChain([duck], {"duck": {"*": {"threads": 4}}})
+        chain = ActionChain([duck], {"duck": {"*": {"threads": 4}}})
         chain.recipes(Csv(), make_item("/a.csv", b""))
         assert seen == [DuckOptions(threads=4)]
 
@@ -243,8 +247,8 @@ class TestOptions:
         }
 
     def test_not_a_support(self):
-        with pytest.raises(TypeError, match="not a FormatSupport"):
-            SupportChain([Csv])
+        with pytest.raises(TypeError, match="not an action nor a FormatSupport"):
+            ActionChain([Csv])
 
 
 class TestOptionsByLocation:
@@ -286,7 +290,7 @@ class TestOptionsByLocation:
         assert (delta.storage_options, delta.use_pyarrow) == ({"region": "eu"}, True)
 
     def test_unknown_options_returned(self):
-        chain = SupportChain(
+        chain = ActionChain(
             ALL_SUPPORTS, {"polars": {"csv": lambda location: {"use_pyarrow": 1}}}
         )
         [csv] = [s for s in chain.supports if isinstance(s, CsvByPolars)]
@@ -295,7 +299,7 @@ class TestOptionsByLocation:
 
     def test_format_names_checked_at_once(self):
         with pytest.raises(ValueError, match="unknown format"):
-            SupportChain(ALL_SUPPORTS, {"polars": {"parq": lambda location: {}}})
+            ActionChain(ALL_SUPPORTS, {"polars": {"parq": lambda location: {}}})
 
     def test_the_items_location(self, make_item):
         seen = []
@@ -304,7 +308,7 @@ class TestOptionsByLocation:
             recipe=lambda self, fmt, ctx, options: seen.append(options) or {},
         )
         recording.options_model = FsspecOptions
-        chain = SupportChain(
+        chain = ActionChain(
             [recording],
             {"duck": {"*": lambda location: {"storage_options": {"at": location.url}}}},
         )
@@ -360,7 +364,7 @@ class TestSecrets:
         assert field.metadata["secret_keys"] == ("shared_key",)
 
     def test_predefined_storage_options(self, make_item):
-        chain = SupportChain(
+        chain = ActionChain(
             ALL_SUPPORTS,
             {"pandas": {"*": {"storage_options": {"account_key": "k", "anon": True}}}},
         )
@@ -393,14 +397,14 @@ class TestChain:
         missing = support(engine=Missing, view=lambda *a, **k: "missing")
         first = support(view=lambda *a, **k: "first")
         second = support(view=lambda *a, **k: "second")
-        chain = SupportChain([missing(), first(), second()])
+        chain = ActionChain([missing(), first(), second()])
         assert self.view(chain, make_item("/a.csv", b"")) == "first"
 
     def test_the_first_supporting_the_item(self, make_item):
         def only_b(self, fmt, ctx, options, task):
             return ctx.name == "b.csv"
 
-        chain = SupportChain(
+        chain = ActionChain(
             [
                 support(view=lambda *a, **k: "b only", supports=only_b)(),
                 support(view=lambda *a, **k: "any")(),
@@ -411,7 +415,7 @@ class TestChain:
 
     def test_only_what_it_implements(self, make_item):
         # A support without view() is never asked to view.
-        chain = SupportChain(
+        chain = ActionChain(
             [
                 support(recipe=lambda *a, **k: {})(),
                 support(view=lambda *a, **k: "viewer")(),
@@ -424,17 +428,17 @@ class TestChain:
         def fail(self, *args, **kwargs):
             raise ValueError("broken file")
 
-        chain = SupportChain(
+        chain = ActionChain(
             [support(view=fail)(), support(view=lambda *a, **k: "next")()]
         )
         with pytest.raises(ValueError, match="broken file"):
             self.view(chain, make_item("/a.csv", b""))
 
     def test_of_lists_the_installed_only(self, make_item, monkeypatch):
-        chain = SupportChain(all_supports())
+        chain = ActionChain(all_supports())
         item = make_item("/a.csv", b"")
         # In the supports' order: the plugins', by key.
-        assert [type(s) for s in chain.of(Csv(), item, "view")] == [
+        assert [type(a.support) for a in chain.of(Csv(), item)] == [
             CsvByDask,
             CsvByDuckDB,
             CsvByPandas,
@@ -442,19 +446,19 @@ class TestChain:
         ]
         monkeypatch.setattr(PythonPackage, "is_installed", lambda self: False)
         # None of the registered supports can.
-        assert chain.of(Csv(), item, "view") == []
-        assert not chain.installed(Csv(), "view")
+        assert chain.of(Csv(), item) == []
+        assert not chain.installed(Csv())
 
     def test_view_without_a_support_is_an_error_of_the_caller(self, make_item):
         # Callers check of() first: none at all is not the item's fault.
         with pytest.raises(RuntimeError, match=r"check viewers\(\) first"):
-            self.view(SupportChain([]), make_item("/a.csv", b""))
+            self.view(ActionChain([]), make_item("/a.csv", b""))
 
     def test_a_recipe_failing(self, make_item):
         def fail(self, *args, **kwargs):
             raise ValueError("no code")
 
-        chain = SupportChain(
+        chain = ActionChain(
             [
                 support(engine=Missing, recipe=fail)(),
                 support(engine=Duck, recipe=fail)(),
@@ -473,7 +477,7 @@ class TestChain:
         tsv = type("Tsv", (Csv,), {"name": "tsv"})
         path = tmp_path / "a.tsv"
         path.write_text("a\tb\n1\t2\n")
-        view = SupportChain(all_supports()).view(
+        view = ActionChain(all_supports()).view(
             tsv(), local_item(path), LIMITS, "polars"
         )
         assert isinstance(view, QueryView)
@@ -481,7 +485,7 @@ class TestChain:
 
     def test_recipes_of_the_installed_supports_only(self, make_item, monkeypatch):
         # As for views: no code the kernel could not run.
-        chain = SupportChain(all_supports())
+        chain = ActionChain(all_supports())
         item = make_item("/a.csv", b"a\n", location=on_s3("a.csv"))
 
         def engines():
@@ -498,7 +502,7 @@ class TestChain:
         several = support(
             recipe=lambda *a, **k: {"Load lazily": "lazy", "Load eagerly": "eager"},
         )
-        recipes = SupportChain([several()]).recipes(Csv(), make_item("/a.csv", b""))
+        recipes = ActionChain([several()]).recipes(Csv(), make_item("/a.csv", b""))
         assert [(r.title, r.code) for r in recipes] == [
             ("Load lazily", "lazy"),
             ("Load eagerly", "eager"),
@@ -506,7 +510,7 @@ class TestChain:
 
     def test_recipes_name_their_packages(self, make_item, memfs, monkeypatch):
         memfs.pipe_file("/t/_delta_log/00000000000000000000.json", b"{}")
-        chain = SupportChain(all_supports())
+        chain = ActionChain(all_supports())
 
         def packages():
             recipes = chain.recipes(DeltaLake(), make_item("/t", location=on_s3("t")))
@@ -528,7 +532,7 @@ class TestChain:
     def test_query_view(self, tmp_path):
         path = tmp_path / "a.parquet"
         pl.DataFrame({"a": [1, 2]}).write_parquet(path)
-        view = SupportChain(all_supports()).view(
+        view = ActionChain(all_supports()).view(
             Parquet(), local_item(path), LIMITS, "polars"
         )
         assert view.data.collect()["a"].to_list() == [1, 2]

@@ -13,7 +13,7 @@ from jupyter_storage_explorer_databricks_support import DatabricksConnect
 from jupyter_storage_explorer_polars_support import DeltaLakeByPolars
 
 from jupyter_storage_explorer._explorer.states import ExplorerStates
-from jupyter_storage_explorer._explorer.supports import SupportChain
+from jupyter_storage_explorer._explorer.supports import ActionChain
 from jupyter_storage_explorer.formats import (
     Csv,
     DeltaLake,
@@ -88,7 +88,7 @@ class TestEngine:
 class TestOrder:
     def keys(self, supports, preference=None):
         return [
-            e.key for e in SupportChain(supports, engine_preference=preference).engines
+            e.key for e in ActionChain(supports, engine_preference=preference).engines
         ]
 
     def test_default_polars_then_pandas(self):
@@ -111,11 +111,11 @@ class TestOrder:
 
     def test_unknown_engine_key(self):
         with pytest.raises(ValueError, match=r"unknown engines \['polar'\]"):
-            SupportChain(all_supports(), engine_preference=["polar"])
+            ActionChain(all_supports(), engine_preference=["polar"])
 
 
 class TestWhichEngineViews:
-    chain = SupportChain(all_supports())
+    chain = ActionChain(all_supports())
 
     @pytest.fixture
     def item(self, make_item):
@@ -140,7 +140,7 @@ class TestWhichEngineViews:
     def test_no_fallback_for_an_item_it_does_not_support(self, make_item):
         refusing = support(Csv, engine("picky"))
         refusing.supports = lambda self, fmt, ctx, options, task: ctx.name != "b.csv"
-        chain = SupportChain([refusing, support(Csv, None)])
+        chain = ActionChain([refusing, support(Csv, None)])
         a, b = make_item("/a.csv", b""), make_item("/b.csv", b"")
         assert chain.engine_for(Csv(), a, "picky") == "picky"
         with pytest.raises(LookupError):

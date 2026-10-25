@@ -332,7 +332,7 @@ class JsonLinesByPandas(_PandasByUrl):
 
 
 class JsonByPandas(_PandasByUrl):
-    """Load code only: JSON is viewed as a tree (``JsonByPython``)."""
+    """Load code only: JSON is viewed as a tree (the built-in ``json_view``)."""
 
     format = Json
     options_model = JsonByPandasOptions

@@ -9,7 +9,7 @@ import functools
 from dataclasses import dataclass
 from email.utils import getaddresses
 from importlib.metadata import distribution, entry_points, packages_distributions
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 from urllib.parse import urlsplit
 
 if TYPE_CHECKING:
@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 
     from jupyter_storage_explorer.filesystems.mapper import FileSystemMapper
     from jupyter_storage_explorer.filesystems.operation import FileSystemOperations
+    from jupyter_storage_explorer.formats.actions import Action
     from jupyter_storage_explorer.formats.base import DataFormat
     from jupyter_storage_explorer.formats.support import FormatSupport
 
@@ -105,6 +106,10 @@ class StorageExplorerPlugin:
         ``authors``, ``maintainers``, ``license`` and ``[project.urls]``,
         read as ``name`` is; shown in the explorer's About, with the name
         linking to the home page. Empty or None without them.
+    actions : sequence of Action
+        What the plugin does with formats' data, in the order tried:
+        functions decorated with ``formats.actions.view`` or ``code``, given
+        as ``register_actions(...)``; their formats are detected too.
     format_supports : sequence of FormatSupport classes or objects
         How formats' data is handled with the plugin's engine (previews, the
         data browser, "Python code"); their formats are detected too.
@@ -202,6 +207,10 @@ class StorageExplorerPlugin:
         (``[project.urls]``): http and https ones only."""
         dist = self.distribution
         return package_urls(dist) if dist is not None else {}
+
+    @property
+    def actions(self) -> Sequence[Action[Any]]:
+        return ()
 
     @property
     def format_supports(self) -> Sequence[type[FormatSupport] | FormatSupport]:

@@ -32,7 +32,7 @@ from jupyter_storage_explorer_pyspark_support import (
 )
 from jupyter_storage_explorer_pyspark_support import supports as pyspark
 
-from jupyter_storage_explorer._explorer.supports import SupportChain
+from jupyter_storage_explorer._explorer.supports import ActionChain
 from jupyter_storage_explorer.filesystems import S3Location
 from jupyter_storage_explorer.formats import (
     Csv,
@@ -42,6 +42,7 @@ from jupyter_storage_explorer.formats import (
     QueryView,
     ViewLimits,
 )
+from jupyter_storage_explorer.formats.actions import CodeAction
 from jupyter_storage_explorer.testing import local_item
 
 LIMITS = ViewLimits()
@@ -231,11 +232,11 @@ class TestSupportedProtocols:
 
     def test_by_engine_options(self, make_item, monkeypatch):
         monkeypatch.setattr(PySpark, "is_installed", lambda self: True)
-        chain = SupportChain(
+        chain = ActionChain(
             [ParquetByPySpark], {"pyspark": {"*": {"supported_protocols": None}}}
         )
         item = make_item("/a.parquet", b"")
-        assert [type(s) for s in chain.of(Parquet(), item, "recipe")] == [
+        assert [type(a.support) for a in chain.of(Parquet(), item, CodeAction)] == [
             ParquetByPySpark
         ]
 

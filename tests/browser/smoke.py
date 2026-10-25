@@ -1456,6 +1456,40 @@ def readable_errors(lab: Lab, page: Page) -> None:
     expect(x.status).not_to_contain_text("locked.txt is not yours")
 
 
+# An action of the explorer's own: a second view of text files, given first,
+# so the default one.
+VIEWS_BY_NAME = """\
+import fsspec
+from jupyter_storage_explorer import StorageExplorer
+from jupyter_storage_explorer.formats import Text, TextView
+from jupyter_storage_explorer.formats.actions import view
+
+@view(format=Text, engine=None, name="Shout")
+def shout(fmt, ctx, options, limits):
+    return TextView(text=ctx.head_text(100)[0].upper())
+
+memory = fsspec.filesystem("memory")
+memory.pipe_file("/named/a.txt", b"quiet")
+StorageExplorer("/named", fs=memory, actions=[shout], preview_panel="open")"""
+
+
+@lab_check
+def views_by_name(lab: Lab, page: Page) -> None:
+    # The first view is the default; "Preview as" lists each view of an
+    # engine with several by name.
+    x = Explorer(lab, page, VIEWS_BY_NAME)
+    text = x.preview.locator(".jse-text")
+    x.row("a.txt").click()
+    expect(text).to_have_text("QUIET")
+    x.row("a.txt").click(button="right")
+    x.menu_item("Preview as").hover()
+    views = x.el.locator(".jse-submenu .jse-menu-item:visible")
+    expect(views).to_have_text(["Text: Shout", "Text: View Text"])
+    views.last.click()
+    expect(text).to_have_text("quiet")
+    x.preview.press("Escape")
+
+
 # Explorers of the toggles: folder operations never or always, "Python code"
 # of no engine or one.
 TOGGLES = """\
@@ -1682,6 +1716,8 @@ def dask_engine(lab: Lab, page: Page) -> None:
     # duckdb_engine: with it open, hovering missed "Python code".
     x.preview.press("Escape")
     x.row("orders.parquet").click(button="right")
+    # The kernel's reply adds rows, moving "Python code": hovered after it.
+    expect(x.menu_item("Preview as")).to_be_visible()
     x.menu_item("Python code").hover()
     x.el.locator(
         ".jse-submenu .jse-menu-item:visible", has_text="Load as DataFrame (Dask)"

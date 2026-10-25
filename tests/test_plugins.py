@@ -19,7 +19,7 @@ from plugin_samples import (
 )
 
 from jupyter_storage_explorer import _plugins
-from jupyter_storage_explorer._explorer.supports import SupportChain
+from jupyter_storage_explorer._explorer.supports import ActionChain
 from jupyter_storage_explorer._plugins import load_plugins
 from jupyter_storage_explorer.filesystems import FsspecOperations
 from jupyter_storage_explorer.formats import Csv, Engine, FormatSupport
@@ -313,8 +313,8 @@ def test_one_engine_class_per_key():
         {"format": Csv, "engine": copy, "recipe": lambda self, *args: {}},
     )
     with pytest.raises(ValueError, match="engine 'sample' is defined twice"):
-        SupportChain([AvroBySample, other])
-    assert SupportChain([AvroBySample, AvroBySample]).supports  # the same class
+        ActionChain([AvroBySample, other])
+    assert ActionChain([AvroBySample, AvroBySample]).supports  # the same class
 
 
 def test_options_model():

@@ -18,7 +18,7 @@ from jupyter_storage_explorer_pandas_support import CsvByPandas
 from jupyter_storage_explorer_polars_support import CsvByPolars
 
 from jupyter_storage_explorer._explorer import previews
-from jupyter_storage_explorer._explorer.supports import SupportChain
+from jupyter_storage_explorer._explorer.supports import ActionChain
 from jupyter_storage_explorer._explorer.view_tab import ViewTab
 from jupyter_storage_explorer._query.settings import QuerySettings
 from jupyter_storage_explorer.data_explorer import DataExplorer
@@ -54,13 +54,13 @@ class TestPreview:
 
     def test_viewed_once_and_again_on_reload(self, local, monkeypatch):
         calls = []
-        view = SupportChain.view
+        view = ActionChain.view
 
         def counting(self, *args, **kwargs):
             calls.append(args[0])
             return view(self, *args, **kwargs)
 
-        monkeypatch.setattr(SupportChain, "view", counting)
+        monkeypatch.setattr(ActionChain, "view", counting)
         path = path_of(local, "data.parquet")
         local.message({"type": "preview", "path": path})
         assert len(calls) == 1  # the data browser gets the data viewed
@@ -74,13 +74,13 @@ class TestPreview:
         (tmp_path / "ds").mkdir()
         pl.DataFrame({"a": [1]}).write_parquet(tmp_path / "ds" / "part-0.parquet")
         contexts = []
-        view = SupportChain.view
+        view = ActionChain.view
 
         def recording(self, fmt, ctx, *args, **kwargs):
             contexts.append(ctx)
             return view(self, fmt, ctx, *args, **kwargs)
 
-        monkeypatch.setattr(SupportChain, "view", recording)
+        monkeypatch.setattr(ActionChain, "view", recording)
         explorer = make(str(tmp_path))
         path = path_of(explorer, "ds")
         explorer.message({"type": "preview", "path": path})
@@ -351,14 +351,14 @@ class TestQueriesInTheBackground:
     def test_closing_waits_for_the_request_reading(self, local, monkeypatch):
         release = threading.Event()
         closed = []
-        view = SupportChain.view
+        view = ActionChain.view
 
         def closing(self, *args, **kwargs):
             viewed = view(self, *args, **kwargs)
             viewed.on_close(lambda v: closed.append(release.is_set()))
             return viewed
 
-        monkeypatch.setattr(SupportChain, "view", closing)
+        monkeypatch.setattr(ActionChain, "view", closing)
 
         holding = []  # the page only, not the first rows read when opening
 
@@ -599,7 +599,7 @@ class TestClose:
     def closed(self, monkeypatch):
         """The titles of the views closed, each view titled by its number."""
         closed, count = [], itertools.count(1)
-        view = SupportChain.view
+        view = ActionChain.view
 
         def closing(self, *args, **kwargs):
             viewed = dataclasses.replace(
@@ -608,7 +608,7 @@ class TestClose:
             viewed.on_close(lambda v: closed.append(v.title))
             return viewed
 
-        monkeypatch.setattr(SupportChain, "view", closing)
+        monkeypatch.setattr(ActionChain, "view", closing)
         return closed
 
     def test_preview_replaced(self, local, closed):
