@@ -24,7 +24,7 @@ ESLINT = "eslint@10.0.0"
 # What the browser gives the widgets, besides JavaScript's own globals.
 GLOBALS = (
     "document,navigator,setTimeout,clearTimeout,URL,Blob,CustomEvent,Node,Element,"
-    "File,DataTransfer,DragEvent"
+    "File,DataTransfer,DragEvent,ResizeObserver"
 )
 RULES = {
     "storage_explorer": ["no-undef: error", "no-unused-vars: [error, {args: none}]"],

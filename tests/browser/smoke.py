@@ -2234,6 +2234,19 @@ def side_panel(lab: Lab, page: Page) -> None:
     row.filter(has=page.get_by_text("orders.parquet", exact=True)).click(button="right")
     expect(menu.filter(has_text="View Parquet in new tab")).to_be_visible()
     expect(menu.filter(has_text="Preview")).to_have_count(0)
+    # A submenu stays inside the narrow panel, where neither side of the menu
+    # has room for it.
+    menu.filter(has_text="View in new tab as").hover()
+    sub = side.locator(".jse-submenu .jse-menu-item:visible").first
+    expect(sub).to_be_visible()
+    panel = side.bounding_box()
+    sub_box = sub.locator("xpath=..").bounding_box()
+    assert panel is not None and sub_box is not None
+    assert panel["x"] <= sub_box["x"], (panel, sub_box)
+    assert sub_box["x"] + sub_box["width"] <= panel["x"] + panel["width"], (
+        panel,
+        sub_box,
+    )
     side.press("Escape")
     page.keyboard.press("Escape")
     # View, in the status bar, views the selected item in a new tab; so does a

@@ -142,6 +142,9 @@ function createMenu(widgetEl) {
         row.classList.add("jse-has-sub");
         row.append(h("span", { className: "jse-sub-arrow" }, icon("caret-right")), sub);
         item.submenu(sub);
+        // Placed as it opens, and again if its rows arrive while it is open.
+        row.addEventListener("mouseenter", () => placeSub(row, sub));
+        new ResizeObserver(() => row.matches(":hover") && placeSub(row, sub)).observe(sub);
       } else {
         row.addEventListener("click", () => {
           hide();
@@ -193,8 +196,35 @@ function createMenu(widgetEl) {
     const y = Math.min(at.y - box.top, box.height - el.offsetHeight - 4);
     el.style.left = `${Math.max(0, x)}px`;
     el.style.top = `${Math.max(0, y)}px`;
-    // Open submenus to the left when there is no room on the right.
-    el.classList.toggle("jse-flip", Math.max(0, x) + 2 * el.offsetWidth > box.width);
+  }
+
+  // Places the submenu `sub` of `row` inside the widget, from its own size:
+  // on the right of the menu, else on its left, else, where neither has
+  // room (e.g. the side panel), over the menu below its row, so that the row
+  // stays in sight. It never goes above or below the widget either.
+  function placeSub(row, sub) {
+    sub.style.display = "block"; // measured even before :hover shows it
+    const box = widgetEl.getBoundingClientRect();
+    const r = row.getBoundingClientRect();
+    const width = sub.offsetWidth;
+    const height = sub.offsetHeight;
+    sub.style.display = "";
+    const margin = 4;
+    let left;
+    let top = -5;
+    if (r.right + width <= box.right - margin) {
+      left = r.width;
+    } else if (r.left - width >= box.left + margin) {
+      left = -width;
+    } else {
+      left = Math.max(box.left + margin, box.right - margin - width) - r.left;
+      top = r.height;
+    }
+    // Inside the widget vertically: up from its bottom, but not past its top.
+    top = Math.min(top, box.bottom - margin - height - r.top);
+    top = Math.max(top, box.top + margin - r.top);
+    sub.style.left = `${left}px`;
+    sub.style.top = `${top}px`;
   }
 
   return {

@@ -470,15 +470,12 @@
   color: var(--jse-icon);
 }
 
+/* Its defaults: overlays.js' placeSub places it as it opens, inside the
+   widget. */
 .jse-submenu {
   display: none;
   top: -5px;
   left: 100%;
-}
-
-.jse-menu.jse-flip .jse-submenu {
-  left: auto;
-  right: 100%;
 }
 
 .jse-has-sub:hover > .jse-submenu {
