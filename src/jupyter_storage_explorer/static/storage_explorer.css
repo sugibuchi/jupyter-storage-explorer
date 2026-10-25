@@ -396,6 +396,22 @@
   outline-offset: -1px;
 }
 
+/* The page's layer of menus (overlays.js' createMenu): at the window's top
+   left, of no size, above JupyterLab's panels, as its own menus are. It has
+   the widget's class for the colours and font, not its box. */
+.jse-widget.jse-menu-layer {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 10000;
+  display: block;
+  width: 0;
+  height: 0;
+  border: none;
+  background: none;
+  overflow: visible;
+}
+
 .jse-menu {
   position: absolute;
   z-index: 20; /* above the preview dialog */
@@ -470,15 +486,12 @@
   color: var(--jse-icon);
 }
 
+/* Its defaults: overlays.js' placeSub places it as it opens, inside the
+   widget. */
 .jse-submenu {
   display: none;
   top: -5px;
   left: 100%;
-}
-
-.jse-menu.jse-flip .jse-submenu {
-  left: auto;
-  right: 100%;
 }
 
 .jse-has-sub:hover > .jse-submenu {

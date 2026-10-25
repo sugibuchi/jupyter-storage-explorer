@@ -114,7 +114,7 @@ class Explorer:
         return self.el.locator(".jse-list tbody td.jse-col-name")
 
     def menu_item(self, text: str) -> Locator:
-        return self.el.locator(
+        return self.page.locator(
             ".jse-menu:not(.jse-submenu) > .jse-menu-item:visible", has_text=text
         ).first
 
@@ -236,7 +236,7 @@ def list_columns(x: Explorer) -> None:
     def toggle(label: str) -> None:
         x.el.locator(".jse-settings-btn").click()
         x.menu_item("Columns").hover()
-        x.el.locator(".jse-submenu .jse-menu-item", has_text=label).click()
+        x.page.locator(".jse-submenu .jse-menu-item", has_text=label).click()
 
     toggle("Format")
     expect(headers).to_have_text(["Name", "Size", "Modified", "Format"])
@@ -431,8 +431,10 @@ def partitioned_parquet(x: Explorer) -> None:
 def python_code(x: Explorer) -> None:
     x.go("curated")
     x.row("orders.parquet").click(button="right")
+    # The menu grows when the item's views arrive: hover after them.
+    expect(x.menu_item("Preview as")).to_be_visible()
     x.menu_item("Python code").hover()
-    code = x.el.locator(".jse-submenu .jse-menu-item:visible")
+    code = x.page.locator(".jse-submenu .jse-menu-item:visible")
     # The engines installed only: development has no pyspark.
     expect(code.filter(has_text="(Polars)").first).to_be_visible()
     expect(code.filter(has_text="(PySpark)")).to_have_count(0)
@@ -469,7 +471,7 @@ def engines(x: Explorer) -> None:
     # "Preview as": each format and engine that can view the item.
     x.row("orders.parquet").click(button="right")
     x.menu_item("Preview as").hover()
-    x.el.locator(
+    x.page.locator(
         ".jse-submenu .jse-menu-item:visible", has_text="Parquet (Polars)"
     ).click()
     expect(badge).to_have_text("Parquet · Polars")
@@ -1174,7 +1176,7 @@ def local_paths_copied(lab: Lab, page: Page) -> None:
     expect(x.status).to_contain_text("Copied URL")
     assert page.evaluate(clipboard) == (folder / "notes.txt").as_uri()
     x.row("notes.txt").click(button="right")
-    x.el.locator(".jse-menu:not(.jse-submenu) > .jse-menu-item:visible").filter(
+    x.page.locator(".jse-menu:not(.jse-submenu) > .jse-menu-item:visible").filter(
         has=page.get_by_text("Copy", exact=True)
     ).click()
     expect(x.status).to_contain_text("Copied notes.txt")
@@ -1510,7 +1512,7 @@ def views_by_name(lab: Lab, page: Page) -> None:
     expect(text).to_have_text("quiet")
     x.row("a.txt").click(button="right")
     x.menu_item("Preview as").hover()
-    views = x.el.locator(".jse-submenu .jse-menu-item:visible")
+    views = x.page.locator(".jse-submenu .jse-menu-item:visible")
     expect(views).to_have_text(["View as Text (Python)", "Shout"])
     views.last.click()
     expect(text).to_have_text("QUIET")
@@ -1636,7 +1638,7 @@ def reversed_view(x: Explorer) -> None:
     expect(text).to_have_text("stressed")
     x.row("a.txt").click(button="right")
     x.menu_item("Preview as").hover()
-    views = x.el.locator(".jse-submenu .jse-menu-item:visible")
+    views = x.page.locator(".jse-submenu .jse-menu-item:visible")
     expect(views).to_have_text(["View as Text (Python)", "Reversed"])
     views.last.click()
     expect(text).to_have_text("desserts")
@@ -1676,8 +1678,9 @@ def toggles(lab: Lab, page: Page) -> None:
     expect(x.menu_item("Delete")).to_be_visible()
     page.keyboard.press("Escape")
     x.row("a.csv").click(button="right")
+    expect(x.menu_item("Preview as")).to_be_visible()  # the views arrived
     x.menu_item("Python code").hover()
-    code = x.el.locator(".jse-submenu .jse-menu-item:visible")
+    code = x.page.locator(".jse-submenu .jse-menu-item:visible")
     expect(code.first).to_contain_text("(pandas)")
     expect(code.filter(has_text="(Polars)")).to_have_count(0)
     page.keyboard.press("Escape")
@@ -1695,7 +1698,7 @@ def excel_sheets(x: Explorer) -> None:
     for engine in ("Polars", "pandas"):
         x.row("budget_2026.xlsx").click(button="right")
         x.menu_item("Preview as").hover()
-        x.el.locator(
+        x.page.locator(
             ".jse-submenu .jse-menu-item:visible", has_text=f"({engine})"
         ).click()
         expect(x.preview.locator(".jse-badge")).to_have_text(
@@ -1813,7 +1816,7 @@ def duckdb_engine(lab: Lab, page: Page) -> None:
     # The code downloads the database, as DuckDB opens only local ones.
     x.row("shop.db").click(button="right")
     x.menu_item("Python code").hover()
-    x.el.locator(
+    x.page.locator(
         ".jse-submenu .jse-menu-item:visible", has_text="Open the database (DuckDB)"
     ).click()
     dialog = x.el.locator(".jse-dialog:visible")
@@ -1877,7 +1880,7 @@ def dask_engine(lab: Lab, page: Page) -> None:
     # The kernel's reply adds rows, moving "Python code": hovered after it.
     expect(x.menu_item("Preview as")).to_be_visible()
     x.menu_item("Python code").hover()
-    x.el.locator(
+    x.page.locator(
         ".jse-submenu .jse-menu-item:visible", has_text="Load as DataFrame (Dask)"
     ).click()
     dialog = x.el.locator(".jse-dialog:visible")
@@ -2011,7 +2014,7 @@ def launcher_settings(lab: Lab, page: Page) -> None:
         tab = open_launcher_tab(lab, page)
         path.unlink()  # read when the tab started
         dialog = tab.locator(".jse-dialog:visible")
-        edit = tab.locator(
+        edit = page.locator(
             ".jse-menu:not(.jse-submenu) > .jse-menu-item:visible",
             has_text="Edit configuration",
         )
@@ -2057,7 +2060,7 @@ def launcher_settings_with_an_error(lab: Lab, page: Page) -> None:
         expect(page.locator(".jse-launcher-panel").first).to_contain_text(warning)
         expect(tab.locator(".jse-status")).to_contain_text("unknown parameter 'hieght'")
         tab.locator(".jse-settings-btn").click()
-        tab.locator(
+        page.locator(
             ".jse-menu:not(.jse-submenu) > .jse-menu-item:visible",
             has_text="Edit configuration",
         ).click()
@@ -2075,7 +2078,7 @@ def edit_actions(lab: Lab, page: Page) -> None:
         tab = open_launcher_tab(lab, page)
         assert not path.exists()
         tab.locator(".jse-settings-btn").click()
-        tab.locator(
+        page.locator(
             ".jse-menu:not(.jse-submenu) > .jse-menu-item:visible",
             has_text="Edit actions",
         ).click()
@@ -2207,7 +2210,7 @@ def side_panel(lab: Lab, page: Page) -> None:
     ).to_be_visible()
     expect(side.locator(".jse-path-bar .jse-crumb").first).to_have_text("/sales-lake")
     settings = side.locator(".jse-settings-btn")
-    menu = side.locator(".jse-menu:not(.jse-submenu) > .jse-menu-item:visible")
+    menu = page.locator(".jse-menu:not(.jse-submenu) > .jse-menu-item:visible")
     settings.click()
     expect(menu.first).to_have_text("Unsafe mode: off")
     menu.first.click()
@@ -2234,6 +2237,18 @@ def side_panel(lab: Lab, page: Page) -> None:
     row.filter(has=page.get_by_text("orders.parquet", exact=True)).click(button="right")
     expect(menu.filter(has_text="View Parquet in new tab")).to_be_visible()
     expect(menu.filter(has_text="Preview")).to_have_count(0)
+    # Menus are on the page, as JupyterLab's: a submenu crosses the narrow
+    # panel's border, on the right of the menu, inside the window.
+    menu.filter(has_text="View in new tab as").hover()
+    sub = page.locator(".jse-submenu .jse-menu-item:visible").first
+    expect(sub).to_be_visible()
+    panel = side.bounding_box()
+    sub_box = sub.locator("xpath=..").bounding_box()
+    window = page.viewport_size
+    assert panel is not None and sub_box is not None and window is not None
+    right = sub_box["x"] + sub_box["width"]
+    assert right > panel["x"] + panel["width"], (panel, sub_box)
+    assert right <= window["width"], (window, sub_box)
     side.press("Escape")
     page.keyboard.press("Escape")
     # View, in the status bar, views the selected item in a new tab; so does a

@@ -60,7 +60,7 @@ function render({ model, el }) {
   };
   x.busy = createBusy();
   x.modal = createModal(el);
-  x.menu = createMenu(el);
+  x.menu = createMenu();
   x.jobs = createJobs(x);
   x.unsafe = createUnsafe(x);
   x.bookmarks = createBookmarks(x);
@@ -122,7 +122,6 @@ function render({ model, el }) {
     grip,
     x.modal.el,
     confirm.el,
-    x.menu.el,
     x.busy.el,
   );
 
