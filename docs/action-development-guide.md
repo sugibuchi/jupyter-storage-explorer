@@ -33,31 +33,29 @@ In addition, you can store actions in Python files under `~/.jupyter/storage-exp
 This action gives code pretty-printing a JSON file:
 
 ```python
-from inspect import cleandoc
-
 from jupyter_storage_explorer.formats import Json
 from jupyter_storage_explorer.formats.actions import code
 
-PRETTY_PRINT = cleandoc("""
-    import json
+PRETTY_PRINT = """
+import json
 
-    import fsspec
+import fsspec
 
-    with fsspec.open({url}) as f:
-        print(json.dumps(json.load(f), indent=4))
-    """)
+with fsspec.open({url!r}) as f:
+    print(json.dumps(json.load(f), indent=4))
+"""
 
 
 @code(Json)
 def pretty_print_json(url):
-    return PRETTY_PRINT.format(url=repr(url))
+    return PRETTY_PRINT.format(url=url).strip()
 ```
 
 Save it in your actions file, and create the explorer again: run its cell again, or open a new tab. Right-click a file named `*.json`: **Python code** now
 offers "Pretty print json".
 
-The template is a multi-line string, with `{url}` where the file's URL goes. `cleandoc` removes its indentation, so
-the template can be indented like the rest of the file.
+The template is a multi-line string, with `{url!r}` where the file's URL goes, in quotes. `strip()` removes the
+blank lines around it.
 
 ## Action basics
 
