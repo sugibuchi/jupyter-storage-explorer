@@ -316,7 +316,7 @@ def csv_view(
 
 @code(format=JsonLines, engine=PandasEngine, label=AS_DATA_FRAME)
 def json_lines_as_data_frame(
-    fmt: JsonLines, ctx: ItemContext, options: JsonLinesByPandasOptions
+    ctx: ItemContext, options: JsonLinesByPandasOptions
 ) -> str:
     """A DataFrame of the lines."""
     kwargs = f", lines=True{_code_kwargs(options)}"
@@ -325,7 +325,6 @@ def json_lines_as_data_frame(
 
 @view(format=JsonLines, engine=PandasEngine, code=json_lines_as_data_frame)
 def json_lines_view(
-    fmt: JsonLines,
     ctx: ItemContext,
     options: JsonLinesByPandasOptions,
     limits: ViewLimits,
@@ -342,9 +341,7 @@ def json_lines_view(
 
 
 @code(format=Json, engine=PandasEngine, label=AS_DATA_FRAME)
-def json_as_data_frame(
-    fmt: Json, ctx: ItemContext, options: JsonByPandasOptions
-) -> str:
+def json_as_data_frame(ctx: ItemContext, options: JsonByPandasOptions) -> str:
     """A DataFrame of the JSON value."""
     return _pandas_code("read_json", ctx.url_or_local_path, _code_kwargs(options))
 
@@ -365,9 +362,7 @@ def _sheets(
 
 
 @code(format=Excel, engine=PandasEngine, label=AS_DATA_FRAME, requires=(Openpyxl(),))
-def excel_as_data_frame(
-    fmt: Excel, ctx: ItemContext, options: ExcelByPandasOptions
-) -> str:
+def excel_as_data_frame(ctx: ItemContext, options: ExcelByPandasOptions) -> str:
     """A DataFrame of the workbook's sheet."""
     return _pandas_code("read_excel", ctx.url_or_local_path, _code_kwargs(options))
 
@@ -379,7 +374,7 @@ def excel_as_data_frame(
     code=excel_as_data_frame,
 )
 def excel_view(
-    fmt: Excel, ctx: ItemContext, options: ExcelByPandasOptions, limits: ViewLimits
+    ctx: ItemContext, options: ExcelByPandasOptions, limits: ViewLimits
 ) -> View:
     """As polars' (``excel_view``): the sheets ``sheet_name`` gives (several
     on tabs), else the workbook's on tabs, or its only sheet."""
@@ -418,9 +413,7 @@ def excel_view(
 
 
 @code(format=Parquet, engine=PandasEngine, label=AS_DATA_FRAME, requires=(PyArrow(),))
-def parquet_as_data_frame(
-    fmt: Parquet, ctx: ItemContext, options: ParquetByPandasOptions
-) -> str:
+def parquet_as_data_frame(ctx: ItemContext, options: ParquetByPandasOptions) -> str:
     """A DataFrame of the file or folder: pyarrow finds partitions itself."""
     return _pandas_code("read_parquet", ctx.url_or_local_path, _code_kwargs(options))
 

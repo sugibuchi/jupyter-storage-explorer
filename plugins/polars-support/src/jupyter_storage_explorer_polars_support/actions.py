@@ -497,7 +497,7 @@ def csv_view(
 
 @code(format=JsonLines, engine=PolarsEngine, label=AS_LAZY_FRAME, check=_read_by_polars)
 def json_lines_as_lazy_frame(
-    fmt: JsonLines, ctx: ItemContext, options: JsonLinesByPolarsOptions
+    ctx: ItemContext, options: JsonLinesByPolarsOptions
 ) -> str:
     """A LazyFrame of the URL."""
     return _polars_code("scan_ndjson", ctx.url_or_local_path, _code_kwargs(options))
@@ -571,9 +571,7 @@ def _sheets(names: list[str], loader: Callable[[str], Any]) -> TableSetView:
     label=AS_DATA_FRAME,
     requires=(Fastexcel(), Fsspec()),
 )
-def excel_as_data_frame(
-    fmt: Excel, ctx: ItemContext, options: ExcelByPolarsOptions
-) -> str:
+def excel_as_data_frame(ctx: ItemContext, options: ExcelByPolarsOptions) -> str:
     """A DataFrame of the bytes read with fsspec."""
     return _EXCEL_TEMPLATE.format(
         url=repr(ctx.url_or_local_path),
@@ -589,7 +587,7 @@ def excel_as_data_frame(
     code=excel_as_data_frame,
 )
 def excel_view(
-    fmt: Excel, ctx: ItemContext, options: ExcelByPolarsOptions, limits: ViewLimits
+    ctx: ItemContext, options: ExcelByPolarsOptions, limits: ViewLimits
 ) -> View:
     """A workbook's sheets on tabs, each read when chosen, or the sheets the
     options ask for. Excel cannot be read lazily: a sheet is read whole,
@@ -701,7 +699,7 @@ def parquet_as_data_frame(
     code=parquet_as_lazy_frame,
 )
 def parquet_view(
-    fmt: Parquet, ctx: ItemContext, options: ParquetByPolarsOptions, limits: ViewLimits
+    fmt: Parquet, ctx: ItemContext, options: ParquetByPolarsOptions
 ) -> View:
     """A LazyFrame over a Parquet file, or over a directory's data files.
 
@@ -739,9 +737,7 @@ def parquet_view(
     requires=(DeltaLakePackage(),),
     check=_read_by_polars,
 )
-def delta_as_lazy_frame(
-    fmt: DeltaLake, ctx: ItemContext, options: DeltaLakeByPolarsOptions
-) -> str:
+def delta_as_lazy_frame(ctx: ItemContext, options: DeltaLakeByPolarsOptions) -> str:
     """A LazyFrame of the table."""
     return _polars_code("scan_delta", ctx.url_or_local_path, _code_kwargs(options))
 
@@ -753,9 +749,7 @@ def delta_as_lazy_frame(
     requires=(DeltaLakePackage(),),
     check=_read_by_polars,
 )
-def delta_as_data_frame(
-    fmt: DeltaLake, ctx: ItemContext, options: DeltaLakeByPolarsOptions
-) -> str:
+def delta_as_data_frame(ctx: ItemContext, options: DeltaLakeByPolarsOptions) -> str:
     """A DataFrame of the table."""
     return _polars_code("read_delta", ctx.url_or_local_path, _code_kwargs(options))
 
@@ -768,10 +762,8 @@ def delta_as_data_frame(
     code=delta_as_lazy_frame,
 )
 def delta_view(
-    fmt: DeltaLake,
     ctx: ItemContext,
     options: DeltaLakeByPolarsOptions,
-    limits: ViewLimits,
 ) -> View:
     """A LazyFrame over the table."""
     import polars as pl

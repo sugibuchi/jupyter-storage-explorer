@@ -487,10 +487,10 @@ def parquet_as_relation(
     code=parquet_as_relation,
 )
 def parquet_view(
-    fmt: Parquet, ctx: ItemContext, options: ParquetByDuckDBOptions, limits: ViewLimits
+    fmt: Parquet, ctx: ItemContext, options: ParquetByDuckDBOptions
 ) -> View:
     """A relation of the Parquet file, or of the folder's data files, with a
-    folder's partition columns. ``limits`` are not used: DuckDB reads only
+    folder's partition columns. It takes no ``limits``: DuckDB reads only
     what the data browser asks."""
     partitioned = ctx.is_dir and bool(fmt.layout(ctx).keys)
     arguments = {"hive_partitioning": partitioned, **options.arguments()}
@@ -669,9 +669,7 @@ def _delta_query(ctx: ItemContext, options: DeltaLakeByDuckDBOptions) -> str:
     requires=_REQUIRES,
     check=_code_read_by_duckdb,
 )
-def delta_as_relation(
-    fmt: DeltaLake, ctx: ItemContext, options: DeltaLakeByDuckDBOptions
-) -> str:
+def delta_as_relation(ctx: ItemContext, options: DeltaLakeByDuckDBOptions) -> str:
     """The code reading the table into a relation, by ``delta_scan``."""
     return _DELTA_CODE.format(
         connect=options.connect_code().removeprefix(", "),
@@ -687,12 +685,10 @@ def delta_as_relation(
     code=delta_as_relation,
 )
 def delta_view(
-    fmt: DeltaLake,
     ctx: ItemContext,
     options: DeltaLakeByDuckDBOptions,
-    limits: ViewLimits,
 ) -> View:
-    """A relation of the table, by ``delta_scan``. ``limits`` are not used:
+    """A relation of the table, by ``delta_scan``. It takes no ``limits``:
     DuckDB reads only what the data browser asks."""
     query = _delta_query(ctx, options)
     return _query_view(_connect(options), lambda con: con.sql(query))
@@ -745,7 +741,7 @@ _REMOTE_DATABASE_CODE = cleandoc("""
 @code(
     format=DuckDBDatabase, engine=DuckDBEngine, label=OPEN_DATABASE, requires=_REQUIRES
 )
-def database_code(fmt: DuckDBDatabase, ctx: ItemContext, options: DuckDBOptions) -> str:
+def database_code(ctx: ItemContext, options: DuckDBOptions) -> str:
     """The code opening the database read only, and listing its tables; a
     remote file is downloaded once by fsspec, with
     ``fsspec_storage_options``."""
@@ -768,9 +764,7 @@ def database_code(fmt: DuckDBDatabase, ctx: ItemContext, options: DuckDBOptions)
 @view(
     format=DuckDBDatabase, engine=DuckDBEngine, requires=_REQUIRES, code=database_code
 )
-def database_view(
-    fmt: DuckDBDatabase, ctx: ItemContext, options: DuckDBOptions, limits: ViewLimits
-) -> View:
+def database_view(ctx: ItemContext, options: DuckDBOptions, limits: ViewLimits) -> View:
     """The database's tables and views, opened read only, each queried when
     chosen; a ``TextView`` if it has none. A remote file larger than
     ``limits.max_whole_file_bytes``, and not copied yet, is downloaded once

@@ -230,7 +230,7 @@ view doing an item is its default, and **Preview as** lists the others of its en
 from inspect import cleandoc
 
 from jupyter_storage_explorer.filesystems import LocalLocation
-from jupyter_storage_explorer.formats import DataFormat, ItemContext, Parquet, QueryView, View, ViewLimits
+from jupyter_storage_explorer.formats import DataFormat, ItemContext, Parquet, QueryView, View
 from jupyter_storage_explorer.formats.actions import code, register_actions, view
 from jupyter_storage_explorer.formats.packages import PyArrow
 from jupyter_storage_explorer.util import format_kwargs
@@ -266,7 +266,7 @@ def parquet_as_relation(fmt: Parquet, ctx: ItemContext, options: DuckDBOptions) 
 
 
 @view(format=Parquet, engine=DuckDBEngine, requires=(PyArrow(),), check=_read_by_duckdb, code=parquet_as_relation)
-def parquet_view(fmt: Parquet, ctx: ItemContext, options: DuckDBOptions, limits: ViewLimits) -> View:
+def parquet_view(fmt: Parquet, ctx: ItemContext, options: DuckDBOptions) -> View:
     """A Parquet file or folder in the data browser."""
     import duckdb  # inside the function: the plugin loads without DuckDB
 
@@ -297,7 +297,9 @@ The rules for the functions:
 
 - They take the parameters they name, in any order: `fmt`, `ctx`, `options`, and `limits` for a view, or parts of
   the item, `url`, `url_or_local_path`, `name`, `path`, `size`, `is_dir` and `fs`. The decorator checks them; another needs a default.
-  A plugin's actions take `fmt, ctx, options, limits`, as the examples here.
+  Name only those the function uses, as this repository's plugins do.
+- Keep `options` with its annotation, used or not, when it names an options class: it is the action's options model,
+  which a view and its code share.
 - A view returns a `View`. A user's may also return other values, made views:
   - a dataframe, shown in the data browser;
   - a `str`, shown as text;

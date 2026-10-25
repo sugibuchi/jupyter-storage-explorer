@@ -456,8 +456,9 @@ def actions() -> list[Any]:
             return None
         return lambda fmt, ctx, options: check(fmt, local(ctx), options)
 
-    def viewing_copy(function):
-        return lambda fmt, ctx, options, limits: function(
+    def viewing_copy(action):
+        # The action, which gives its function the parameters it names.
+        return lambda fmt, ctx, options, limits: action(
             fmt, local(ctx), options, limits
         )
 
@@ -471,7 +472,7 @@ def actions() -> list[Any]:
     return [
         dataclasses.replace(
             a,
-            function=viewing_copy(a.function),
+            function=viewing_copy(a),
             check=on_copy(a.check),
             code=codes.get(a.code),
         )

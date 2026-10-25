@@ -335,12 +335,10 @@ def parquet_as_data_frame(
 
 
 @view(format=Parquet, engine=DaskEngine, code=parquet_as_data_frame)
-def parquet_view(
-    fmt: Parquet, ctx: ItemContext, options: ParquetByDaskOptions, limits: ViewLimits
-) -> View:
+def parquet_view(fmt: Parquet, ctx: ItemContext, options: ParquetByDaskOptions) -> View:
     """A DataFrame of the Parquet file, or of the folder's data files, which
     the data browser reads a partition at a time (the core's
-    ``fetch_rows``). ``limits`` are not used: Dask reads only the partitions
+    ``fetch_rows``). It takes no ``limits``: Dask reads only the partitions
     the data browser needs."""
     import dask.dataframe as dd
 
@@ -443,9 +441,7 @@ def csv_view(
 
 
 @code(format=JsonLines, engine=DaskEngine, label=AS_DATA_FRAME)
-def json_lines_as_data_frame(
-    fmt: JsonLines, ctx: ItemContext, options: JsonLinesByDaskOptions
-) -> str:
+def json_lines_as_data_frame(ctx: ItemContext, options: JsonLinesByDaskOptions) -> str:
     """The code reading the file into a Dask DataFrame."""
     return _dask_code(
         "read_json({url}, lines=True", ctx.url_or_local_path, _code_kwargs(options, {})
@@ -454,7 +450,6 @@ def json_lines_as_data_frame(
 
 @view(format=JsonLines, engine=DaskEngine, code=json_lines_as_data_frame)
 def json_lines_view(
-    fmt: JsonLines,
     ctx: ItemContext,
     options: JsonLinesByDaskOptions,
     limits: ViewLimits,
