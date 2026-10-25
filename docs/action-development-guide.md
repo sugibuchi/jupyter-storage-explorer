@@ -91,6 +91,26 @@ action for Markdown files.
 For files no format covers, make a format of your own with `file_format`, from `jupyter_storage_explorer.formats`:
 
 ```python
+from jupyter_storage_explorer.formats import file_format
+from jupyter_storage_explorer.formats.actions import code
+
+READ_AVRO = """
+import fastavro
+import fsspec
+
+with fsspec.open({url!r}, "rb") as f:
+    records = list(fastavro.reader(f))
+""".strip()
+
+
+@code(format=file_format(".avro"))
+def read_avro_records(url):
+    return READ_AVRO.format(url=url)
+```
+
+`file_format` names the files in several ways:
+
+```python
 file_format(".abc")                            # files named *.abc
 file_format([".yml", ".yaml"])                 # either ending
 file_format(names="Dockerfile")                # files of that name
