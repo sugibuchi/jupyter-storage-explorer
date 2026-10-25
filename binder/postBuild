@@ -16,6 +16,10 @@ def filesystems():
 
 def actions():
     return demo_data.actions()
+
+
+def plugin_options():
+    return demo_data.PLUGIN_OPTIONS
 EOF
 
 # No prompt about Jupyter news over the demo.

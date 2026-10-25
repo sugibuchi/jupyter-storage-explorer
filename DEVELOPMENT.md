@@ -1311,6 +1311,14 @@ vulnerable ones.
 
 ## Releasing
 
+Before tagging, point the Binder demo at the release:
+
+- `binder/requirements.txt` pins the launcher of the new version, e.g. `==X.Y.Z`;
+- README.md's Binder links open the new tag, `.../v2/gh/sugibuchi/jupyter-storage-explorer/vX.Y.Z?...`.
+
+Binder installs the released packages, while it runs the demo's files of the commit it opens. A link to `main` would
+run the next version's demo on the last release's packages.
+
 Releases are made by GitHub Actions: push a version tag from `main`,
 
 ```bash
