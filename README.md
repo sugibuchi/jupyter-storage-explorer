@@ -1,6 +1,6 @@
 # Jupyter Storage Explorer
 
-*Explore your data lake without leaving Jupyter: built for data professionals*
+*There's no place like Jupyter: explore your data lake without leaving home*
 
 [![PyPI - Version](https://img.shields.io/pypi/v/jupyter-storage-explorer?color=blue)](https://pypi.org/project/jupyter-storage-explorer/)
 [![Python versions](https://img.shields.io/pypi/pyversions/jupyter-storage-explorer)](https://pypi.org/project/jupyter-storage-explorer/)
