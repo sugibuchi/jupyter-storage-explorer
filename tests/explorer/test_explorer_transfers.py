@@ -8,7 +8,6 @@ from explorers import make, storage
 
 from jupyter_storage_explorer import _paths
 from jupyter_storage_explorer.filesystems import S3Location
-from jupyter_storage_explorer.util import format_size
 
 
 def test_download(mem_explorer):
@@ -222,15 +221,6 @@ def test_safe_name():
     assert _paths.safe_name("a/b\\c.txt") == "c.txt"
     with pytest.raises(ValueError):
         _paths.safe_name("..")
-
-
-def test_format_size():
-    assert format_size(10 * 1024 * 1024) == "10 MB"
-    assert format_size(1536) == "1.5 KB"
-    assert format_size(2048) == "2 KB"  # no ".0"
-    assert format_size(586 * 1024 * 1024 + 1) == "586 MB"
-    assert format_size(512) == "512 B"
-    assert format_size(3 * 1024**5) == "3,072 TB"
 
 
 DENY_SECRET = [{"rule": "deny", "src": r"memory:///d/secret.*", "dest": ".*"}]

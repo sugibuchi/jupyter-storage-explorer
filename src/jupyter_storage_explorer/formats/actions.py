@@ -13,7 +13,9 @@ Users import these from this module, not from ``formats``: there,
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
+import functools
 import inspect
 import typing
 from collections.abc import Callable
@@ -79,6 +81,15 @@ class Action(Generic[F]):
     requires: tuple[PythonPackage, ...]
     check: Check | None
     options_model: type[SupportOptions]
+
+    def __post_init__(self) -> None:
+        # Its function's name, docstring and signature, as functools.wraps
+        # gives them (inspect.signature follows __wrapped__): an action reads
+        # as its function in help(), IDEs and errors. Frozen: set directly.
+        for name in functools.WRAPPER_ASSIGNMENTS:
+            with contextlib.suppress(AttributeError):
+                object.__setattr__(self, name, getattr(self.function, name))
+        object.__setattr__(self, "__wrapped__", self.function)
 
     def __call__(self, *args: Any) -> Any:
         return self.function(*args)

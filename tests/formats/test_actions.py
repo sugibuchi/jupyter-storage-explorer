@@ -4,6 +4,7 @@ how explorers use actions (``ActionChain``)."""
 from __future__ import annotations
 
 import dataclasses
+import inspect
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -91,6 +92,17 @@ class TestDecorators:
         assert csv_view.options_model is DuckOptions
         assert csv_view.code is csv_code
         assert csv_view.engine.key == "duck"
+
+    def test_reads_as_the_function(self):
+        # Its name, docstring and signature, for help(), IDEs and errors.
+        assert csv_view.__name__ == "csv_view"
+        assert csv_view.__wrapped__ is csv_view.function
+        assert list(inspect.signature(csv_view).parameters) == [
+            "fmt",
+            "ctx",
+            "options",
+            "limits",
+        ]
 
     def test_called_as_the_function(self, make_item):
         item = make_item("/a.csv", b"")
