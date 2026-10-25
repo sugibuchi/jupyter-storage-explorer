@@ -59,7 +59,8 @@ function render({ model, el }) {
     },
   };
   x.busy = createBusy();
-  x.modal = createModal(el);
+  // Over the whole window in the side panel, which is too narrow for it.
+  x.modal = createModal(el, model.get("_layout") === "sidebar");
   x.menu = createMenu();
   x.jobs = createJobs(x);
   x.unsafe = createUnsafe(x);
@@ -120,7 +121,7 @@ function render({ model, el }) {
     h("div", { className: "jse-status-bar" }, x.list.statusEl, x.engine.button, x.preview.button),
     x.preview.el,
     grip,
-    x.modal.el,
+    ...(x.modal.el ? [x.modal.el] : []),
     confirm.el,
     x.busy.el,
   );

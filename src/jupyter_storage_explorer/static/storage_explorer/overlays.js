@@ -53,17 +53,34 @@ function createBusy() {
   };
 }
 
-// The modal window ("Python code", "Properties"), centred over a backdrop that
-// dims the widget. Esc (see render), its close button or a click on the
-// backdrop closes it.
-function createModal(widgetEl) {
+// The modal window ("Python code", "Properties", "About"), centred over a
+// backdrop that dims the widget. Esc (see render), its close button or a
+// click on the backdrop closes it.
+//
+// With `onPage` (the side panel, too narrow for it), it is shown over the
+// whole browser window instead, as JupyterLab's dialogs are: in a layer of
+// the page's own, with the widget's class for its colours and font, on the
+// page only while it is open. `el` is then null: nothing to add to the widget.
+function createModal(widgetEl, onPage = false) {
   const closeBtn = iconButton("close", "Close (Esc)");
   const head = h("div", { className: "jse-dialog-head" });
   const body = h("div", { className: "jse-dialog-body" });
   const el = h("div", { className: "jse-dialog", tabIndex: -1, hidden: true }, h("div", { className: "jse-modal" }, head, body));
+  const layer = onPage ? h("div", { className: "jse-widget jse-dialog-layer" }, el) : null;
+  if (layer) {
+    // As the widget: JupyterLab's shortcuts do not fire on keys pressed in it.
+    layer.dataset.lmSuppressShortcuts = "true";
+    // Outside the widget, whose own handler closes it on Esc.
+    el.addEventListener("keydown", (ev) => {
+      if (ev.key !== "Escape") return;
+      ev.stopPropagation();
+      close();
+    });
+  }
 
   function close() {
     el.hidden = true;
+    layer?.remove();
     widgetEl.focus({ preventScroll: true });
   }
 
@@ -71,7 +88,7 @@ function createModal(widgetEl) {
   el.addEventListener("pointerdown", (ev) => ev.target === el && close());
 
   return {
-    el,
+    el: layer ? null : el,
     close,
     isOpen: () => !el.hidden,
     show(title, children) {
@@ -82,6 +99,7 @@ function createModal(widgetEl) {
       );
       body.replaceChildren(...children);
       body.scrollTop = 0;
+      if (layer) document.body.append(layer);
       el.hidden = false;
       el.focus({ preventScroll: true });
     },

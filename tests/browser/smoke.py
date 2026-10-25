@@ -2251,6 +2251,21 @@ def side_panel(lab: Lab, page: Page) -> None:
     assert right <= window["width"], (window, sub_box)
     side.press("Escape")
     page.keyboard.press("Escape")
+    # "Python code" shows over the whole window, wider than the panel; Esc
+    # closes it.
+    row.filter(has=page.get_by_text("orders.parquet", exact=True)).click(button="right")
+    expect(menu.filter(has_text="View in new tab as")).to_be_visible()  # views arrived
+    menu.filter(has_text="Python code").hover()
+    page.locator(".jse-submenu .jse-menu-item:visible").first.click()
+    dialog = page.locator(".jse-dialog-layer .jse-modal")
+    expect(dialog).to_contain_text("import")
+    dialog_box = dialog.bounding_box()
+    assert dialog_box is not None and dialog_box["width"] > panel["width"], (
+        panel,
+        dialog_box,
+    )
+    page.keyboard.press("Escape")
+    expect(dialog).to_have_count(0)
     # View, in the status bar, views the selected item in a new tab; so does a
     # double-click.
     row.filter(has=page.get_by_text("orders.parquet", exact=True)).click()
