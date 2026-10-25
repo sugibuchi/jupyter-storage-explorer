@@ -17,7 +17,6 @@ from jupyter_storage_explorer.formats.text import Csv, Json, JsonLines, Markdown
 if TYPE_CHECKING:
     from jupyter_storage_explorer.formats.actions import Action
     from jupyter_storage_explorer.formats.base import DataFormat
-    from jupyter_storage_explorer.formats.support import FormatSupport
 
 # The formats explorers detect even without an action installed for them, so
 # that a Parquet file is one, with its icon, before an engine's plugin is
@@ -37,13 +36,3 @@ DEFAULT_FORMATS: tuple[type[DataFormat], ...] = (
 
 # The actions explorers use after those they are given and their plugins'.
 DEFAULT_ACTIONS: tuple[Action[Any], ...] = BUILT_IN_ACTIONS
-
-# The supports of the former interface explorers used by default: none, as
-# the built-in ones are actions now. To be removed with FormatSupport.
-DEFAULT_SUPPORTS: tuple[type[FormatSupport], ...] = ()
-
-
-def default_supports() -> list[FormatSupport]:
-    """The ``DEFAULT_SUPPORTS``, created: none. To be removed with
-    ``FormatSupport``."""
-    return []

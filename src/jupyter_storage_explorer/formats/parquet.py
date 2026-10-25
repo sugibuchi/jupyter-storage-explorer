@@ -27,7 +27,7 @@ _PARTITION = re.compile(r"([^=/]+)=([^/]*)")
 # Apache Hudi tables are folders of Parquet files whose rows are versioned by
 # the table's timeline: read as plain Parquet, they show stale rows.
 _HUDI_FOLDER = ".hoodie"
-# Datasets' layouts remembered per format, for the supports (by location).
+# Datasets' layouts remembered per format, for the actions (by location).
 _MAX_LAYOUTS = 256
 
 
@@ -234,7 +234,7 @@ class Parquet(DataFormat):
     """Parquet files, and directories of them, partitioned or not.
 
     ``matches`` keeps each directory's layout by location (``layout()``),
-    for the supports reading it.
+    for the actions reading it.
     """
 
     name = "parquet"
@@ -245,7 +245,7 @@ class Parquet(DataFormat):
 
     def __init__(self) -> None:
         # Directory location -> its layout, found by ``matches`` for the
-        # supports. One format object serves every storage of an explorer.
+        # actions. One format object serves every storage of an explorer.
         self._layouts: dict[Location, ParquetLayout] = {}
 
     def matches(self, ctx: ItemContext) -> bool:

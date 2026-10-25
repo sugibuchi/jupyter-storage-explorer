@@ -1,23 +1,24 @@
-"""Formats: how explorers detect each kind of data, and handle it with libraries.
+"""Formats: how explorers detect each kind of data, and the views they show.
 
 ``DataFormat`` (base.py, with the ``ItemContext`` it looks at, which reads
-the item) detects a format, ``FormatSupport`` (support.py, with its
-``SupportOptions`` and ``format_kwargs`` for the code it generates) handles
-its data with one engine (views, recipes), an ``Engine`` (engine.py; the
-predefined ones are with their supports) is a library users choose, and
-``PythonPackage`` (package.py) is a package one needs. The predefined formats each have a
-module (delta.py, parquet.py, excel.py, text.py, images.py), the predefined
-supports and their engines one per library in the ``supports`` package
-(imported from there),
-and packages.py has the predefined packages. view.py has the views supports
-return. ``default_supports()`` (defaults.py) creates those explorers use by
-default; the formats files are detected as are those of the supports.
+the item) detects a format. The predefined formats each have a module
+(delta.py, parquet.py, excel.py, text.py, images.py). An ``Engine``
+(engine.py, with ``EngineOptions``) is a library users choose, and a
+``PythonPackage`` a package one needs; packages.py has it with the
+predefined packages. views.py has the views actions return.
+
+What explorers do with a format's data are actions, in ``formats.actions``:
+functions decorated with ``view`` or ``code``, with their options, an
+``ActionOptions`` subclass. ``formats.python`` has the built-in ones, with
+their engine, ``PythonEngine``; the other engines' come with their
+plugins. defaults.py lists the formats and actions explorers use
+whatever plugins are installed.
 """
 
+from jupyter_storage_explorer.formats.actions import ActionOptions
 from jupyter_storage_explorer.formats.base import FILE_ICONS, DataFormat, ItemContext
-from jupyter_storage_explorer.formats.defaults import default_supports
 from jupyter_storage_explorer.formats.delta import DeltaLake
-from jupyter_storage_explorer.formats.engine import Engine
+from jupyter_storage_explorer.formats.engine import Engine, EngineOptions
 from jupyter_storage_explorer.formats.excel import Excel
 from jupyter_storage_explorer.formats.images import Image
 from jupyter_storage_explorer.formats.local_files import (
@@ -25,23 +26,10 @@ from jupyter_storage_explorer.formats.local_files import (
     LocalFileCache,
     local_file_cache,
 )
-from jupyter_storage_explorer.formats.package import PythonPackage
+from jupyter_storage_explorer.formats.packages import PythonPackage
 from jupyter_storage_explorer.formats.parquet import Parquet, ParquetLayout
-from jupyter_storage_explorer.formats.support import (
-    LIBRARY_DEFAULT,
-    EngineOptions,
-    FormatOptions,
-    FormatSupport,
-    LibraryDefault,
-    SupportOptions,
-    Task,
-    format_arguments,
-    format_kwargs,
-    secret_dict_field,
-    secret_field,
-)
 from jupyter_storage_explorer.formats.text import Csv, Json, JsonLines, Markdown, Text
-from jupyter_storage_explorer.formats.view import (
+from jupyter_storage_explorer.formats.views import (
     Leaf,
     MarkdownView,
     MediaView,
@@ -61,7 +49,7 @@ from jupyter_storage_explorer.formats.view import (
 
 __all__ = [
     "FILE_ICONS",
-    "LIBRARY_DEFAULT",
+    "ActionOptions",
     "CacheStatus",
     "Csv",
     "DataFormat",
@@ -69,14 +57,11 @@ __all__ = [
     "Engine",
     "EngineOptions",
     "Excel",
-    "FormatOptions",
-    "FormatSupport",
     "Image",
     "ItemContext",
     "Json",
     "JsonLines",
     "Leaf",
-    "LibraryDefault",
     "LocalFileCache",
     "Markdown",
     "MarkdownView",
@@ -86,10 +71,8 @@ __all__ = [
     "ParquetLayout",
     "PythonPackage",
     "QueryView",
-    "SupportOptions",
     "TableSetView",
     "TableView",
-    "Task",
     "Text",
     "TextView",
     "TreeView",
@@ -99,10 +82,5 @@ __all__ = [
     "ViewWithConfirmation",
     "ViewWithInput",
     "ViewWithPrompt",
-    "default_supports",
-    "format_arguments",
-    "format_kwargs",
     "local_file_cache",
-    "secret_dict_field",
-    "secret_field",
 ]

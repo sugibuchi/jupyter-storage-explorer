@@ -20,7 +20,6 @@ if TYPE_CHECKING:
     from jupyter_storage_explorer.filesystems.operation import FileSystemOperations
     from jupyter_storage_explorer.formats.actions import Action
     from jupyter_storage_explorer.formats.base import DataFormat
-    from jupyter_storage_explorer.formats.support import FormatSupport
 
 # The entry point group plugins register their class in, named by its key.
 ENTRY_POINT_GROUP = "jupyter_storage_explorer.plugins"
@@ -42,7 +41,7 @@ class StorageExplorerPluginOptions:
         Whether the explorer uses the plugin; a plugin not enabled is not
         even imported.
     priority : int, default the lowest
-        Plugins of a higher priority come first: their supports, operations
+        Plugins of a higher priority come first: their actions, operations
         and mappers are tried before the others'. Plugins of one priority
         come by key.
     """
@@ -73,7 +72,7 @@ class StorageExplorerPlugin:
     for Storage Explorer". The libraries it uses are not dependencies of the
     package (shared Jupyter environments install and configure them with
     care, and a plugin must not change them): its ``full`` extra installs
-    them. Import them only inside methods, as supports do.
+    them. Import them only inside functions, as actions do.
 
     Parameters
     ----------
@@ -91,7 +90,8 @@ class StorageExplorerPlugin:
         subclassing ``StorageExplorerPluginOptions``, each field with a
         default.
     options : StorageExplorerPluginOptions
-        Its options, for the properties to make its components with.
+        Its options, for the properties to choose its components with, e.g.
+        which actions to give.
     name, description, version : str or None
         Its package's name, description (shown to users, e.g. "DuckDB
         support for Storage Explorer") and version, as its
@@ -110,12 +110,9 @@ class StorageExplorerPlugin:
         What the plugin does with formats' data, in the order tried:
         functions decorated with ``formats.actions.view`` or ``code``, given
         as ``register_actions(...)``; their formats are detected too.
-    format_supports : sequence of FormatSupport classes or objects
-        How formats' data is handled with the plugin's engine (previews, the
-        data browser, "Python code"); their formats are detected too.
     formats : sequence of DataFormat classes
-        Formats of the plugin's own that none of its supports names (rare:
-        a support names its format).
+        Formats of the plugin's own that none of its actions names (rare:
+        an action names its format).
     filesystem_operations : sequence of FileSystemOperations
         File operations, tried before the default ones.
     filesystem_mappers : sequence of FileSystemMapper
@@ -128,14 +125,15 @@ class StorageExplorerPlugin:
 
     >>> @dataclass(frozen=True, kw_only=True)
     ... class DuckDBSupportOptions(StorageExplorerPluginOptions):
-    ...     threads: int = 4
+    ...     databases: bool = True
     >>> class DuckDBSupport(StorageExplorerPlugin):
     ...     key = "duckdb-support"
     ...     options_model = DuckDBSupportOptions
     ...
     ...     @property
-    ...     def format_supports(self):
-    ...         return (ParquetByDuckDB(threads=self.options.threads),)
+    ...     def actions(self):
+    ...         databases = (database_view,) if self.options.databases else ()
+    ...         return register_actions(parquet_view, parquet_as_relation, *databases)
 
     its entry point, in ``pyproject.toml``:
 
@@ -147,7 +145,7 @@ class StorageExplorerPlugin:
     and an explorer giving it options, and disabling another plugin:
 
     >>> StorageExplorer(plugin_options={
-    ...     "duckdb-support": {"threads": 8, "priority": 10},
+    ...     "duckdb-support": {"databases": False, "priority": 10},
     ...     "pandas-support": {"enabled": False},
     ... })
     """
@@ -210,10 +208,6 @@ class StorageExplorerPlugin:
 
     @property
     def actions(self) -> Sequence[Action[Any]]:
-        return ()
-
-    @property
-    def format_supports(self) -> Sequence[type[FormatSupport] | FormatSupport]:
         return ()
 
     @property

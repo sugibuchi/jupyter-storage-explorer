@@ -33,8 +33,12 @@ def filesystems():
     return {**demo_data.shared_drive(), **demo_data.filesystems()}
 
 
-def supports():
-    return demo_data.supports()
+def actions():
+    return demo_data.actions()
+
+
+def plugin_options():
+    return demo_data.PLUGIN_OPTIONS
 """
 
 

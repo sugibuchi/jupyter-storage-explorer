@@ -12,28 +12,31 @@ from dataclasses import dataclass
 from inspect import cleandoc
 from typing import TYPE_CHECKING, Any
 
-from jupyter_storage_explorer.formats.actions import code, register_actions, view
+from jupyter_storage_explorer.formats.actions import (
+    ActionOptions,
+    code,
+    register_actions,
+    view,
+)
 from jupyter_storage_explorer.formats.base import ItemContext
 from jupyter_storage_explorer.formats.engine import Engine
 from jupyter_storage_explorer.formats.excel import Excel
-from jupyter_storage_explorer.formats.package import PythonPackage
-from jupyter_storage_explorer.formats.packages import Openpyxl, PyArrow
+from jupyter_storage_explorer.formats.packages import Openpyxl, PyArrow, PythonPackage
 from jupyter_storage_explorer.formats.parquet import Parquet
-from jupyter_storage_explorer.formats.support import (
-    LIBRARY_DEFAULT,
-    LibraryDefault,
-    SupportOptions,
-    format_arguments,
-    format_kwargs,
-    secret_dict_field,
-)
 from jupyter_storage_explorer.formats.text import Csv, Json, JsonLines
-from jupyter_storage_explorer.formats.view import (
+from jupyter_storage_explorer.formats.views import (
     Leaf,
     QueryView,
     TableSetView,
     View,
     ViewLimits,
+)
+from jupyter_storage_explorer.util import (
+    LIBRARY_DEFAULT,
+    LibraryDefault,
+    format_arguments,
+    format_kwargs,
+    secret_dict_field,
 )
 
 if TYPE_CHECKING:
@@ -71,7 +74,7 @@ class PandasEngine(Engine):
 
 
 @dataclass(frozen=True, kw_only=True)
-class PandasOptions(SupportOptions):
+class PandasOptions(ActionOptions):
     """The options of the formats pandas reads.
 
     Attributes
@@ -256,7 +259,7 @@ def _code_kwargs(
     )
 
 
-def _view_arguments(options: SupportOptions, limits: ViewLimits) -> dict[str, Any]:
+def _view_arguments(options: ActionOptions, limits: ViewLimits) -> dict[str, Any]:
     """The options' arguments for the data browser's rows: ``nrows`` at most
     ``_rows(limits)``."""
     arguments = options.arguments()

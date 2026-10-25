@@ -1,12 +1,25 @@
 """The engines handling formats' data: the ``Engine`` interface (python.py
-has ``PythonEngine``, the built-in actions'; plugins define the others)."""
+has ``PythonEngine``, the built-in actions'; plugins define the others), and
+``EngineOptions``, the type of the engines' options, ``engine_options``."""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar
+from collections.abc import Callable, Mapping
+from typing import TYPE_CHECKING, Any, ClassVar, TypeAlias
+
+# At run time, not only for type checkers: EngineOptions, a public alias,
+# names it.
+from jupyter_storage_explorer.location import Location
 
 if TYPE_CHECKING:
-    from jupyter_storage_explorer.formats.package import PythonPackage
+    from jupyter_storage_explorer.formats.packages import PythonPackage
+
+# StorageExplorer's engine_options: {engine key: {format name or "*": options}},
+# the options a dict, or a function of the item's location returning one
+# (see StorageExplorer's engine_options).
+EngineOptions: TypeAlias = Mapping[
+    str, Mapping[str, Mapping[str, Any] | Callable[[Location], Mapping[str, Any]]]
+]
 
 
 class Engine:

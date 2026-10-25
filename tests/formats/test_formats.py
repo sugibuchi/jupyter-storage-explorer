@@ -7,9 +7,9 @@ import io
 
 import polars as pl
 import pytest
-from all_supports import all_supports
+from all_actions import all_actions
 
-from jupyter_storage_explorer._explorer.supports import ActionChain
+from jupyter_storage_explorer._explorer.actions import ActionChain
 from jupyter_storage_explorer.formats import (
     Csv,
     DeltaLake,
@@ -26,7 +26,7 @@ from jupyter_storage_explorer.formats import (
     ViewLimits,
 )
 
-CHAIN = ActionChain(all_supports())
+CHAIN = ActionChain(all_actions())
 
 
 def parquet_bytes(df: pl.DataFrame) -> bytes:
@@ -253,7 +253,7 @@ class TestRecipes:
 
     def test_python_options(self, make_item):
         chain = ActionChain(
-            all_supports(), {"python": {"*": {"storage_options": {"anon": True}}}}
+            all_actions(), {"python": {"*": {"storage_options": {"anon": True}}}}
         )
         [recipe] = chain.recipes(Text(), make_item("/a.txt", b""))
         assert recipe.title == "Read the text"

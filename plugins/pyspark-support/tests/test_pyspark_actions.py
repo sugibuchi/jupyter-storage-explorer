@@ -38,7 +38,7 @@ from jupyter_storage_explorer_pyspark_support import (
 )
 from jupyter_storage_explorer_pyspark_support import actions as pyspark
 
-from jupyter_storage_explorer._explorer.supports import ActionChain
+from jupyter_storage_explorer._explorer.actions import ActionChain
 from jupyter_storage_explorer.filesystems import S3Location
 from jupyter_storage_explorer.formats import (
     Csv,

@@ -1,11 +1,7 @@
 """The explorer's actions (``ActionChain``): the formats they handle, which
 action does what to an item, with which engine and options
 (``engine_options``), the engines users choose from, and the "Python code"
-recipes the code actions give (``Recipe``).
-
-Supports of the former interface, ``FormatSupport`` classes or objects, are
-turned into actions here (``_adapted``), until the plugins are written with
-actions."""
+recipes the code actions give (``Recipe``)."""
 
 from __future__ import annotations
 
@@ -20,16 +16,15 @@ from jupyter_storage_explorer.formats.actions import (
     check_actions,
 )
 from jupyter_storage_explorer.formats.python import PythonEngine
-from jupyter_storage_explorer.formats.support import FormatSupport
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
 
     from jupyter_storage_explorer.formats import ItemContext, View, ViewLimits
+    from jupyter_storage_explorer.formats.actions import ActionOptions
     from jupyter_storage_explorer.formats.base import DataFormat
-    from jupyter_storage_explorer.formats.engine import Engine
-    from jupyter_storage_explorer.formats.package import PythonPackage
-    from jupyter_storage_explorer.formats.support import EngineOptions, SupportOptions
+    from jupyter_storage_explorer.formats.engine import Engine, EngineOptions
+    from jupyter_storage_explorer.formats.packages import PythonPackage
     from jupyter_storage_explorer.location import Location
 
 # In engine_options, the options of an engine for all formats.
@@ -39,10 +34,6 @@ ALL_FORMATS = "*"
 # polars queries the data itself, lazily; pandas reads it whole, so only its
 # first rows. Others (e.g. PySpark) follow by key.
 DEFAULT_ENGINE_PREFERENCE = ("polars", "pandas")
-
-# What explorers give their actions as: actions, or supports of the former
-# interface (classes or objects), turned into actions.
-ActionLike = Action[Any] | FormatSupport | type[FormatSupport]
 
 
 def engine_key(action: Action[Any]) -> str | None:
@@ -71,77 +62,6 @@ class Recipe:
     # Why the action failed, shown in place of the code (then empty); "" if
     # it did not.
     error: str = ""
-
-
-@dataclass(frozen=True, eq=False)
-class _AdaptedView(ViewAction):
-    """The view of a ``FormatSupport``, as an action."""
-
-    support: FormatSupport | None = None
-
-
-@dataclass(frozen=True, eq=False)
-class _AdaptedCode(CodeAction):
-    """The recipes of a ``FormatSupport``, as an action whose function
-    returns several, by title."""
-
-    support: FormatSupport | None = None
-
-
-def _created(support: FormatSupport | type[FormatSupport]) -> FormatSupport:
-    """``support``, created if it is a class. TypeError if it is no action
-    and no FormatSupport."""
-    cls = support if isinstance(support, type) else type(support)
-    if not issubclass(cls, FormatSupport):
-        raise TypeError(f"not an action nor a FormatSupport: {support!r}")
-    return support() if isinstance(support, type) else support
-
-
-def _adapted(created: FormatSupport) -> list[Action[Any]]:
-    """``created``'s view and recipes as actions."""
-    cls = type(created)
-    common: dict[str, Any] = {
-        "format": cls.format,
-        "engine": cls.engine or PythonEngine,
-        # As the menu shows it if the engine has other views. Supports have no
-        # names: adapted actions are left out of check_actions, and only the
-        # first of an engine counts (see view_names).
-        "name": f"View {cls.format.label}",
-        "requires": tuple(cls.additional_requirements),
-        "options_model": cls.options_model,
-        "support": created,
-    }
-    actions: list[Action[Any]] = []
-    if cls.implements("view"):
-        actions.append(
-            _AdaptedView(
-                function=created.view,
-                check=lambda fmt, ctx, options: created.supports(
-                    fmt, ctx, options, "view"
-                ),
-                **common,
-            )
-        )
-    if cls.implements("recipe"):
-        actions.append(
-            _AdaptedCode(
-                function=created.recipe,
-                check=lambda fmt, ctx, options: created.supports(
-                    fmt, ctx, options, "recipe"
-                ),
-                **common,
-            )
-        )
-    return actions
-
-
-# Something with options of a format and an engine: an action, or a support
-# of the former interface (whose library() is a method).
-_WithOptions = Action[Any] | FormatSupport
-
-
-def _engine_key_of(item: _WithOptions) -> str:
-    return item.engine.key if isinstance(item, Action) else item.library()
 
 
 class ActionChain:
@@ -184,45 +104,34 @@ class ActionChain:
 
     def __init__(
         self,
-        actions: Iterable[ActionLike],
+        actions: Iterable[Action[Any]],
         engine_options: EngineOptions | None = None,
         *,
         formats: Iterable[type[DataFormat]] = (),
         engine_preference: Sequence[str] | None = None,
     ) -> None:
-        self.actions: list[Action[Any]] = []
-        # The supports of the former interface given, created; their formats
-        # and options count even if they implement nothing.
-        self.supports: list[FormatSupport] = []
-        given: list[_WithOptions] = []
-        for item in actions:
-            if isinstance(item, Action):
-                self.actions.append(item)
-                given.append(item)
-            else:
-                created = _created(item)
-                self.supports.append(created)
-                self.actions += _adapted(created)
-                given.append(created)
+        self.actions: list[Action[Any]] = list(actions)
+        for action in self.actions:
+            if not isinstance(action, Action):
+                raise TypeError(
+                    f"not an action: {action!r}; decorate it with @view or @code"
+                )
         self.engine_options = engine_options or {}
         # What takes options, by engine key ("python" for PythonEngine): what
         # options are checked against.
-        self._by_engine: dict[str, list[_WithOptions]] = {}
-        for item in given:
-            self._by_engine.setdefault(_engine_key_of(item), []).append(item)
-        engine_keys = {
-            a.engine.key
-            for a in given
-            if a.engine is not None and a.engine is not PythonEngine
-        }
+        self._by_engine: dict[str, list[Action[Any]]] = {}
+        for action in self.actions:
+            self._by_engine.setdefault(action.engine.key, []).append(action)
+        engine_keys = {key for a in self.actions if (key := engine_key(a)) is not None}
         # One object of each format: formats keep what detection finds (e.g.
         # a Parquet dataset's layout) for their actions.
         self.formats: list[DataFormat] = [
-            cls() for cls in dict.fromkeys([*(a.format for a in given), *formats])
+            cls()
+            for cls in dict.fromkeys([*(a.format for a in self.actions), *formats])
         ]
         self._format_names = [f.name for f in self.formats]
         _check_format_names(self.formats)
-        check_actions([a for a in self.actions if not _is_adapted(a)])
+        check_actions(self.actions)
         _check_options(self.engine_options, self._by_engine, self._format_names)
         if engine_preference is None:
             engine_preference = DEFAULT_ENGINE_PREFERENCE
@@ -233,7 +142,7 @@ class ActionChain:
                     f"engine_preference: unknown engines {unknown}; "
                     f"choose from {sorted(engine_keys)}"
                 )
-        _check_engine_keys(given)
+        _check_engine_keys(self.actions)
         self.engines = _ordered_engines(self.actions, engine_preference)
         self._engine_preference = list(engine_preference)
 
@@ -242,12 +151,12 @@ class ActionChain:
         (``PythonEngine``)."""
         return set(self._by_engine)
 
-    def options_of(self, action: _WithOptions, location: Location) -> SupportOptions:
+    def options_of(self, action: Action[Any], location: Location) -> ActionOptions:
         """The options of ``action`` for the item at ``location``: those of
         its engine for all formats, then for its format, those its model
         has (see the class docstring). ValueError for options a function
         returned that no action of the engine takes."""
-        key = _engine_key_of(action)
+        key = action.engine.key
         by_format = self.engine_options.get(key, {})
         merged: dict[str, Any] = {}
         for name in (ALL_FORMATS, action.format.name):
@@ -303,22 +212,11 @@ class ActionChain:
     ) -> dict[str | None, list[str]]:
         """The names of the view actions doing the item as ``fmt``, by engine
         (see ``viewers``), each engine's in order: the first is its default.
-        Of supports of the former interface, the first of each engine only,
-        as before actions: a support given replaces the default one. Its
-        name is the default view's, "View {format}", which then hides the
-        later action of that name: ``view`` takes the first of a name. One
-        pass over the actions, as the right-click menu needs all of them."""
+        One pass over the actions, as the right-click menu needs all of
+        them."""
         names: dict[str | None, list[str]] = {}
-        adapted: set[str | None] = set()
         for action in self.of(fmt, ctx):
-            key = engine_key(action)
-            if _is_adapted(action):
-                if key in adapted:
-                    continue
-                adapted.add(key)
-            known = names.setdefault(key, [])
-            if action.name not in known:
-                known.append(action.name)
+            names.setdefault(engine_key(action), []).append(action.name)
         order = [e.key for e in self.engines] + [None]
         return {key: names[key] for key in order if key in names}
 
@@ -377,22 +275,15 @@ class ActionChain:
     def recipes(self, fmt: DataFormat, ctx: ItemContext) -> list[Recipe]:
         """The recipes of the code actions for ``fmt`` that are installed and
         do the item, as for views: code the kernel could not run is not
-        offered. Of supports of the former interface, those of the first
-        such support of each engine, so a support given before the defaults
-        replaces the default one of its engine, even its code actions. An
-        action that fails gives
-        one recipe holding the error, so the others are still shown. Those
-        without an engine first, then by engine: those of
-        ``engine_preference``, in its order, then the others by key,
-        whichever plugin they come from; in the actions' order within one."""
-        recipes: list[Recipe] = []
-        adapted: set[str] = set()
-        for action in self.of(fmt, ctx, CodeAction):
-            if action.engine.key in adapted:
-                continue
-            if _is_adapted(action):
-                adapted.add(action.engine.key)
-            recipes += self._recipes_of(action, fmt, ctx)
+        offered. An action that fails gives a recipe holding the error, so
+        the others are still shown. Those of ``PythonEngine`` first, then by
+        engine: those of ``engine_preference``, in its order, then the
+        others by key, whichever plugin they come from; in the actions' order
+        within one."""
+        recipes = [
+            self._recipe_of(action, fmt, ctx)
+            for action in self.of(fmt, ctx, CodeAction)
+        ]
         order = {key: i for i, key in enumerate(self._engine_preference)}
 
         def rank(recipe: Recipe) -> tuple[int, int, str]:
@@ -402,35 +293,25 @@ class ActionChain:
 
         return sorted(recipes, key=rank)
 
-    def _recipes_of(
+    def _recipe_of(
         self, action: Action[Any], fmt: DataFormat, ctx: ItemContext
-    ) -> list[Recipe]:
-        """The recipes of one code action: one, or one per title for a
-        support of the former interface; one holding the error if it fails."""
+    ) -> Recipe:
+        """The recipe of one code action, holding the error if it fails."""
         common = {
+            "title": action.name,
             "engine": action.engine if engine_key(action) else None,
             "requirements": action.requirements(),
         }
         try:
-            codes = action(fmt, ctx, self.options_of(action, ctx.location))
+            code = action(fmt, ctx, self.options_of(action, ctx.location))
         except Exception as exc:
-            title = "" if _is_adapted(action) else action.name
-            return [Recipe(title=title, code="", error=error_text(exc), **common)]
-        if not _is_adapted(action):
-            return [Recipe(title=action.name, code=codes, **common)]
-        return [
-            Recipe(title=title, code=code, **common) for title, code in codes.items()
-        ]
-
-
-def _is_adapted(action: Action[Any]) -> bool:
-    """Whether ``action`` is a support of the former interface."""
-    return isinstance(action, (_AdaptedView, _AdaptedCode))
+            return Recipe(code="", error=error_text(exc), **common)
+        return Recipe(code=code, **common)
 
 
 def _check_options(
     engine_options: Mapping[str, Any],
-    by_engine: Mapping[str, Sequence[_WithOptions]],
+    by_engine: Mapping[str, Sequence[Action[Any]]],
     format_names: Sequence[str],
 ) -> None:
     """ValueError for ``engine_options`` that no action takes (see
@@ -500,15 +381,12 @@ def _check_format_names(formats: Sequence[DataFormat]) -> None:
             )
 
 
-def _check_engine_keys(actions: Sequence[_WithOptions]) -> None:
+def _check_engine_keys(actions: Sequence[Action[Any]]) -> None:
     """ValueError for two engine classes of one key: actions of an engine
-    share its class, so that the explorer offers it once, with one label.
-    Supports of the former interface have None for Python alone."""
+    share its class, so that the explorer offers it once, with one label."""
     engines: dict[str, type[Engine]] = {}
     for action in actions:
         engine = action.engine
-        if engine is None:
-            continue
         known = engines.setdefault(engine.key, engine)
         if known is not engine:
             raise ValueError(

@@ -37,7 +37,7 @@ explorer exactly, so an extra always installs the plugin of the explorer's versi
 | `binder/`                                                      | The demo on mybinder.org (the README's "Try it" link): released packages, demo data.                 |
 
 The explorer's runtime dependencies are only anywidget, fsspec, narwhals, pygments and traitlets. Every other library,
-such as polars, pandas, PyArrow, Pillow or PySpark, is optional and probed at run time. The engines' supports come with
+such as polars, pandas, PyArrow, Pillow or PySpark, is optional and probed at run time. The engines' actions come with
 the plugins.
 
 ### The public API
@@ -51,7 +51,7 @@ construct, subclass, call or annotate with.
   actions with their engine, `PythonEngine`;
 - `jupyter_storage_explorer.util`: helpers such as `format_size`.
 
-The explorer's machinery stays out of them, such as `SupportChain`, `OperationChain` and `detect`. The package and the
+The explorer's machinery stays out of them, such as `ActionChain`, `OperationChain` and `detect`. The package and the
 tests import it from its modules.
 
 `jupyter_storage_explorer.testing` has the helpers plugins test with: items and pytest fixtures. It needs pytest.
@@ -128,7 +128,7 @@ The top of `tests/` has `conftest.py`, the tests of the top-level modules, and t
 The fixtures come from the public `jupyter_storage_explorer.testing`, which plugins' tests use too:
 
 - `memfs`: a cleared fsspec memory filesystem;
-- `make_item`: writes a file there and returns it as formats and supports get it, an `ItemContext`;
+- `make_item`: writes a file there and returns it as formats and actions get it, an `ItemContext`;
 - `local_item`: the same for a local file.
 
 `tests/conftest.py` adds `mem_explorer` and `local`, explorers of those.
@@ -144,9 +144,9 @@ condition holds.
 There, an explorer lists its first folder in the background too. Wait for it with `listed`, from the same file, before
 selecting or previewing its items.
 
-Plugins' tests cover their own code: supports, options, engine, operations and entry point. The explorer's tests use
-the plugins' supports as material, from `tests/all_supports.py`. The plugins' test dependencies are in each one's
-`dev` group.
+Plugins' tests cover their own code: actions, options, engine, operations and entry point. The explorer's tests use
+the plugins' actions as material, from `tests/all_actions.py`. The plugins' test dependencies are in each one's `dev`
+group.
 
 A few libraries need care:
 
@@ -254,7 +254,7 @@ know, the explorer may also open one with the user's credentials. It never opens
 
 ### Extended by chains, users first
 
-Formats, supports, file operations and mappers are each a chain of objects, tried in order:
+Formats, actions, file operations and mappers are each a chain, tried in order:
 
 1. what the explorer's arguments give;
 2. what the plugins give;
@@ -262,21 +262,21 @@ Formats, supports, file operations and mappers are each a chain of objects, trie
 
 The first that takes an item handles it:
 
-- A support takes the items its `supports` accepts. What its method then raises is the item's error.
+- An action takes the items its `check` accepts. What it then raises is the item's error.
 - An operation refuses a call by raising `FileSystemOperations.NotSupported`, and the next one is tried.
 - A mapper takes the filesystems it matches.
 - The highest priority among matching formats wins.
 
-So a plugin or a user adds or replaces behaviour without changing the core.
+So a plugin or a user adds behaviour without changing the core.
 
-A format only detects, and a support handles one format with one library. So a new library for a format needs only a
-support.
+A format only detects, and an action does one thing with one format's data and one library. So a new library for a
+format needs only actions, and a new way of viewing it only a view action.
 
 ### Optional libraries, probed at run time
 
 The core needs only anywidget, fsspec, narwhals, pygments and traitlets. Every other library is optional.
 
-- Supports import their libraries inside methods, and the chain calls only those whose packages are installed.
+- Actions import their libraries inside their functions, and the chain calls only those whose packages are installed.
 - Mappers match filesystems by class name, so they never import a storage's library.
 - Plugins never depend on their libraries: their `full` extra installs them.
 
@@ -300,10 +300,11 @@ Cloud storages answer each call in tens of milliseconds, and folders hold tens o
 
 ### Written for AI to extend
 
-Users are expected to generate formats, supports and plugins with AI. So the rules are written where AI reads them:
+Users are expected to generate formats, actions and plugins with AI. So the rules are written where AI reads them:
 in docstrings and in docs/development-plugin.md.
 
-- The explorer does not check at run time that a support keeps them, by design.
+- The decorators check what they can when a function is decorated: its parameters and its options class.
+- The explorer does not check at run time that an action keeps the other rules, by design.
 - Tests keep the rules true of the defaults, so the examples AI learns from stay right.
 
 ### Known limits
@@ -333,7 +334,7 @@ These follow from the choices above. Users may meet them.
   `FileSystemOperations` objects does the work, and users can extend it.
 - **The data browser** is `DataQuery`, in `_query/`. It works on any dataframe narwhals supports. `DataExplorer` shows
   it alone.
-- **Formats**, in `formats/`, detect each kind of file. Supports preview, query and load it, one library each.
+- **Formats**, in `formats/`, detect each kind of file. Actions view it and give code loading it, one library each.
 - **The launcher** opens explorers in JupyterLab's tabs and side bar, with the settings of `launcher.py` files.
 
 The sections below describe each part.
@@ -452,11 +453,12 @@ user. `load_settings` does the merging. Each file may define these functions:
 
 - `filesystems()`, `operations()`, `filesystem_mappers()` and `transfer_policy()`;
 - `plugin_options()`, merged by plugin, then option;
-- `supports()`, and `engine_options()`, merged by engine, format, then option;
+- `actions()`, concatenated, a later layer's first;
+- `engine_options()`, merged by engine, format, then option;
 - `parameters()`, the explorer's other arguments;
 - `final()`, which names what later layers cannot change.
 
-The retired `style()` and `formats()` are ignored with a warning.
+The retired `style()`, `formats()` and `supports()` are ignored with a warning.
 
 Errors are handled by whose file has them:
 
@@ -917,8 +919,8 @@ never show unfiltered.
 
 ### Formats
 
-A format only detects files. A support handles one format's data with one library. So a library is added to a format,
-e.g. DuckDB for Parquet, without touching the format.
+A format only detects files. An action does one thing with one format's data and one library: a view, or code loading
+it. So a library is added to a format, e.g. DuckDB for Parquet, without touching the format.
 [development-plugin.md](docs/development-plugin.md) says how to write each, with their rules.
 
 `formats/` is laid out as `filesystems/`:
@@ -926,16 +928,16 @@ e.g. DuckDB for Parquet, without touching the format.
 | Module                          | Contents                                                                         |
 |---------------------------------|----------------------------------------------------------------------------------|
 | `base.py`                       | `DataFormat`, `ItemContext`, the file icons, and the explorer's `detect`.        |
-| `support.py`                    | `FormatSupport`, its options, and the helpers of the generated code.             |
+| `actions.py`                    | The decorators `view` and `code`, `register_actions`, `check_actions`, and `ActionOptions`. |
 | `engine.py`                     | `Engine`: a library users choose, such as polars.                                |
-| `package.py`, `packages.py`     | `PythonPackage`: what a support needs, and the packages several engines share.   |
-| `view.py`                       | The views supports return, and `ViewLimits`.                                     |
+| `packages.py`                   | `PythonPackage`: what an action needs, and the packages several engines share.   |
+| `views.py`                      | The views actions return, and `ViewLimits`.                                      |
 | `delta.py`, `parquet.py`, ...   | A module per predefined format.                                                  |
-| `supports/python.py`            | The core's supports, without an engine: text, JSON, Markdown, images.            |
-| `defaults.py`                   | `DEFAULT_FORMATS` and `DEFAULT_SUPPORTS`.                                        |
+| `python.py`                     | `PythonEngine` and the built-in actions: text, JSON, Markdown, images.           |
+| `defaults.py`                   | `DEFAULT_FORMATS` and `DEFAULT_ACTIONS`.                                         |
 
-The engines' supports are in their plugins, in `plugins/<engine>-support/src/.../supports.py`. They import their
-libraries only inside methods, through `PythonPackage.load()`.
+The engines' actions are in their plugins, in `plugins/<engine>-support/src/.../actions.py`. They import their
+libraries only inside their functions.
 
 `formats` never imports `_explorer`. Presentation, such as the wording of a table's row counts, stays in the explorer.
 
@@ -957,72 +959,81 @@ Formats with a binary signature also declare `sniff_bytes` and `sniff(ctx, head)
 - It does so whichever plugins are installed: the files in a storage need not be what the plugins expect.
 - Listings skip sniffing, so such files have no format until clicked. Folders are never sniffed.
 
-The highest priority wins: Delta 20, Parquet 10, others 0, and Text -10. What supports share about a format is on it,
+The highest priority wins: Delta 20, Parquet 10, others 0, and Text -10. What actions share about a format is on it,
 such as `Csv.separator` or `Parquet.data_url`.
 
 Directory formats, Delta and Parquet datasets, inspect the folder's listing. Parquet also takes Hive-style partition
 folders, such as `year=…/month=…/`. It follows them down one branch, one more listing per partition column, and keeps
-each dataset's layout by location for the supports.
+each dataset's layout by location for the actions.
 
 A format's file icon is one of JupyterLab's, or an SVG of its own shown as an image, so its scripts never run. Files of
 a format without an icon get their extension's.
 
-#### Supports
+#### Actions
 
-A `FormatSupport` declares:
+An action is a function decorated with `view` or `code`, from `formats/actions.py`. The decorator makes it a
+`ViewAction` or a `CodeAction`, a frozen dataclass holding:
 
+- `function`, called when the action is;
 - `format`, matched with `isinstance`, so subclasses too;
-- `engine`, an `Engine` class, or None for the built-in views;
-- `additional_requirements`, packages besides the engine's.
+- `engine`, an `Engine` class, `PythonEngine` for the built-in ones;
+- `name`, what the menu shows, unique for its kind, format and engine;
+- `requires`, packages besides the engine's;
+- `check`, whether it does an item, or None for every item;
+- `options_model`, the class of its options, read from the annotation of the function's `options` parameter.
 
-It implements `view`, `recipe` or both. Its `supports(fmt, ctx, options, task)` tells whether it does a task for an
-item, with its options for that item:
+A view action may name its `code`, the code action reproducing it. An action takes its function's name, docstring and
+signature, so it reads as the function.
 
-- By default, it does what its class implements, for every item.
-- A support overrides it to refuse items, such as a storage its library cannot read.
-- It decides without reading the storage, as it runs on the main thread for each item clicked.
+The decorator checks the function's parameters, positional in a fixed order: `(fmt, ctx, options, limits)` for a view,
+`(fmt, ctx, options)` for code. A view returns one `View` and runs in a worker thread. Code returns one snippet and
+runs in a worker thread too.
 
-Once a support accepts an item, the chain tries no other. What its method raises is shown as the item's error, so a
-failure is never hidden by another library's view. Without an item, as for the engines offered, the chain asks
-`implements(task)`.
+`check(fmt, ctx, options)` decides without reading the storage, as it runs on the main thread for each item clicked.
+Once an action is chosen, the chain tries no other. What it raises is shown as the item's error, so a failure is never
+hidden by another library's view.
 
-Each method gets the format object, then the `ItemContext`, then the support's options. `view` also gets the
-`ViewLimits`.
+Actions never check their packages: the chain calls only installed ones.
 
-Supports never check their packages: the chain calls only installed ones. They take no `__init__` arguments.
+`register_actions(...)` returns a plugin's actions in order, checked together. `check_actions`, which the chain also
+runs on all its actions, refuses two cases:
 
-#### The support chain
+- two actions of one kind, format and engine with one name;
+- options classes of one format and engine whose fields of one name differ in type or in what is secret.
 
-The explorer's `SupportChain`, in `_explorer/supports.py`, holds its supports in order:
+#### The action chain
 
-1. the explorer's `supports=`;
-2. the plugins' supports;
-3. `DEFAULT_SUPPORTS`, the core's.
+The explorer's `ActionChain`, in `_explorer/actions.py`, holds its actions in order:
 
-Its formats are an object of each support's format, in that order, then the plugins' own formats and the defaults.
+1. the explorer's `actions=`;
+2. the plugins' actions;
+3. `default_actions()`, by default `DEFAULT_ACTIONS`, the built-in ones.
+
+Its formats are an object of each action's format, in that order, then the plugins' own formats and the defaults.
 The explorer has no `formats=` argument. Two format classes of one name are a `ValueError`, as two engine classes of
 one key are.
 
 The chain answers:
 
-- `of(fmt, ctx, task)`: the installed supports of a format that support a task for the item;
-- `engines`: the installed engines with a view support, the preferred first;
+- `of(fmt, ctx, kind)`: the installed actions of a kind for a format that do the item;
+- `engines`: the installed engines with a view action, the preferred first, never `PythonEngine`;
 - `viewers(fmt, ctx)`: the engines that can view the item, then None for the built-in views;
+- `views_by_engine(fmt, ctx)`: the names of the views doing the item, by engine, for "Preview as";
 - `engine_for(fmt, ctx, engine)`: the engine chosen if it handles the format, else the built-in views;
-- `view(...)`, with the first of one engine's supports;
-- `recipes(...)`: the first support of each library for the item, as for views.
+- `view(..., action=None)`: the view of an engine's action of that name, by default its first;
+- `recipes(...)`: the code of every code action doing the item, ranked by engine.
 
 `engine_for` never falls back to another engine. It raises `LookupError` in two cases:
 
-- the chosen engine's support is not installed;
-- its support refuses the item.
+- none of the chosen engine's view actions is installed;
+- its actions refuse the item.
 
-A support whose `recipe` fails gives a recipe holding the error. "Python code" shows it in place of that library's code,
-and the others' code still shows.
+A code action that fails gives a recipe holding the error. "Python code" shows it in place of that code, and the
+others' code still shows.
 
 #### Views
 
-`view` returns one `View`, from `view.py`:
+`view` returns one `View`, from `views.py`:
 
 - A `QueryView` opens the data browser. Its `data` is any dataframe narwhals supports, best lazy. `more` says the data
   holds only the item's first part:
@@ -1126,7 +1137,7 @@ Every read of lazy data, the first rows when opening and each live page, goes th
 order, until one gives rows:
 
 1. the explorer's `fetch_rows`, the user's;
-2. the `fetch` of the `QueryView` the data came from, a support's, asked at each read, as a reload's view may differ;
+2. the `fetch` of the `QueryView` the data came from, an action's, asked at each read, as a reload's view may differ;
 3. `fetch_rows`, the default: polars and DuckDB skip rows themselves, and Dask is read partition by partition, as
    narwhals' `head` would read every partition. Sorted Dask data, found in its expression, is read in one pass:
    computed one by one, each partition would sort all the data again. Others read all rows up to `offset + length`.
@@ -1138,15 +1149,15 @@ only its own `fetch_rows`.
 
 #### Recipes
 
-`recipe` returns the code of "Python code", by title, such as "Load as LazyFrame". The code runs as it is in a new
-notebook, with its imports and, for Spark, its session.
+A code action returns one snippet of "Python code", titled by its name, such as "Load as LazyFrame". The chain makes a
+`Recipe` of each. The code runs as it is in a new notebook, with its imports and, for Spark, its session.
 
-- Titles never name the library. The chain adds the support's requirements, and the frontend groups the code by library.
-- Supports fill class attributes `*_template` with `str.format`: `{url}`, a repr, and `{kwargs}`, the options.
+- Titles never name the library. The chain adds the action's requirements, and the frontend groups the code by library.
+- Actions fill module-level templates, made with `inspect.cleandoc`, with `str.format`: `{url}`, a repr, and
+  `{kwargs}`, the options.
 - Installing packages and configuring access to the storage depend on the environment, so they are left to the user.
 
-`code_snippet` limits the recipes to some engines' keys, `"python"` for those without an engine, or turns "Python
-code" off. Unknown keys are left out with a warning, as one launcher configuration may serve environments with other
+`code_snippet` limits the recipes to some engines' keys, `"python"` for the built-in code, or turns "Python code" off. Unknown keys are left out with a warning, as one launcher configuration may serve environments with other
 plugins.
 
 ### Plugins
@@ -1155,11 +1166,13 @@ A plugin is a `StorageExplorerPlugin` subclass, in `plugin.py`. It is registered
 `jupyter_storage_explorer.plugins`, named by its `key`.
 
 Each explorer creates each plugin with its options. The options model is a frozen dataclass subclassing
-`StorageExplorerPluginOptions`, which has `enabled` and `priority`. The plugin's properties give its components, made
-with those options:
+`StorageExplorerPluginOptions`, which has `enabled` and `priority`. The plugin's properties give its components, chosen
+or made with those options:
 
-- `format_supports` and `formats`;
+- `actions`, as `register_actions(...)` gives them, and `formats`;
 - `filesystem_operations` and `filesystem_mappers`.
+
+Plugin options only include or leave out actions. Actions get their own options from `engine_options`.
 
 `load_plugins`, in `_plugins.py`, loads every plugin installed, highest priority first, then by key.
 
@@ -1173,18 +1186,22 @@ The explorer uses each kind of component as given in its arguments, then the plu
 A plugin's name, description, version, authors, license and URLs are its package's metadata. About shows them, also for
 plugins not loaded. Plugins never depend on their libraries: their `full` extra installs them.
 
-databricks-support depends on pyspark-support, of exactly its own version. Its engine, Databricks Connect, has
-pyspark-support's supports as subclasses, which override how the session is made:
+databricks-support depends on pyspark-support, of exactly its own version. Its engine, Databricks Connect, has actions
+of its own, which call pyspark-support's helpers with a `SparkSessions` of its own. That says how the session is made:
 
 - `session` makes it with `DatabricksSession`, on the workspace of fsspec-databricks' filesystem when the item is on
   one.
-- `session_code` and `session_import` give the code's lines.
-- `databricks-connect` brings a pyspark of its own, which makes no session with `SparkSession.builder`. pyspark-support's
-  `PySpark` package then counts as not installed, so its engine is not offered.
+- `code_import` and `code` give the code's lines.
+
+Two more points about the pair:
+
+- `databricks-connect` brings a pyspark module of its own, which makes no session with `SparkSession.builder`.
+  pyspark-support's `PySpark` sets `own_distribution`, so it counts as installed only with pyspark's own distribution,
+  and its engine is not offered then.
 - `databricks-connect` is in databricks-support's `full` extra. It replaces pyspark, so the two extras must not be
   installed together.
 
-Tests fake entry points to `tests/plugin_samples.py`. `tests/all_supports.py` has the supports of this repository's
+Tests fake entry points to `tests/plugin_samples.py`. `tests/all_actions.py` has the actions of this repository's
 plugins, which the other tests use, and `NO_PLUGINS`, options disabling them all.
 
 ### Engines in the explorer
@@ -1207,19 +1224,20 @@ Separators left without visible rows around them are hidden.
 
 ### Engine options
 
-`engine_options` is `{engine key: {format name or "*": {option: value}}}`. A support gets its engine's options for "*",
-then for its format's name. It gets only those its options model has, as an object of that model.
+`engine_options` is `{engine key: {format name or "*": {option: value}}}`. An action gets its engine's options for "*",
+then for its format's name. It gets only those its options class has, as an object of that class.
 
+- The options a format and an engine take are those of all their actions' classes.
 - An entry may instead be a function of the item's `Location`, returning the dict. It gives options per storage, e.g.
-  by account. It is called at each view and recipe.
+  by account. It is called at each view and each code action.
 - The launcher merges its layers option by option, even for such functions.
 - Unknown engines, formats and options are `ValueError`s.
 
 Secrets are declared on the options' fields, with `secret_field` and `secret_dict_field`. Generated code gets options
-only through `SupportOptions.code_value`. It drops secret fields and secret keys, and also keys that look like
+only through `ActionOptions.code_value`. It drops secret fields and secret keys, and also keys that look like
 credentials, as a safety net.
 
-Spark reads with its own storage settings. PySpark's supports take `session_options`, for the session, and
+Spark reads with its own storage settings. PySpark's actions take `session_options`, for the session, and
 `reader_options`, for `spark.read.option`. A subclass per format has Spark's documented reader options, in snake case.
 
 The options of each library are listed in its plugin's README only.

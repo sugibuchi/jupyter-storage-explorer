@@ -1,4 +1,4 @@
-"""Files and folders as formats and supports are given them (``ItemContext``),
+"""Files and folders as formats and actions are given them (``ItemContext``),
 for their tests: the helpers plugins test with."""
 
 from jupyter_storage_explorer.testing import item_of, local_item

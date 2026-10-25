@@ -406,10 +406,15 @@ def filesystems() -> dict[str, str]:
     return {"Sales lake": LAKE_URL, "Scratch": SCRATCH_URL}
 
 
-def supports() -> list[Any]:
-    """polars-support's supports viewing the local copy (polars reads by URL,
-    for the data browser), for an explorer's ``supports``: tried before its
-    plugins', they are those used."""
+# The plugin options of explorers given ``actions()``: polars-support off, as
+# those actions replace its own, of the same names.
+PLUGIN_OPTIONS = {"polars-support": {"enabled": False}}
+
+
+def actions() -> list[Any]:
+    """polars-support's actions, viewing the local copy (polars reads by URL,
+    for the data browser), for an explorer's ``actions``, with
+    ``PLUGIN_OPTIONS``."""
 
     from jupyter_storage_explorer.filesystems import (  # noqa: PLC0415
         LocalLocation,
@@ -441,50 +446,39 @@ def supports() -> list[Any]:
         )
 
     # Only polars reads by URL; the other plugins read the demo's own files,
-    # so that files saved from JupyterLab show as saved. polars-support's
-    # actions are wrapped in supports, one per format: given before the
-    # plugin's, a support replaces its engine's actions of the format, which
-    # actions of the same names could not.
-    actions = PolarsSupport().actions
-    formats = dict.fromkeys(a.format for a in actions)
-    return [_polars_support(fmt, actions, local) for fmt in formats]
-
-
-def _polars_support(fmt_class, actions, local) -> Any:
-    """A support of ``fmt_class`` running polars-support's ``actions`` of it
-    on the item's local copy (``local``): its first view, and its code in the
-    recipes. Whether an action does the item is decided by the copy's
-    location too, but the code reads the demo's own location."""
-    from jupyter_storage_explorer.formats import FormatSupport  # noqa: PLC0415
+    # so that files saved from JupyterLab show as saved. Whether an action
+    # does an item is decided by the copy's location, and views read the
+    # copy; code still reads the demo's own location.
     from jupyter_storage_explorer.formats.actions import ViewAction  # noqa: PLC0415
 
-    mine = [a for a in actions if a.format is fmt_class]
-    views = [a for a in mine if isinstance(a, ViewAction)]
-    codes = [a for a in mine if not isinstance(a, ViewAction)]
+    def on_copy(check):
+        if check is None:
+            return None
+        return lambda fmt, ctx, options: check(fmt, local(ctx), options)
 
-    class DemoByPolars(FormatSupport):
-        format = fmt_class
-        engine = mine[0].engine
-        options_model = mine[0].options_model
-        additional_requirements = mine[0].requires
+    def viewing_copy(function):
+        return lambda fmt, ctx, options, limits: function(
+            fmt, local(ctx), options, limits
+        )
 
-        def supports(self, fmt, ctx, options, task):
-            done = views if task == "view" else codes
-            return any(a.does(fmt, local(ctx), options) for a in done)
-
-        if views:
-
-            def view(self, fmt, ctx, options, limits):
-                return views[0](fmt, local(ctx), options, limits)
-
-        def recipe(self, fmt, ctx, options):
-            return {
-                a.name: a(fmt, ctx, options)
-                for a in codes
-                if a.does(fmt, local(ctx), options)
-            }
-
-    return DemoByPolars()
+    originals = PolarsSupport().actions
+    # The code first, which the views name.
+    codes = {
+        a: dataclasses.replace(a, check=on_copy(a.check))
+        for a in originals
+        if not isinstance(a, ViewAction)
+    }
+    return [
+        dataclasses.replace(
+            a,
+            function=viewing_copy(a.function),
+            check=on_copy(a.check),
+            code=codes.get(a.code),
+        )
+        if isinstance(a, ViewAction)
+        else codes[a]
+        for a in originals
+    ]
 
 
 if __name__ == "__main__":

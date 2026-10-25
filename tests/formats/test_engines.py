@@ -1,5 +1,6 @@
-"""Engines (formats/engine.py, PythonEngine in formats/python.py, the others in the plugins): which are offered, in which order,
-which views an item, and the explorer's choice of one."""
+"""Engines (formats/engine.py, PythonEngine in formats/python.py, the others
+in the plugins): which are offered, in which order, which views an item, and
+the explorer's choice of one."""
 
 from __future__ import annotations
 
@@ -7,22 +8,22 @@ import importlib
 
 import pytest
 import traitlets
-from all_supports import all_supports
+from all_actions import all_actions
 from explorers import make, path_of
 from jupyter_storage_explorer_databricks_support import DatabricksConnect
 
+from jupyter_storage_explorer._explorer.actions import ActionChain
 from jupyter_storage_explorer._explorer.states import ExplorerStates
-from jupyter_storage_explorer._explorer.supports import ActionChain
 from jupyter_storage_explorer.formats import (
     Csv,
     DeltaLake,
     Engine,
-    FormatSupport,
     Markdown,
     Parquet,
     PythonPackage,
-    package,
+    packages,
 )
+from jupyter_storage_explorer.formats.actions import code, view
 from jupyter_storage_explorer.formats.packages import DeltaLake as DeltaLakePackage
 from jupyter_storage_explorer.formats.python import PythonEngine
 
@@ -48,10 +49,24 @@ def engine(key, requirements=INSTALLED):
     )
 
 
-def support(fmt, engine_, tasks=("view",)):
-    """A support class of ``fmt`` and ``engine_`` implementing ``tasks``."""
-    methods = {task: lambda self, *args: None for task in tasks}
-    return type("Fake", (FormatSupport,), {"format": fmt, "engine": engine_, **methods})
+def viewer(fmt, engine_, check=None):
+    """A view action of ``fmt`` and ``engine_``."""
+
+    @view(format=fmt, engine=engine_, check=check)
+    def viewing(fmt, ctx, options, limits):
+        return None
+
+    return viewing
+
+
+def coder(fmt, engine_):
+    """A code action of ``fmt`` and ``engine_``."""
+
+    @code(format=fmt, engine=engine_, name="Load")
+    def coding(fmt, ctx, options):
+        return ""
+
+    return coding
 
 
 class TestEngine:
@@ -75,43 +90,43 @@ class TestEngine:
         monkeypatch.setattr(
             importlib,
             "invalidate_caches",
-            lambda: held.append(package._probing.locked()),
+            lambda: held.append(packages._probing.locked()),
         )
         assert Installed().is_installed()
         assert held == [True]
 
 
 class TestOrder:
-    def keys(self, supports, preference=None):
+    def keys(self, actions, preference=None):
         return [
-            e.key for e in ActionChain(supports, engine_preference=preference).engines
+            e.key for e in ActionChain(actions, engine_preference=preference).engines
         ]
 
     def test_default_polars_then_pandas(self):
         # Then the others by key: dask, duckdb (pyspark is not installed).
-        assert self.keys(all_supports()) == ["polars", "pandas", "dask", "duckdb"]
+        assert self.keys(all_actions()) == ["polars", "pandas", "dask", "duckdb"]
 
     def test_preference_then_the_others_by_key(self):
-        supports = [support(Csv, engine(k)) for k in ("zeta", "alpha", "mid")]
-        assert self.keys(supports, ["mid"]) == ["mid", "alpha", "zeta"]
-        assert self.keys(supports, []) == ["alpha", "mid", "zeta"]
+        actions = [viewer(Csv, engine(k)) for k in ("zeta", "alpha", "mid")]
+        assert self.keys(actions, ["mid"]) == ["mid", "alpha", "zeta"]
+        assert self.keys(actions, []) == ["alpha", "mid", "zeta"]
 
     def test_only_installed_engines_that_view(self):
-        supports = [
-            support(Csv, engine("viewer")),
-            support(Csv, engine("absent", (Missing(),))),
-            support(Csv, engine("coder"), tasks=("recipe",)),
+        actions = [
+            viewer(Csv, engine("viewer")),
+            viewer(Csv, engine("absent", (Missing(),))),
+            coder(Csv, engine("coder")),
         ]
-        # Listed but not installed: left out.
-        assert self.keys(supports, ["absent", "viewer"]) == ["viewer"]
+        # Listed but not installed: left out; code only: no engine to choose.
+        assert self.keys(actions, ["absent", "viewer"]) == ["viewer"]
 
     def test_unknown_engine_key(self):
         with pytest.raises(ValueError, match=r"unknown engines \['polar'\]"):
-            ActionChain(all_supports(), engine_preference=["polar"])
+            ActionChain(all_actions(), engine_preference=["polar"])
 
 
 class TestWhichEngineViews:
-    chain = ActionChain(all_supports())
+    chain = ActionChain(all_actions())
 
     @pytest.fixture
     def item(self, make_item):
@@ -131,10 +146,11 @@ class TestWhichEngineViews:
         with pytest.raises(LookupError):
             self.chain.engine_for(DeltaLake(), item, "polars")
 
-    def test_no_fallback_for_an_item_it_does_not_support(self, make_item):
-        refusing = support(Csv, engine("picky"))
-        refusing.supports = lambda self, fmt, ctx, options, task: ctx.name != "b.csv"
-        chain = ActionChain([refusing, support(Csv, None)])
+    def test_no_fallback_for_an_item_it_does_not_do(self, make_item):
+        refusing = viewer(
+            Csv, engine("picky"), check=lambda fmt, ctx, options: ctx.name != "b.csv"
+        )
+        chain = ActionChain([refusing, viewer(Csv, PythonEngine)])
         a, b = make_item("/a.csv", b""), make_item("/b.csv", b"")
         assert chain.engine_for(Csv(), a, "picky") == "picky"
         with pytest.raises(LookupError):
@@ -230,7 +246,7 @@ class TestExplorer:
             raise LookupError(engine)
 
         # As when the engine chosen handles the format, but cannot view it.
-        monkeypatch.setattr(type(local._supports), "engine_for", cannot)
+        monkeypatch.setattr(type(local._actions), "engine_for", cannot)
         path = path_of(local, "data.parquet")
         local._selected = [path]
         assert local._selected_format == {

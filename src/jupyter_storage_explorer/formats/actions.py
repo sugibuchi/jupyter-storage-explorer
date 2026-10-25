@@ -5,10 +5,9 @@ in the preview panel or a tab) or ``code`` (Python loading the item, shown
 in "Python code"). A format and an engine may have any number of actions:
 e.g. Parquet with Polars viewed in the data browser and in another widget.
 Plugins give theirs as ``register_actions(...)``, in order; explorers try
-them in that order, and the first matching an item is its default.
-
-Users import these from this module, not from ``formats``: there,
-``formats.view`` is a module, which a function of that name would hide.
+them in that order, and the first matching an item is its default. An
+action's options are an ``ActionOptions`` subclass; ``util`` has the
+helpers of their fields and of generated code.
 """
 
 from __future__ import annotations
@@ -24,21 +23,153 @@ from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 from jupyter_storage_explorer.formats.base import DataFormat
 from jupyter_storage_explorer.formats.engine import Engine
-from jupyter_storage_explorer.formats.package import PythonPackage
-from jupyter_storage_explorer.formats.support import (
+from jupyter_storage_explorer.formats.packages import PythonPackage
+from jupyter_storage_explorer.util import (
     IS_SECRET,
+    LIBRARY_DEFAULT,
     SECRET_KEYS,
-    SupportOptions,
+    _shown_options,
 )
 
 if TYPE_CHECKING:
     from jupyter_storage_explorer.formats.base import ItemContext
-    from jupyter_storage_explorer.formats.view import View
+    from jupyter_storage_explorer.formats.views import View
 
-__all__ = ["Action", "CodeAction", "ViewAction", "code", "register_actions", "view"]
+__all__ = [
+    "Action",
+    "ActionOptions",
+    "CodeAction",
+    "ViewAction",
+    "code",
+    "register_actions",
+    "view",
+]
+
+
+@dataclass(frozen=True, kw_only=True)
+class ActionOptions:
+    """The options of an action: none. The base of actions' options.
+
+    An action taking options annotates its ``options`` parameter with a
+    subclass: a frozen, keyword-only dataclass whose fields are the options,
+    each with a default, as users may set none of them. Explorers make one
+    from ``engine_options``, by the action's engine and format, and pass it
+    to the action and its check. Subclasses of a library's options share
+    them, e.g. its storage options, which ``engine_options``' ``"*"`` then
+    sets for all its formats.
+
+    Options are data. What actions do with them is in functions taking them;
+    methods only give views of them, e.g. ``code_value``.
+
+    Mark secrets with ``secret_field`` (a whole value) or
+    ``secret_dict_field`` (keys of a mapping), and give generated code the
+    options through ``code_value``, which leaves them out.
+
+    Examples
+    --------
+    >>> @dataclass(frozen=True, kw_only=True)
+    ... class DuckDBOptions(ActionOptions):
+    ...     config: Mapping[str, Any] | None = secret_dict_field(
+    ...         default=None, secret_keys=["s3_secret_access_key"]
+    ...     )
+    >>> @view(format=Parquet, engine=DuckDBEngine)
+    ... def parquet_view(fmt, ctx, options: DuckDBOptions, limits):
+    ...     import duckdb
+    ...
+    ...     con = duckdb.connect(config=dict(options.config or {}))
+    ...     ...
+    >>> StorageExplorer(
+    ...     "data",
+    ...     actions=[parquet_view],
+    ...     engine_options={"duckdb": {"*": {"config": {"threads": 4}}}},
+    ... )
+    """
+
+    @classmethod
+    def option_names(cls) -> frozenset[str]:
+        """The options: the names of the fields, those ``engine_options`` may
+        set.
+
+        Returns
+        -------
+        frozenset of str
+            E.g. ``{"storage_options", "credential_provider"}`` for
+            ``PolarsOptions``.
+        """
+        return frozenset(f.name for f in dataclasses.fields(cls))
+
+    def code_value(self, name: str) -> Any:
+        """Option ``name`` as generated code may show it: None for a secret
+        (``secret_field``) or an object that is not plain data; a mapping
+        without its secret keys (``secret_dict_field``) and keys that look
+        like credentials, None if nothing is left.
+
+        Parameters
+        ----------
+        name : str
+            A field's name.
+
+        Returns
+        -------
+        Any
+            The value to show, or None to leave the option out.
+        """
+        [field] = [f for f in dataclasses.fields(self) if f.name == name]
+        if field.metadata.get(IS_SECRET):
+            return None
+        secret_keys = field.metadata.get(SECRET_KEYS, ())
+        shown = _shown_options({name: getattr(self, name)}, frozenset(secret_keys))
+        value = shown.get(name)
+        return None if isinstance(value, dict) and not value else value
+
+    def arguments(self) -> dict[str, Any]:
+        """The library's arguments the options give: the fields whose default
+        is ``LIBRARY_DEFAULT`` (each an argument of its name), those given,
+        in the fields' order. Pass them to the library's reader as they are.
+
+        Returns
+        -------
+        dict
+            E.g. ``{"has_header": False}`` for
+            ``CsvByPolarsOptions(has_header=False)``.
+
+        Examples
+        --------
+        >>> @dataclass(frozen=True, kw_only=True)
+        ... class CsvByDuckDBOptions(ActionOptions):
+        ...     header: bool | LibraryDefault = LIBRARY_DEFAULT
+        ...     delim: str | LibraryDefault = LIBRARY_DEFAULT
+        >>> CsvByDuckDBOptions(header=True).arguments()
+        {'header': True}
+        """
+        return {
+            f.name: value
+            for f in dataclasses.fields(self)
+            if f.default is LIBRARY_DEFAULT
+            and (value := getattr(self, f.name)) is not LIBRARY_DEFAULT
+        }
+
+    def code_arguments(self) -> dict[str, Any]:
+        """``arguments()`` as generated code may show them (``code_value``):
+        without secrets and values that are objects rather than plain data
+        (e.g. polars' data types); None, a value given, is kept. For
+        ``format_arguments``.
+
+        Returns
+        -------
+        dict
+        """
+        shown = {}
+        for name, value in self.arguments().items():
+            if value is None:
+                shown[name] = None
+            elif (code := self.code_value(name)) is not None:
+                shown[name] = code
+        return shown
+
 
 # A check: whether an action does an item (see ``view``).
-Check = Callable[[DataFormat, "ItemContext", SupportOptions], bool]
+Check = Callable[[DataFormat, "ItemContext", ActionOptions], bool]
 
 F = TypeVar("F", bound=Callable[..., Any])
 
@@ -69,7 +200,7 @@ class Action(Generic[F]):
         Packages it needs besides its engine's.
     check : callable or None
         Whether it does an item (see ``view``); None for every item.
-    options_model : type of SupportOptions
+    options_model : type of ActionOptions
         The class of its options, from the annotation of the function's
         ``options`` parameter.
     """
@@ -80,7 +211,7 @@ class Action(Generic[F]):
     name: str
     requires: tuple[PythonPackage, ...]
     check: Check | None
-    options_model: type[SupportOptions]
+    options_model: type[ActionOptions]
 
     def __post_init__(self) -> None:
         # Its function's name, docstring and signature, as functools.wraps
@@ -102,7 +233,7 @@ class Action(Generic[F]):
         """Whether its engine and ``requires`` are installed."""
         return all(p.is_installed() for p in self.requirements())
 
-    def does(self, fmt: DataFormat, ctx: ItemContext, options: SupportOptions) -> bool:
+    def does(self, fmt: DataFormat, ctx: ItemContext, options: ActionOptions) -> bool:
         """Whether it does the item: of its format, and its check agrees."""
         return isinstance(fmt, self.format) and (
             self.check is None or bool(self.check(fmt, ctx, options))
@@ -152,7 +283,7 @@ def view(
       - ``fmt``, the format detected, an instance of ``format``;
       - ``ctx``, the item as an ``ItemContext``;
       - ``options``, its options, an instance of the class its annotation
-        names (``SupportOptions``, with no fields, without one);
+        names (``ActionOptions``, with no fields, without one);
       - ``limits``, how much to read and show, a ``ViewLimits``.
     - Import ``options``' class at run time, not only for type checkers:
       the class is read from the annotation when the function is decorated.
@@ -199,7 +330,7 @@ def view(
     TypeError
         When decorating: for arguments of the wrong type, a function of
         another number of parameters, an options annotation that does not
-        resolve to a ``SupportOptions`` subclass, or a ``code`` of another
+        resolve to a ``ActionOptions`` subclass, or a ``code`` of another
         pair or options class.
 
     Examples
@@ -250,7 +381,7 @@ def code(
     configuring access to the storage are left to the user. It reads the
     location (``ctx.url_or_local_path``). The function reads the item only for
     what the code needs to know, e.g. a CSV file's separator. Options go into
-    the code only through ``SupportOptions.code_value`` and
+    the code only through ``ActionOptions.code_value`` and
     ``code_arguments``, which leave secrets out.
 
     The function's parameters, the import rules and ``check`` are as for
@@ -445,12 +576,12 @@ def _fields(
 
 def _options_model(
     function: Callable[..., Any], parameter: str, format: type[DataFormat], where: str
-) -> type[SupportOptions]:
+) -> type[ActionOptions]:
     """The class ``function``'s ``parameter`` is annotated with, resolved in
-    the function's module; ``SupportOptions`` without an annotation."""
+    the function's module; ``ActionOptions`` without an annotation."""
     annotation = inspect.get_annotations(function).get(parameter)
     if annotation is None:
-        return SupportOptions
+        return ActionOptions
     if isinstance(annotation, str):
         try:
             annotation = eval(annotation, getattr(function, "__globals__", {}))
@@ -459,9 +590,9 @@ def _options_model(
                 f"{where}: the annotation of {parameter!r}, {annotation!r}, does not "
                 "resolve: import its class at run time, not under TYPE_CHECKING"
             ) from exc
-    if not (isinstance(annotation, type) and issubclass(annotation, SupportOptions)):
+    if not (isinstance(annotation, type) and issubclass(annotation, ActionOptions)):
         raise TypeError(
-            f"{where}: {parameter!r} must be annotated with a SupportOptions "
+            f"{where}: {parameter!r} must be annotated with a ActionOptions "
             f"subclass, not {annotation!r}"
         )
     return annotation
@@ -486,7 +617,7 @@ def _check_code(action: ViewAction, code: CodeAction) -> None:
 
 
 def _field_shapes(
-    model: type[SupportOptions],
+    model: type[ActionOptions],
 ) -> dict[str, tuple[Any, bool, tuple[str, ...]]]:
     """``model``'s fields by name: their type and what of them is secret,
     for comparing classes. Types are resolved where the class's module

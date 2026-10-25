@@ -152,7 +152,7 @@ class TestMerging:
             from jupyter_storage_explorer.filesystems import FsspecOperations
             from jupyter_storage_explorer_pandas_support import csv_view
 
-            def supports():
+            def actions():
                 return [csv_view]
 
             def operations():
@@ -170,7 +170,7 @@ class TestMerging:
             from jupyter_storage_explorer.filesystems.operation import FileSystemOperations
             from jupyter_storage_explorer_pandas_support import json_lines_view
 
-            def supports():
+            def actions():
                 return [json_lines_view]
 
             def operations():
@@ -183,7 +183,7 @@ class TestMerging:
         )
         _, kwargs = load_settings([user, system]).explorer_arguments()
         # The user's first; the explorer tries the defaults after them.
-        names = [s.function.__name__ for s in kwargs["supports"]]
+        names = [a.__name__ for a in kwargs["actions"]]
         assert names == ["json_lines_view", "csv_view"]
         kinds = [type(o) for o in kwargs["operations"]]
         assert kinds == [FileSystemOperations, FsspecOperations]
@@ -350,7 +350,7 @@ class TestFinal:
         assert "custom.css" in warning
 
     def test_retired_formats_is_ignored_with_a_warning(self, tmp_path):
-        """formats() is no longer used: formats are those of the supports."""
+        """formats() is no longer used: formats are those of the actions."""
         path = layer(
             tmp_path,
             "user",
@@ -363,7 +363,29 @@ class TestFinal:
         assert settings.explorer_arguments() == defaults()
         [warning] = settings.warnings
         assert warning.startswith(f"{path}: formats() is no longer used and is ignored")
-        assert "supports()" in warning
+        assert "actions()" in warning
+
+    def test_retired_supports_is_ignored_with_a_warning(self, tmp_path):
+        """supports() is no longer used: FormatSupport classes gave way to
+        actions. A layer having it, or naming it in final(), still works."""
+        path = layer(
+            tmp_path,
+            "user",
+            """
+            def supports():
+                return [object()]
+
+            def final():
+                return ["supports"]
+            """,
+        )
+        settings = load_settings([path])
+        assert settings.explorer_arguments() == defaults()
+        [warning] = settings.warnings
+        assert warning.startswith(
+            f"{path}: supports() is no longer used and is ignored"
+        )
+        assert "actions()" in warning
 
     def test_format_options_is_engine_options(self, tmp_path):
         """format_options(), engine_options()' former name, is still taken,
@@ -476,7 +498,7 @@ class TestErrors:
                 "def filesystems():\n    return ['a']",
                 "filesystems() must return a dict",
             ),
-            ("def supports():\n    return 'csv'", "supports() must return a list"),
+            ("def actions():\n    return 'csv'", "actions() must return a list"),
             (
                 "def plugin_options():\n    return {'pandas-support': False}",
                 "'pandas-support' must map option names to values",

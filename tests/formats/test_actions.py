@@ -10,18 +10,15 @@ from typing import TYPE_CHECKING, Any
 import pytest
 
 from jupyter_storage_explorer import StorageExplorer
-from jupyter_storage_explorer._explorer.supports import ActionChain
+from jupyter_storage_explorer._explorer.actions import ActionChain
 from jupyter_storage_explorer.formats import (
+    ActionOptions,
     Csv,
     Engine,
-    FormatSupport,
     Parquet,
     PythonPackage,
-    SupportOptions,
     TextView,
     ViewLimits,
-    secret_dict_field,
-    secret_field,
 )
 from jupyter_storage_explorer.formats.actions import (
     CodeAction,
@@ -31,6 +28,7 @@ from jupyter_storage_explorer.formats.actions import (
     view,
 )
 from jupyter_storage_explorer.formats.python import PythonEngine
+from jupyter_storage_explorer.util import secret_dict_field, secret_field
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -52,7 +50,7 @@ class MissingPackage(PythonPackage):
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
-class DuckOptions(SupportOptions):
+class DuckOptions(ActionOptions):
     threads: int = 1
     config: Mapping[str, Any] | None = secret_dict_field(
         default=None, secret_keys=["token"]
@@ -116,7 +114,7 @@ class TestDecorators:
         def plain(fmt, ctx, options, limits):
             return TextView(text="")
 
-        assert plain.options_model is SupportOptions
+        assert plain.options_model is ActionOptions
         assert plain.engine.key == "python"
 
     @pytest.mark.parametrize(
@@ -163,7 +161,7 @@ class TestDecorators:
                 return TextView(text="")
 
     def test_options_annotation_of_another_type(self):
-        with pytest.raises(TypeError, match="SupportOptions subclass"):
+        with pytest.raises(TypeError, match="ActionOptions subclass"):
 
             @view(format=Csv, engine=Duck)
             def broken(fmt, ctx, options: dict, limits):
@@ -251,7 +249,7 @@ class TestRegister:
         clash = dataclasses.make_dataclass(
             "Clash",
             [("threads", int if field.default == 1 else str, field)],
-            bases=(SupportOptions,),
+            bases=(ActionOptions,),
             frozen=True,
             kw_only=True,
         )
@@ -268,7 +266,7 @@ class TestRegister:
 
     def test_secret_keys_differing(self):
         @dataclasses.dataclass(frozen=True, kw_only=True)
-        class OtherSecrets(SupportOptions):
+        class OtherSecrets(ActionOptions):
             config: Mapping[str, Any] | None = secret_dict_field(
                 default=None, secret_keys=["password"]
             )
@@ -369,41 +367,6 @@ class TestChain:
         with pytest.raises(ValueError, match="two actions named 'View CSV'"):
             ActionChain([mine, csv_view, csv_code])
 
-    def test_with_supports_of_the_former_interface(self, make_item):
-        old = type(
-            "OldDuck",
-            (FormatSupport,),
-            {
-                "format": Csv,
-                "engine": Duck,
-                "view": lambda self, *args: TextView(text="old"),
-            },
-        )
-        chain = ActionChain([old, csv_view, csv_code])
-        item = make_item("/a.csv", b"")
-        assert text_of(chain.view(Csv(), item, LIMITS, "duck")) == "old"
-        assert chain.of(Csv(), item)[1] is csv_view
-
-    def test_a_support_given_replaces_the_engines_default(self, make_item):
-        # Its view, named as the default view, hides the action of that name;
-        # its recipes replace the engine's code actions.
-        old = type(
-            "OldDuck",
-            (FormatSupport,),
-            {
-                "format": Csv,
-                "engine": Duck,
-                "view": lambda self, *args: TextView(text="old"),
-                "recipe": lambda self, *args: {"Load the old way": "old"},
-            },
-        )
-        chain = ActionChain([old, csv_view, csv_widget, csv_code])
-        item = make_item("/a.csv", b"")
-        assert chain.view_names(Csv(), item, "duck") == ["View CSV", "Widget for CSV"]
-        assert text_of(chain.view(Csv(), item, LIMITS, "duck", "View CSV")) == "old"
-        recipes = chain.recipes(Csv(), item)
-        assert [(r.title, r.code) for r in recipes] == [("Load the old way", "old")]
-
 
 class TestExplorer:
     def test_actions_given_first(self, memfs):
@@ -411,7 +374,7 @@ class TestExplorer:
         explorer = StorageExplorer(fs=memfs, actions=[csv_widget, csv_view, csv_code])
         assert "duck" in [e["key"] for e in explorer._engines]
         item = explorer._detect_now("/a.csv", memfs)
-        assert text_of(explorer._supports.view(Csv(), item.ctx, LIMITS, "duck")) == (
+        assert text_of(explorer._actions.view(Csv(), item.ctx, LIMITS, "duck")) == (
             "rows=10"
         )
 

@@ -226,8 +226,6 @@ runtime-evaluated-decorators = [
 [tool.ruff.lint.flake8-bugbear]
 # Options' field specifiers, dataclasses.field with metadata (RUF009, B008).
 extend-immutable-calls = [
-    "jupyter_storage_explorer.formats.secret_dict_field",
-    "jupyter_storage_explorer.formats.secret_field",
-    "jupyter_storage_explorer.formats.support.secret_dict_field",
-    "jupyter_storage_explorer.formats.support.secret_field",
+    "jupyter_storage_explorer.util.secret_dict_field",
+    "jupyter_storage_explorer.util.secret_field",
 ]

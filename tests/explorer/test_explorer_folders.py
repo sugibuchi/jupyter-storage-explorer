@@ -411,7 +411,7 @@ class TestFilesystems:
         [
             ({"filesystems": {}}, ValueError),
             ({"filesystems": {"a": "."}, "path": "."}, TypeError),
-            ({"supports": [object()]}, TypeError),
+            ({"actions": [object()]}, TypeError),
             ({"engine_options": {"typo": 1}}, ValueError),
         ],
     )
@@ -423,7 +423,7 @@ class TestFilesystems:
         """format_options, engine_options' former name, is still taken."""
         options = {"python": {"*": {"storage_options": {"anon": True}}}}
         explorer = make(format_options=options)
-        assert explorer._supports.engine_options == options
+        assert explorer._actions.engine_options == options
         with pytest.raises(ValueError, match="give engine_options only"):
             make(engine_options=options, format_options=options)
 

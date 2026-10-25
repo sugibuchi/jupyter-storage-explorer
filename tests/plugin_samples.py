@@ -6,7 +6,8 @@ from dataclasses import dataclass
 
 from jupyter_storage_explorer import StorageExplorerPlugin, StorageExplorerPluginOptions
 from jupyter_storage_explorer.filesystems import FileSystemMapper, FsspecOperations
-from jupyter_storage_explorer.formats import Csv, Engine, FormatSupport
+from jupyter_storage_explorer.formats import Csv, Engine
+from jupyter_storage_explorer.formats.actions import code, register_actions
 
 
 class AvroFormat(Csv):
@@ -20,12 +21,9 @@ class SampleEngine(Engine):
     label = "Sample"
 
 
-class AvroBySample(FormatSupport):
-    format = AvroFormat
-    engine = SampleEngine
-
-    def recipe(self, fmt, ctx, options):
-        return {"Load": "sample"}
+@code(format=AvroFormat, engine=SampleEngine, name="Load")
+def avro_code(fmt, ctx, options):
+    return "sample"
 
 
 class SampleOperations(FsspecOperations):
@@ -47,8 +45,8 @@ class SampleSupport(StorageExplorerPlugin):
     options_model = SampleSupportOptions
 
     @property
-    def format_supports(self):
-        return (AvroBySample,)
+    def actions(self):
+        return register_actions(avro_code)
 
     @property
     def filesystem_operations(self):

@@ -17,16 +17,20 @@ from typing import TYPE_CHECKING, Any
 
 import narwhals as nw
 
-from jupyter_storage_explorer.formats.actions import code, register_actions, view
+from jupyter_storage_explorer.formats.actions import (
+    ActionOptions,
+    code,
+    register_actions,
+    view,
+)
 from jupyter_storage_explorer.formats.base import DataFormat, ItemContext
 from jupyter_storage_explorer.formats.delta import DeltaLake
 from jupyter_storage_explorer.formats.engine import Engine
-from jupyter_storage_explorer.formats.package import PythonPackage
-from jupyter_storage_explorer.formats.packages import PyArrow
+from jupyter_storage_explorer.formats.packages import PyArrow, PythonPackage
 from jupyter_storage_explorer.formats.parquet import Parquet
-from jupyter_storage_explorer.formats.support import SupportOptions, format_kwargs
 from jupyter_storage_explorer.formats.text import Csv, JsonLines
-from jupyter_storage_explorer.formats.view import QueryView, View, ViewLimits
+from jupyter_storage_explorer.formats.views import QueryView, View, ViewLimits
+from jupyter_storage_explorer.util import format_kwargs
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
@@ -178,7 +182,7 @@ def _merged(*options: Mapping[str, Any]) -> dict[str, Any]:
 
 
 @dataclass(frozen=True, kw_only=True)
-class PySparkOptions(SupportOptions):
+class PySparkOptions(ActionOptions):
     """The options of the formats Spark reads, for the data browser and the
     code. Each format's subclass adds its reader options as fields
     (``CsvByPySparkOptions``, ...): None, their default, leaves the option to

@@ -7,22 +7,24 @@ import email.message
 from importlib.metadata import EntryPoint, version
 
 import pytest
-from all_supports import NO_PLUGINS, PLUGINS
+from all_actions import NO_PLUGINS, PLUGINS
 from explorers import make
 from jupyter_storage_explorer_polars_support import PolarsSupport
 from plugin_samples import (
-    AvroBySample,
+    SampleEngine,
     SampleMapper,
     SampleOperations,
     SampleSupport,
     SampleSupportOptions,
+    avro_code,
 )
 
 from jupyter_storage_explorer import _plugins
-from jupyter_storage_explorer._explorer.supports import ActionChain
+from jupyter_storage_explorer._explorer.actions import ActionChain
 from jupyter_storage_explorer._plugins import load_plugins
 from jupyter_storage_explorer.filesystems import FsspecOperations
-from jupyter_storage_explorer.formats import Csv, Engine, FormatSupport
+from jupyter_storage_explorer.formats import Csv, Engine
+from jupyter_storage_explorer.formats.actions import code
 from jupyter_storage_explorer.plugin import (
     ENTRY_POINT_GROUP,
     LOWEST_PRIORITY,
@@ -268,7 +270,7 @@ class TestExplorer:
         mappers = explorer._mappers.mappers
         assert mappers[0] is mapper
         assert type(mappers[1]) is SampleMapper  # a class, created
-        assert isinstance(explorer._supports.supports[0], AvroBySample)
+        assert explorer._actions.actions[0] is avro_code
         # Its format is detected, and its engine (no view) not offered.
         assert explorer._formats[0].name == "avro"
         assert explorer._engines == []
@@ -307,14 +309,18 @@ class TestExplorer:
 def test_one_engine_class_per_key():
     # A plugin using another's engine imports its class.
     copy = type("SampleEngine", (Engine,), {"key": "sample", "label": "Copy"})
-    other = type(
-        "CsvByCopy",
-        (FormatSupport,),
-        {"format": Csv, "engine": copy, "recipe": lambda self, *args: {}},
-    )
+
+    def csv_code(engine):
+        @code(format=Csv, engine=engine, name="Load CSV")
+        def loading(fmt, ctx, options):
+            return ""
+
+        return loading
+
     with pytest.raises(ValueError, match="engine 'sample' is defined twice"):
-        ActionChain([AvroBySample, other])
-    assert ActionChain([AvroBySample, AvroBySample]).supports  # the same class
+        ActionChain([avro_code, csv_code(copy)])
+    # The same class, imported: fine.
+    assert ActionChain([avro_code, csv_code(SampleEngine)]).actions
 
 
 def test_options_model():

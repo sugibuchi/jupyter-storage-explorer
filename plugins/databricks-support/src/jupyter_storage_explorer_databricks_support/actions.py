@@ -39,10 +39,10 @@ from jupyter_storage_explorer.formats.actions import code, register_actions, vie
 from jupyter_storage_explorer.formats.base import ItemContext
 from jupyter_storage_explorer.formats.delta import DeltaLake
 from jupyter_storage_explorer.formats.engine import Engine
-from jupyter_storage_explorer.formats.package import PythonPackage
+from jupyter_storage_explorer.formats.packages import PythonPackage
 from jupyter_storage_explorer.formats.parquet import Parquet
 from jupyter_storage_explorer.formats.text import Csv, JsonLines
-from jupyter_storage_explorer.formats.view import View, ViewLimits
+from jupyter_storage_explorer.formats.views import View, ViewLimits
 from jupyter_storage_explorer_databricks_support.mapper import (
     DatabricksWorkspaceMapper,
 )

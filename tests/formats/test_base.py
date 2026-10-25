@@ -1,31 +1,30 @@
-"""What formats share (formats/base.py, package.py): reading files
+"""What formats share (formats/base.py, packages.py): reading files
 (ItemContext), generated-code helpers, requirements and detection, with
-signatures (the supports: test_supports.py; the formats' file icons:
+signatures (the actions: test_action_chain.py; the formats' file icons:
 explorer/test_explorer_icons.py)."""
 
 from __future__ import annotations
 
 import dataclasses
 
-import fsspec
 import pytest
 from format_samples import DUCKDB_BYTES, SQLITE_BYTES, DuckDB, SQLite
 from items import local_item
 
 from jupyter_storage_explorer.filesystems import S3Location
 from jupyter_storage_explorer.formats import (
+    ActionOptions,
     Csv,
     DeltaLake,
     ItemContext,
     Parquet,
     PythonPackage,
-    SupportOptions,
     Text,
     ViewLimits,
-    format_kwargs,
 )
 from jupyter_storage_explorer.formats.base import detect, matching_formats
 from jupyter_storage_explorer.formats.packages import Fsspec
+from jupyter_storage_explorer.util import format_kwargs
 
 
 class TestReading:
@@ -56,7 +55,7 @@ class TestReading:
         assert make_item("/a.txt", b"\xef\xbb\xbfhi").head_text(100)[0] == "hi"
 
     def test_head_read_once(self, make_item, monkeypatch):
-        # Detection and supports ask for the same beginning: one read each
+        # Detection and actions ask for the same beginning: one read each
         # time more is needed, none for less, or for a file read whole.
         item = make_item("/a.txt", b"0123456789")
         opened = []
@@ -95,13 +94,13 @@ def test_format_kwargs_leaves_out_none():
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
-class StorageOptions(SupportOptions):
+class StorageOptions(ActionOptions):
     storage_options: dict | None = None
 
 
 class TestCodeValue:
     """Options as generated code shows them, without declared secrets (see
-    test_supports.py's TestSecrets): names that look like credentials and
+    test_options.py's TestSecrets): names that look like credentials and
     objects are left out anyway."""
 
     def test_none(self):
@@ -135,9 +134,8 @@ class TestCodeValue:
 
 
 class TestRequirement:
-    def test_installed_and_loaded(self):
+    def test_installed(self):
         assert Fsspec().is_installed()
-        assert Fsspec().load() is fsspec
 
     def test_missing(self):
         missing = type(

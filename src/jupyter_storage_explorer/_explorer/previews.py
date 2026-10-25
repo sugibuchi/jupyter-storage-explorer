@@ -39,7 +39,7 @@ if TYPE_CHECKING:
 
     from fsspec import AbstractFileSystem
 
-    from jupyter_storage_explorer._explorer.supports import Recipe
+    from jupyter_storage_explorer._explorer.actions import Recipe
 
 log = logging.getLogger(__name__)
 
@@ -59,7 +59,7 @@ def _not_viewed(verb: str) -> dict[str, Any]:
 
 
 class _Detected(NamedTuple):
-    """An item of the storage shown with a location, as formats and supports
+    """An item of the storage shown with a location, as formats and actions
     are given it, and the formats it matches, best first (see
     ``PreviewsMixin._detection``)."""
 
@@ -75,7 +75,7 @@ class _Viewer:
     and given again to those of later views, so a reload asks nothing."""
 
     def __init__(self, view: Callable[[bool], View]) -> None:
-        # The support's view, of the context read again if True.
+        # The action's view, of the context read again if True.
         self._view = view
         self._viewed = False
         self.answers: list[Any] = []
@@ -132,7 +132,7 @@ def _layered_fetch(
     view_fetch: Callable[[], Callable[[Any, int, int], Any] | None],
 ) -> Callable[[Any, int, int], Any]:
     """The data browser's ``fetch`` of a view's data: the explorer's
-    ``fetch_rows`` (the user's), then the view's ``fetch`` (a support's), the
+    ``fetch_rows`` (the user's), then the view's ``fetch`` (an action's), the
     one of the view now shown, as a reload's may differ; None where neither
     reads, for the default (``DataQuery``)."""
 
@@ -308,7 +308,7 @@ class PreviewsMixin:
         built-in views (None)."""
         if key is None:
             return ""
-        engine = next((e for e in self._supports.engines if e.key == key), None)
+        engine = next((e for e in self._actions.engines if e.key == key), None)
         return engine.label if engine is not None else key
 
     def _view_engine(
@@ -324,16 +324,16 @@ class PreviewsMixin:
         for), or the built-in views for formats it does not handle.
         ValueError if that cannot view it. Safe in a worker thread."""
         name = ctx.name
-        viewers = self._supports.viewers(fmt, ctx)
+        viewers = self._actions.viewers(fmt, ctx)
         if engine is not ...:
             if engine not in viewers:
                 with_ = self._engine_label(engine) or "the built-in views"
                 raise ValueError(f"{name} cannot be viewed as {fmt.label} with {with_}")
             return engine
         try:
-            return self._supports.engine_for(fmt, ctx, chosen)
+            return self._actions.engine_for(fmt, ctx, chosen)
         except LookupError:
-            if not self._supports.installed(fmt):
+            if not self._actions.installed(fmt):
                 # Nothing installed views it: the engines come with plugins.
                 raise ValueError(
                     f"{name} cannot be viewed as {fmt.label}: no library viewing "
@@ -341,7 +341,7 @@ class PreviewsMixin:
                     f'"jupyter-storage-explorer[polars]"'
                 ) from None
             if not viewers:
-                # The supports installed refuse it, e.g. on a storage their
+                # The actions installed refuse it, e.g. on a storage their
                 # libraries cannot read.
                 raise ValueError(
                     f"{name} cannot be viewed as {fmt.label} where it is stored "
@@ -356,10 +356,10 @@ class PreviewsMixin:
     def _viewable(self, fmt: DataFormat, ctx: ItemContext) -> bool:
         """Whether the item of ``ctx`` can be viewed as ``fmt`` with the
         engine chosen (or the built-in views): the Preview button's, and the
-        menu's. On the main thread: a support failing to tell is logged, and
+        menu's. On the main thread: a check failing to tell is logged, and
         offers nothing."""
         try:
-            self._supports.engine_for(fmt, ctx, self._engine or None)
+            self._actions.engine_for(fmt, ctx, self._engine or None)
         except LookupError:
             return False
         except Exception:
@@ -383,7 +383,7 @@ class PreviewsMixin:
 
         def view(again: bool) -> View:
             ctx = self._refreshed(fmt, item.ctx) if again else item.ctx
-            return self._supports.view(fmt, ctx, limits, engine, action)
+            return self._actions.view(fmt, ctx, limits, engine, action)
 
         return _Viewer(view)
 
@@ -1033,7 +1033,7 @@ class PreviewsMixin:
                     return self._menu_info([], [], None, chosen)
                 formats = item.formats
                 recipes = (
-                    self._supports.recipes(formats[0], item.ctx)
+                    self._actions.recipes(formats[0], item.ctx)
                     if formats and engines != frozenset()
                     else []
                 )
@@ -1085,11 +1085,11 @@ class PreviewsMixin:
         format and engine that can ("Preview as", "View in new tab as"),
         each of the engine's views by name if it has several;
         "recipes", the load code ("Python code"), with their engine's label,
-        or the error of a support's. Safe in a worker thread."""
+        or the error of an action's. Safe in a worker thread."""
         view = None
         if formats and ctx is not None:
             try:
-                key = self._supports.engine_for(formats[0], ctx, chosen)
+                key = self._actions.engine_for(formats[0], ctx, chosen)
             except LookupError:
                 pass
             else:
@@ -1101,7 +1101,7 @@ class PreviewsMixin:
                 view
                 for f in formats
                 if ctx is not None
-                for key, names in self._supports.views_by_engine(f, ctx).items()
+                for key, names in self._actions.views_by_engine(f, ctx).items()
                 for view in self._view_entries(f, key, names)
             ],
             # The frontend gets the packages' names, listed under the code.

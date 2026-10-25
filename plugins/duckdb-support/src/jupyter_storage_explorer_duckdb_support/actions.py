@@ -39,24 +39,20 @@ from fsspec.implementations.dirfs import DirFileSystem
 from fsspec.spec import AbstractFileSystem
 
 from jupyter_storage_explorer.filesystems.locations import LocalLocation
-from jupyter_storage_explorer.formats.actions import code, register_actions, view
+from jupyter_storage_explorer.formats.actions import (
+    ActionOptions,
+    code,
+    register_actions,
+    view,
+)
 from jupyter_storage_explorer.formats.base import DataFormat, ItemContext
 from jupyter_storage_explorer.formats.delta import DeltaLake
 from jupyter_storage_explorer.formats.engine import Engine
 from jupyter_storage_explorer.formats.local_files import local_file_cache
-from jupyter_storage_explorer.formats.package import PythonPackage
-from jupyter_storage_explorer.formats.packages import PyArrow
+from jupyter_storage_explorer.formats.packages import PyArrow, PythonPackage
 from jupyter_storage_explorer.formats.parquet import Parquet
-from jupyter_storage_explorer.formats.support import (
-    LIBRARY_DEFAULT,
-    LibraryDefault,
-    SupportOptions,
-    format_arguments,
-    format_kwargs,
-    secret_dict_field,
-)
 from jupyter_storage_explorer.formats.text import Csv, JsonLines
-from jupyter_storage_explorer.formats.view import (
+from jupyter_storage_explorer.formats.views import (
     Leaf,
     Node,
     QueryView,
@@ -67,7 +63,14 @@ from jupyter_storage_explorer.formats.view import (
     ViewWithChoice,
     ViewWithConfirmation,
 )
-from jupyter_storage_explorer.util import format_size
+from jupyter_storage_explorer.util import (
+    LIBRARY_DEFAULT,
+    LibraryDefault,
+    format_arguments,
+    format_kwargs,
+    format_size,
+    secret_dict_field,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
@@ -156,7 +159,7 @@ _FSSPEC_SECRETS = (
 
 
 @dataclass(frozen=True, kw_only=True)
-class DuckDBOptions(SupportOptions):
+class DuckDBOptions(ActionOptions):
     """The options of every DuckDB action: the connection, and how DuckDB
     reaches the storage.
 

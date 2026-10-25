@@ -29,7 +29,7 @@ The first command installs them, as does `jupyter-storage-explorer-databricks-su
 alone. Databricks recommends a `databricks-connect` of your compute's Databricks Runtime version.
 
 The plugin is not in the explorer's `all` and `all-supports` extras: install it on purpose. It installs
-pyspark-support, whose supports the Databricks Connect engine uses.
+pyspark-support, whose actions the Databricks Connect engine shares.
 
 ### Prerequisites
 

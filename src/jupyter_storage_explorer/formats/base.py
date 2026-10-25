@@ -1,9 +1,9 @@
 """The base of formats: the ``DataFormat`` interface, and ``ItemContext``,
-the item formats and supports are given, with what they read of it (its
+the item formats and actions are given, with what they read of it (its
 beginning, all of it, its children's names, its URL as libraries read it).
 ``detect`` and ``matching_formats`` are the explorer's. The predefined
-formats each have a module (delta.py, parquet.py, text.py, ...); handling
-the data is ``FormatSupport``'s (support.py)."""
+formats each have a module (delta.py, parquet.py, text.py, ...); what is
+done with the data is actions' (actions.py)."""
 
 from __future__ import annotations
 
@@ -19,14 +19,15 @@ if TYPE_CHECKING:
 
     from fsspec import AbstractFileSystem
 
-    from jupyter_storage_explorer.formats.view import ViewLimits
+    from jupyter_storage_explorer.formats.views import ViewLimits
     from jupyter_storage_explorer.location import Location
 
 
 @dataclass(frozen=True, kw_only=True)
 class ItemContext:
-    """A file or folder, as formats (``DataFormat.matches``) and supports
-    (``FormatSupport.view``, ``recipe``) are given it, and how they read it.
+    """A file or folder, as formats (``DataFormat.matches``) and actions
+    (functions decorated with ``view`` or ``code``) are given it, and how
+    they read it.
 
     One object rather than parameters, so that what they are given can grow
     without changing their signatures.
@@ -100,7 +101,7 @@ class ItemContext:
     def head(self, size: int) -> bytes:
         """The first ``size`` bytes of the file, without reading the rest.
 
-        Read once for each context: detection and the supports often ask for
+        Read once for each context: detection and the actions often ask for
         the same beginning (a signature, a CSV file's separator in each
         engine's code), and on cloud storages each read is a round trip."""
         read = self._heads.get("bytes")
@@ -158,14 +159,15 @@ class DataFormat:
     """How to recognise one kind of file or directory.
 
     Subclass it for a format of your own, and give ``StorageExplorer`` the
-    supports handling its data (``FormatSupport``, whose ``format`` it is:
-    previews, the data browser, load code) as ``supports``: explorers detect
-    the formats of their supports, one object of each. File formats usually only set
-    ``extensions``; directory formats (Delta Lake tables, Spark output,
-    Hive-partitioned datasets, ...) override ``matches`` and inspect the
-    folder's listing (``ctx.children``, ``ctx.child_names``). What detection
-    finds and supports need (e.g. a Parquet dataset's partition layout) is
-    kept by the format, by location: supports are given the format.
+    actions of its data as ``actions``: views and code, whose ``format`` it
+    is. Explorers detect the formats of their actions, one object of each.
+
+    File formats usually only set ``extensions``. Directory formats, e.g.
+    Delta Lake tables, Spark output or Hive-partitioned datasets, override
+    ``matches`` and inspect the folder's listing (``ctx.children``,
+    ``ctx.child_names``). What detection finds and actions need, e.g. a
+    Parquet dataset's partition layout, is kept by the format, by location:
+    actions are given the format.
 
     Attributes
     ----------
@@ -216,7 +218,7 @@ class DataFormat:
         ----------
         ctx : ItemContext
             The file or folder: its location (what the format keeps what it
-            finds by, e.g. a dataset's layout, for the supports), filesystem
+            finds by, e.g. a dataset's layout, for the actions), filesystem
             and path (to read more if needed), info and listing.
 
         Returns

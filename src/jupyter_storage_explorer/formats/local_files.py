@@ -72,7 +72,7 @@ class LocalFileCache:
 
     Examples
     --------
-    In a support's ``view()``, asking first before a large download, or one
+    In a view action, asking first before a large download, or one
     of an unknown size:
 
     >>> cache = local_file_cache()
@@ -109,7 +109,7 @@ class LocalFileCache:
     def status(self, ctx: ItemContext) -> CacheStatus:
         """What the cache holds of the item: "cached", a valid copy (``get``
         reads nothing); "invalid", a copy of an older version of the file;
-        "not_cached", none. For a support to ask before downloading, e.g.
+        "not_cached", none. For a view action to ask before downloading, e.g.
         with a ``ViewWithConfirmation``.
 
         Parameters

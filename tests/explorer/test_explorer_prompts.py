@@ -9,7 +9,6 @@ from explorers import make
 
 from jupyter_storage_explorer._explorer.view_tab import ViewTab
 from jupyter_storage_explorer.formats import (
-    FormatSupport,
     QueryView,
     Text,
     TextView,
@@ -18,44 +17,42 @@ from jupyter_storage_explorer.formats import (
     ViewWithConfirmation,
     ViewWithInput,
 )
+from jupyter_storage_explorer.formats.actions import view
+from jupyter_storage_explorer.formats.python import PythonEngine
 
 # What the prompts did: "closed", and the answers' views made.
 EVENTS: list[str] = []
 
 
-class Asking(FormatSupport):
+@view(format=Text, engine=PythonEngine, name="Ask")
+def asking(fmt, ctx, options, limits):
     """Asks how to show a text file's name; before the built-in views."""
 
-    format = Text
+    def make_view(case):
+        if case is None:
+            raise ValueError("no such case")
+        EVENTS.append(f"made {case}")
+        return TextView(text=getattr(ctx.name, case)())
 
-    def view(self, fmt, ctx, options, limits):
-        def make_view(case):
-            if case is None:
-                raise ValueError("no such case")
-            EVENTS.append(f"made {case}")
-            return TextView(text=getattr(ctx.name, case)())
-
-        prompt = ViewWithChoice(
-            message="Which case?",
-            choices={"Upper": "upper", "Lower": "lower", "Broken": None},
-            factory=make_view,
-            style="button",
-        )
-        prompt.on_close(lambda view: EVENTS.append("closed"))
-        return prompt
+    prompt = ViewWithChoice(
+        message="Which case?",
+        choices={"Upper": "upper", "Lower": "lower", "Broken": None},
+        factory=make_view,
+        style="button",
+    )
+    prompt.on_close(lambda view: EVENTS.append("closed"))
+    return prompt
 
 
-class Confirming(FormatSupport):
+@view(format=Text, engine=PythonEngine, name="Confirm")
+def confirming(fmt, ctx, options, limits):
     """Data, once confirmed."""
 
-    format = Text
+    def read():
+        EVENTS.append("read")
+        return QueryView(data=pl.DataFrame({"a": [1, 2]}))
 
-    def view(self, fmt, ctx, options, limits):
-        def read():
-            EVENTS.append("read")
-            return QueryView(data=pl.DataFrame({"a": [1, 2]}))
-
-        return ViewWithConfirmation(message="Read it?", factory=read)
+    return ViewWithConfirmation(message="Read it?", factory=read)
 
 
 @pytest.fixture(autouse=True)
@@ -64,10 +61,10 @@ def events():
     yield EVENTS
 
 
-def explorer_of(memfs, support=Asking):
+def explorer_of(memfs, action=asking):
     memfs.pipe_file("/data/a.txt", b"a")
     memfs.pipe_file("/data/b.txt", b"b")
-    return make("/data", fs=memfs, supports=[support])
+    return make("/data", fs=memfs, actions=[action])
 
 
 def preview(explorer, path="/data/a.txt"):
@@ -142,7 +139,7 @@ class TestPreview:
         assert "not one of the choices" in answer(explorer, value="Title")["error"]
 
     def test_a_reload_asks_nothing(self, memfs, events):
-        explorer = explorer_of(memfs, Confirming)
+        explorer = explorer_of(memfs, confirming)
         preview(explorer)
         assert answer(explorer)["query"]["columns"]
         reply = explorer.request(
