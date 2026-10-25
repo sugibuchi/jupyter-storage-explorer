@@ -10,12 +10,14 @@
 [![Try it on Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/sugibuchi/jupyter-storage-explorer/v0.23.2?urlpath=lab/tree/binder/demo.ipynb)
 
 **`StorageExplorer`** is a file explorer for cloud storage and data lakes, right inside Jupyter, in the spirit of Azure
-Storage Explorer. See
+Storage Explorer. It is built on [fsspec](https://filesystem-spec.readthedocs.io/), so it reaches every storage fsspec
+does: S3, Azure, Google Cloud Storage, SFTP, Hugging Face and many more. See
 [Using the explorer](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#using-the-explorer).
 
 ![Storage Explorer in JupyterLab: a Delta Lake table queried, files filtered, and a Markdown file edited in JupyterLab's editor and previewed](https://raw.githubusercontent.com/sugibuchi/jupyter-storage-explorer/main/docs/figs/storage-explorer.gif)
 
-**`DataExplorer`** browses any dataframe in your notebook: pandas, polars, Spark, DuckDB and more. See
+**`DataExplorer`** browses any dataframe in your notebook: pandas, polars, Spark, DuckDB and more, through
+[narwhals](https://narwhals-dev.github.io/narwhals/). See
 [Using the data browser](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/data-explorer.md#using-the-data-browser).
 
 ![DataExplorer in a notebook: a Parquet file paged through, columns hidden, filtered and sorted](https://raw.githubusercontent.com/sugibuchi/jupyter-storage-explorer/main/docs/figs/data-explorer.gif)
@@ -23,7 +25,8 @@ Storage Explorer. See
 ## Highlights
 
 - **`StorageExplorer`**: one explorer to browse them all.
-  - S3, Azure, Google Cloud Storage, local disks and anything else fsspec reaches.
+  - Local disks, cloud storage and every other
+    [storage fsspec implements](https://filesystem-spec.readthedocs.io/en/latest/api.html#implementations).
   - [Several storages side by side](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#several-storages-in-one-explorer)
     in one explorer.
 - **`DataExplorer`**: a table widget for your dataframes, more than meets the eye.
@@ -68,6 +71,13 @@ Storage Explorer. See
   - [Remembered queries](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#remembered-states)
     bring back your sorting and filters.
 
+## Requirements
+
+- Python 3.11 or later.
+- JupyterLab 4.0 or later. Other Jupyter frontends show the widgets, without drag and drop from JupyterLab's file
+  browser.
+- For querying data: an engine plugin, e.g. `jupyter-storage-explorer[polars]` (Polars, tested with 2.0).
+
 ## Quick start
 
 **Try it without installing anything**:
@@ -104,7 +114,7 @@ from jupyter_storage_explorer import StorageExplorer
 StorageExplorer("s3://my-bucket/data")
 ```
 
-Options after the address go to the storage package, e.g. `profile="analytics"`. Double-click a file to preview it,
+Keyword arguments after the address go to fsspec, e.g. `profile="analytics"` for S3. Double-click a file to preview it,
 and right-click for everything else. With the launcher installed, files that JupyterLab can show open in its editors
 instead.
 
@@ -122,7 +132,8 @@ explorer
 explorer.result().collect()  # after filtering and sorting in the widget
 ```
 
-The `notebooks` folder has a demo of each widget on sample data.
+The [`notebooks`](https://github.com/sugibuchi/jupyter-storage-explorer/tree/main/notebooks) folder has a demo of each
+widget on sample data.
 
 ## Documentation
 
@@ -132,6 +143,8 @@ The `notebooks` folder has a demo of each widget on sample data.
   widget for dataframes.
 - **[Launcher](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/launcher/README.md)**: StorageExplorer
   integrated into JupyterLab.
+- **[Plugins](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/plugins/README.md)**: the engines and
+  storages you can add, with their extras.
 - **[Writing actions](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/action-development-guide.md)**:
   menu items of your own, for views, code snippets and more.
 - **[Writing plugins](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/plugin-development-guide.md)**:
@@ -139,9 +152,17 @@ The `notebooks` folder has a demo of each widget on sample data.
 - **[Development](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/DEVELOPMENT.md)**: building,
   releasing, and custom icons.
 
-## Requirements
+## Technologies
 
-- Python 3.11 or later
-- JupyterLab 4.0 or later. Other Jupyter frontends show the widgets, without drag and drop from JupyterLab's file
-  browser.
-- For querying data: an engine plugin, e.g. `jupyter-storage-explorer[polars]` (Polars, tested with 2.0)
+Storage Explorer is made possible by these open-source projects. Our thanks to their authors and contributors.
+
+- **[fsspec](https://filesystem-spec.readthedocs.io/)**: filesystem interfaces for Python. Used for all storage access.
+- **[narwhals](https://narwhals-dev.github.io/narwhals/)**: a compatibility layer between dataframe libraries. Used for
+  the data browser's queries.
+- **[anywidget](https://anywidget.dev/)**: a framework for custom Jupyter widgets. Used for both explorers' frontends.
+
+## License
+
+[MIT](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/LICENSE). To contribute, see
+[Development](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/DEVELOPMENT.md); to report a
+vulnerability, see [Security](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/SECURITY.md).
