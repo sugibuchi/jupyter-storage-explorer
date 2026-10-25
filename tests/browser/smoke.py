@@ -1529,9 +1529,23 @@ from jupyter_storage_explorer.formats.actions import view
 def slider(name):
     return ipywidgets.IntSlider(value=7, description=name)
 
+
+# An anywidget of the user's own, rendered by its own module.
+import anywidget
+import traitlets
+
+class Greeting(anywidget.AnyWidget):
+    _esm = "export default { render({ model, el }) { el.classList.add('my-greeting'); el.textContent = 'Hello ' + model.get('name'); } };"
+    name = traitlets.Unicode().tag(sync=True)
+
+@view(file_format(".hi"), label="Greeting")
+def greeting(name):
+    return Greeting(name=name)
+
 memory = fsspec.filesystem("memory")
 memory.pipe_file("/widgets/a.wdg", b"")
-StorageExplorer("/widgets", fs=memory, actions=[slider], preview_panel="open")"""
+memory.pipe_file("/widgets/b.hi", b"")
+StorageExplorer("/widgets", fs=memory, actions=[slider, greeting], preview_panel="open")"""
 
 
 @lab_check
@@ -1547,6 +1561,11 @@ def widget_view(lab: Lab, page: Page) -> None:
     expect(tab).to_be_visible()
     expect(tab).to_contain_text("a.wdg")
     x.back_to_notebook()
+    # An anywidget renders with its own module.
+    x.row("b.hi").click()
+    expect(x.preview.locator(".jse-jupyter-widget .my-greeting")).to_have_text(
+        "Hello b.hi"
+    )
 
 
 # A user's actions file, in the Jupyter configuration folder: an explorer
