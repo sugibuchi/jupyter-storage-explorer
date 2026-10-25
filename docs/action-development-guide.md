@@ -43,18 +43,18 @@ import fsspec
 
 with fsspec.open({url!r}) as f:
     print(json.dumps(json.load(f), indent=4))
-"""
+""".strip()
 
 
-@code(Json)
+@code(format=Json)
 def pretty_print_json(url):
-    return PRETTY_PRINT.format(url=url).strip()
+    return PRETTY_PRINT.format(url=url)
 ```
 
 Save it in your actions file, and create the explorer again: run its cell again, or open a new tab. Right-click a file named `*.json`: **Python code** now
 offers "Pretty print json".
 
-The template is a multi-line string, with `{url!r}` where the file's URL goes, in quotes. `strip()` removes the
+The template is a multi-line string, with `{url!r}` where the file's URL goes, in quotes. `.strip()` removes the
 blank lines around it.
 
 ## Action basics
