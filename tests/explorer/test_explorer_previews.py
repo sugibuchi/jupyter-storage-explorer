@@ -15,7 +15,6 @@ from explorers import entries, make, path_of
 from format_samples import DUCKDB_BYTES, SQLITE_BYTES, DuckDB, SQLite
 from in_a_kernel import listed, until
 from jupyter_storage_explorer_pandas_support import CsvByPandas
-from jupyter_storage_explorer_polars_support import CsvByPolars
 
 from jupyter_storage_explorer._explorer import previews
 from jupyter_storage_explorer._explorer.supports import ActionChain
@@ -31,6 +30,7 @@ from jupyter_storage_explorer.formats import (
     TextView,
     ViewLimits,
 )
+from jupyter_storage_explorer.formats.actions import ViewAction
 
 
 class TestPreview:
@@ -145,7 +145,7 @@ class TestPreview:
         # in the panel and for a tab.
         memfs.pipe_file("/data/a.csv", b"x,y\n1,2\n")
         monkeypatch.setattr(PythonPackage, "is_installed", lambda self: False)
-        monkeypatch.setattr(CsvByPolars, "view", None)
+        monkeypatch.setattr(ViewAction, "__call__", None)
         monkeypatch.setattr(CsvByPandas, "view", None)
         mem_explorer = make("/", fs=memfs)
         assert mem_explorer._engines == []

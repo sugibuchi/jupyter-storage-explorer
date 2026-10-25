@@ -441,20 +441,50 @@ def supports() -> list[Any]:
         )
 
     # Only polars reads by URL; the other plugins read the demo's own files,
-    # so that files saved from JupyterLab show as saved.
-    result = [cls() for cls in PolarsSupport().format_supports]
-    for support in result:
-        # Whether polars supports the item is decided by its copy's location too.
-        supported = support.supports
-        support.supports = lambda fmt, ctx, options, task, supported=supported: (
-            supported(fmt, local(ctx), options, task)
-        )
-        if support.implements("view"):
-            view = support.view
-            support.view = lambda fmt, ctx, options, limits, view=view: view(
-                fmt, local(ctx), options, limits
-            )
-    return result
+    # so that files saved from JupyterLab show as saved. polars-support's
+    # actions are wrapped in supports, one per format: given before the
+    # plugin's, a support replaces its engine's actions of the format, which
+    # actions of the same names could not.
+    actions = PolarsSupport().actions
+    formats = dict.fromkeys(a.format for a in actions)
+    return [_polars_support(fmt, actions, local) for fmt in formats]
+
+
+def _polars_support(fmt_class, actions, local) -> Any:
+    """A support of ``fmt_class`` running polars-support's ``actions`` of it
+    on the item's local copy (``local``): its first view, and its code in the
+    recipes. Whether an action does the item is decided by the copy's
+    location too, but the code reads the demo's own location."""
+    from jupyter_storage_explorer.formats import FormatSupport  # noqa: PLC0415
+    from jupyter_storage_explorer.formats.actions import ViewAction  # noqa: PLC0415
+
+    mine = [a for a in actions if a.format is fmt_class]
+    views = [a for a in mine if isinstance(a, ViewAction)]
+    codes = [a for a in mine if not isinstance(a, ViewAction)]
+
+    class DemoByPolars(FormatSupport):
+        format = fmt_class
+        engine = mine[0].engine
+        options_model = mine[0].options_model
+        additional_requirements = mine[0].requires
+
+        def supports(self, fmt, ctx, options, task):
+            done = views if task == "view" else codes
+            return any(a.does(fmt, local(ctx), options) for a in done)
+
+        if views:
+
+            def view(self, fmt, ctx, options, limits):
+                return views[0](fmt, local(ctx), options, limits)
+
+        def recipe(self, fmt, ctx, options):
+            return {
+                a.name: a(fmt, ctx, options)
+                for a in codes
+                if a.does(fmt, local(ctx), options)
+            }
+
+    return DemoByPolars()
 
 
 if __name__ == "__main__":

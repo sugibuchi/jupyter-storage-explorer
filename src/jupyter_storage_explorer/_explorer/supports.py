@@ -298,7 +298,9 @@ class ActionChain:
         """The names of the view actions doing the item as ``fmt``, by engine
         (see ``viewers``), each engine's in order: the first is its default.
         Of supports of the former interface, the first of each engine only,
-        as before actions: a support given replaces the default one. One
+        as before actions: a support given replaces the default one. Its
+        name is the default view's, "View {format}", which then hides the
+        later action of that name: ``view`` takes the first of a name. One
         pass over the actions, as the right-click menu needs all of them."""
         names: dict[str | None, list[str]] = {}
         adapted: set[str | None] = set()
@@ -308,7 +310,9 @@ class ActionChain:
                 if key in adapted:
                     continue
                 adapted.add(key)
-            names.setdefault(key, []).append(action.name)
+            known = names.setdefault(key, [])
+            if action.name not in known:
+                known.append(action.name)
         order = [e.key for e in self.engines] + [None]
         return {key: names[key] for key in order if key in names}
 
@@ -369,7 +373,8 @@ class ActionChain:
         do the item, as for views: code the kernel could not run is not
         offered. Of supports of the former interface, those of the first
         such support of each engine, so a support given before the defaults
-        replaces the default one of its engine. An action that fails gives
+        replaces the default one of its engine, even its code actions. An
+        action that fails gives
         one recipe holding the error, so the others are still shown. Those
         without an engine first, then by engine: those of
         ``engine_preference``, in its order, then the others by key,
@@ -377,9 +382,9 @@ class ActionChain:
         recipes: list[Recipe] = []
         adapted: set[str] = set()
         for action in self.of(fmt, ctx, CodeAction):
+            if action.library in adapted:
+                continue
             if _is_adapted(action):
-                if action.library in adapted:
-                    continue
                 adapted.add(action.library)
             recipes += self._recipes_of(action, fmt, ctx)
         order = {key: i for i, key in enumerate(self._engine_preference)}

@@ -7,21 +7,31 @@ The plugin, ``PolarsSupport``, is found by explorers through its entry point
 
 from jupyter_storage_explorer import StorageExplorerPlugin
 from jupyter_storage_explorer_polars_support.supports import (
-    CsvByPolars,
+    POLARS_ACTIONS,
     CsvByPolarsOptions,
-    DeltaLakeByPolars,
     DeltaLakeByPolarsOptions,
-    ExcelByPolars,
     ExcelByPolarsOptions,
-    JsonByPolars,
+    FsspecCodeOptions,
     JsonByPolarsOptions,
-    JsonLinesByPolars,
     JsonLinesByPolarsOptions,
-    ParquetByPolars,
     ParquetByPolarsOptions,
     Polars,
     PolarsEngine,
     PolarsOptions,
+    csv_as_data_frame,
+    csv_view,
+    delta_as_data_frame,
+    delta_as_lazy_frame,
+    delta_view,
+    excel_as_data_frame,
+    excel_view,
+    json_as_data_frame,
+    json_lines_as_data_frame,
+    json_lines_as_lazy_frame,
+    json_lines_view,
+    parquet_as_data_frame,
+    parquet_as_lazy_frame,
+    parquet_view,
 )
 
 
@@ -29,32 +39,35 @@ class PolarsSupport(StorageExplorerPlugin):
     key = "polars-support"
 
     @property
-    def format_supports(self):
-        return (
-            DeltaLakeByPolars,
-            ParquetByPolars,
-            CsvByPolars,
-            ExcelByPolars,
-            JsonByPolars,
-            JsonLinesByPolars,
-        )
+    def actions(self):
+        return POLARS_ACTIONS
 
 
 __all__ = [
-    "CsvByPolars",
+    "POLARS_ACTIONS",
     "CsvByPolarsOptions",
-    "DeltaLakeByPolars",
     "DeltaLakeByPolarsOptions",
-    "ExcelByPolars",
     "ExcelByPolarsOptions",
-    "JsonByPolars",
+    "FsspecCodeOptions",
     "JsonByPolarsOptions",
-    "JsonLinesByPolars",
     "JsonLinesByPolarsOptions",
-    "ParquetByPolars",
     "ParquetByPolarsOptions",
     "Polars",
     "PolarsEngine",
     "PolarsOptions",
     "PolarsSupport",
+    "csv_as_data_frame",
+    "csv_view",
+    "delta_as_data_frame",
+    "delta_as_lazy_frame",
+    "delta_view",
+    "excel_as_data_frame",
+    "excel_view",
+    "json_as_data_frame",
+    "json_lines_as_data_frame",
+    "json_lines_as_lazy_frame",
+    "json_lines_view",
+    "parquet_as_data_frame",
+    "parquet_as_lazy_frame",
+    "parquet_view",
 ]

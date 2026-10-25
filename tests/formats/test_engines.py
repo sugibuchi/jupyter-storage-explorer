@@ -10,7 +10,6 @@ import traitlets
 from all_supports import all_supports
 from explorers import make, path_of
 from jupyter_storage_explorer_databricks_support import DatabricksConnect
-from jupyter_storage_explorer_polars_support import DeltaLakeByPolars
 
 from jupyter_storage_explorer._explorer.states import ExplorerStates
 from jupyter_storage_explorer._explorer.supports import ActionChain
@@ -24,6 +23,7 @@ from jupyter_storage_explorer.formats import (
     PythonPackage,
     package,
 )
+from jupyter_storage_explorer.formats.packages import DeltaLake as DeltaLakePackage
 
 
 class Installed(PythonPackage):
@@ -131,9 +131,7 @@ class TestWhichEngineViews:
     def test_no_fallback_to_another_engine(self, item, monkeypatch):
         # Polars handles Delta tables, but needs deltalake: pandas, which
         # does not handle them, is not used instead.
-        monkeypatch.setattr(
-            DeltaLakeByPolars, "is_installed", classmethod(lambda cls: False)
-        )
+        monkeypatch.setattr(DeltaLakePackage, "is_installed", lambda self: False)
         with pytest.raises(LookupError):
             self.chain.engine_for(DeltaLake(), item, "polars")
 

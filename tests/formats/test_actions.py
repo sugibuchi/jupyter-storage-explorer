@@ -371,6 +371,26 @@ class TestChain:
         assert text_of(chain.view(Csv(), item, LIMITS, "duck")) == "old"
         assert chain.of(Csv(), item)[1] is csv_view
 
+    def test_a_support_given_replaces_the_engines_default(self, make_item):
+        # Its view, named as the default view, hides the action of that name;
+        # its recipes replace the engine's code actions.
+        old = type(
+            "OldDuck",
+            (FormatSupport,),
+            {
+                "format": Csv,
+                "engine": Duck,
+                "view": lambda self, *args: TextView(text="old"),
+                "recipe": lambda self, *args: {"Load the old way": "old"},
+            },
+        )
+        chain = ActionChain([old, csv_view, csv_widget, csv_code])
+        item = make_item("/a.csv", b"")
+        assert chain.view_names(Csv(), item, "duck") == ["View CSV", "Widget for CSV"]
+        assert text_of(chain.view(Csv(), item, LIMITS, "duck", "View CSV")) == "old"
+        recipes = chain.recipes(Csv(), item)
+        assert [(r.title, r.code) for r in recipes] == [("Load the old way", "old")]
+
 
 class TestExplorer:
     def test_actions_given_first(self, memfs):
