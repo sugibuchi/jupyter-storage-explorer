@@ -141,13 +141,6 @@ The `notebooks` folder has a demo of each widget on sample data.
 - **[Development](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/DEVELOPMENT.md)**: building,
   releasing, and custom icons.
 
-## Requirements
-
-- Python 3.11 or later
-- JupyterLab 4.0 or later. Other Jupyter frontends show the widgets, without drag and drop from JupyterLab's file
-  browser.
-- For querying data: an engine plugin, e.g. `jupyter-storage-explorer[polars]` (Polars, tested with 2.0)
-
 ## Technologies
 
 Storage Explorer is made possible by these open-source projects. Our thanks to their authors and contributors.
@@ -156,3 +149,10 @@ Storage Explorer is made possible by these open-source projects. Our thanks to t
 - **[narwhals](https://narwhals-dev.github.io/narwhals/)**: a compatibility layer between dataframe libraries. Used for
   the data browser's queries.
 - **[anywidget](https://anywidget.dev/)**: a framework for custom Jupyter widgets. Used for both explorers' frontends.
+
+## Requirements
+
+- Python 3.11 or later
+- JupyterLab 4.0 or later. Other Jupyter frontends show the widgets, without drag and drop from JupyterLab's file
+  browser.
+- For querying data: an engine plugin, e.g. `jupyter-storage-explorer[polars]` (Polars, tested with 2.0)
