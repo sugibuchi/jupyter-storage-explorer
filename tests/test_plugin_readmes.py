@@ -1,4 +1,4 @@
-"""The plugins' READMEs keep one layout (docs/development-plugin.md, "The
+"""The plugins' READMEs keep one layout (docs/plugin-development-guide.md, "The
 README"): Installation with the full extra's libraries, Prerequisites, and
 Plugin options with examples for StorageExplorer and launcher.py."""
 

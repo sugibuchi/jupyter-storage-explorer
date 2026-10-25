@@ -1283,7 +1283,7 @@ def storage_levels(lab: Lab, page: Page) -> None:
 
 
 # Actions taking seconds to view text files, as a Spark session starting;
-# given first, so the default views.
+# the default views, as the explorer has no others for them.
 SLOW_PREVIEW = """\
 import io
 import time
@@ -1314,10 +1314,19 @@ memory.pipe_file("/slow/notes.txt", b"read slowly")
 memory.pipe_file("/slow/broken.txt", b"x")
 memory.pipe_file("/slow/table.csv", b"a\\n1\\n2\\n3\\n")
 memory.pipe_file("/slow/inner/other.txt", b"x")
-StorageExplorer(
+
+class OwnViewsOnly(StorageExplorer):
+    # Actions given come after the built-in ones: none here, so that the
+    # slow ones are the defaults.
+    @staticmethod
+    def default_actions():
+        return []
+
+OwnViewsOnly(
     "/slow",
     fs=memory,
     actions=[slow_text, csv_in_memory],
+    plugin_options={"polars-support": {"enabled": False}},  # its CSV view first
     preview_panel="open",
     fetch_rows=slow_page,
     view_limits=ViewLimits(max_live_rows=1),  # live queries: each page fetched
@@ -1435,7 +1444,15 @@ class Locked(MemoryFileSystem):
 fs = Locked()
 fs.pipe_file("/errors/data.txt", b"x")
 fs.pipe_file("/errors/locked.txt", b"x")
-StorageExplorer("/errors", fs=fs, actions=[spark_like], preview_panel="open")"""
+
+class OwnViewsOnly(StorageExplorer):
+    # Actions given come after the built-in ones: none here, so that the
+    # failing one is the default.
+    @staticmethod
+    def default_actions():
+        return []
+
+OwnViewsOnly("/errors", fs=fs, actions=[spark_like], preview_panel="open")"""
 
 
 @lab_check
@@ -1465,8 +1482,8 @@ def readable_errors(lab: Lab, page: Page) -> None:
     expect(x.status).not_to_contain_text("locked.txt is not yours")
 
 
-# An action of the explorer's own: a second view of text files, given first,
-# so the default one.
+# An action given to the explorer: a second view of text files, after the
+# built-in one, which stays the default.
 VIEWS_BY_NAME = """\
 import fsspec
 from jupyter_storage_explorer import StorageExplorer
@@ -1490,13 +1507,139 @@ def views_by_name(lab: Lab, page: Page) -> None:
     x = Explorer(lab, page, VIEWS_BY_NAME)
     text = x.preview.locator(".jse-text")
     x.row("a.txt").click()
-    expect(text).to_have_text("QUIET")
+    expect(text).to_have_text("quiet")
     x.row("a.txt").click(button="right")
     x.menu_item("Preview as").hover()
     views = x.el.locator(".jse-submenu .jse-menu-item:visible")
-    expect(views).to_have_text(["Shout", "View as Text (Python)"])
+    expect(views).to_have_text(["View as Text (Python)", "Shout"])
     views.last.click()
-    expect(text).to_have_text("quiet")
+    expect(text).to_have_text("QUIET")
+    x.preview.press("Escape")
+
+
+# A view returning a Jupyter widget: an ipywidgets slider, shown as it is.
+WIDGET_VIEW = """\
+import fsspec
+import ipywidgets
+from jupyter_storage_explorer import StorageExplorer
+from jupyter_storage_explorer.formats import file_format
+from jupyter_storage_explorer.formats.actions import view
+
+@view(file_format(".wdg"), label="Slider")
+def slider(name):
+    return ipywidgets.IntSlider(value=7, description=name)
+
+
+# An anywidget of the user's own, rendered by its own module.
+import anywidget
+import traitlets
+
+class Greeting(anywidget.AnyWidget):
+    _esm = "export default { render({ model, el }) { el.classList.add('my-greeting'); el.textContent = 'Hello ' + model.get('name'); } };"
+    name = traitlets.Unicode().tag(sync=True)
+
+@view(file_format(".hi"), label="Greeting")
+def greeting(name):
+    return Greeting(name=name)
+
+memory = fsspec.filesystem("memory")
+memory.pipe_file("/widgets/a.wdg", b"")
+memory.pipe_file("/widgets/b.hi", b"")
+StorageExplorer("/widgets", fs=memory, actions=[slider, greeting], preview_panel="open")"""
+
+
+@lab_check
+def widget_view(lab: Lab, page: Page) -> None:
+    # The widget renders in the preview panel, and in a tab of its own.
+    x = Explorer(lab, page, WIDGET_VIEW)
+    x.row("a.wdg").click()
+    slider = x.preview.locator(".jse-jupyter-widget .widget-slider")
+    expect(slider).to_be_visible()
+    expect(slider).to_contain_text("a.wdg")
+    x.preview.locator("button[title='View in a new tab']").click()
+    tab = page.locator(".jse-view-tab .jse-jupyter-widget .widget-slider")
+    expect(tab).to_be_visible()
+    expect(tab).to_contain_text("a.wdg")
+    x.back_to_notebook()
+    # An anywidget renders with its own module.
+    x.row("b.hi").click()
+    expect(x.preview.locator(".jse-jupyter-widget .my-greeting")).to_have_text(
+        "Hello b.hi"
+    )
+
+
+# A user's actions file, in the Jupyter configuration folder: an explorer
+# created in a notebook uses it, after the built-in view.
+USER_ACTIONS_FILE = """\
+from jupyter_storage_explorer.formats import Text, TextView
+from jupyter_storage_explorer.formats.actions import view
+from jupyter_storage_explorer.formats.python import PythonEngine
+
+
+@view(format=Text, engine=PythonEngine, label="Reversed")
+def reversed_text(fmt, ctx, options, limits):
+    return TextView(text=ctx.head_text(100)[0][::-1])
+
+
+# The light style: a format of the user's own, the parameters named, text
+# returned.
+from jupyter_storage_explorer.formats import file_format
+
+
+@view(file_format(".abc"))
+def shouted(fs, path):
+    return fs.cat_file(path).decode().upper()
+"""
+
+USER_ACTIONS = """\
+import fsspec
+from jupyter_storage_explorer import StorageExplorer
+
+memory = fsspec.filesystem("memory")
+memory.pipe_file("/mine/a.txt", b"stressed")
+memory.pipe_file("/mine/b.abc", b"quiet")
+StorageExplorer("/mine", fs=memory, preview_panel="open")"""
+
+
+@lab_check
+def user_actions(lab: Lab, page: Page) -> None:
+    # The user's file adds a view of text files, after the built-in one,
+    # which stays the default; "Preview as" offers both.
+    with lab.user_actions("reversed.py", USER_ACTIONS_FILE):
+        x = Explorer(lab, page, USER_ACTIONS)
+    # A file of the user's format: its only view, the default.
+    x.row("b.abc").click()
+    expect(x.preview.locator(".jse-text")).to_have_text("QUIET")
+    reversed_view(x)
+
+
+@lab_check
+def reload_actions(lab: Lab, page: Page) -> None:
+    # An explorer created before the user's file: "Reload actions", in the
+    # settings menu, reads it and lists the folder again with its format.
+    x = Explorer(lab, page, USER_ACTIONS)
+    expect(x.row("b.abc")).to_be_visible()
+    with lab.user_actions("reversed.py", USER_ACTIONS_FILE):
+        x.el.locator(".jse-settings-btn").click()
+        x.menu_item("Reload actions").click()
+        expect(x.status).to_contain_text("Actions reloaded: 2 of yours")
+    x.row("b.abc").click()
+    expect(x.preview.locator(".jse-text")).to_have_text("QUIET")
+    reversed_view(x)
+
+
+def reversed_view(x: Explorer) -> None:
+    """In ``x``, a.txt's default view, then the user's "Reversed" chosen in
+    "Preview as"."""
+    text = x.preview.locator(".jse-text")
+    x.row("a.txt").click()
+    expect(text).to_have_text("stressed")
+    x.row("a.txt").click(button="right")
+    x.menu_item("Preview as").hover()
+    views = x.el.locator(".jse-submenu .jse-menu-item:visible")
+    expect(views).to_have_text(["View as Text (Python)", "Reversed"])
+    views.last.click()
+    expect(text).to_have_text("desserts")
     x.preview.press("Escape")
 
 
@@ -1680,25 +1823,29 @@ def duckdb_engine(lab: Lab, page: Page) -> None:
     dialog.press("Escape")
 
 
-# dask-support's engine on a memory filesystem fsspec cannot rebuild from its
-# options (skip_instance_cache): Parquet read through it, a small CSV file
-# copied to the kernel's disk at once, and a large one copied once asked.
+# dask-support's engine on a zip file opened by position, which fsspec cannot
+# make again from a URL: Parquet read through it, a small CSV file copied to
+# the kernel's disk at once, and a large one copied once asked.
 DASK = """\
 import io
+import pathlib
+import tempfile
+import zipfile
 import pandas as pd
-from fsspec.implementations.memory import MemoryFileSystem
+from fsspec.implementations.zip import ZipFileSystem
 from jupyter_storage_explorer import StorageExplorer
 from jupyter_storage_explorer.formats import ViewLimits
 
-memory = MemoryFileSystem(skip_instance_cache=True)
 parquet = io.BytesIO()
 pd.DataFrame({"id": range(300)}).to_parquet(parquet, row_group_size=50)
-memory.pipe_file("/dask/orders.parquet", parquet.getvalue())
-memory.pipe_file("/dask/small.csv", b"a;b\\n" + b"1;2\\n" * 250)
-memory.pipe_file("/dask/large.csv", b"a\\n" + b"1\\n" * 3000)
+path = pathlib.Path(tempfile.mkdtemp()) / "lake.zip"
+with zipfile.ZipFile(path, "w") as z:
+    z.writestr("dask/orders.parquet", parquet.getvalue())
+    z.writestr("dask/small.csv", b"a;b\\n" + b"1;2\\n" * 250)
+    z.writestr("dask/large.csv", b"a\\n" + b"1\\n" * 3000)
 StorageExplorer(
-    "/dask",
-    fs=memory,
+    "dask",
+    fs=ZipFileSystem(str(path)),
     engine_preference=["dask"],
     preview_panel="open",
     view_limits=ViewLimits(max_whole_file_bytes=1024),
@@ -1734,7 +1881,7 @@ def dask_engine(lab: Lab, page: Page) -> None:
         ".jse-submenu .jse-menu-item:visible", has_text="Load as DataFrame (Dask)"
     ).click()
     dialog = x.el.locator(".jse-dialog:visible")
-    expect(dialog).to_contain_text("dd.read_parquet('memory:///dask/orders.parquet')")
+    expect(dialog).to_contain_text("dd.read_parquet('zip://dask/orders.parquet')")
     dialog.press("Escape")
 
 
@@ -1916,6 +2063,38 @@ def launcher_settings_with_an_error(lab: Lab, page: Page) -> None:
         ).click()
         editor = page.locator(".jp-FileEditor .cm-content").first
         expect(editor).to_contain_text("hieght")
+
+
+@lab_check
+def edit_actions(lab: Lab, page: Page) -> None:
+    # The settings menu's "Edit actions" opens the user's actions.py in
+    # JupyterLab's editor, created from the template once the user agrees;
+    # an action added there is used by the next explorer.
+    path = lab.folder / "config" / "storage-explorer" / "actions.py"
+    try:
+        tab = open_launcher_tab(lab, page)
+        assert not path.exists()
+        tab.locator(".jse-settings-btn").click()
+        tab.locator(
+            ".jse-menu:not(.jse-submenu) > .jse-menu-item:visible",
+            has_text="Edit actions",
+        ).click()
+        dialog = tab.locator(".jse-dialog:visible")
+        expect(dialog).to_contain_text("Create your actions file")
+        dialog.get_by_role("button", name="Create").click()
+        editor = page.locator(".jp-FileEditor .cm-content").first
+        expect(editor).to_contain_text("Storage Explorer actions: yours.")
+        expect(page.locator(".lm-TabBar-tab.jp-mod-current")).to_contain_text(
+            "actions.py"
+        )
+        editor.click()
+        page.keyboard.press("Control+End")
+        page.keyboard.insert_text("\n" + USER_ACTIONS_FILE)
+        page.keyboard.press("Control+s")
+        wait_for(lambda: "Reversed" in path.read_text(encoding="utf-8"), "the save")
+        reversed_view(Explorer(lab, page, USER_ACTIONS))
+    finally:
+        path.unlink(missing_ok=True)
 
 
 @lab_check

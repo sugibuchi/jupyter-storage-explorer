@@ -82,7 +82,7 @@ class ThreadsOptions(ActionOptions):
 
 
 def viewer(result, *, name, fmt=Csv, engine=PythonEngine, check=None):
-    """A view action returning ``result`` as it is."""
+    """A view action returning ``result``: a string is shown as text."""
 
     @view(format=fmt, engine=engine, label=name, check=check)
     def viewing(fmt, ctx, options, limits):
@@ -311,21 +311,22 @@ class TestSecretsInCode:
         assert "account_key" not in recipe.code
 
     def test_formats_of_the_explorer(self):
-        # The format of an action given, first, and its options.
+        # The format of an action given, detected too, and its options.
         avro = type("Avro", (Csv,), {"name": "avro"})
         explorer = StorageExplorer(
             fs=None,
             actions=[viewer("", name="Avro", fmt=avro)],
             engine_options={"python": {"avro": {}}},
         )
-        assert explorer._formats[0].name == "avro"
+        assert "avro" in [f.name for f in explorer._formats]
 
 
 class TestChain:
     def view(self, chain, item):
-        """The view by the first engine viewing CSV, else the built-in views."""
+        """The text of the view by the first engine viewing CSV, else the
+        built-in views: ``viewer``'s strings are shown as text."""
         engine = (chain.viewers(Csv(), item) or [None])[0]
-        return chain.view(Csv(), item, LIMITS, engine)
+        return chain.view(Csv(), item, LIMITS, engine).text
 
     def test_first_installed_views(self, make_item):
         chain = ActionChain(

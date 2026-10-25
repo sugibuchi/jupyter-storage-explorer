@@ -70,7 +70,7 @@ writing tests. The traps:
 
 ## Architecture
 
-DEVELOPMENT.md's Architecture section describes each part: read it before changing one. docs/development-plugin.md
+DEVELOPMENT.md's Architecture section describes each part: read it before changing one. docs/plugin-development-guide.md
 has the rules for formats, actions, options, operations, mappers and plugins: follow them, and keep them in step with
 the code. The traps:
 
@@ -82,6 +82,7 @@ the code. The traps:
   is gone after 1.5 seconds.
 - anywidget's `model` has only `get`, `set`, `save_changes`, `on`, `off` and `send`. Backbone methods such as
   `previous()` throw inside `set` and silently break syncing.
+- `model.widget_manager` is used only to render Jupyter widgets, in `sections.js`. Check that it can make views first.
 - A new frontend file in `static/` is joined into the module only if `_static.esm` names it. A part in
   `static/<widget>/` is joined automatically.
 - Mappers match classes by qualified name: never import an optional package to map it.
@@ -129,7 +130,7 @@ the code. The traps:
 - Plugins never depend on their libraries: their `full` extra installs them. A new dependency of a plugin goes in its
   `hatch_build.py`.
 - Each library's options are listed in its plugin's README only. Update it when an options model changes.
-- A plugin's README follows "The README" in docs/development-plugin.md, which `tests/test_plugin_readmes.py` checks.
+- A plugin's README follows "The README" in docs/plugin-development-guide.md, which `tests/test_plugin_readmes.py` checks.
   The table in the plugin README's own Installation section lists exactly its `full` extra's libraries.
 
 ## Conventions
@@ -176,12 +177,14 @@ Write docs so that people can review them. That covers this file, DEVELOPMENT.md
 - `docs/data-explorer.md` covers the data browser, `result()`, `on_change()`, `QuerySettings` and `DataExplorer`'s
   options.
 - DEVELOPMENT.md has custom icons, in "Customizing", and how the code fits together, in "Architecture".
-- docs/development-plugin.md covers extending the explorer in Python and packaging plugins, with the conventions.
+- `docs/action-development-guide.md` is the users' guide to actions of their own, in their actions files.
+- docs/plugin-development-guide.md covers extending the explorer in Python and packaging plugins, with the conventions.
+  It has the full rules of actions, which the action development guide links to rather than repeats.
 
 Update the docs when operations, formats or options change. Keep user docs short: what users do, not how it works.
 
 `actions`, `operations` and `filesystem_mappers` are for development. They come last in the options table of
-docs/storage-explorer.md and in the launcher's template. Only docs/development-plugin.md explains them, in "Trying
+docs/storage-explorer.md and in the launcher's template. Only docs/plugin-development-guide.md explains them, in "Trying
 components in an explorer".
 
 ### Links and images

@@ -28,11 +28,10 @@ final. Each file may have these functions, all optional:
 ``actions()``
     ``[action, ...]``: what explorers do with formats' data, functions of
     your own decorated with ``formats.actions.view`` or ``code``, tried
-    before the plugins' and the defaults; a later layer's come first. Their
-    formats are detected with the defaults'. Two actions of one kind,
-    format, engine and name stop the tab with an error: give yours another
-    name, or disable the plugin whose action it replaces in
-    ``plugin_options()``.
+    after the plugins' and the explorer's own, as additions offered in its
+    menus; a later layer's come first. Their formats are detected with the
+    defaults'. Two actions of one kind, format, engine and label stop the
+    tab with an error: give yours another label.
 ``engine_options()``
     ``{engine key: {format or "*": {option: value}}}`` for the actions (see
     ``StorageExplorer``'s ``engine_options``), merged option by option (a
@@ -678,7 +677,9 @@ def _create_explorer(
         # The settings the explorer has, for the warnings launch() shows.
         settings.__dict__.update(without.__dict__)
         settings.user_error = f"{user}: the explorer cannot be created with it: {error}"
-    explorer._offer_settings(user_launcher_file(), create_user_launcher_file)
+    explorer._offer_config_file(
+        "launcher", user_launcher_file(), create_user_launcher_file
+    )
     if settings.user_error:
         # Also in the explorer, until it lists another folder.
         explorer._error = _left_out(settings.user_error)

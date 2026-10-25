@@ -22,9 +22,19 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
+import narwhals as nw
+
 from jupyter_storage_explorer.formats.base import DataFormat
 from jupyter_storage_explorer.formats.engine import Engine
 from jupyter_storage_explorer.formats.packages import PythonPackage
+from jupyter_storage_explorer.formats.views import (
+    JupyterWidgetView,
+    QueryView,
+    TextView,
+    TreeView,
+    View,
+    is_jupyter_widget,
+)
 from jupyter_storage_explorer.util import (
     IS_SECRET,
     LIBRARY_DEFAULT,
@@ -34,7 +44,6 @@ from jupyter_storage_explorer.util import (
 
 if TYPE_CHECKING:
     from jupyter_storage_explorer.formats.base import ItemContext
-    from jupyter_storage_explorer.formats.views import View
 
 __all__ = [
     "Action",
@@ -177,10 +186,25 @@ F = TypeVar("F", bound=Callable[..., Any])
 # The actions' ids, in the order they are made (see Action.id).
 _ids = itertools.count(1)
 
-# The parameters of each kind of function, in order: checked by name count
-# only, as the names are the author's.
-_VIEW_PARAMETERS = ("fmt", "ctx", "options", "limits")
-_CODE_PARAMETERS = ("fmt", "ctx", "options")
+# What an action's function may take, by parameter name, from what the
+# explorer calls the action with: (fmt, ctx, options, limits). The function
+# names those it needs, in any order.
+_ARGUMENTS: dict[str, Callable[[Any, Any, Any, Any], Any]] = {
+    "fmt": lambda fmt, ctx, options, limits: fmt,
+    "ctx": lambda fmt, ctx, options, limits: ctx,
+    "options": lambda fmt, ctx, options, limits: options,
+    "limits": lambda fmt, ctx, options, limits: limits,
+    "url": lambda fmt, ctx, options, limits: ctx.url,
+    "url_or_local_path": lambda fmt, ctx, options, limits: ctx.url_or_local_path,
+    "path": lambda fmt, ctx, options, limits: ctx.path,
+    "name": lambda fmt, ctx, options, limits: ctx.name,
+    "size": lambda fmt, ctx, options, limits: ctx.size,
+    "is_dir": lambda fmt, ctx, options, limits: ctx.is_dir,
+    "fs": lambda fmt, ctx, options, limits: ctx.fs,
+}
+_VIEW_PARAMETERS = tuple(_ARGUMENTS)
+# Code shows nothing: no limits.
+_CODE_PARAMETERS = tuple(n for n in _ARGUMENTS if n != "limits")
 
 
 @dataclass(frozen=True, eq=False)
@@ -234,9 +258,25 @@ class Action(Generic[F]):
             with contextlib.suppress(AttributeError):
                 object.__setattr__(self, name, getattr(self.function, name))
         object.__setattr__(self, "__wrapped__", self.function)
+        # The function's parameters it is called with, by name (_ARGUMENTS):
+        # read here, so that dataclasses.replace with another function reads
+        # that one's.
+        object.__setattr__(self, "_parameters", _taken(self.function))
 
-    def __call__(self, *args: Any) -> Any:
-        return self.function(*args)
+    def __call__(
+        self,
+        fmt: DataFormat,
+        ctx: ItemContext,
+        options: ActionOptions,
+        limits: Any = None,
+    ) -> Any:
+        """Call the function with the parameters it names (see ``view``)."""
+        return self.function(
+            **{
+                name: _ARGUMENTS[name](fmt, ctx, options, limits)
+                for name in self._parameters
+            }
+        )
 
     def requirements(self) -> tuple[PythonPackage, ...]:
         """All the packages it needs: its engine's, then ``requires``."""
@@ -270,34 +310,58 @@ class ViewAction(Action[Callable[..., "View"]]):
 
     code: CodeAction | None = None
 
+    def __call__(
+        self,
+        fmt: DataFormat,
+        ctx: ItemContext,
+        options: ActionOptions,
+        limits: Any = None,
+    ) -> View:
+        """The function's view, plain data made a view (see ``view``)."""
+        return _as_view(super().__call__(fmt, ctx, options, limits))
+
 
 def view(
-    *,
-    format: type[DataFormat],
-    engine: type[Engine],
+    *types: type[DataFormat | Engine],
+    format: type[DataFormat] | None = None,
+    engine: type[Engine] | None = None,
     label: str = "View as {format} ({engine})",
     requires: tuple[PythonPackage, ...] = (),
     check: Check | None = None,
     code: CodeAction | None = None,
-) -> Callable[[Callable[..., View]], ViewAction]:
+) -> Callable[[Callable[..., Any]], ViewAction]:
     """Make a function an action viewing items of a format with an engine.
 
-    The function is called as ``function(fmt, ctx, options, limits)`` and
-    returns a ``View``: a ``QueryView`` opens the data in the data browser,
-    other views show what the function read. Explorers call it in a worker
-    thread, so that a slow read leaves the kernel free; it never touches
-    widgets or displays anything. What it raises is the item's error: no
-    other action is tried.
+    The function returns what to show: a ``View``, or plain data, made one.
+
+    - A dataframe, any the data browser reads, best a lazy one, opens in the
+      data browser, as a ``QueryView`` of it.
+    - A ``str`` is shown as text (``TextView``).
+    - A ``dict`` or ``list`` is shown as a tree (``TreeView``).
+    - A Jupyter widget, an ``ipywidgets.DOMWidget``, is shown as it is
+      (``JupyterWidgetView``).
+
+    Explorers call it in a worker thread, so that a slow read leaves the
+    kernel free. It displays nothing, and touches no widget shown: it may
+    create the widget it returns, which the view then owns. What it
+    raises is the item's error: no other action is tried.
 
     Rules for the function:
 
-    - Its parameters are positional, in this order, under any names:
+    - It takes the parameters it names, in any order, of these:
 
-      - ``fmt``, the format detected, an instance of ``format``;
+      - ``url``, the item's URL, also of a local file, which fsspec opens;
+      - ``url_or_local_path``, where most libraries read the item: its URL,
+        but a local file's plain path;
+      - ``path``, ``name``, ``size``, ``is_dir`` and ``fs``, those of the
+        item (see ``ItemContext``);
       - ``ctx``, the item as an ``ItemContext``;
+      - ``fmt``, the format detected, an instance of ``format``;
       - ``options``, its options, an instance of the class its annotation
         names (``ActionOptions``, with no fields, without one);
       - ``limits``, how much to read and show, a ``ViewLimits``.
+
+      Others are allowed only with a default, which they keep.
     - Import ``options``' class at run time, not only for type checkers:
       the class is read from the annotation when the function is decorated.
       The annotation resolves in the function's module: define the class at
@@ -311,9 +375,13 @@ def view(
 
     Parameters
     ----------
+    *types : type of DataFormat or Engine
+        The format and the engine, in any order, as ``format`` and
+        ``engine`` give them: ``@view(Parquet, PolarsEngine)``.
     format : type of DataFormat
-        The format viewed, e.g. ``Parquet``; its subclasses too.
-    engine : type of Engine
+        The format viewed, e.g. ``Parquet``; its subclasses too. Required,
+        here or in ``types``; ``file_format(...)`` makes one.
+    engine : type of Engine, default PythonEngine
         The library used, e.g. polars-support's ``PolarsEngine``;
         ``PythonEngine`` for Python alone.
     label : str, default "View as {format} ({engine})"
@@ -343,21 +411,28 @@ def view(
     Raises
     ------
     TypeError
-        When decorating: for arguments of the wrong type, a function of
-        another number of parameters, an options annotation that does not
-        resolve to a ``ActionOptions`` subclass, or a ``code`` of another
-        pair or options class.
+        When decorating: for arguments of the wrong type, no format, a
+        parameter the function cannot be given, an options annotation that
+        does not resolve to a ``ActionOptions`` subclass, or a ``code`` of
+        another pair or options class.
 
     Examples
     --------
+    >>> @view(Parquet, PolarsEngine, label="First rows ({engine})")
+    ... def head(url_or_local_path):
+    ...     import polars as pl
+    ...
+    ...     return pl.scan_parquet(url_or_local_path).head(100)
+
     >>> @view(format=Parquet, engine=PolarsEngine)
     ... def parquet_by_polars(fmt, ctx, options: ParquetByPolarsOptions, limits):
     ...     import polars as pl
     ...
     ...     return QueryView(pl.scan_parquet(ctx.url_or_local_path, **options.arguments()))
     """
+    format, engine = _format_and_engine(types, format, engine)
 
-    def decorate(function: Callable[..., View]) -> ViewAction:
+    def decorate(function: Callable[..., Any]) -> ViewAction:
         fields = _fields(
             function,
             _VIEW_PARAMETERS,
@@ -376,43 +451,47 @@ def view(
 
 
 def code(
-    *,
-    format: type[DataFormat],
-    engine: type[Engine],
-    label: str,
+    *types: type[DataFormat | Engine],
+    format: type[DataFormat] | None = None,
+    engine: type[Engine] | None = None,
+    label: str | None = None,
     requires: tuple[PythonPackage, ...] = (),
     check: Check | None = None,
 ) -> Callable[[Callable[..., str]], CodeAction]:
     """Make a function an action giving code that loads items of a format
     with an engine.
 
-    The function is called as ``function(fmt, ctx, options)`` and returns
-    one snippet of Python, shown in "Python code" under its engine. Explorers
-    call it in a worker thread. What it raises is shown in place of its
-    code; the other snippets are still shown.
+    The function returns one snippet of Python, shown in "Python code" under
+    its engine. Explorers call it in a worker thread. What it raises is
+    shown in place of its code; the other snippets are still shown.
 
     The code runs as it is in a new notebook: its imports first, and what
     else it needs, e.g. a Spark session. Installing the packages and
     configuring access to the storage are left to the user. It reads the
-    location (``ctx.url_or_local_path``). The function reads the item only for
-    what the code needs to know, e.g. a CSV file's separator. Options go into
-    the code only through ``ActionOptions.code_value`` and
-    ``code_arguments``, which leave secrets out.
+    location (``url`` or ``url_or_local_path``). The function reads the item only for what the code
+    needs to know, e.g. a CSV file's separator. Options go into the code
+    only through ``ActionOptions.code_value`` and ``code_arguments``, which
+    leave secrets out.
 
     The function's parameters, the import rules and ``check`` are as for
     ``view``'s, without ``limits``.
 
     Parameters
     ----------
+    *types : type of DataFormat or Engine
+        The format and the engine, in any order, as ``format`` and
+        ``engine`` give them: ``@code(Parquet, PolarsEngine)``.
     format : type of DataFormat
-        The format loaded; its subclasses too.
-    engine : type of Engine
+        The format loaded; its subclasses too. Required, here or in
+        ``types``.
+    engine : type of Engine, default PythonEngine
         The library used; ``PythonEngine`` for Python alone.
-    label : str
+    label : str, optional
         What the code does, shown as its title under its engine in "Python
         code", e.g. "Load as LazyFrame". ``{format}`` and ``{engine}`` are
         replaced by the labels of ``format`` and ``engine``. Unique among
-        the code actions of one format and engine.
+        the code actions of one format and engine. By default, the
+        function's name, e.g. "Pretty print" for ``pretty_print``.
     requires : tuple of PythonPackage, default ()
         Packages needed besides the engine's.
     check : callable, optional
@@ -430,11 +509,16 @@ def code(
 
     Examples
     --------
+    >>> @code(file_format(extensions=".abc"))
+    ... def pretty_print(url):
+    ...     return f"import fsspec, json\\n\\nprint(json.dumps(json.loads(fsspec.open({url!r}).open().read()), indent=4))"
+
     >>> @code(format=Parquet, engine=PolarsEngine, label="Load as LazyFrame")
-    ... def parquet_as_lazy_frame(fmt, ctx, options: ParquetByPolarsOptions):
+    ... def parquet_as_lazy_frame(url_or_local_path, options: ParquetByPolarsOptions):
     ...     kwargs = format_arguments(options.code_arguments())
-    ...     return f"import polars as pl\\n\\ndf = pl.scan_parquet({ctx.url_or_local_path!r}{kwargs})"
+    ...     return f"import polars as pl\\n\\ndf = pl.scan_parquet({url_or_local_path!r}{kwargs})"
     """
+    format, engine = _format_and_engine(types, format, engine)
 
     def decorate(function: Callable[..., str]) -> CodeAction:
         fields = _fields(
@@ -442,7 +526,7 @@ def code(
             _CODE_PARAMETERS,
             format=format,
             engine=engine,
-            label=label,
+            label=label if label is not None else _label_of(function),
             requires=requires,
             check=check,
         )
@@ -568,22 +652,7 @@ def _fields(
         raise TypeError(
             f"{where}: label may hold only {{format}} and {{engine}}: {label!r}"
         ) from exc
-    every = list(inspect.signature(function).parameters.values())
-    positional = [
-        p for p in every if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
-    ]
-    # Keyword-only parameters with defaults are harmless: never passed.
-    others = [
-        p
-        for p in every
-        if p.kind in (p.VAR_POSITIONAL, p.VAR_KEYWORD)
-        or (p.kind == p.KEYWORD_ONLY and p.default is p.empty)
-    ]
-    if len(positional) != len(parameters) or others:
-        raise TypeError(
-            f"{where}: takes {len(parameters)} positional parameters "
-            f"({', '.join(parameters)}), and no others"
-        )
+    _check_parameters(function, parameters, where)
     return {
         "function": function,
         "format": format,
@@ -591,8 +660,99 @@ def _fields(
         "label": shown,
         "requires": requires,
         "check": check,
-        "options_model": _options_model(function, positional[2].name, format, where),
+        "options_model": _options_model(function, "options", format, where),
     }
+
+
+def _check_parameters(
+    function: Callable[..., Any], parameters: tuple[str, ...], where: str
+) -> None:
+    """TypeError for a parameter of ``function`` an action cannot give: one
+    not of ``parameters`` without a default, positional-only, or ``*args``
+    and ``**kwargs``."""
+    for p in inspect.signature(function).parameters.values():
+        if p.kind in (p.POSITIONAL_ONLY, p.VAR_POSITIONAL, p.VAR_KEYWORD):
+            raise TypeError(
+                f"{where}: {p.name!r}: parameters are given by name: no "
+                "positional-only parameters, *args or **kwargs"
+            )
+        # Others are fine with a default, never given.
+        if p.name not in parameters and p.default is p.empty:
+            raise TypeError(
+                f"{where}: cannot be given {p.name!r}; it may take "
+                f"{', '.join(parameters)}"
+            )
+
+
+def _taken(function: Callable[..., Any]) -> tuple[str, ...]:
+    """The parameters an action gives ``function``: those it names of
+    ``_ARGUMENTS``. Checked when decorating (see ``_fields``)."""
+    try:
+        names = inspect.signature(function).parameters
+    except (TypeError, ValueError):  # e.g. a builtin
+        return ()
+    return tuple(n for n in names if n in _ARGUMENTS)
+
+
+def _format_and_engine(
+    types: tuple[Any, ...], format: Any, engine: Any
+) -> tuple[Any, Any]:
+    """The format and engine given to ``view`` or ``code``: positionally, as
+    ``types``, or by keyword; PythonEngine without an engine. TypeError for
+    one given twice, no format, or something else; ``_fields`` checks the
+    keywords' types."""
+    for given in types:
+        if isinstance(given, type) and issubclass(given, DataFormat):
+            if format is not None:
+                raise TypeError(f"two formats given: {format!r} and {given!r}")
+            format = given
+        elif isinstance(given, type) and issubclass(given, Engine):
+            if engine is not None:
+                raise TypeError(f"two engines given: {engine!r} and {given!r}")
+            engine = given
+        else:
+            raise TypeError(
+                f"not a DataFormat or Engine class: {given!r}; give the "
+                "others by keyword, e.g. label=..."
+            )
+    if format is None:
+        raise TypeError("no format given: e.g. @view(Parquet) or file_format(...)")
+    if engine is None:
+        # Here, as formats.python's actions import this module.
+        from jupyter_storage_explorer.formats.python import (  # noqa: PLC0415
+            PythonEngine,
+        )
+
+        engine = PythonEngine
+    return format, engine
+
+
+def _label_of(function: Callable[..., Any]) -> str:
+    """A code action's default label: its function's name as words, e.g.
+    "Pretty print" for ``pretty_print``."""
+    words = getattr(function, "__name__", "code").strip("_").replace("_", " ")
+    return words[:1].upper() + words[1:] or "Code"
+
+
+def _as_view(value: Any) -> View:
+    """What a view action's function returned, as a view: a ``View`` as it
+    is; a ``str`` as text, a ``dict`` or ``list`` as a tree, a dataframe in
+    the data browser, and a Jupyter widget as it is. TypeError for anything
+    else."""
+    if isinstance(value, View):
+        return value
+    if isinstance(value, str):
+        return TextView(text=value)
+    if isinstance(value, (dict, list)):
+        return TreeView(value=value)
+    if nw.from_native(value, pass_through=True) is not value:
+        return QueryView(data=value)
+    if is_jupyter_widget(value):
+        return JupyterWidgetView(widget=value)
+    raise TypeError(
+        "a view returns a View, a str, a dict or list, a dataframe, or a "
+        f"Jupyter widget, not {type(value).__name__}"
+    )
 
 
 def _options_model(

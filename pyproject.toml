@@ -40,6 +40,7 @@ requires-python = ">=3.11"
 dependencies = [
     "anywidget>=0.9",
     "fsspec>=2023.1.0",
+    "jupyter-core>=5",
     "narwhals>=2.20",
     "pygments>=2.12",
     "traitlets>=5.4",
@@ -215,6 +216,8 @@ ignore = [
 # Actions import their libraries inside the functions, so that plugins load
 # without them.
 "plugins/*/src/**" = ["PLC0415"]
+# The users' actions file: its imports serve the commented example.
+"src/jupyter_storage_explorer/_extensions/actions_template.py" = ["F401"]
 
 [tool.ruff.lint.flake8-type-checking]
 # Actions' decorators read the options class from the annotation at run time.

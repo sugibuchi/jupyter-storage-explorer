@@ -6,7 +6,7 @@ import itertools
 import os
 import uuid
 import warnings
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import anywidget
 import traitlets
@@ -14,7 +14,6 @@ import traitlets
 from jupyter_storage_explorer import _paths, _static
 from jupyter_storage_explorer._callbacks import Callbacks
 from jupyter_storage_explorer._explorer.about import AboutMixin
-from jupyter_storage_explorer._explorer.actions import ActionChain
 from jupyter_storage_explorer._explorer.bookmarks import BookmarksMixin
 from jupyter_storage_explorer._explorer.common import (
     explorers,
@@ -22,7 +21,6 @@ from jupyter_storage_explorer._explorer.common import (
     within_top,
 )
 from jupyter_storage_explorer._explorer.folders import FoldersMixin
-from jupyter_storage_explorer._explorer.icons import format_icons
 from jupyter_storage_explorer._explorer.jobs import JobsMixin
 from jupyter_storage_explorer._explorer.jupyterlab import JupyterLabFilesMixin
 from jupyter_storage_explorer._explorer.listing import Listing
@@ -30,12 +28,18 @@ from jupyter_storage_explorer._explorer.mapper_css import mapper_key, mapper_sty
 from jupyter_storage_explorer._explorer.previews import PreviewsMixin, action_id
 from jupyter_storage_explorer._explorer.requests import FileRequestsMixin
 from jupyter_storage_explorer._explorer.states import ExplorerStates, explorer_states
+from jupyter_storage_explorer._explorer.user_actions import UserActionsMixin
+from jupyter_storage_explorer._extensions.plugins import PluginComponents, load_plugins
+from jupyter_storage_explorer._extensions.user_actions import (
+    create_user_actions_file,
+    user_actions_file,
+    users_actions_warned,
+)
 from jupyter_storage_explorer._jobs.incoming import IncomingFiles
 from jupyter_storage_explorer._jobs.loader import Loader
 from jupyter_storage_explorer._jobs.operation_chain import OperationChain
 from jupyter_storage_explorer._jobs.runner import JobRunner
 from jupyter_storage_explorer._jobs.transfer_policy import TransferPolicy
-from jupyter_storage_explorer._plugins import PluginComponents, load_plugins
 from jupyter_storage_explorer.filesystems import (
     LocalLocation,
     MapperChain,
@@ -47,7 +51,6 @@ from jupyter_storage_explorer.filesystems import (
 from jupyter_storage_explorer.filesystems.mapper import protocols
 from jupyter_storage_explorer.formats import (
     DataFormat,
-    Text,
     ViewLimits,
 )
 from jupyter_storage_explorer.formats.defaults import (
@@ -62,6 +65,7 @@ if TYPE_CHECKING:
     import narwhals as nw
     from fsspec import AbstractFileSystem
 
+    from jupyter_storage_explorer._explorer.actions import ActionChain
     from jupyter_storage_explorer._explorer.previews import _Asking, _Detected
     from jupyter_storage_explorer._explorer.table_set_tab import TableSetTab
     from jupyter_storage_explorer._explorer.view_tab import ViewTab
@@ -97,6 +101,9 @@ _LAYOUTS = ("standard", "sidebar")
 
 # The values of unsafe_mode: offered by the user's switch, always, or never.
 _UNSAFE_MODES = ("on_demand", "always", "blocked")
+
+# The values of user_actions: the actions of the user's files used, or not.
+_USER_ACTIONS = ("enabled", "disabled")
 
 
 def _code_engines(
@@ -171,6 +178,7 @@ class StorageExplorer(
     JupyterLabFilesMixin,
     JobsMixin,
     FileRequestsMixin,
+    UserActionsMixin,
     anywidget.AnyWidget,
 ):
     """Browse any fsspec-supported storage with a directory tree and a file list.
@@ -249,16 +257,29 @@ class StorageExplorer(
         lowest, then by key), and the plugin's own (its ``options_model``).
         Every plugin installed is used unless disabled here. A plugin that
         cannot be loaded, or options of one not installed, are left out with
-        a warning; an option a plugin does not have is a ValueError. What
-        plugins give is used after the ``actions``, ``operations`` and
-        ``filesystem_mappers`` given, and before the defaults.
+        a warning; an option a plugin does not have is a ValueError. The
+        plugins' operations and mappers are used after those given and
+        before the defaults; their actions, before all others.
+    user_actions : {"enabled", "disabled"}, default "enabled"
+        Whether to use the actions of the user's files,
+        ``storage-explorer/actions.py`` and ``storage-explorer/actions/*.py``
+        in Jupyter's configuration directories (``jupyter --paths``): the
+        user's first, then the environment's and the system's. Each file
+        gives the actions defined at its top level, or its ``ACTIONS``. They
+        are tried last, after ``actions``: additions to the explorer's
+        views and code, offered in its menus. A file that
+        cannot be used, e.g. with an error or an action of the same label as
+        another, is left out with a warning. Enabled, the settings menu
+        offers to edit the user's ``actions.py``, created from a template if
+        it is missing, and to reload the files' actions.
     actions : sequence of Action, optional
         Actions of your own, functions decorated with
-        ``formats.actions.view`` or ``code``, tried in order before the
-        plugins' and ``default_actions()``: for an item, the first view of
-        the engine chosen that does it is its default. An action of the same
-        kind, format, engine and name as another is a ValueError. The
-        formats files are detected as are those of the actions (their
+        ``formats.actions.view`` or ``code``. They are tried in order after
+        the plugins' and ``default_actions()``, and before the user's
+        files': for an item, the first view of the engine chosen that does
+        it is its default, and "Preview as" offers the others. An action of
+        the same kind, format, engine and label as another is a ValueError.
+        The formats files are detected as are those of the actions (their
         ``format``, one object of each), and the standard ones.
     engine_options : mapping, optional
         The actions' options, by engine key (``"python"`` for
@@ -471,10 +492,10 @@ class StorageExplorer(
     _explorer_id = traitlets.Unicode().tag(sync=True)
     # Absolute folder on the kernel's machine "Download to JupyterLab" copies into.
     _download_to_jupyterlab_path = traitlets.Unicode().tag(sync=True)
-    # The settings file the settings menu's "Edit settings" opens in
-    # JupyterLab; "" (no such item) unless the launcher offers it
-    # (_offer_settings).
-    _settings_path = traitlets.Unicode().tag(sync=True)
+    # The configuration files the settings menu opens in JupyterLab, by key
+    # (see _explorer/jupyterlab.py's CONFIG_FILES): the user's actions, and in
+    # the launcher's tabs their settings (_offer_config_file).
+    _config_paths = traitlets.Dict().tag(sync=True)
     # The engines to choose from in the settings menu, in order:
     # [{"key", "label"}]; and the key of the one chosen ("" if there is none),
     # which previews use. The frontend sets _engine when the user chooses.
@@ -495,6 +516,7 @@ class StorageExplorer(
         unsafe_mode: str = "on_demand",
         code_snippet: str | Sequence[str] = "enabled",
         plugin_options: Mapping[str, Mapping[str, Any]] | None = None,
+        user_actions: Literal["enabled", "disabled"] = "enabled",
         actions: Sequence[Action[Any]] | None = None,
         engine_options: EngineOptions | None = None,
         engine_preference: Sequence[str] | None = None,
@@ -610,19 +632,24 @@ class StorageExplorer(
         # Their loads still running, by "load_id": cancelled if the tab closes.
         self._view_tab_loads: dict[str, Load[Any]] = {}
         self._view_tab_ids = itertools.count(1)
-        # The launcher's settings file and the function creating it (see
-        # _offer_settings); None in notebooks.
-        self._settings_file: tuple[str, Callable[[], Any]] | None = None
+        # The configuration files the settings menu opens, by key, with the
+        # functions creating them (see _offer_config_file).
+        self._config_files: dict[str, tuple[str, Callable[[], Any]]] = {}
         # What is done with the formats' data: the actions in order, the first
         # installed that does an item its default, with their options (see
         # _explorer/actions.py); the formats files are detected as are the
         # actions', and the standard ones.
-        self._actions = ActionChain(
-            [*(actions or ()), *components.actions, *self.default_actions()],
-            engine_options,
-            formats=[*components.formats, *DEFAULT_FORMATS],
-            engine_preference=engine_preference,
-        )
+        # Plugins, installed to enrich or change the explorer, come first;
+        # then its own; then actions given and the user's files', additions
+        # to them rather than replacements.
+        # The user's are read again by "Reload actions" (see
+        # _explorer/user_actions.py), so the rest is kept.
+        given = list(actions or ())
+        self._other_actions = [*components.actions, *self.default_actions(), *given]
+        self._chain_formats = [*components.formats, *DEFAULT_FORMATS]
+        self._chain_options = (engine_options, engine_preference)
+        mine = self._users_actions(user_actions, self._other_actions)
+        self._actions = self._chain_of(mine)
         self._formats = self._actions.formats
         # The engines whose code "Python code" shows (None: all).
         self._code_engines = _code_engines(code_snippet, self._actions)
@@ -654,7 +681,6 @@ class StorageExplorer(
         self._remembered: dict[str, str] = {}
         name = next(iter(self._filesystems))
         self._fs: AbstractFileSystem = self._filesystems[name].fs
-        icons, svgs = format_icons(self._formats)
         super().__init__(
             _height=height,
             _tree_view=tree_view,
@@ -667,10 +693,7 @@ class StorageExplorer(
             _columns=_DEFAULT_COLUMNS[layout]
             if (remembered := self._states.columns(layout)) is None
             else remembered,
-            _format_labels={f.name: f.label for f in self._formats},
-            _text_formats=[f.name for f in self._formats if isinstance(f, Text)],
-            _format_icons=icons,
-            _file_icon_svgs=svgs,
+            **self._format_traits(),
             _mapper_css=mapper_styles(
                 self._mappers.mapper_in(storage.fs)
                 for storage in self._filesystems.values()
@@ -716,10 +739,28 @@ class StorageExplorer(
         """
         return _default_operations()
 
+    def _users_actions(
+        self, setting: str, others: Sequence[Action[Any]]
+    ) -> list[Action[Any]]:
+        """The actions of the user's files, with ``user_actions="enabled"``,
+        each file left out with a warning if it cannot be used with
+        ``others``; and the user's ``actions.py`` offered in the settings
+        menu. None with ``"disabled"``."""
+        if setting not in _USER_ACTIONS:
+            raise ValueError(
+                f"user_actions must be one of {_USER_ACTIONS}, not {setting!r}"
+            )
+        if setting == "disabled":
+            return []
+        self._offer_config_file(
+            "actions", user_actions_file(), create_user_actions_file
+        )
+        return users_actions_warned(others)
+
     @staticmethod
     def default_actions() -> list[Action[Any]]:
-        """The actions tried after those given and the plugins'; override it
-        in a subclass to change them.
+        """The actions tried after the plugins', before those given and the
+        user's; override it in a subclass to change them.
 
         Returns
         -------
@@ -1102,6 +1143,7 @@ class StorageExplorer(
             "jupyterlab_get": self._jupyterlab_get,
             "jupyterlab_save": self._jupyterlab_save,
             "settings_open": self._settings_open,
+            "reload_actions": self._reload_actions,
             "about": lambda c: self._about(),
             # File operations: most start a job (see _start).
             "move": self._move_request,

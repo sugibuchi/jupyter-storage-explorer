@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import pathlib
 from typing import Any
 
 from explorers import Explorer, entries, make
@@ -205,9 +206,10 @@ class TestOpenInJupyterLab:
         assert self.trust(mem_explorer, "/data/n.ipynb") == [False, False]
 
 
-class TestSettingsFile:
-    """The launcher's settings file, opened by the toolbar's settings button
-    through the same drive ("settings": that file only)."""
+class TestConfigFiles:
+    """The configuration files of the settings menu, opened through the same
+    drive ("settings": the key of that file, and only it): here the
+    launcher's, as its tabs offer it."""
 
     def offered(self, explorer: Explorer, tmp_path) -> tuple[Any, list[int]]:
         path = tmp_path / "launcher.py"
@@ -218,21 +220,35 @@ class TestSettingsFile:
             if not path.exists():
                 path.write_bytes(b"# template\n")
 
-        explorer._offer_settings(path, create)
+        explorer._offer_config_file("launcher", path, create)
         return path, created
 
-    def test_none_in_notebooks(self, mem_explorer):
-        assert mem_explorer._settings_path == ""  # no button
-        reply = mem_explorer.request({"type": "settings_open", "rid": 1})
-        assert reply["error"] == "this explorer has no settings file"
-        get = {"type": "jupyterlab_get", "rid": 2, "settings": True, "format": "text"}
+    def test_no_launcher_settings_in_notebooks(self, mem_explorer):
+        assert "launcher" not in mem_explorer._config_paths  # no menu item
+        reply = mem_explorer.request(
+            {"type": "settings_open", "rid": 1, "file": "launcher"}
+        )
+        assert reply["error"] == "this explorer has no such configuration file"
+        get = {
+            "type": "jupyterlab_get",
+            "rid": 2,
+            "settings": "launcher",
+            "format": "text",
+        }
         assert "error" in mem_explorer.request(get)
+
+    def test_unknown_keys(self, mem_explorer):
+        for key in ("other", True, None, ["launcher"]):
+            reply = mem_explorer.request(
+                {"type": "settings_open", "rid": 1, "file": key}
+            )
+            assert "error" in reply
 
     def test_open_get_and_save(self, mem_explorer, tmp_path):
         path, created = self.offered(mem_explorer, tmp_path)
-        assert mem_explorer._settings_path == str(path)
+        assert mem_explorer._config_paths["launcher"] == str(path)
         # Missing: the user is asked before it is created.
-        open_ = {"type": "settings_open", "rid": 1}
+        open_ = {"type": "settings_open", "rid": 1, "file": "launcher"}
         assert mem_explorer.request(open_)["missing"] is True
         assert created == []
         assert not path.exists()
@@ -245,7 +261,7 @@ class TestSettingsFile:
         assert "error" not in reply
         assert "missing" not in reply
         assert created == [1]
-        settings = {"settings": True, "format": "text"}
+        settings = {"settings": "launcher", "format": "text"}
         model = mem_explorer.request({"type": "jupyterlab_get", "rid": 2, **settings})
         assert model["model"]["content"] == "# template\n"
         save = {"type": "jupyterlab_save", "rid": 3, "content": "# mine\n", **settings}
@@ -260,7 +276,7 @@ class TestSettingsFile:
             {
                 "type": "jupyterlab_get",
                 "rid": 1,
-                "settings": True,
+                "settings": "launcher",
                 "filesystem": mem_explorer._filesystem,
                 "path": "/data/notes.md",
                 "format": "text",
@@ -272,6 +288,21 @@ class TestSettingsFile:
         def fail():
             raise PermissionError("denied")
 
-        mem_explorer._offer_settings(tmp_path / "launcher.py", fail)
-        open_ = {"type": "settings_open", "rid": 1, "create": True}
+        mem_explorer._offer_config_file("launcher", tmp_path / "launcher.py", fail)
+        open_ = {"type": "settings_open", "rid": 1, "file": "launcher", "create": True}
         assert "denied" in mem_explorer.request(open_)["error"]
+
+    def test_the_users_actions_file(self, mem_explorer):
+        # Offered in every explorer, created from the template when asked.
+        path = pathlib.Path(mem_explorer._config_paths["actions"])
+        assert path.parts[-2:] == ("storage-explorer", "actions.py")
+        open_ = {"type": "settings_open", "rid": 1, "file": "actions"}
+        assert mem_explorer.request(open_)["missing"] is True
+        assert "error" not in mem_explorer.request({**open_, "create": True})
+        text = path.read_text(encoding="utf-8")
+        assert text.startswith("# Storage Explorer actions: yours.")
+        assert "@view" in text
+
+    def test_no_actions_file_with_user_actions_disabled(self, memfs):
+        explorer = make("/", fs=memfs, user_actions="disabled")
+        assert explorer._config_paths == {}

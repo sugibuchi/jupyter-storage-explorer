@@ -20,6 +20,26 @@ def jupyter_data_dir(tmp_path_factory, monkeypatch):
     return folder
 
 
+@pytest.fixture(autouse=True)
+def jupyter_config_dirs(tmp_path_factory, monkeypatch):
+    """Jupyter configuration folders of each test's own, none read by
+    default: explorers never load the actions of the user's files, nor
+    create the user's actions.py in ~/.jupyter (the user's folder is an
+    empty one of the test's). A test adds folders to the list it returns,
+    the user's first."""
+    folders: list[str] = []
+    user = tmp_path_factory.mktemp("jupyter-config")
+    monkeypatch.setattr(
+        "jupyter_storage_explorer._extensions.user_actions.jupyter_config_path",
+        lambda: folders,
+    )
+    monkeypatch.setattr(
+        "jupyter_storage_explorer._extensions.user_actions.jupyter_config_dir",
+        lambda: str(user),
+    )
+    return folders
+
+
 @pytest.fixture
 def mem_explorer(memfs) -> Explorer:
     memfs.pipe_file("/data/a.csv", b"x,y\n1,2\n")

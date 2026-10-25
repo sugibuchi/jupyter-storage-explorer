@@ -23,6 +23,7 @@ explorer exactly, so an extra always installs the plugin of the explorer's versi
 | `src/jupyter_storage_explorer/filesystems/`                    | Filesystems' locations (mappers) and file operations: interfaces users extend, and the default ones. |
 | `src/jupyter_storage_explorer/formats/`                        | The formats files are previewed, queried and loaded as.                                              |
 | `src/jupyter_storage_explorer/_explorer/`                      | `StorageExplorer`'s features, as mixins of the class.                                                |
+| `src/jupyter_storage_explorer/_extensions/`                    | What extends the explorer from outside: plugins installed and the user's action files.               |
 | `src/jupyter_storage_explorer/_jobs/`                          | File operations planned and run as jobs, without the widget.                                         |
 | `src/jupyter_storage_explorer/_query/`                         | The data browser: filters, settings, and a dataset open in it.                                       |
 | `src/jupyter_storage_explorer/static/`                         | The widgets' JavaScript and CSS, loaded at run time (no build step).                                 |
@@ -116,6 +117,7 @@ tests expect pyspark missing, until `uv sync` at the root removes it.
 | `formats/`     | `formats/`                                     |
 | `filesystems/` | `filesystems/`                                 |
 | `jobs/`        | `_jobs/`                                       |
+| `extensions/`  | `_extensions/`: plugins and the user's actions |
 | `launcher/`    | The launcher                                   |
 | `browser/`     | The JavaScript's checks and the smoke test     |
 
@@ -254,11 +256,13 @@ know, the explorer may also open one with the user's credentials. It never opens
 
 ### Extended by chains, users first
 
-Formats, actions, file operations and mappers are each a chain, tried in order:
+Formats, file operations and mappers are each a chain, tried in order:
 
 1. what the explorer's arguments give;
 2. what the plugins give;
 3. the defaults.
+
+Actions are a chain too, in another order: see [The action chain](#the-action-chain).
 
 The first that takes an item handles it:
 
@@ -301,7 +305,7 @@ Cloud storages answer each call in tens of milliseconds, and folders hold tens o
 ### Written for AI to extend
 
 Users are expected to generate formats, actions and plugins with AI. So the rules are written where AI reads them:
-in docstrings and in docs/development-plugin.md.
+in docstrings and in docs/plugin-development-guide.md.
 
 - The decorators check what they can when a function is decorated: its parameters and its options class.
 - The explorer does not check at run time that an action keeps the other rules, by design.
@@ -396,6 +400,7 @@ share is in `_explorer/common.py`.
 | `JobsMixin`            | `jobs.py`       | Running file operations as jobs, and showing what they change.           |
 | `FileRequestsMixin`    | `requests.py`   | The requests for file operations.                                        |
 | `AboutMixin`           | `about.py`      | The settings menu's About: the versions of the explorer and the plugins. |
+| `UserActionsMixin`     | `user_actions.py` | The action chain, and the settings menu's Reload actions.              |
 
 ### Frontend
 
@@ -415,7 +420,7 @@ The storage explorer's parts are in `static/storage_explorer/`, one feature each
 - `operations.js`, with the clipboard;
 - `transfers.js`: drag and drop, uploads and downloads;
 - `jupyterlab.js`, `properties.js` and `jobs.js`;
-- `toolbar.js`, with unsafe mode and bookmarks;
+- `toolbar.js`, with unsafe mode, bookmarks and the settings menu;
 - `engine.js`, the engine chosen, and `about.js`, the settings menu's About;
 - `overlays.js`, for the busy screen, dialogs and menus, and `util.js`.
 
@@ -921,7 +926,7 @@ never show unfiltered.
 
 A format only detects files. An action does one thing with one format's data and one library: a view, or code loading
 it. So a library is added to a format, e.g. DuckDB for Parquet, without touching the format.
-[development-plugin.md](docs/development-plugin.md) says how to write each, with their rules.
+[plugin-development-guide.md](docs/plugin-development-guide.md) says how to write each, with their rules.
 
 `formats/` is laid out as `filesystems/`:
 
@@ -986,9 +991,18 @@ An action is a function decorated with `view` or `code`, from `formats/actions.p
 A view action may name its `code`, the code action reproducing it. An action takes its function's name, docstring and
 signature, so it reads as the function.
 
-The decorator checks the function's parameters, positional in a fixed order: `(fmt, ctx, options, limits)` for a view,
-`(fmt, ctx, options)` for code. A view returns one `View` and runs in a worker thread. Code returns one snippet and
-runs in a worker thread too.
+The explorer calls every action as `(fmt, ctx, options, limits)`, `limits` for views only. The function takes the
+parameters it names of those and of the item's parts, `url`, `url_or_local_path`, `name`, `path`, `size`, `is_dir` and `fs` (`_ARGUMENTS`),
+given by keyword. The decorator checks them; an action reads them again in `__post_init__`, for `dataclasses.replace`.
+The format and the engine may be given positionally, the engine defaulting to `PythonEngine`, and a code action's label
+to its function's name.
+
+A view returns one `View`, or plain data `ViewAction.__call__` makes one: a dataframe a `QueryView`, a `str` a
+`TextView`, a `dict` or `list` a `TreeView`. Views and code run in a worker thread.
+
+`file_format`, in `formats/user_defined.py`, makes formats of the user's own by name: `UserDefinedFormat` classes,
+cached by their arguments, named "user-format-N" in the order made. Their priority, -20, is below Text's, the
+fallback, so the explorer's and the plugins' formats win an item they match.
 
 `check(fmt, ctx, options)` decides without reading the storage, as it runs on the main thread for each item clicked.
 Once an action is chosen, the chain tries no other. What it raises is shown as the item's error, so a failure is never
@@ -1006,9 +1020,34 @@ runs on all its actions, refuses two cases:
 
 The explorer's `ActionChain`, in `_explorer/actions.py`, holds its actions in order:
 
-1. the explorer's `actions=`;
-2. the plugins' actions;
-3. `default_actions()`, by default `DEFAULT_ACTIONS`, the built-in ones.
+1. the plugins' actions;
+2. `default_actions()`, by default `DEFAULT_ACTIONS`, the built-in ones;
+3. the explorer's `actions=`;
+4. the actions of the user's files, unless `user_actions="disabled"` (see below).
+
+Plugins are installed to enrich or change the explorer, so a plugin's view of a format is its default. Actions given
+and the user's add to the explorer's: they are offered in "Preview as" and "Python code", and are the default only for
+formats nothing before them views. So the operations' order, given first, does not apply to actions.
+
+`load_user_actions`, in `_extensions/user_actions.py`, reads the user's action files in Jupyter's configuration directories, the
+user's first. In each, `storage-explorer/actions.py` comes first, then `storage-explorer/actions/*.py` by name, without
+those starting with `_`.
+
+- Each file is imported as a module of its own, registered in `sys.modules`, as dataclasses and type hints look
+  modules up.
+- A file gives its `ACTIONS`, or else the actions whose functions it defines, not those it imports.
+- A file that cannot be imported, or whose actions `check_actions` refuses with the explorer's others, is left out
+  with a warning.
+- The files are read again for each explorer, so a change applies to the next one.
+- "Reload actions", in the settings menu, reads them again in an explorer (`_reload_actions`, in
+  `_explorer/user_actions.py`). It makes the chain again with the other actions, kept by `__init__`, and sends the
+  formats' traits again. The folder is then listed again, as a refresh does. The preview open and the tabs keep the
+  actions they were made with.
+
+The settings menu opens configuration files in JupyterLab's editor, by key, through the launcher's drive
+(`_offer_config_file`, in `_explorer/jupyterlab.py`): "launcher", the launcher's `launcher.py`, in its tabs only, and
+"actions", the user's `actions.py`, created from `actions_template.py`. Tests never read nor write the user's folders:
+`tests/conftest.py` replaces them with folders of each test's own.
 
 Its formats are an object of each action's format, in that order, then the plugins' own formats and the defaults.
 The explorer has no `formats=` argument. Two format classes of one name are a `ValueError`, as two engine classes of
@@ -1045,6 +1084,9 @@ others' code still shows.
 - A `ViewWithPrompt` asks the user first: `ViewWithConfirmation`, `ViewWithChoice` or `ViewWithInput`.
 - The others, `TableView`, `TextView`, `TreeView`, `MarkdownView` and `MediaView`, are sent to the frontend as a
   section, which it renders by kind.
+- A `JupyterWidgetView` is a section with its widget's model id. The frontend renders the widget with the page's widget
+  manager, anywidget's `model.widget_manager`, in the preview panel and in view tabs alike. The view closes the widget
+  when it is closed.
 
 A prompt is a section too, without its function or a choice's values: the frontend answers with a label. Where it is
 shown:
@@ -1175,14 +1217,15 @@ or made with those options:
 
 Plugin options only include or leave out actions. Actions get their own options from `engine_options`.
 
-`load_plugins`, in `_plugins.py`, loads every plugin installed, highest priority first, then by key.
+`load_plugins`, in `_extensions/plugins.py`, loads every plugin installed, highest priority first, then by key.
 
 - A disabled plugin is not even imported. A plugin may default to disabled, to be opt-in.
 - An option the model lacks is a `ValueError`.
 - A plugin that fails is left out with a `RuntimeWarning`: it fails to import or be created, is no plugin class, or
   clashes with another's name or key.
 
-The explorer uses each kind of component as given in its arguments, then the plugins', then its defaults.
+The explorer uses formats, operations and mappers as given in its arguments, then the plugins', then its defaults.
+Actions come in the order of [The action chain](#the-action-chain).
 
 A plugin's name, description, version, authors, license and URLs are its package's metadata. About shows them, also for
 plugins not loaded. Plugins never depend on their libraries: their `full` extra installs them.
@@ -1267,6 +1310,14 @@ test. Dependabot does not update them, as it writes `yarn.lock` in a format jlpm
 vulnerable ones.
 
 ## Releasing
+
+Before tagging, point the Binder demo at the release:
+
+- `binder/requirements.txt` pins the launcher of the new version, e.g. `==X.Y.Z`;
+- README.md's Binder links open the new tag, `.../v2/gh/sugibuchi/jupyter-storage-explorer/vX.Y.Z?...`.
+
+Binder installs the released packages, while it runs the demo's files of the commit it opens. A link to `main` would
+run the next version's demo on the last release's packages.
 
 Releases are made by GitHub Actions: push a version tag from `main`,
 
@@ -1368,8 +1419,13 @@ Build from a clean checkout of the tag: uncommitted changes give a version like 
 The root `README.md` is the quick start and highlights. PyPI shows it too and cannot resolve relative paths, so its
 links and images are absolute GitHub URLs.
 
-The details are in `docs/` (`storage-explorer.md`, `data-explorer.md`). They are read on GitHub only, so they link to
-each other and to the repository's files with relative paths.
+The details are in `docs/`:
+
+- `storage-explorer.md` and `data-explorer.md`, for users;
+- `action-development-guide.md`, for users' own actions;
+- `plugin-development-guide.md`, for extending the explorer and packaging plugins.
+
+They are read on GitHub only, so they link to each other and to the repository's files with relative paths.
 
 The screenshots (`docs/figs/`, `launcher/figs/`) and the demo GIFs are made by the scripts in
 [`docs/scripts/`](docs/scripts/README.md). They use Playwright and the installed Microsoft Edge, on a made-up data lake
@@ -1382,7 +1438,7 @@ uv run --group docs docs/scripts/make_all.py
 ## Customizing
 
 Icons are changed with CSS (below). Formats, engines, file operations and storages are added in Python, as plugins
-that every explorer uses once installed. See [development-plugin.md](docs/development-plugin.md), which also covers
+that every explorer uses once installed. See [plugin-development-guide.md](docs/plugin-development-guide.md), which also covers
 this repository's plugins (`plugins/`).
 
 ### Icons
@@ -1397,7 +1453,7 @@ The icons of files and plain folders are JupyterLab's file browser's, as SVG ima
   - Databricks' catalogs, schemas, volumes and workspace folders.
 
   The filesystem's mapper tells which they are, and its CSS gives their icons: `FileSystemMapper.level` and
-  `FileSystemMapper.css`, see [development-plugin.md](docs/development-plugin.md#how-its-storages-look). The icon
+  `FileSystemMapper.css`, see [plugin-development-guide.md](docs/plugin-development-guide.md#how-its-storages-look). The icon
   hides the folder's image, and is drawn in its `.jse-icon::before`, as a mask.
 - **Azure, S3, GCS and Databricks** icons are in their cloud's colour, the variable `--jse-storage-color`. For example,
   `.jse-browser[data-fs-protocol="s3"] { --jse-storage-color: green; }`, or `initial` for JupyterLab's grey.

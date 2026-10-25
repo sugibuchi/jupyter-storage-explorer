@@ -355,7 +355,16 @@ may work, but are not guaranteed to.
 The preview and the data browser use the [engine](#engines) chosen. **Python code** shows the code of every engine
 installed in the kernel, each snippet under its engine.
 The name identifies the format in CSS (see [Icons](../DEVELOPMENT.md#icons)) and in [Engine options](#engine-options).
-To handle a format with another library, see [Actions](development-plugin.md#actions).
+To view or load a format your own way, see [Actions of your own](#actions-of-your-own).
+
+## Actions of your own
+
+Views and code of your own, called actions, go in `~/.jupyter/storage-explorer/actions.py`. The ⚙ menu's
+**Edit actions** opens it in JupyterLab's editor, created from a commented example if it is missing. Every explorer
+then offers them in **Preview as** and **Python code**, beside its own. **Reload actions**, in the same menu, applies
+a change to the file.
+
+The [Action development guide](action-development-guide.md) shows how, step by step.
 
 ## Engine options
 
@@ -494,6 +503,7 @@ Storages and data:
 |---------------------------|------------------------------------------------------------------------------------------------------------|
 | `filesystems={...}`       | Several named storages; see [Several storages in one explorer](#several-storages-in-one-explorer).         |
 | `plugin_options={...}`    | The plugins' options, by key, e.g. `{"pandas-support": {"enabled": False}}`; see each plugin's README. |
+| `user_actions="enabled"`  | `"disabled"`: no actions of your files; see [Turning them off](action-development-guide.md#turning-them-off). |
 | `engine_options={...}`    | The engines' options; see [Engine options](#engine-options).                                               |
 | `engine_preference=[...]` | The engines in the order they are offered, the first chosen until the user chooses; see [Engines](#engines). |
 
@@ -529,6 +539,6 @@ For extending the explorer, tried before the defaults:
 
 | Option                     | Meaning                                                                                                               |
 |----------------------------|-----------------------------------------------------------------------------------------------------------------------|
-| `operations=[...]`         | File operations; see [File operations](development-plugin.md#file-operations).                                     |
-| `actions=[...]`            | Views and code of formats with libraries, as functions; see [Actions](development-plugin.md#actions).              |
-| `filesystem_mappers=[...]` | How storages are told apart; see [Filesystem mappers](development-plugin.md#filesystem-mappers).                   |
+| `operations=[...]`         | File operations; see [File operations](plugin-development-guide.md#file-operations).                                     |
+| `actions=[...]`            | Views and code of formats with libraries, as functions; see [Actions](plugin-development-guide.md#actions).              |
+| `filesystem_mappers=[...]` | How storages are told apart; see [Filesystem mappers](plugin-development-guide.md#filesystem-mappers).                   |

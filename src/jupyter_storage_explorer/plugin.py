@@ -63,8 +63,10 @@ class StorageExplorerPlugin:
     ``"jupyter_storage_explorer.plugins"``, named by its ``key``. Each
     explorer creates the plugins installed with their options (its
     ``plugin_options``, as an ``options_model`` object, ``self.options``),
-    and uses what their properties give after what the explorer is given and
-    before its own defaults.
+    and uses what their properties give. Their actions come before all
+    others, as a plugin is installed to enrich or change the explorer: a
+    plugin's view of a format is its default. Their operations and mappers
+    come after those the explorer is given, and before its own.
 
     Conventions: one plugin per engine or filesystem, in a package named
     ``jupyter-storage-explorer-<name>-support``, described (its

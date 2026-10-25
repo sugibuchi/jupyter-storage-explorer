@@ -174,7 +174,7 @@ def _fsspec_code(template: str, ctx: ItemContext, options: FsspecOptions) -> str
 
 
 @code(format=Text, engine=PythonEngine, label=READ_TEXT, requires=(Fsspec(),))
-def text_code(fmt: Text, ctx: ItemContext, options: FsspecOptions) -> str:
+def text_code(ctx: ItemContext, options: FsspecOptions) -> str:
     """Text read with fsspec."""
     return _fsspec_code(TEXT_TEMPLATE, ctx, options)
 
@@ -191,9 +191,7 @@ def text_view(
 
 
 @view(format=Markdown, engine=PythonEngine)
-def markdown_view(
-    fmt: Markdown, ctx: ItemContext, options: ActionOptions, limits: ViewLimits
-) -> View:
+def markdown_view(ctx: ItemContext, limits: ViewLimits) -> View:
     """Markdown, rendered by the browser. Registered before ``text_view``:
     Markdown is a Text format."""
     text, truncated = ctx.head_text(limits.max_bytes)
@@ -202,15 +200,13 @@ def markdown_view(
 
 
 @code(format=Json, engine=PythonEngine, label=LOAD_VALUE, requires=(Fsspec(),))
-def json_code(fmt: Json, ctx: ItemContext, options: FsspecOptions) -> str:
+def json_code(ctx: ItemContext, options: FsspecOptions) -> str:
     """The JSON value, loaded with fsspec and Python's json."""
     return _fsspec_code(JSON_TEMPLATE, ctx, options)
 
 
 @view(format=Json, engine=PythonEngine, code=json_code)
-def json_view(
-    fmt: Json, ctx: ItemContext, options: FsspecOptions, limits: ViewLimits
-) -> View:
+def json_view(ctx: ItemContext, options: FsspecOptions, limits: ViewLimits) -> View:
     """JSON as a tree, or as text if it is too large or invalid."""
     text, truncated = ctx.head_text(limits.max_bytes)
     if truncated:
@@ -223,9 +219,7 @@ def json_view(
 
 
 @view(format=Image, engine=PythonEngine)
-def image_view(
-    fmt: Image, ctx: ItemContext, options: ActionOptions, limits: ViewLimits
-) -> View:
+def image_view(fmt: Image, ctx: ItemContext, limits: ViewLimits) -> View:
     """Images, shown by the browser: their bytes, or a temporary link for
     those too large to send through the kernel."""
     mime = fmt.mime_type(ctx.path)
@@ -253,7 +247,7 @@ def _not_svg(fmt: Image, ctx: ItemContext, options: ActionOptions) -> bool:
     requires=(Fsspec(), Pillow()),
     check=_not_svg,
 )
-def image_code(fmt: Image, ctx: ItemContext, options: FsspecOptions) -> str:
+def image_code(ctx: ItemContext, options: FsspecOptions) -> str:
     """The image, read with fsspec and opened with Pillow. Pillow is needed
     by this code only: images are viewed without it."""
     return _fsspec_code(IMAGE_TEMPLATE, ctx, options)

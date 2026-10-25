@@ -27,7 +27,7 @@ function render({ model, el }) {
 
   // A prompt's answer goes to the kernel, which shows the view of it in the
   // tab, in a widget of its own.
-  const actions = { answer: (content) => model.send({ type: "answer", ...content }) };
+  const actions = { answer: (content) => model.send({ type: "answer", ...content }), widgetManager: model.widget_manager };
 
   function renderView() {
     body.replaceChildren(renderSection(model.get("view"), actions));

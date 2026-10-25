@@ -22,6 +22,7 @@ from jupyter_storage_explorer.data_explorer import DataExplorer
 from jupyter_storage_explorer.formats import (
     DataFormat,
     ItemContext,
+    JupyterWidgetView,
     MediaView,
     QueryView,
     TableSetView,
@@ -210,8 +211,11 @@ def section(view: View) -> dict[str, Any]:
     data = {
         f.name: getattr(view, f.name)
         for f in dataclasses.fields(view)
-        if not f.name.startswith("_") and f.name != "factory"
+        if not f.name.startswith("_") and f.name not in ("factory", "widget")
     }
+    if isinstance(view, JupyterWidgetView):
+        # The page renders the widget's model, which its kernel already sent.
+        data["model_id"] = view.widget.model_id
     if isinstance(view, MediaView) and view.data is not None:
         data["data"] = base64.b64encode(view.data).decode("ascii")
     if isinstance(view, TableView):

@@ -165,7 +165,7 @@ class DeltaLakeByDatabricksConnectOptions(DeltaLakeByPySparkOptions):
     check=spark_can_read,
 )
 def delta_as_data_frame(
-    fmt: DeltaLake, ctx: ItemContext, options: DeltaLakeByDatabricksConnectOptions
+    ctx: ItemContext, options: DeltaLakeByDatabricksConnectOptions
 ) -> str:
     """A Delta Lake table into a DataFrame."""
     return spark_delta_code(DATABRICKS_SESSIONS, ctx, options)
@@ -178,10 +178,8 @@ def delta_as_data_frame(
     code=delta_as_data_frame,
 )
 def delta_view(
-    fmt: DeltaLake,
     ctx: ItemContext,
     options: DeltaLakeByDatabricksConnectOptions,
-    limits: ViewLimits,
 ) -> View:
     """A Delta Lake table in the data browser."""
     return spark_delta_view(DATABRICKS_SESSIONS, ctx, options)
@@ -194,7 +192,7 @@ def delta_view(
     check=spark_can_read,
 )
 def parquet_as_data_frame(
-    fmt: Parquet, ctx: ItemContext, options: ParquetByDatabricksConnectOptions
+    ctx: ItemContext, options: ParquetByDatabricksConnectOptions
 ) -> str:
     """A Parquet file or a folder of them into a DataFrame."""
     return spark_parquet_code(DATABRICKS_SESSIONS, ctx, options)
@@ -207,10 +205,8 @@ def parquet_as_data_frame(
     code=parquet_as_data_frame,
 )
 def parquet_view(
-    fmt: Parquet,
     ctx: ItemContext,
     options: ParquetByDatabricksConnectOptions,
-    limits: ViewLimits,
 ) -> View:
     """A Parquet file or a folder of them in the data browser."""
     return spark_parquet_view(DATABRICKS_SESSIONS, ctx, options)
@@ -252,7 +248,7 @@ def csv_view(
     check=spark_can_read,
 )
 def json_lines_as_data_frame(
-    fmt: JsonLines, ctx: ItemContext, options: JsonLinesByDatabricksConnectOptions
+    ctx: ItemContext, options: JsonLinesByDatabricksConnectOptions
 ) -> str:
     """JSON Lines into a DataFrame."""
     return spark_json_lines_code(DATABRICKS_SESSIONS, ctx, options)
@@ -265,10 +261,8 @@ def json_lines_as_data_frame(
     code=json_lines_as_data_frame,
 )
 def json_lines_view(
-    fmt: JsonLines,
     ctx: ItemContext,
     options: JsonLinesByDatabricksConnectOptions,
-    limits: ViewLimits,
 ) -> View:
     """JSON Lines in the data browser."""
     return spark_json_lines_view(DATABRICKS_SESSIONS, ctx, options)

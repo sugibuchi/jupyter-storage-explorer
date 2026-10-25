@@ -1,4 +1,4 @@
-"""Plugins for tests/test_plugins.py, loaded through fake entry points."""
+"""Plugins for tests/extensions/test_plugins.py, loaded through fake entry points."""
 
 from __future__ import annotations
 

@@ -78,8 +78,9 @@ function createToolbar(x) {
   });
   refreshBtn.addEventListener("click", () => model.send({ type: "refresh" }));
   // "Edit configuration" opens the launcher's settings file in JupyterLab's
-  // editor: only in its tabs (the kernel sets _settings_path), with the
-  // launcher's extension.
+  // editor, only in its tabs; "Edit actions" the user's actions file, unless
+  // user_actions is disabled. Both need the launcher's extension, and come
+  // from the kernel's _config_paths.
   function showSettingsMenu() {
     const items = [];
     if (sidebar && x.unsafe.switchable()) {
@@ -119,17 +120,50 @@ function createToolbar(x) {
           ),
         ),
     });
-    const path = model.get("_settings_path");
-    if (path && x.jupyterlab.canOpenSettings()) {
+    const paths = model.get("_config_paths");
+    if (x.jupyterlab.canOpenSettings()) {
+      if (paths.launcher) {
+        items.push({
+          label: "Edit configuration",
+          icon: "edit",
+          title: `${visible(paths.launcher)}\nOpen a new Storage Explorer tab, or reload the page, to apply the changes.`,
+          action: () => void x.jupyterlab.openSettings("launcher"),
+        });
+      }
+      if (paths.actions) {
+        items.push({
+          label: "Edit actions",
+          icon: "edit",
+          title: `${visible(paths.actions)}\nReload actions, in this menu, to apply the changes.`,
+          action: () => void x.jupyterlab.openSettings("actions"),
+        });
+      }
+    }
+    // Without the extension too: the kernel reads the files itself.
+    if (paths.actions) {
       items.push({
-        label: "Edit configuration",
-        icon: "edit",
-        title: `${visible(path)}\nOpen a new Storage Explorer tab, or reload the page, to apply the changes.`,
-        action: () => void x.jupyterlab.openSettings(),
+        label: "Reload actions",
+        icon: "refresh",
+        title: `Read ${visible(paths.actions)} and the other actions files again.`,
+        action: () => void reloadActions(),
       });
     }
     items.push({ label: "About", icon: "info", action: () => void x.about.show() });
     x.menu.showBelow(settingsBtn, items);
+  }
+
+  // "Reload actions": the kernel reads the user's actions files again and
+  // lists the folder again ("reload_actions"). A file left out, e.g. with a
+  // syntax error, is flashed as an error; the others' actions are used.
+  async function reloadActions() {
+    const reply = await x.request({ type: "reload_actions" });
+    if (reply.error) {
+      x.flash(`Cannot reload actions: ${visible(reply.error)}`, { error: true });
+    } else if (reply.problems.length) {
+      x.flash(reply.problems.map(visible).join("\n"), { error: true });
+    } else {
+      x.flash(`Actions reloaded: ${reply.actions} of yours`);
+    }
   }
 
   settingsBtn.addEventListener("click", () => {

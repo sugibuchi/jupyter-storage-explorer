@@ -20,33 +20,50 @@ if TYPE_CHECKING:
     from fsspec import AbstractFileSystem
 
 
+# The configuration files an explorer may offer in its settings menu, by key:
+# the launcher's settings (its tabs only) and the user's actions.
+CONFIG_FILES = ("launcher", "actions")
+
+
 class JupyterLabFilesMixin:
     """Files opened in JupyterLab's own editors and viewers, read and saved
     through the launcher's drive ("jupyterlab_get", "jupyterlab_save").
 
-    The launcher's tabs also open their settings file this way (the toolbar's
-    settings button): it is on the kernel's disk, but usually outside what
+    The settings menu also opens configuration files this way (see
+    ``CONFIG_FILES``): they are on the kernel's disk, but usually outside what
     JupyterLab's file browser serves (``~/.jupyter`` is hidden).
     """
 
-    def _offer_settings(
-        self, path: str | os.PathLike[str], create: Callable[[], Any]
+    _config_files: dict[str, tuple[str, Callable[[], Any]]]
+    _config_paths: dict[str, str]
+
+    def _offer_config_file(
+        self, key: str, path: str | os.PathLike[str], create: Callable[[], Any]
     ) -> None:
-        """Show the settings button, which opens the file ``path`` in
-        JupyterLab, calling ``create()`` first (it creates the file if it is
-        missing). Only the launcher calls it: explorers in notebooks have no
-        settings file."""
-        self._settings_file = (os.fspath(path), create)
-        self._settings_path = os.fspath(path)
+        """Offer the configuration file ``key`` (of ``CONFIG_FILES``) in the
+        settings menu, which opens the file ``path`` in JupyterLab, calling
+        ``create()`` first (it creates the file if it is missing)."""
+        if key not in CONFIG_FILES:
+            raise ValueError(f"unknown configuration file {key!r}")
+        self._config_files = {**self._config_files, key: (os.fspath(path), create)}
+        self._config_paths = {**self._config_paths, key: os.fspath(path)}
+
+    def _config_file(self, key: Any) -> tuple[str, Callable[[], Any]]:
+        """The path and the function creating the configuration file ``key``,
+        a key the page sent; ValueError if the explorer offers none of it."""
+        if not isinstance(key, str) or key not in self._config_files:
+            raise ValueError("this explorer has no such configuration file")
+        return self._config_files[key]
 
     def _settings_open(self, content: dict[str, Any]) -> dict[str, Any]:
-        """Answer "settings_open": the settings file exists, so it can be opened
-        in JupyterLab; {}, or {"missing": True} if it does not and "create" is
-        not set (the user is asked first), or {"error"}. With "create", a
-        missing file is created."""
-        if self._settings_file is None:
-            return {"error": "this explorer has no settings file"}
-        path, create = self._settings_file
+        """Answer "settings_open": the configuration file of "file" exists, so
+        it can be opened in JupyterLab; {}, or {"missing": True} if it does
+        not and "create" is not set (the user is asked first), or {"error"}.
+        With "create", a missing file is created."""
+        try:
+            path, create = self._config_file(content.get("file"))
+        except ValueError as exc:
+            return {"error": str(exc)}
         try:
             if not os.path.exists(path):
                 if not content.get("create"):
@@ -61,12 +78,10 @@ class JupyterLabFilesMixin:
     ) -> tuple[AbstractFileSystem, str]:
         """The storage and path of a file opened in JupyterLab: by the storage's
         name, as the file may stay open there while another storage is shown;
-        or with "settings", the settings file (see _offer_settings), and no
-        other, whatever the path."""
+        or with "settings", the configuration file of that key (see
+        _offer_config_file), and no other, whatever the path."""
         if content.get("settings"):
-            if self._settings_file is None:
-                raise ValueError("this explorer has no settings file")
-            return LocalFileSystem(), self._settings_file[0]
+            return LocalFileSystem(), self._config_file(content["settings"])[0]
         storage = self._filesystems.get(content.get("filesystem"))
         path = content.get("path")
         if (

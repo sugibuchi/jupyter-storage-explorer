@@ -98,6 +98,7 @@ function createPreview(x) {
       const actions = {
         answer: (content) => model.send({ type: "preview_answer", path: preview.path, ...content }),
         again: () => open(preview.path, preview.format, preview.engine, preview.action),
+        widgetManager: model.widget_manager,
       };
       children = preview.sections.map((section) => renderSection(section, actions));
     }

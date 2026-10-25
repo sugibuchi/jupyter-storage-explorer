@@ -148,6 +148,18 @@ class Lab:
         finally:
             path.write_text(LAUNCHER_PY, encoding="utf-8")
 
+    @contextlib.contextmanager
+    def user_actions(self, name: str, source: str) -> Iterator[None]:
+        """Explorers created meanwhile read ``source`` as the user's actions
+        file ``storage-explorer/actions/<name>``, removed after."""
+        path = self.folder / "config" / "storage-explorer" / "actions" / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(source, encoding="utf-8")
+        try:
+            yield
+        finally:
+            path.unlink()
+
     def url(self, path: str = "") -> str:
         """``/lab/<path>`` in a new, empty workspace, so that no tab or panel
         of an earlier page is restored."""

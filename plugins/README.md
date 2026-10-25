@@ -59,4 +59,4 @@ has its options.
 ## Writing a plugin
 
 Your favourite library is not here yet? You, or your AI assistant, can write a plugin for it. See
-[Developing plugins](../docs/development-plugin.md).
+[Plugin development guide](../docs/plugin-development-guide.md).

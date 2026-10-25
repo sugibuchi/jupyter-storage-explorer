@@ -54,31 +54,38 @@ function createJupyterLab(x) {
     }).catch((err) => x.flash(`Cannot open in JupyterLab: ${err.message ?? err}`, { error: true }));
   }
 
-  // The launcher's settings file (the toolbar's settings button), created by
-  // the kernel from its template if missing, once the user agrees
-  // ("settings_open"), then opened as a file of its own storage: get and save
-  // name no path, the kernel reads and writes that file only ("settings").
+  // The configuration files of the settings menu, by key (the kernel's
+  // _config_paths): the launcher's settings, in its tabs, and the user's
+  // actions. Each is created by the kernel from its template if missing,
+  // once the user agrees ("settings_open"), then opened as a file of its own
+  // storage: get and save name no path, the kernel reads and writes that
+  // file only ("settings": its key).
+  const CONFIG_FILES = {
+    launcher: { storage: "Launcher settings", name: "launcher.py", create: "Create your launcher settings from a template?" },
+    actions: { storage: "Your actions", name: "actions.py", create: "Create your actions file from a template?" },
+  };
   const canOpenSettings = () => Boolean(globalThis[JUPYTERLAB]?.open);
 
-  async function openSettings() {
-    let reply = await request({ type: "settings_open" });
+  async function openSettings(key) {
+    const file = CONFIG_FILES[key];
+    let reply = await request({ type: "settings_open", file: key });
     if (reply.missing) {
-      const lines = question("Create your launcher settings from a template?", model.get("_settings_path"));
+      const lines = question(file.create, model.get("_config_paths")[key]);
       if (!(await x.ask(lines, confirmButtons("Create")))) return;
-      reply = await request({ type: "settings_open", create: true });
+      reply = await request({ type: "settings_open", file: key, create: true });
     }
     if (reply.error) {
-      x.flash(`Cannot open the settings: ${reply.error}`, { error: true });
+      x.flash(`Cannot open ${file.name}: ${reply.error}`, { error: true });
       return;
     }
-    const ask = (type, options) => askKernel({ ...options, type, settings: true });
+    const ask = (type, options) => askKernel({ ...options, type, settings: key });
     globalThis[JUPYTERLAB].open({
       explorer: model.get("_explorer_id"),
-      storage: "Launcher settings",
-      path: "launcher.py",
+      storage: file.storage,
+      path: file.name,
       get: (options) => ask("jupyterlab_get", options),
       save: (options) => ask("jupyterlab_save", options),
-    }).catch((err) => x.flash(`Cannot open the settings: ${err.message ?? err}`, { error: true }));
+    }).catch((err) => x.flash(`Cannot open ${file.name}: ${err.message ?? err}`, { error: true }));
   }
 
   // "View in a new tab": the kernel answers at once ("view_tab"), and the
