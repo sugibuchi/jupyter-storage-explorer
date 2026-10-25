@@ -132,7 +132,7 @@ def test_the_engine():
     for action in actions:
         assert action.engine is DatabricksConnectEngine
     assert DatabricksConnectEngine.key == "databricks-connect"
-    assert [p.package for p in DatabricksConnectEngine.packages()] == [
+    assert [p.package for p in DatabricksConnectEngine.requirements] == [
         "databricks-connect"
     ]
     # Databricks has Delta Lake: no delta-spark.

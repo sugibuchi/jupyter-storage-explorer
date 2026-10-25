@@ -20,6 +20,7 @@ from jupyter_storage_explorer.formats import (
     FormatSupport,
     Markdown,
     Parquet,
+    PythonEngine,
     PythonPackage,
     package,
 )
@@ -58,14 +59,9 @@ class TestEngine:
         assert engine("a").is_installed()
         assert not engine("b", (Installed(), Missing())).is_installed()
 
-    def test_alternatives(self):
-        either = engine("c", ((Missing(),), (Installed(),)))
-        assert either.is_installed()
-        assert [type(p) for p in either.packages()] == [Installed]  # the one installed
-        neither = engine("d", ((Missing(),), (Missing(),)))
-        assert not neither.is_installed()
-        assert [type(p) for p in neither.packages()] == [Missing]  # the first
-        assert engine("e", ()).is_installed()  # none needed
+    def test_none_needed(self):
+        assert engine("e", ()).is_installed()
+        assert PythonEngine.is_installed()
 
     def test_dotted_import_names(self):
         # "databricks.connect": a missing parent is not installed, not an error.

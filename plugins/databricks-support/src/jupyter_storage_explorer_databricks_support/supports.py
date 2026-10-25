@@ -23,6 +23,7 @@ from jupyter_storage_explorer_pyspark_support import (
     ParquetByPySparkOptions,
     PySparkOptions,
     SparkSessions,
+    spark_can_read,
     spark_csv_code,
     spark_csv_view,
     spark_delta_code,
@@ -31,7 +32,6 @@ from jupyter_storage_explorer_pyspark_support import (
     spark_json_lines_view,
     spark_parquet_code,
     spark_parquet_view,
-    spark_reads,
 )
 from jupyter_storage_explorer_pyspark_support.supports import AS_DATA_FRAME
 
@@ -162,7 +162,7 @@ class DeltaLakeByDatabricksConnectOptions(DeltaLakeByPySparkOptions):
     format=DeltaLake,
     engine=DatabricksConnectEngine,
     name=AS_DATA_FRAME,
-    check=spark_reads,
+    check=spark_can_read,
 )
 def delta_as_data_frame(
     fmt: DeltaLake, ctx: ItemContext, options: DeltaLakeByDatabricksConnectOptions
@@ -174,7 +174,7 @@ def delta_as_data_frame(
 @view(
     format=DeltaLake,
     engine=DatabricksConnectEngine,
-    check=spark_reads,
+    check=spark_can_read,
     code=delta_as_data_frame,
 )
 def delta_view(
@@ -191,7 +191,7 @@ def delta_view(
     format=Parquet,
     engine=DatabricksConnectEngine,
     name=AS_DATA_FRAME,
-    check=spark_reads,
+    check=spark_can_read,
 )
 def parquet_as_data_frame(
     fmt: Parquet, ctx: ItemContext, options: ParquetByDatabricksConnectOptions
@@ -203,7 +203,7 @@ def parquet_as_data_frame(
 @view(
     format=Parquet,
     engine=DatabricksConnectEngine,
-    check=spark_reads,
+    check=spark_can_read,
     code=parquet_as_data_frame,
 )
 def parquet_view(
@@ -216,7 +216,9 @@ def parquet_view(
     return spark_parquet_view(DATABRICKS_SESSIONS, ctx, options)
 
 
-@code(format=Csv, engine=DatabricksConnectEngine, name=AS_DATA_FRAME, check=spark_reads)
+@code(
+    format=Csv, engine=DatabricksConnectEngine, name=AS_DATA_FRAME, check=spark_can_read
+)
 def csv_as_data_frame(
     fmt: Csv, ctx: ItemContext, options: CsvByDatabricksConnectOptions
 ) -> str:
@@ -227,7 +229,7 @@ def csv_as_data_frame(
 @view(
     format=Csv,
     engine=DatabricksConnectEngine,
-    check=spark_reads,
+    check=spark_can_read,
     code=csv_as_data_frame,
 )
 def csv_view(
@@ -244,7 +246,7 @@ def csv_view(
     format=JsonLines,
     engine=DatabricksConnectEngine,
     name=AS_DATA_FRAME,
-    check=spark_reads,
+    check=spark_can_read,
 )
 def json_lines_as_data_frame(
     fmt: JsonLines, ctx: ItemContext, options: JsonLinesByDatabricksConnectOptions
@@ -256,7 +258,7 @@ def json_lines_as_data_frame(
 @view(
     format=JsonLines,
     engine=DatabricksConnectEngine,
-    check=spark_reads,
+    check=spark_can_read,
     code=json_lines_as_data_frame,
 )
 def json_lines_view(

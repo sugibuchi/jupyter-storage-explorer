@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import io
 from dataclasses import dataclass
+from inspect import cleandoc
 from typing import TYPE_CHECKING, Any
 
 from jupyter_storage_explorer.filesystems.locations import LocalLocation
@@ -37,6 +38,7 @@ from jupyter_storage_explorer.formats.view import (
     View,
     ViewLimits,
     ViewWithChoice,
+    format_size,
 )
 
 if TYPE_CHECKING:
@@ -309,63 +311,80 @@ _READ_BY_POLARS = frozenset(
 )
 
 
-def reads_itself(ctx: ItemContext) -> bool:
-    """Whether polars reads the item by its location itself, lazily."""
+# The checks of the actions below, and what the actions decide with them.
+# A LazyFrame's code reads the URL, so it is offered only where polars reads
+# the storage itself. Elsewhere, a file's DataFrame code opens it with
+# fsspec and gives polars the file, which it reads whole: no LazyFrame,
+# which would read it whole all the same. Folders have no code there.
+
+
+def _read_by_polars(fmt: DataFormat, ctx: ItemContext, options: SupportOptions) -> bool:
+    """Whether polars reads the item by its location itself, lazily: the
+    LazyFrame code's and Delta Lake's check."""
     if isinstance(ctx.location, LocalLocation):
         return True
     return ctx.location.url.partition(":")[0].lower() in _READ_BY_POLARS
 
 
-# The checks of the actions below. A LazyFrame's code reads the URL, so it
-# is offered only where polars reads the storage itself. Elsewhere, a file's
-# DataFrame code opens it with fsspec and gives polars the file, which it
-# reads whole (``_opened_with_fsspec``): no LazyFrame, which would read it
-# whole all the same. Folders have no code there.
+def _can_offer_recipe(
+    fmt: DataFormat, ctx: ItemContext, options: SupportOptions
+) -> bool:
+    """Whether DataFrame code can load the item: polars reads it itself, or
+    the code opens the file with fsspec."""
+    return _read_by_polars(fmt, ctx, options) or not ctx.is_dir
 
 
-def _read_by_polars(fmt: DataFormat, ctx: ItemContext, options: SupportOptions) -> bool:
-    """Whether polars reads the item by its location itself."""
-    return reads_itself(ctx)
-
-
-def _read_or_a_file(fmt: DataFormat, ctx: ItemContext, options: SupportOptions) -> bool:
-    """Whether polars reads the item itself, or code can open it with
-    fsspec: a file."""
-    return reads_itself(ctx) or not ctx.is_dir
-
-
-def _opened_with_fsspec(ctx: ItemContext) -> bool:
+def _opened_with_fsspec(
+    fmt: DataFormat, ctx: ItemContext, options: SupportOptions
+) -> bool:
     """Whether the item's DataFrame code opens it with fsspec: a file polars
     cannot read itself."""
-    return not reads_itself(ctx) and not ctx.is_dir
+    return not _read_by_polars(fmt, ctx, options) and not ctx.is_dir
+
+
+# The code reading a URL with polars' {reader}, e.g. "scan_parquet".
+_POLARS_TEMPLATE = cleandoc("""
+    import polars as pl
+
+    df = pl.{reader}({url}{kwargs})
+    """)
+
+# The code reading a file opened with fsspec into a DataFrame, with polars'
+# {reader} (e.g. "read_csv") given the file.
+_FSSPEC_TEMPLATE = cleandoc("""
+    import fsspec
+    import polars as pl
+
+    with fsspec.open({url}, 'rb'{fsspec_kwargs}) as f:
+        df = pl.{reader}(f{kwargs})
+    """)
+
+# Excel's code: polars reads the bytes, fetched with fsspec so any storage
+# works.
+_EXCEL_TEMPLATE = cleandoc("""
+    import fsspec
+    import polars as pl
+
+    with fsspec.open({url}, 'rb'{fsspec_kwargs}) as f:
+        df = pl.read_excel(f.read(){kwargs})
+    """)
 
 
 def _fsspec_code(
     reader: str, ctx: ItemContext, options: FsspecCodeOptions, kwargs: str
 ) -> str:
-    """The code reading the file opened with fsspec into a DataFrame, with
-    polars' ``reader`` (e.g. "read_csv") given the file and ``kwargs``."""
-    return f"""\
-import fsspec
-import polars as pl
-
-with fsspec.open({ctx.library_url!r}, 'rb'{options.fsspec_kwargs()}) as f:
-    df = pl.{reader}(f{kwargs})"""
+    """``_FSSPEC_TEMPLATE`` filled for the item."""
+    return _FSSPEC_TEMPLATE.format(
+        reader=reader,
+        url=repr(ctx.url_or_local_path),
+        fsspec_kwargs=options.fsspec_kwargs(),
+        kwargs=kwargs,
+    )
 
 
 def _polars_code(reader: str, url: str, kwargs: str) -> str:
-    """The code reading ``url`` with polars' ``reader``, e.g. "scan_parquet"."""
-    return f"""\
-import polars as pl
-
-df = pl.{reader}({url!r}{kwargs})"""
-
-
-def _size_text(size: int) -> str:
-    """``size`` bytes, as people read it, e.g. "586 MB"."""
-    if size < 1024 * 1024:
-        return f"{max(size // 1024, 1)} KB"
-    return f"{size / (1024 * 1024):,.0f} MB"
+    """``_POLARS_TEMPLATE`` filled for ``url``."""
+    return _POLARS_TEMPLATE.format(reader=reader, url=repr(url), kwargs=kwargs)
 
 
 def _read_through_fsspec(
@@ -394,8 +413,8 @@ def _read_through_fsspec(
 
     if size is not None and size <= limit:
         return read(None)
-    whole = f"The whole file ({_size_text(size)})" if size else "The whole file"
-    first = f"Its first {_size_text(limit)}"
+    whole = f"The whole file ({format_size(size)})" if size else "The whole file"
+    first = f"Its first {format_size(limit)}"
     return ViewWithChoice(
         message=(
             "Polars cannot read this storage itself: the file is read into "
@@ -414,7 +433,7 @@ def _code_kwargs(
     *,
     storage: bool = True,
 ) -> str:
-    """The code's keyword arguments: the support's ``defaults`` (those not
+    """The code's keyword arguments: the action's ``defaults`` (those not
     None), then the options' arguments given, then the storage options."""
     arguments = {k: v for k, v in (defaults or {}).items() if v is not None}
     arguments.update(options.code_arguments())
@@ -427,14 +446,15 @@ def _code_kwargs(
 # CSV
 
 
-@code(format=Csv, engine=PolarsEngine, name=AS_DATA_FRAME, check=_read_or_a_file)
+@code(format=Csv, engine=PolarsEngine, name=AS_DATA_FRAME, check=_can_offer_recipe)
 def csv_as_data_frame(fmt: Csv, ctx: ItemContext, options: CsvByPolarsOptions) -> str:
     """A DataFrame, with the separator detected unless one is given."""
     defaults = {"separator": fmt.code_separator(ctx)}
-    if _opened_with_fsspec(ctx):
+    if _opened_with_fsspec(fmt, ctx, options):
         kwargs = _code_kwargs(options, defaults, storage=False)
         return _fsspec_code("read_csv", ctx, options, kwargs)
-    return _polars_code("read_csv", ctx.library_url, _code_kwargs(options, defaults))
+    kwargs = _code_kwargs(options, defaults)
+    return _polars_code("read_csv", ctx.url_or_local_path, kwargs)
 
 
 @view(format=Csv, engine=PolarsEngine, code=csv_as_data_frame)
@@ -446,8 +466,8 @@ def csv_view(
     storage itself."""
     import polars as pl
 
-    url = ctx.library_url
-    native = reads_itself(ctx)
+    url = ctx.url_or_local_path
+    native = _read_by_polars(fmt, ctx, options)
     # try_parse_dates: date columns get date filters (<, >, ...) instead of text ones.
     defaults: dict[str, Any] = {
         "truncate_ragged_lines": True,
@@ -477,18 +497,20 @@ def json_lines_as_lazy_frame(
     fmt: JsonLines, ctx: ItemContext, options: JsonLinesByPolarsOptions
 ) -> str:
     """A LazyFrame of the URL."""
-    return _polars_code("scan_ndjson", ctx.library_url, _code_kwargs(options))
+    return _polars_code("scan_ndjson", ctx.url_or_local_path, _code_kwargs(options))
 
 
-@code(format=JsonLines, engine=PolarsEngine, name=AS_DATA_FRAME, check=_read_or_a_file)
+@code(
+    format=JsonLines, engine=PolarsEngine, name=AS_DATA_FRAME, check=_can_offer_recipe
+)
 def json_lines_as_data_frame(
     fmt: JsonLines, ctx: ItemContext, options: JsonLinesByPolarsOptions
 ) -> str:
     """A DataFrame of the URL, or of the file opened with fsspec."""
-    if _opened_with_fsspec(ctx):
+    if _opened_with_fsspec(fmt, ctx, options):
         kwargs = _code_kwargs(options, storage=False)
         return _fsspec_code("read_ndjson", ctx, options, kwargs)
-    return _polars_code("read_ndjson", ctx.library_url, _code_kwargs(options))
+    return _polars_code("read_ndjson", ctx.url_or_local_path, _code_kwargs(options))
 
 
 @view(format=JsonLines, engine=PolarsEngine, code=json_lines_as_lazy_frame)
@@ -503,27 +525,27 @@ def json_lines_view(
     import polars as pl
 
     arguments = options.arguments()
-    if not reads_itself(ctx):
+    if not _read_by_polars(fmt, ctx, options):
         return _read_through_fsspec(
             ctx, limits, lambda data: pl.scan_ndjson(data, **arguments)
         )
-    data = pl.scan_ndjson(ctx.library_url, **arguments, **options.storage())
+    data = pl.scan_ndjson(ctx.url_or_local_path, **arguments, **options.storage())
     return QueryView(data=data)
 
 
 # JSON: code only, as JSON is viewed as a tree (the built-in ``json_view``).
 
 
-@code(format=Json, engine=PolarsEngine, name=AS_DATA_FRAME, check=_read_or_a_file)
+@code(format=Json, engine=PolarsEngine, name=AS_DATA_FRAME, check=_can_offer_recipe)
 def json_as_data_frame(
     fmt: Json, ctx: ItemContext, options: JsonByPolarsOptions
 ) -> str:
     """A DataFrame of the URL, or of the file opened with fsspec."""
     # polars' read_json takes no storage options.
     kwargs = _code_kwargs(options, storage=False)
-    if _opened_with_fsspec(ctx):
+    if _opened_with_fsspec(fmt, ctx, options):
         return _fsspec_code("read_json", ctx, options, kwargs)
-    return _polars_code("read_json", ctx.library_url, kwargs)
+    return _polars_code("read_json", ctx.url_or_local_path, kwargs)
 
 
 # Excel: fastexcel reads workbooks for polars; the code reads the bytes with
@@ -550,12 +572,11 @@ def excel_as_data_frame(
     fmt: Excel, ctx: ItemContext, options: ExcelByPolarsOptions
 ) -> str:
     """A DataFrame of the bytes read with fsspec."""
-    return f"""\
-import fsspec
-import polars as pl
-
-with fsspec.open({ctx.library_url!r}, 'rb'{options.fsspec_kwargs()}) as f:
-    df = pl.read_excel(f.read(){_code_kwargs(options, storage=False)})"""
+    return _EXCEL_TEMPLATE.format(
+        url=repr(ctx.url_or_local_path),
+        fsspec_kwargs=options.fsspec_kwargs(),
+        kwargs=_code_kwargs(options, storage=False),
+    )
 
 
 @view(
@@ -621,10 +642,10 @@ def _pyarrow_dataset(ctx: ItemContext, layout: ParquetLayout | None) -> Any:
     return pl.scan_pyarrow_dataset(dataset)
 
 
-def _parquet_reachable(fmt: Parquet, ctx: ItemContext, options: SupportOptions) -> bool:
+def _can_view_parquet(fmt: Parquet, ctx: ItemContext, options: SupportOptions) -> bool:
     """Whether polars reads the item itself, or PyArrow is installed to read
     it through the explorer's filesystem."""
-    return reads_itself(ctx) or PyArrow().is_installed()
+    return _read_by_polars(fmt, ctx, options) or PyArrow().is_installed()
 
 
 def _parquet_code_kwargs(
@@ -653,12 +674,12 @@ def parquet_as_lazy_frame(
     return _polars_code("scan_parquet", fmt.data_url(ctx), kwargs)
 
 
-@code(format=Parquet, engine=PolarsEngine, name=AS_DATA_FRAME, check=_read_or_a_file)
+@code(format=Parquet, engine=PolarsEngine, name=AS_DATA_FRAME, check=_can_offer_recipe)
 def parquet_as_data_frame(
     fmt: Parquet, ctx: ItemContext, options: ParquetByPolarsOptions
 ) -> str:
     """A DataFrame of the URL, or of the file opened with fsspec."""
-    if _opened_with_fsspec(ctx):
+    if _opened_with_fsspec(fmt, ctx, options):
         # A file: none of scan_parquet's own arguments.
         arguments = {
             k: v
@@ -669,6 +690,7 @@ def parquet_as_data_frame(
     kwargs, scanned = _parquet_code_kwargs(fmt, ctx, options)
     url = fmt.data_url(ctx)
     if scanned:
+        # read_parquet lacks an argument given: scanned, then read.
         return f"{_polars_code('scan_parquet', url, kwargs)}.collect()"
     return _polars_code("read_parquet", url, kwargs)
 
@@ -676,7 +698,7 @@ def parquet_as_data_frame(
 @view(
     format=Parquet,
     engine=PolarsEngine,
-    check=_parquet_reachable,
+    check=_can_view_parquet,
     code=parquet_as_lazy_frame,
 )
 def parquet_view(
@@ -692,7 +714,7 @@ def parquet_view(
     import polars as pl
 
     layout = fmt.layout(ctx) if ctx.is_dir else None
-    if not reads_itself(ctx):
+    if not _read_by_polars(fmt, ctx, options):
         return QueryView(data=_pyarrow_dataset(ctx, layout))
     defaults = {
         "hive_partitioning": layout is not None and bool(layout.keys),
@@ -722,7 +744,7 @@ def delta_as_lazy_frame(
     fmt: DeltaLake, ctx: ItemContext, options: DeltaLakeByPolarsOptions
 ) -> str:
     """A LazyFrame of the table."""
-    return _polars_code("scan_delta", ctx.library_url, _code_kwargs(options))
+    return _polars_code("scan_delta", ctx.url_or_local_path, _code_kwargs(options))
 
 
 @code(
@@ -736,7 +758,7 @@ def delta_as_data_frame(
     fmt: DeltaLake, ctx: ItemContext, options: DeltaLakeByPolarsOptions
 ) -> str:
     """A DataFrame of the table."""
-    return _polars_code("read_delta", ctx.library_url, _code_kwargs(options))
+    return _polars_code("read_delta", ctx.url_or_local_path, _code_kwargs(options))
 
 
 @view(
@@ -755,7 +777,8 @@ def delta_view(
     """A LazyFrame over the table."""
     import polars as pl
 
-    data = pl.scan_delta(ctx.library_url, **options.arguments(), **options.storage())
+    url = ctx.url_or_local_path
+    data = pl.scan_delta(url, **options.arguments(), **options.storage())
     return QueryView(data=data)
 
 

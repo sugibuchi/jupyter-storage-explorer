@@ -12,6 +12,7 @@ plugin loads without it."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field, fields
+from inspect import cleandoc
 from typing import TYPE_CHECKING, Any
 
 import narwhals as nw
@@ -219,14 +220,6 @@ class PySparkOptions(SupportOptions):
     session_options: Mapping[str, Any] | None = None
     reader_options: Mapping[str, Any] | None = None
     supported_protocols: Sequence[str] | None = SPARK_PROTOCOLS
-
-    def reads(self, ctx: ItemContext) -> bool:
-        """Whether Spark reads the item, by its URL's scheme as Spark names
-        it (``supported_protocols``)."""
-        if self.supported_protocols is None:
-            return True
-        scheme = spark_url(ctx.location.url).partition(":")[0].lower()
-        return scheme in {p.lower() for p in self.supported_protocols}
 
     def spark_options(self) -> dict[str, Any]:
         """The reader options the fields set (those not None), by Spark's
@@ -463,10 +456,14 @@ PYSPARK_SESSIONS = SparkSessions(
 )
 
 
-def spark_reads(fmt: DataFormat, ctx: ItemContext, options: PySparkOptions) -> bool:
-    """The actions' check: Spark reads the item's URL itself, for the view
-    and the code alike (``PySparkOptions.reads``)."""
-    return options.reads(ctx)
+def spark_can_read(fmt: DataFormat, ctx: ItemContext, options: PySparkOptions) -> bool:
+    """The actions' check, for the view and the code alike: whether Spark
+    reads the item, by its URL's scheme as Spark names it
+    (``PySparkOptions.supported_protocols``)."""
+    if options.supported_protocols is None:
+        return True
+    scheme = spark_url(ctx.location.url).partition(":")[0].lower()
+    return scheme in {p.lower() for p in options.supported_protocols}
 
 
 def _spark_view(
@@ -483,6 +480,17 @@ def _spark_view(
     return QueryView(data=data, fetch=spark_rows)
 
 
+# The code loading an item: {code_import}, then {note} (a comment line, or
+# ""), {session}, the lines making ``spark``, and the read, ``spark.read``
+# with {reader}, its options, and {read}, e.g. ".csv('s3a://b/a.csv')".
+_CODE_TEMPLATE = cleandoc("""
+    {code_import}
+
+    {note}{session}
+    df = spark.read{reader}{read}
+    """)
+
+
 def _spark_code(
     sessions: SparkSessions,
     ctx: ItemContext,
@@ -494,11 +502,12 @@ def _spark_code(
 ) -> str:
     """The code loading the item into a DataFrame: the session, then
     ``spark.read``, its options and ``call`` of the URL, e.g. ".csv({url})"."""
-    session = sessions.code(ctx, options)
-    read = call.format(url=repr(_url(ctx)))
-    return (
-        f"{sessions.code_import}\n\n{note}{session}\n"
-        f"df = spark.read{options.reader_code(defaults)}{read}"
+    return _CODE_TEMPLATE.format(
+        code_import=sessions.code_import,
+        note=note,
+        session=sessions.code(ctx, options),
+        reader=options.reader_code(defaults),
+        read=call.format(url=repr(_url(ctx))),
     )
 
 
@@ -589,7 +598,7 @@ AS_DATA_FRAME = "Load as DataFrame"
     engine=PySparkEngine,
     name=AS_DATA_FRAME,
     requires=(DeltaSpark(),),
-    check=spark_reads,
+    check=spark_can_read,
 )
 def delta_as_data_frame(
     fmt: DeltaLake, ctx: ItemContext, options: DeltaLakeByPySparkOptions
@@ -602,7 +611,7 @@ def delta_as_data_frame(
     format=DeltaLake,
     engine=PySparkEngine,
     requires=(DeltaSpark(),),
-    check=spark_reads,
+    check=spark_can_read,
     code=delta_as_data_frame,
 )
 def delta_view(
@@ -615,7 +624,7 @@ def delta_view(
     return spark_delta_view(PYSPARK_SESSIONS, ctx, options)
 
 
-@code(format=Parquet, engine=PySparkEngine, name=AS_DATA_FRAME, check=spark_reads)
+@code(format=Parquet, engine=PySparkEngine, name=AS_DATA_FRAME, check=spark_can_read)
 def parquet_as_data_frame(
     fmt: Parquet, ctx: ItemContext, options: ParquetByPySparkOptions
 ) -> str:
@@ -624,7 +633,10 @@ def parquet_as_data_frame(
 
 
 @view(
-    format=Parquet, engine=PySparkEngine, check=spark_reads, code=parquet_as_data_frame
+    format=Parquet,
+    engine=PySparkEngine,
+    check=spark_can_read,
+    code=parquet_as_data_frame,
 )
 def parquet_view(
     fmt: Parquet,
@@ -636,13 +648,13 @@ def parquet_view(
     return spark_parquet_view(PYSPARK_SESSIONS, ctx, options)
 
 
-@code(format=Csv, engine=PySparkEngine, name=AS_DATA_FRAME, check=spark_reads)
+@code(format=Csv, engine=PySparkEngine, name=AS_DATA_FRAME, check=spark_can_read)
 def csv_as_data_frame(fmt: Csv, ctx: ItemContext, options: CsvByPySparkOptions) -> str:
     """CSV into a DataFrame."""
     return spark_csv_code(PYSPARK_SESSIONS, fmt, ctx, options)
 
 
-@view(format=Csv, engine=PySparkEngine, check=spark_reads, code=csv_as_data_frame)
+@view(format=Csv, engine=PySparkEngine, check=spark_can_read, code=csv_as_data_frame)
 def csv_view(
     fmt: Csv, ctx: ItemContext, options: CsvByPySparkOptions, limits: ViewLimits
 ) -> View:
@@ -650,7 +662,7 @@ def csv_view(
     return spark_csv_view(PYSPARK_SESSIONS, fmt, ctx, options, limits)
 
 
-@code(format=JsonLines, engine=PySparkEngine, name=AS_DATA_FRAME, check=spark_reads)
+@code(format=JsonLines, engine=PySparkEngine, name=AS_DATA_FRAME, check=spark_can_read)
 def json_lines_as_data_frame(
     fmt: JsonLines, ctx: ItemContext, options: JsonLinesByPySparkOptions
 ) -> str:
@@ -661,7 +673,7 @@ def json_lines_as_data_frame(
 @view(
     format=JsonLines,
     engine=PySparkEngine,
-    check=spark_reads,
+    check=spark_can_read,
     code=json_lines_as_data_frame,
 )
 def json_lines_view(

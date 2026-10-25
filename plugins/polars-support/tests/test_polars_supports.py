@@ -33,7 +33,7 @@ from jupyter_storage_explorer_polars_support import (
     parquet_as_lazy_frame,
     parquet_view,
 )
-from jupyter_storage_explorer_polars_support.supports import reads_itself
+from jupyter_storage_explorer_polars_support.supports import _read_by_polars
 
 from jupyter_storage_explorer.filesystems import S3Location
 from jupyter_storage_explorer.formats import (
@@ -427,12 +427,15 @@ class TestStoragesPolarsCannotRead:
     """Text formats on a storage polars does not read itself (here memory://)
     are read through the explorer's filesystem; large files once chosen."""
 
-    def test_reads_itself(self, make_item, tmp_path):
-        assert reads_itself(local_item(tmp_path))
-        assert reads_itself(
+    def test_read_by_polars(self, make_item, tmp_path):
+        def read(item):
+            return _read_by_polars(Csv(), item, CsvByPolarsOptions())
+
+        assert read(local_item(tmp_path))
+        assert read(
             make_item("/a.csv", b"", location=S3Location(bucket="b", key="a.csv"))
         )
-        assert not reads_itself(make_item("/a.csv", b""))
+        assert not read(make_item("/a.csv", b""))
 
     def test_small_files_read_at_once(self, make_item):
         item = make_item("/a.csv", b"a;b\n1;2\n")
@@ -444,7 +447,7 @@ class TestStoragesPolarsCannotRead:
 
     @pytest.mark.parametrize(
         ("label", "rows", "more"),
-        [("Its first 1 KB", 1, True), ("The whole file (2 KB)", 2, False)],
+        [("Its first 1.1 KB", 1, True), ("The whole file (2 KB)", 2, False)],
     )
     def test_large_files_once_chosen(self, make_item, label, rows, more):
         # Two lines of 1 KB: larger than the files read whole at once.
@@ -454,7 +457,7 @@ class TestStoragesPolarsCannotRead:
         prompt = csv_view(Csv(), item, CsvByPolarsOptions(), limits)
         assert isinstance(prompt, ViewWithChoice)
         assert (prompt.style, prompt.with_cancel) == ("button", True)
-        assert list(prompt.choices) == ["Its first 1 KB", "The whole file (2 KB)"]
+        assert list(prompt.choices) == ["Its first 1.1 KB", "The whole file (2 KB)"]
         view = prompt.answer(label)
         assert isinstance(view, QueryView)
         assert (view.data.collect().height, view.more) == (rows, more)

@@ -35,7 +35,7 @@ class ItemContext:
     location : Location
         Where it is, independently of fsspec: what formats keep what they
         find by (e.g. a Parquet dataset's layout); libraries doing their own
-        I/O read ``library_url``.
+        I/O read ``url_or_local_path``.
     fs : AbstractFileSystem
         The explorer's filesystem it is on, with its credentials, which
         ``head``, ``head_text`` and ``read_whole`` read it through.
@@ -57,7 +57,7 @@ class ItemContext:
         The names of a folder's items; empty for a file.
     size : int or None
         A file's size in bytes, if its filesystem tells it (from ``info``).
-    library_url : str
+    url_or_local_path : str
         Where most libraries read it (polars, pandas, DuckDB, ...): its
         location's URL, but a local file's plain path, which they all take
         (not all of them read ``file://`` URLs). Spark reads its own
@@ -92,7 +92,7 @@ class ItemContext:
         return self.info.get("size")
 
     @property
-    def library_url(self) -> str:
+    def url_or_local_path(self) -> str:
         location = self.location
         return location.path if isinstance(location, LocalLocation) else location.url
 

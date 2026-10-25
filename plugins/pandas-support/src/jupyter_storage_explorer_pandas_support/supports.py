@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import io
 from dataclasses import dataclass
+from inspect import cleandoc
 from typing import TYPE_CHECKING, Any
 
 from jupyter_storage_explorer.formats.actions import code, register_actions, view
@@ -264,12 +265,18 @@ def _view_arguments(options: SupportOptions, limits: ViewLimits) -> dict[str, An
     return arguments
 
 
+# The code reading {url} with pandas' {reader}, e.g. "read_csv", given
+# {kwargs}.
+_PANDAS_TEMPLATE = cleandoc("""
+    import pandas as pd
+
+    df = pd.{reader}({url}{kwargs})
+    """)
+
+
 def _pandas_code(reader: str, url: str, kwargs: str) -> str:
     """The code reading ``url`` with pandas' ``reader``, e.g. "read_csv"."""
-    return f"""\
-import pandas as pd
-
-df = pd.{reader}({url!r}{kwargs})"""
+    return _PANDAS_TEMPLATE.format(reader=reader, url=repr(url), kwargs=kwargs)
 
 
 # CSV
@@ -279,7 +286,7 @@ df = pd.{reader}({url!r}{kwargs})"""
 def csv_as_data_frame(fmt: Csv, ctx: ItemContext, options: CsvByPandasOptions) -> str:
     """A DataFrame, with the separator detected unless one is given."""
     kwargs = _code_kwargs(options, {"sep": fmt.code_separator(ctx)})
-    return _pandas_code("read_csv", ctx.library_url, kwargs)
+    return _pandas_code("read_csv", ctx.url_or_local_path, kwargs)
 
 
 @view(format=Csv, engine=PandasEngine, code=csv_as_data_frame)
@@ -309,10 +316,8 @@ def json_lines_as_data_frame(
     fmt: JsonLines, ctx: ItemContext, options: JsonLinesByPandasOptions
 ) -> str:
     """A DataFrame of the lines."""
-    return f"""\
-import pandas as pd
-
-df = pd.read_json({ctx.library_url!r}, lines=True{_code_kwargs(options)})"""
+    kwargs = f", lines=True{_code_kwargs(options)}"
+    return _pandas_code("read_json", ctx.url_or_local_path, kwargs)
 
 
 @view(format=JsonLines, engine=PandasEngine, code=json_lines_as_data_frame)
@@ -338,7 +343,7 @@ def json_as_data_frame(
     fmt: Json, ctx: ItemContext, options: JsonByPandasOptions
 ) -> str:
     """A DataFrame of the JSON value."""
-    return _pandas_code("read_json", ctx.library_url, _code_kwargs(options))
+    return _pandas_code("read_json", ctx.url_or_local_path, _code_kwargs(options))
 
 
 # Excel: openpyxl is pandas' Excel engine.
@@ -361,7 +366,7 @@ def excel_as_data_frame(
     fmt: Excel, ctx: ItemContext, options: ExcelByPandasOptions
 ) -> str:
     """A DataFrame of the workbook's sheet."""
-    return _pandas_code("read_excel", ctx.library_url, _code_kwargs(options))
+    return _pandas_code("read_excel", ctx.url_or_local_path, _code_kwargs(options))
 
 
 @view(
@@ -414,7 +419,7 @@ def parquet_as_data_frame(
     fmt: Parquet, ctx: ItemContext, options: ParquetByPandasOptions
 ) -> str:
     """A DataFrame of the file or folder: pyarrow finds partitions itself."""
-    return _pandas_code("read_parquet", ctx.library_url, _code_kwargs(options))
+    return _pandas_code("read_parquet", ctx.url_or_local_path, _code_kwargs(options))
 
 
 @view(

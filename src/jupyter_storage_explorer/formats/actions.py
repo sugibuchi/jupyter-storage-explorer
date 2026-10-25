@@ -57,10 +57,10 @@ class Action(Generic[F]):
         The function decorated.
     format : type of DataFormat
         The format it handles; its subclasses too.
-    engine : type of Engine or None
-        The library it uses, or None for Python alone. With ``format``, the
-        pair whose options it gets: ``engine_options[engine.key][format.name]``
-        ("python" for None).
+    engine : type of Engine
+        The library it uses, ``PythonEngine`` for Python alone. With
+        ``format``, the pair whose options it gets:
+        ``engine_options[engine.key][format.name]``.
     name : str
         What the menu shows, ``{format}`` replaced by the format's label.
     requires : tuple of PythonPackage
@@ -74,7 +74,7 @@ class Action(Generic[F]):
 
     function: F
     format: type[DataFormat]
-    engine: type[Engine] | None
+    engine: type[Engine]
     name: str
     requires: tuple[PythonPackage, ...]
     check: Check | None
@@ -83,22 +83,13 @@ class Action(Generic[F]):
     def __call__(self, *args: Any) -> Any:
         return self.function(*args)
 
-    @property
-    def library(self) -> str:
-        """The key of its options in ``engine_options``: its engine's key,
-        or "python"."""
-        return self.engine.key if self.engine is not None else "python"
-
     def requirements(self) -> tuple[PythonPackage, ...]:
         """All the packages it needs: its engine's, then ``requires``."""
-        engine = self.engine.packages() if self.engine is not None else ()
-        return (*engine, *self.requires)
+        return (*self.engine.requirements, *self.requires)
 
     def is_installed(self) -> bool:
         """Whether its engine and ``requires`` are installed."""
-        return (self.engine is None or self.engine.is_installed()) and all(
-            p.is_installed() for p in self.requires
-        )
+        return all(p.is_installed() for p in self.requirements())
 
     def does(self, fmt: DataFormat, ctx: ItemContext, options: SupportOptions) -> bool:
         """Whether it does the item: of its format, and its check agrees."""
@@ -128,7 +119,7 @@ class ViewAction(Action[Callable[..., "View"]]):
 def view(
     *,
     format: type[DataFormat],
-    engine: type[Engine] | None,
+    engine: type[Engine],
     name: str = "View {format}",
     requires: tuple[PythonPackage, ...] = (),
     check: Check | None = None,
@@ -167,9 +158,9 @@ def view(
     ----------
     format : type of DataFormat
         The format viewed, e.g. ``Parquet``; its subclasses too.
-    engine : type of Engine or None
-        The library used, e.g. polars-support's ``PolarsEngine``; None for
-        Python alone.
+    engine : type of Engine
+        The library used, e.g. polars-support's ``PolarsEngine``;
+        ``PythonEngine`` for Python alone.
     name : str, default "View {format}"
         What the menu shows, ``{format}`` replaced by the format's label.
         It never names the library: the menu shows the engine already.
@@ -206,7 +197,7 @@ def view(
     ... def parquet_by_polars(fmt, ctx, options: ParquetByPolarsOptions, limits):
     ...     import polars as pl
     ...
-    ...     return QueryView(pl.scan_parquet(ctx.library_url, **options.arguments()))
+    ...     return QueryView(pl.scan_parquet(ctx.url_or_local_path, **options.arguments()))
     """
 
     def decorate(function: Callable[..., View]) -> ViewAction:
@@ -230,7 +221,7 @@ def view(
 def code(
     *,
     format: type[DataFormat],
-    engine: type[Engine] | None,
+    engine: type[Engine],
     name: str,
     requires: tuple[PythonPackage, ...] = (),
     check: Check | None = None,
@@ -246,7 +237,7 @@ def code(
     The code runs as it is in a new notebook: its imports first, and what
     else it needs, e.g. a Spark session. Installing the packages and
     configuring access to the storage are left to the user. It reads the
-    location (``ctx.library_url``). The function reads the item only for
+    location (``ctx.url_or_local_path``). The function reads the item only for
     what the code needs to know, e.g. a CSV file's separator. Options go into
     the code only through ``SupportOptions.code_value`` and
     ``code_arguments``, which leave secrets out.
@@ -258,8 +249,8 @@ def code(
     ----------
     format : type of DataFormat
         The format loaded; its subclasses too.
-    engine : type of Engine or None
-        The library used; None for Python alone.
+    engine : type of Engine
+        The library used; ``PythonEngine`` for Python alone.
     name : str
         What the code does, shown as its title, e.g. "Load as LazyFrame".
         ``{format}`` is replaced by the format's label. It never names the
@@ -284,7 +275,7 @@ def code(
     >>> @code(format=Parquet, engine=PolarsEngine, name="Load as LazyFrame")
     ... def parquet_as_lazy_frame(fmt, ctx, options: ParquetByPolarsOptions):
     ...     kwargs = format_arguments(options.code_arguments())
-    ...     return f"import polars as pl\\n\\ndf = pl.scan_parquet({ctx.library_url!r}{kwargs})"
+    ...     return f"import polars as pl\\n\\ndf = pl.scan_parquet({ctx.url_or_local_path!r}{kwargs})"
     """
 
     def decorate(function: Callable[..., str]) -> CodeAction:
@@ -360,23 +351,23 @@ def check_actions(actions: tuple[Action[Any], ...] | list[Action[Any]]) -> None:
     Explorers check all their actions so, whatever they come from."""
     names: dict[tuple[type, type[DataFormat], str, str], Action[Any]] = {}
     for action in actions:
-        key = (type(action), action.format, action.library, action.name)
+        key = (type(action), action.format, action.engine.key, action.name)
         known = names.setdefault(key, action)
         if known is not action:
             raise ValueError(
                 f"two actions named {action.name!r} for {action.format.label} "
-                f"with {action.library}: {_where(known)} and {_where(action)}; "
+                f"with {action.engine.key}: {_where(known)} and {_where(action)}; "
                 "rename one"
             )
     fields: dict[tuple[type[DataFormat], str, str], tuple[Any, Action[Any]]] = {}
     for action in actions:
         for name, shape in _field_shapes(action.options_model).items():
-            key = (action.format, action.library, name)
+            key = (action.format, action.engine.key, name)
             known_shape, known = fields.setdefault(key, (shape, action))
             if known_shape != shape:
                 raise ValueError(
                     f"option {name!r} of {action.format.label} with "
-                    f"{action.library} differs between "
+                    f"{action.engine.key} differs between "
                     f"{known.options_model.__qualname__} ({_where(known)}) and "
                     f"{action.options_model.__qualname__} ({_where(action)}): "
                     "one type, and secret in both or neither"
@@ -388,7 +379,7 @@ def _fields(
     parameters: tuple[str, ...],
     *,
     format: type[DataFormat],
-    engine: type[Engine] | None,
+    engine: type[Engine],
     name: str,
     requires: tuple[PythonPackage, ...],
     check: Check | None,
@@ -397,11 +388,10 @@ def _fields(
     where = getattr(function, "__qualname__", repr(function))
     if not (isinstance(format, type) and issubclass(format, DataFormat)):
         raise TypeError(f"{where}: format must be a DataFormat class, not {format!r}")
-    if engine is not None and not (
-        isinstance(engine, type) and issubclass(engine, Engine)
-    ):
+    if not (isinstance(engine, type) and issubclass(engine, Engine)):
         raise TypeError(
-            f"{where}: engine must be an Engine class or None, not {engine!r}"
+            f"{where}: engine must be an Engine class, e.g. PythonEngine, "
+            f"not {engine!r}"
         )
     if not isinstance(requires, tuple) or not all(
         isinstance(p, PythonPackage) for p in requires

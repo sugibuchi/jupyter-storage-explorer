@@ -138,7 +138,7 @@ def test_engine_not_with_databricks_connects_pyspark(monkeypatch):
     monkeypatch.setattr(pyspark._DatabricksConnect, "is_installed", lambda self: True)
     assert not PySpark().is_installed()
     assert not PySparkEngine.is_installed()
-    assert [p.package for p in PySparkEngine.packages()] == ["pyspark", "pyarrow"]
+    assert [p.package for p in PySparkEngine.requirements] == ["pyspark", "pyarrow"]
 
 
 def test_spark_url(tmp_path):

@@ -106,7 +106,7 @@ def _code_engines(
 ) -> frozenset[str] | None:
     """The engines' keys whose code "Python code" shows: None for all
     ("enabled"), none for "disabled", else those named that an action has
-    (its engine's key, "python" for those without an engine); names no
+    (its engine's key, "python" for the built-in code); names no
     action has are left out with a warning, as a launcher shared by
     environments with other plugins may name them."""
     if code_snippet == "enabled":
@@ -120,7 +120,7 @@ def _code_engines(
             f'code_snippet must be "enabled", "disabled" or a list of engine keys, '
             f"not {code_snippet!r}"
         )
-    known = supports.libraries()
+    known = supports.engine_keys()
     if unknown := sorted(set(code_snippet) - known):
         warnings.warn(
             f"code_snippet: no support of {', '.join(unknown)} (left out); "

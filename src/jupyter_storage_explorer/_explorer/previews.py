@@ -31,6 +31,7 @@ from jupyter_storage_explorer.formats import (
     ViewWithPrompt,
 )
 from jupyter_storage_explorer.formats.base import matching_formats
+from jupyter_storage_explorer.formats.engine import PythonEngine
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -221,8 +222,8 @@ def section(view: View) -> dict[str, Any]:
 
 def _recipe_engine(recipe: Recipe) -> str:
     """The key of a recipe's engine, as ``code_snippet`` names it: "python"
-    for the code of the formats without one (``FormatSupport.library``)."""
-    return recipe.engine.key if recipe.engine is not None else "python"
+    for the built-in code (``PythonEngine``)."""
+    return recipe.engine.key if recipe.engine is not None else PythonEngine.key
 
 
 def _rows_note(table: TableView) -> str:

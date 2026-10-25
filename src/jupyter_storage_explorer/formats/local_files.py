@@ -158,7 +158,7 @@ class LocalFileCache:
         if ctx.is_dir:
             raise ValueError(f"{ctx.name} is a folder: only files are copied")
         if _is_local(ctx):
-            return Path(ctx.library_url)
+            return Path(ctx.url_or_local_path)
         with self._lock:
             download = self._downloads.setdefault(ctx.location, threading.Lock())
         with download:

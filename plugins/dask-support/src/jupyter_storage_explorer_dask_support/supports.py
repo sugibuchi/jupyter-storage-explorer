@@ -37,6 +37,7 @@ counting the bytes read (the plugin's README says it for users):
 from __future__ import annotations
 
 from dataclasses import dataclass
+from inspect import cleandoc
 from typing import TYPE_CHECKING, Any
 
 import fsspec
@@ -65,6 +66,7 @@ from jupyter_storage_explorer.formats.view import (
     View,
     ViewLimits,
     ViewWithConfirmation,
+    format_size,
 )
 
 if TYPE_CHECKING:
@@ -268,13 +270,6 @@ def _rebuilt_url(ctx: ItemContext) -> tuple[str, dict[str, Any]] | None:
     return (url, dict(fs.storage_options)) if rebuilt is fs else None
 
 
-def _size_text(size: int) -> str:
-    """``size`` bytes, as people read it, e.g. "586 MB"."""
-    if size < 1024 * 1024:
-        return f"{max(size // 1024, 1)} KB"
-    return f"{size / (1024 * 1024):,.0f} MB"
-
-
 def _code_kwargs(options: DaskOptions, defaults: Mapping[str, Any]) -> str:
     """The code's keyword arguments: the action's ``defaults``, then the
     options' arguments given, then ``storage_options``."""
@@ -284,14 +279,20 @@ def _code_kwargs(options: DaskOptions, defaults: Mapping[str, Any]) -> str:
     )
 
 
+# The code reading into a Dask DataFrame: {call}, the reader's call up to
+# its keyword arguments, then {kwargs}.
+_DASK_CODE = cleandoc("""
+    import dask.dataframe as dd
+
+    df = dd.{call}{kwargs})
+    """)
+
+
 def _dask_code(reader: str, url: str, kwargs: str) -> str:
     """The code reading ``url`` into a Dask DataFrame with ``reader``'s call,
     e.g. "read_parquet({url}"; ``kwargs`` and the closing parenthesis
     follow."""
-    return f"""\
-import dask.dataframe as dd
-
-df = dd.{reader.format(url=repr(url))}{kwargs})"""
+    return _DASK_CODE.format(call=reader.format(url=repr(url)), kwargs=kwargs)
 
 
 # Parquet files and folders, through the explorer's filesystem on every
@@ -312,7 +313,7 @@ def parquet_as_data_frame(
     """The code reading the file or folder into a Dask DataFrame."""
     defaults = {"parquet_file_extension": None} if _hive_files(fmt, ctx) else {}
     return _dask_code(
-        "read_parquet({url}", ctx.library_url, _code_kwargs(options, defaults)
+        "read_parquet({url}", ctx.url_or_local_path, _code_kwargs(options, defaults)
     )
 
 
@@ -366,7 +367,7 @@ def _text_view(
     }
     read = getattr(dd, reader)
     if isinstance(ctx.location, LocalLocation):
-        return QueryView(data=read(ctx.library_url, **arguments))
+        return QueryView(data=read(ctx.url_or_local_path, **arguments))
     if (rebuilt := _rebuilt_url(ctx)) is not None:
         url, storage_options = rebuilt
         return QueryView(data=read(url, storage_options=storage_options, **arguments))
@@ -387,7 +388,7 @@ def _text_view(
         size is not None and size <= limits.max_whole_file_bytes
     ):
         return copied()
-    size_text = f" ({_size_text(size)})" if size else ""
+    size_text = f" ({format_size(size)})" if size else ""
     return ViewWithConfirmation(
         message=(
             f"Dask cannot reach this storage by URL: {ctx.name}{size_text} is "
@@ -405,7 +406,7 @@ def csv_as_data_frame(fmt: Csv, ctx: ItemContext, options: CsvByDaskOptions) -> 
     sep = fmt.code_separator(ctx)
     defaults = {"sep": sep} if sep is not None else {}
     return _dask_code(
-        "read_csv({url}", ctx.library_url, _code_kwargs(options, defaults)
+        "read_csv({url}", ctx.url_or_local_path, _code_kwargs(options, defaults)
     )
 
 
@@ -426,7 +427,7 @@ def json_lines_as_data_frame(
 ) -> str:
     """The code reading the file into a Dask DataFrame."""
     return _dask_code(
-        "read_json({url}, lines=True", ctx.library_url, _code_kwargs(options, {})
+        "read_json({url}, lines=True", ctx.url_or_local_path, _code_kwargs(options, {})
     )
 
 

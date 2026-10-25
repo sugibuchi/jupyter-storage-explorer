@@ -38,7 +38,7 @@ from jupyter_storage_explorer_duckdb_support import (
     parquet_view,
 )
 from jupyter_storage_explorer_duckdb_support import supports as duckdb_supports
-from jupyter_storage_explorer_duckdb_support.supports import reads_by_url
+from jupyter_storage_explorer_duckdb_support.supports import _read_by_duckdb
 
 from jupyter_storage_explorer.filesystems import (
     AbfsLocation,
@@ -190,7 +190,7 @@ class TestParquet:
     def test_file_through_the_explorers_filesystem(self, make_item):
         # The memory filesystem: no storage DuckDB reads itself.
         item = make_item("/d/a.parquet", parquet_bytes(pa.table({"a": [1, 2]})))
-        assert not reads_by_url(item, ParquetByDuckDBOptions())
+        assert not _read_by_duckdb(Parquet(), item, ParquetByDuckDBOptions())
         view = query_view(parquet_view, Parquet(), item)
         assert rows(view.data) == [{"a": 1}, {"a": 2}]
         view.close()
@@ -256,8 +256,8 @@ class TestParquet:
         item = make_item(
             "/b/a.parquet", b"", location=S3Location(bucket="b", key="a.parquet")
         )
-        assert not reads_by_url(item, DuckDBOptions())
-        assert reads_by_url(item, DuckDBOptions(url_schemes=["S3"]))
+        assert not _read_by_duckdb(Parquet(), item, DuckDBOptions())
+        assert _read_by_duckdb(Parquet(), item, DuckDBOptions(url_schemes=["S3"]))
 
 
 class TestTheExplorersFilesystem:
@@ -315,13 +315,13 @@ class TestText:
         limits = ViewLimits(max_whole_file_bytes=100)
         prompt = csv_view(Csv(), item, CsvByDuckDBOptions(), limits)
         assert isinstance(prompt, ViewWithChoice)
-        assert list(prompt.choices) == ["Its first 1 KB", "The whole file (8 KB)"]
+        assert list(prompt.choices) == ["Its first 100 B", "The whole file (8.1 KB)"]
         assert cache.status(item) == "not_cached"
-        first = prompt.answer("Its first 1 KB")
+        first = prompt.answer("Its first 100 B")
         assert first.more
         assert [r["a"] for r in rows(first.data)] == list(range(len(rows(first.data))))
         assert len(rows(first.data)) < 1000
-        whole = prompt.answer("The whole file (8 KB)")
+        whole = prompt.answer("The whole file (8.1 KB)")
         assert not whole.more and len(rows(whole.data)) == 1000
         assert cache.status(item) == "cached"
         # Copied: viewed again without asking.
@@ -337,7 +337,7 @@ class TestText:
             JsonLinesByDuckDBOptions(),
             ViewLimits(max_whole_file_bytes=50),
         )
-        view = prompt.answer("Its first 1 KB")
+        view = prompt.answer("Its first 50 B")
         assert view.more
         assert rows(view.data) == [{"a": 0}, {"a": 1}, {"a": 2}, {"a": 3}, {"a": 4}]
 
@@ -488,7 +488,7 @@ class TestCode:
         pq.write_table(pa.table({"a": [1, 2]}), tmp_path / "a.parquet")
         item = local_item(tmp_path / "a.parquet")
         source = parquet_as_relation(Parquet(), item, ParquetByDuckDBOptions())
-        assert f"rel = con.read_parquet({item.library_url!r})" in source
+        assert f"rel = con.read_parquet({item.url_or_local_path!r})" in source
         namespace = {}
         exec(source, namespace)
         assert namespace["rel"].fetchall() == [(1,), (2,)]

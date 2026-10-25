@@ -19,6 +19,7 @@ from jupyter_storage_explorer.formats.actions import (
     ViewAction,
     check_actions,
 )
+from jupyter_storage_explorer.formats.engine import PythonEngine
 from jupyter_storage_explorer.formats.support import FormatSupport
 
 if TYPE_CHECKING:
@@ -31,7 +32,7 @@ if TYPE_CHECKING:
     from jupyter_storage_explorer.formats.support import EngineOptions, SupportOptions
     from jupyter_storage_explorer.location import Location
 
-# In engine_options, the options of a library for all formats.
+# In engine_options, the options of an engine for all formats.
 ALL_FORMATS = "*"
 
 # The engines offered first when the explorer is given no engine_preference:
@@ -45,8 +46,9 @@ ActionLike = Action[Any] | FormatSupport | type[FormatSupport]
 
 
 def engine_key(action: Action[Any]) -> str | None:
-    """The key of an action's engine; None for the built-in views."""
-    return action.engine.key if action.engine is not None else None
+    """The key of an action's engine; None for ``PythonEngine``, the built-in
+    views', which explorers offer as no engine."""
+    return None if action.engine is PythonEngine else action.engine.key
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -100,7 +102,7 @@ def _adapted(created: FormatSupport) -> list[Action[Any]]:
     cls = type(created)
     common: dict[str, Any] = {
         "format": cls.format,
-        "engine": cls.engine,
+        "engine": cls.engine or PythonEngine,
         # As the menu shows it if the engine has other views. Supports have no
         # names: adapted actions are left out of check_actions, and only the
         # first of an engine counts (see view_names).
@@ -133,13 +135,13 @@ def _adapted(created: FormatSupport) -> list[Action[Any]]:
     return actions
 
 
-# Something with options of a format and a library: an action, or a support
+# Something with options of a format and an engine: an action, or a support
 # of the former interface (whose library() is a method).
 _WithOptions = Action[Any] | FormatSupport
 
 
-def _library(item: _WithOptions) -> str:
-    return item.library if isinstance(item, Action) else item.library()
+def _engine_key_of(item: _WithOptions) -> str:
+    return item.engine.key if isinstance(item, Action) else item.library()
 
 
 class ActionChain:
@@ -149,8 +151,8 @@ class ActionChain:
     view is the item's default.
 
     Each action gets an ``options_model`` made from ``engine_options``, by
-    engine key ("python" for the actions without an engine: the built-in
-    views and code), then format name, or ``"*"`` for all formats, e.g.
+    engine key ("python" for ``PythonEngine``: the built-in views and
+    code), then format name, or ``"*"`` for all formats, e.g.
     ``{"polars": {"*": {"storage_options": {...}}, "delta": {"use_pyarrow":
     True}}}``: those of its engine for all formats, then for its format
     (``format.name``), each only if its model has the field. Instead of a
@@ -203,12 +205,16 @@ class ActionChain:
                 self.actions += _adapted(created)
                 given.append(created)
         self.engine_options = engine_options or {}
-        # What takes options, by library (an engine's key, or "python"): what
+        # What takes options, by engine key ("python" for PythonEngine): what
         # options are checked against.
-        self._libraries: dict[str, list[_WithOptions]] = {}
+        self._by_engine: dict[str, list[_WithOptions]] = {}
         for item in given:
-            self._libraries.setdefault(_library(item), []).append(item)
-        engine_keys = {a.engine.key for a in given if a.engine is not None}
+            self._by_engine.setdefault(_engine_key_of(item), []).append(item)
+        engine_keys = {
+            a.engine.key
+            for a in given
+            if a.engine is not None and a.engine is not PythonEngine
+        }
         # One object of each format: formats keep what detection finds (e.g.
         # a Parquet dataset's layout) for their actions.
         self.formats: list[DataFormat] = [
@@ -217,7 +223,7 @@ class ActionChain:
         self._format_names = [f.name for f in self.formats]
         _check_format_names(self.formats)
         check_actions([a for a in self.actions if not _is_adapted(a)])
-        _check_options(self.engine_options, self._libraries, self._format_names)
+        _check_options(self.engine_options, self._by_engine, self._format_names)
         if engine_preference is None:
             engine_preference = DEFAULT_ENGINE_PREFERENCE
         else:
@@ -231,28 +237,28 @@ class ActionChain:
         self.engines = _ordered_engines(self.actions, engine_preference)
         self._engine_preference = list(engine_preference)
 
-    def libraries(self) -> set[str]:
-        """The keys of the actions' libraries: their engines', "python" for
-        those without one."""
-        return set(self._libraries)
+    def engine_keys(self) -> set[str]:
+        """The keys of the actions' engines, "python" for the built-in ones
+        (``PythonEngine``)."""
+        return set(self._by_engine)
 
     def options_of(self, action: _WithOptions, location: Location) -> SupportOptions:
         """The options of ``action`` for the item at ``location``: those of
-        its library for all formats, then for its format, those its model
+        its engine for all formats, then for its format, those its model
         has (see the class docstring). ValueError for options a function
-        returned that no action of the library takes."""
-        library = _library(action)
-        by_format = self.engine_options.get(library, {})
+        returned that no action of the engine takes."""
+        key = _engine_key_of(action)
+        by_format = self.engine_options.get(key, {})
         merged: dict[str, Any] = {}
         for name in (ALL_FORMATS, action.format.name):
             values = by_format.get(name)
             if callable(values):
                 values = values(location)
                 _check_engine_options(
-                    f"engine_options[{library!r}][{name!r}]({location.url!r})",
+                    f"engine_options[{key!r}][{name!r}]({location.url!r})",
                     name,
                     values,
-                    self._libraries[library],
+                    self._by_engine[key],
                     self._format_names,
                 )
             merged.update(values or {})
@@ -382,10 +388,10 @@ class ActionChain:
         recipes: list[Recipe] = []
         adapted: set[str] = set()
         for action in self.of(fmt, ctx, CodeAction):
-            if action.library in adapted:
+            if action.engine.key in adapted:
                 continue
             if _is_adapted(action):
-                adapted.add(action.library)
+                adapted.add(action.engine.key)
             recipes += self._recipes_of(action, fmt, ctx)
         order = {key: i for i, key in enumerate(self._engine_preference)}
 
@@ -401,7 +407,10 @@ class ActionChain:
     ) -> list[Recipe]:
         """The recipes of one code action: one, or one per title for a
         support of the former interface; one holding the error if it fails."""
-        common = {"engine": action.engine, "requirements": action.requirements()}
+        common = {
+            "engine": action.engine if engine_key(action) else None,
+            "requirements": action.requirements(),
+        }
         try:
             codes = action(fmt, ctx, self.options_of(action, ctx.location))
         except Exception as exc:
@@ -421,28 +430,28 @@ def _is_adapted(action: Action[Any]) -> bool:
 
 def _check_options(
     engine_options: Mapping[str, Any],
-    libraries: Mapping[str, Sequence[Action[Any]]],
+    by_engine: Mapping[str, Sequence[_WithOptions]],
     format_names: Sequence[str],
 ) -> None:
     """ValueError for ``engine_options`` that no action takes (see
     ``ActionChain``); functions are checked when called."""
-    for library, by_format in engine_options.items():
-        if library not in libraries:
+    for key, by_format in engine_options.items():
+        if key not in by_engine:
             raise ValueError(
-                f"engine_options: unknown engine {library!r}; "
-                f"choose from {sorted(libraries)}"
+                f"engine_options: unknown engine {key!r}; "
+                f"choose from {sorted(by_engine)}"
             )
         if not isinstance(by_format, dict):
             raise ValueError(
-                f"engine_options[{library!r}] must be a dict of format names "
+                f"engine_options[{key!r}] must be a dict of format names "
                 f"(or {ALL_FORMATS!r}) to options"
             )
         for name, values in by_format.items():
             _check_engine_options(
-                f"engine_options[{library!r}][{name!r}]",
+                f"engine_options[{key!r}][{name!r}]",
                 name,
                 values,
-                libraries[library],
+                by_engine[key],
                 format_names,
             )
 
@@ -454,7 +463,7 @@ def _check_engine_options(
     actions: Sequence[Action[Any]],
     format_names: Sequence[str],
 ) -> None:
-    """ValueError for options of a library for format ``name`` (or all) that
+    """ValueError for options of an engine for format ``name`` (or all) that
     none of its ``actions`` for it takes: the options of a format and an
     engine are those of all their actions' classes."""
     if name != ALL_FORMATS and name not in format_names:
@@ -491,9 +500,10 @@ def _check_format_names(formats: Sequence[DataFormat]) -> None:
             )
 
 
-def _check_engine_keys(actions: Sequence[Action[Any]]) -> None:
+def _check_engine_keys(actions: Sequence[_WithOptions]) -> None:
     """ValueError for two engine classes of one key: actions of an engine
-    share its class, so that the explorer offers it once, with one label."""
+    share its class, so that the explorer offers it once, with one label.
+    Supports of the former interface have None for Python alone."""
     engines: dict[str, type[Engine]] = {}
     for action in actions:
         engine = action.engine
@@ -516,13 +526,9 @@ def _ordered_engines(
     in its order, then the others by key."""
     engines: dict[str, type[Engine]] = {}
     for action in actions:
-        engine = action.engine
-        if (
-            engine is not None
-            and isinstance(action, ViewAction)
-            and action.is_installed()
-        ):
-            engines.setdefault(engine.key, engine)
+        key = engine_key(action)
+        if key is not None and isinstance(action, ViewAction) and action.is_installed():
+            engines.setdefault(key, action.engine)
     first = [engines[k] for k in dict.fromkeys(preference) if k in engines]
     rest = sorted((e for e in engines.values() if e not in first), key=lambda e: e.key)
     return first + rest

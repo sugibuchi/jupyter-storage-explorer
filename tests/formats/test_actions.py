@@ -15,6 +15,7 @@ from jupyter_storage_explorer.formats import (
     Engine,
     FormatSupport,
     Parquet,
+    PythonEngine,
     PythonPackage,
     SupportOptions,
     TextView,
@@ -89,7 +90,7 @@ class TestDecorators:
         assert csv_widget.name == "Widget for CSV"
         assert csv_view.options_model is DuckOptions
         assert csv_view.code is csv_code
-        assert csv_view.library == "duck"
+        assert csv_view.engine.key == "duck"
 
     def test_called_as_the_function(self, make_item):
         item = make_item("/a.csv", b"")
@@ -99,12 +100,12 @@ class TestDecorators:
         )
 
     def test_options_without_annotation(self):
-        @view(format=Csv, engine=None)
+        @view(format=Csv, engine=PythonEngine)
         def plain(fmt, ctx, options, limits):
             return TextView(text="")
 
         assert plain.options_model is SupportOptions
-        assert plain.library == "python"
+        assert plain.engine.key == "python"
 
     @pytest.mark.parametrize(
         "function",
@@ -130,7 +131,7 @@ class TestDecorators:
         ("arguments", "message"),
         [
             ({"format": str}, "format must be a DataFormat class"),
-            ({"engine": "duck"}, "engine must be an Engine class or None"),
+            ({"engine": "duck"}, "engine must be an Engine class"),
             ({"requires": [MissingPackage()]}, "requires must be a tuple"),
             ({"check": True}, "check must be callable"),
             ({"name": "View {library}"}, r"name may hold only \{format\}"),
@@ -213,7 +214,7 @@ class TestRegister:
         def parquet(fmt, ctx, options, limits):
             return TextView(text="")
 
-        @view(format=Csv, engine=None)
+        @view(format=Csv, engine=PythonEngine)
         def python(fmt, ctx, options, limits):
             return TextView(text="")
 
