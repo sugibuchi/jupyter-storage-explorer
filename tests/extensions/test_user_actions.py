@@ -1,4 +1,4 @@
-"""_user_actions.py: the actions of the user's files, storage-explorer/actions/*.py
+"""_extensions/user_actions.py: the actions of the user's files, storage-explorer/actions/*.py
 in Jupyter's configuration folders, which every explorer loads."""
 
 from __future__ import annotations
@@ -9,7 +9,7 @@ import textwrap
 import pytest
 
 from jupyter_storage_explorer import StorageExplorer
-from jupyter_storage_explorer._user_actions import load_user_actions
+from jupyter_storage_explorer._extensions.user_actions import load_user_actions
 from jupyter_storage_explorer.formats import Csv, ViewLimits
 
 # A user's file: an action of its own, and one imported (a built-in), which
@@ -147,7 +147,7 @@ class TestTemplate:
     """actions_template.py, which "Edit actions" creates actions.py from."""
 
     def source(self):
-        template = importlib.resources.files("jupyter_storage_explorer")
+        template = importlib.resources.files("jupyter_storage_explorer._extensions")
         return template.joinpath("actions_template.py").read_text(encoding="utf-8")
 
     def test_no_actions_as_it_is(self, user):

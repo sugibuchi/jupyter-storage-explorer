@@ -10,7 +10,7 @@ from importlib.metadata import EntryPoint, version
 import pytest
 from explorers import make
 
-from jupyter_storage_explorer import _plugins
+from jupyter_storage_explorer._extensions import plugins as _plugins
 from jupyter_storage_explorer._static import STATIC
 from jupyter_storage_explorer.plugin import ENTRY_POINT_GROUP
 

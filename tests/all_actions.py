@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from jupyter_storage_explorer._plugins import PluginComponents, load_plugins
+from jupyter_storage_explorer._extensions.plugins import PluginComponents, load_plugins
 from jupyter_storage_explorer.formats.defaults import DEFAULT_ACTIONS
 from jupyter_storage_explorer.formats.packages import PythonPackage
 

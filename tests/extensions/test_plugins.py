@@ -19,9 +19,9 @@ from plugin_samples import (
     avro_code,
 )
 
-from jupyter_storage_explorer import _plugins
 from jupyter_storage_explorer._explorer.actions import ActionChain
-from jupyter_storage_explorer._plugins import load_plugins
+from jupyter_storage_explorer._extensions import plugins as _plugins
+from jupyter_storage_explorer._extensions.plugins import load_plugins
 from jupyter_storage_explorer.filesystems import FsspecOperations
 from jupyter_storage_explorer.formats import Csv, Engine
 from jupyter_storage_explorer.formats.actions import code

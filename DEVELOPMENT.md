@@ -23,6 +23,7 @@ explorer exactly, so an extra always installs the plugin of the explorer's versi
 | `src/jupyter_storage_explorer/filesystems/`                    | Filesystems' locations (mappers) and file operations: interfaces users extend, and the default ones. |
 | `src/jupyter_storage_explorer/formats/`                        | The formats files are previewed, queried and loaded as.                                              |
 | `src/jupyter_storage_explorer/_explorer/`                      | `StorageExplorer`'s features, as mixins of the class.                                                |
+| `src/jupyter_storage_explorer/_extensions/`                    | What extends the explorer from outside: plugins installed and the user's action files.               |
 | `src/jupyter_storage_explorer/_jobs/`                          | File operations planned and run as jobs, without the widget.                                         |
 | `src/jupyter_storage_explorer/_query/`                         | The data browser: filters, settings, and a dataset open in it.                                       |
 | `src/jupyter_storage_explorer/static/`                         | The widgets' JavaScript and CSS, loaded at run time (no build step).                                 |
@@ -116,6 +117,7 @@ tests expect pyspark missing, until `uv sync` at the root removes it.
 | `formats/`     | `formats/`                                     |
 | `filesystems/` | `filesystems/`                                 |
 | `jobs/`        | `_jobs/`                                       |
+| `extensions/`  | `_extensions/`: plugins and the user's actions |
 | `launcher/`    | The launcher                                   |
 | `browser/`     | The JavaScript's checks and the smoke test     |
 
@@ -1024,7 +1026,7 @@ Plugins are installed to enrich or change the explorer, so a plugin's view of a 
 and the user's add to the explorer's: they are offered in "Preview as" and "Python code", and are the default only for
 formats nothing before them views. So the operations' order, given first, does not apply to actions.
 
-`load_user_actions`, in `_user_actions.py`, reads the user's action files in Jupyter's configuration directories, the
+`load_user_actions`, in `_extensions/user_actions.py`, reads the user's action files in Jupyter's configuration directories, the
 user's first. In each, `storage-explorer/actions.py` comes first, then `storage-explorer/actions/*.py` by name, without
 those starting with `_`.
 
@@ -1205,7 +1207,7 @@ or made with those options:
 
 Plugin options only include or leave out actions. Actions get their own options from `engine_options`.
 
-`load_plugins`, in `_plugins.py`, loads every plugin installed, highest priority first, then by key.
+`load_plugins`, in `_extensions/plugins.py`, loads every plugin installed, highest priority first, then by key.
 
 - A disabled plugin is not even imported. A plugin may default to disabled, to be opt-in.
 - An option the model lacks is a `ValueError`.

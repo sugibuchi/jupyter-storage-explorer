@@ -7,7 +7,7 @@ import base64
 from importlib.metadata import PackageNotFoundError, distribution, version
 from typing import TYPE_CHECKING, Any
 
-from jupyter_storage_explorer._plugins import installed_plugins
+from jupyter_storage_explorer._extensions.plugins import installed_plugins
 from jupyter_storage_explorer._static import STATIC
 from jupyter_storage_explorer.plugin import (
     homepage,

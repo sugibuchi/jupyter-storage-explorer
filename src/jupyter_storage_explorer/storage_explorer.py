@@ -30,17 +30,17 @@ from jupyter_storage_explorer._explorer.mapper_css import mapper_key, mapper_sty
 from jupyter_storage_explorer._explorer.previews import PreviewsMixin, action_id
 from jupyter_storage_explorer._explorer.requests import FileRequestsMixin
 from jupyter_storage_explorer._explorer.states import ExplorerStates, explorer_states
+from jupyter_storage_explorer._extensions.plugins import PluginComponents, load_plugins
+from jupyter_storage_explorer._extensions.user_actions import (
+    create_user_actions_file,
+    user_actions_file,
+    users_actions_warned,
+)
 from jupyter_storage_explorer._jobs.incoming import IncomingFiles
 from jupyter_storage_explorer._jobs.loader import Loader
 from jupyter_storage_explorer._jobs.operation_chain import OperationChain
 from jupyter_storage_explorer._jobs.runner import JobRunner
 from jupyter_storage_explorer._jobs.transfer_policy import TransferPolicy
-from jupyter_storage_explorer._plugins import PluginComponents, load_plugins
-from jupyter_storage_explorer._user_actions import (
-    create_user_actions_file,
-    user_actions_file,
-    users_actions_warned,
-)
 from jupyter_storage_explorer.filesystems import (
     LocalLocation,
     MapperChain,

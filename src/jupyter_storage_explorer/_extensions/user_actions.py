@@ -67,9 +67,7 @@ def create_user_actions_file() -> None:
     if path.exists():
         return
     path.parent.mkdir(parents=True, exist_ok=True)
-    template = importlib.resources.files("jupyter_storage_explorer").joinpath(
-        "actions_template.py"
-    )
+    template = importlib.resources.files(__package__).joinpath("actions_template.py")
     path.write_text(template.read_text(encoding="utf-8"), encoding="utf-8")
 
 

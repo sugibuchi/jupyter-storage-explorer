@@ -30,10 +30,12 @@ def jupyter_config_dirs(tmp_path_factory, monkeypatch):
     folders: list[str] = []
     user = tmp_path_factory.mktemp("jupyter-config")
     monkeypatch.setattr(
-        "jupyter_storage_explorer._user_actions.jupyter_config_path", lambda: folders
+        "jupyter_storage_explorer._extensions.user_actions.jupyter_config_path",
+        lambda: folders,
     )
     monkeypatch.setattr(
-        "jupyter_storage_explorer._user_actions.jupyter_config_dir", lambda: str(user)
+        "jupyter_storage_explorer._extensions.user_actions.jupyter_config_dir",
+        lambda: str(user),
     )
     return folders
 
