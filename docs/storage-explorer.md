@@ -363,7 +363,7 @@ Views and code of your own, called actions, go in `~/.jupyter/storage-explorer/a
 **Edit actions** opens it in JupyterLab's editor, created from a commented example if it is missing. Every explorer
 then offers them in **Preview as** and **Python code**, beside its own.
 
-[Writing actions](actions.md) shows how, step by step.
+The [Action development guide](action-development-guide.md) shows how, step by step.
 
 ## Engine options
 
@@ -502,7 +502,7 @@ Storages and data:
 |---------------------------|------------------------------------------------------------------------------------------------------------|
 | `filesystems={...}`       | Several named storages; see [Several storages in one explorer](#several-storages-in-one-explorer).         |
 | `plugin_options={...}`    | The plugins' options, by key, e.g. `{"pandas-support": {"enabled": False}}`; see each plugin's README. |
-| `user_actions="enabled"`  | `"disabled"`: no actions of your files; see [Writing actions](actions.md#turning-them-off).                |
+| `user_actions="enabled"`  | `"disabled"`: no actions of your files; see [Turning them off](action-development-guide.md#turning-them-off). |
 | `engine_options={...}`    | The engines' options; see [Engine options](#engine-options).                                               |
 | `engine_preference=[...]` | The engines in the order they are offered, the first chosen until the user chooses; see [Engines](#engines). |
 

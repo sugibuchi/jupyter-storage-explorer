@@ -20,11 +20,12 @@ Storage Explorer. See
 ## Highlights
 
 - **`StorageExplorer`**: one explorer to browse them all.
-  S3, Azure, Google Cloud Storage, local disks and anything else fsspec reaches, even
-  [side by side](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#several-storages-in-one-explorer).
+  - S3, Azure, Google Cloud Storage, local disks and anything else fsspec reaches.
+  - [Several storages side by side](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#several-storages-in-one-explorer)
+    in one explorer.
 - **`DataExplorer`**: a table widget for your dataframes, more than meets the eye.
-  Page, sort and filter large tables in your data lake, then
-  [get the result back in code](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/data-explorer.md#the-result-in-code).
+  - Page, sort and filter large tables in your data lake.
+  - [Get the result back in code](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/data-explorer.md#the-result-in-code).
 - **[Launcher](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/launcher/README.md)**: right at home in
   your Jupyter.
   - Open the explorer in a tab or in the side panel.
@@ -34,19 +35,21 @@ Storage Explorer. See
     [drag and drop](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#drag-and-drop),
     files between explorers.
 - **Previews**: look before you load.
-  [Delta Lake, Parquet, CSV, JSON, Excel, DuckDB databases, text and images](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#supported-formats)
-  open at a click, with ready-to-run code that loads them into your notebook.
+  - [Delta Lake, Parquet, CSV, JSON, Excel, DuckDB databases, text and images](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#supported-formats)
+    open at a click.
+  - Ready-to-run code loads them into your notebook.
 - **Multi-engine support**: data professionals, start your engines.
-  Plug in your favourite data library, such as
-  [Polars, pandas, DuckDB, PySpark or Dask](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/plugins/README.md),
-  and browse data with it on the fly. Switch engines at any time, and get code for each of them.
+  - Plug in your favourite data library:
+    [Polars, pandas, DuckDB, PySpark or Dask](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/plugins/README.md).
+  - Browse data with it on the fly, and switch engines at any time.
+  - Get code for each engine installed.
 - **Actions and plugins**: your explorer, your way.
-  - Want another data library, or code snippets of your own? Write a few functions in
-    [your actions file](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/actions.md),
-    and every explorer offers your views and code beside its own.
-  - Need a complete extension, for another storage or data framework? Develop a plugin, with your AI assistant: the
-    [Plugin development guide](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/plugin-development-guide.md)
-    is written for both of you.
+  - Another data library, or code snippets of your own? Write a few functions as
+    [actions](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/action-development-guide.md),
+    offered beside the explorer's own.
+  - A complete extension, for another storage or data framework? Develop a
+    [plugin](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/plugin-development-guide.md) with
+    your AI assistant: its guide is written for both of you.
 - **Safe file operations**: keep calm and copy on.
   - Copy, move and delete large folders
     [in the background](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#background-operations),
@@ -56,9 +59,10 @@ Storage Explorer. See
   - [Transfer rules](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#transfer-policy)
     keep data where it may go.
 - **Bookmarks**: there and back again.
-  [Bookmarks](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#bookmarks) and
-  [remembered queries](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#remembered-states)
-  bring you back where you left off.
+  - [Bookmarks](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#bookmarks)
+    bring you back to your folders.
+  - [Remembered queries](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#remembered-states)
+    bring back your sorting and filters.
 
 ## Quick start
 
@@ -119,17 +123,17 @@ The `notebooks` folder has a demo of each widget on sample data.
 ## Documentation
 
 - **[StorageExplorer](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md)**:
-  storages, using the explorer, transfer policy, formats, working with it from Python and options.
-- **[DataExplorer](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/data-explorer.md)**: the data
-  browser, `result()`, `on_change()`, `QuerySettings` and options.
-- **[The launcher](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/launcher/README.md)**: configuring
-  its tab with `launcher.py` files.
+  the file browser.
+- **[DataExplorer](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/data-explorer.md)**: the table
+  widget for dataframes.
+- **[Launcher](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/launcher/README.md)**: StorageExplorer
+  integrated into JupyterLab.
+- **[Writing actions](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/action-development-guide.md)**:
+  menu items of your own, for views, code snippets and more.
+- **[Writing plugins](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/plugin-development-guide.md)**:
+  distribution packages of actions, filesystem support and more.
 - **[Development](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/DEVELOPMENT.md)**: building,
   releasing, and custom icons.
-- **[Writing actions](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/actions.md)**: views and code
-  snippets of your own, in a file every explorer reads.
-- **[Plugin development guide](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/plugin-development-guide.md)**:
-  formats, actions, engines, file operations and storages of your own, packaged as plugins.
 
 ## Requirements
 

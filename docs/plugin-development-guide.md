@@ -3,7 +3,8 @@
 How to extend Storage Explorer in Python: new formats, engines (libraries reading data), file operations and storages,
 and how to package them as a **plugin** that every explorer uses once installed.
 
-For views and code snippets of your own use, a file of actions is enough: see [Writing actions](actions.md).
+For views and code snippets of your own use, a file of actions is enough: see the
+[Action development guide](action-development-guide.md).
 
 This guide is for developers, and is written to be followed by AI assistants generating plugin code and projects: the
 rules are stated explicitly, and the templates are complete. When generating a plugin, follow the
@@ -1126,8 +1127,9 @@ that plugin.
 Restart the kernel after changing the component's module: Python imports a module only once.
 
 Actions can also go in `storage-explorer/actions.py`, or a file of `storage-explorer/actions/`, in a Jupyter
-configuration directory. Every explorer reads them when it is created: see [Writing actions](actions.md). A changed
-file applies to the next explorer, without a restart.
+configuration directory. Every explorer reads them when it is created: see the
+[Action development guide](action-development-guide.md). A changed file applies to the next explorer, without a
+restart.
 
 The launcher's tab and side panel take the same components from functions of the same names in `launcher.py`:
 

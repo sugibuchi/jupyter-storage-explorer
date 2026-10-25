@@ -1,4 +1,4 @@
-# Writing actions
+# Action development guide
 
 Actions are what the explorer does with a file or a folder of a format:
 

@@ -176,9 +176,9 @@ Write docs so that people can review them. That covers this file, DEVELOPMENT.md
 - `docs/data-explorer.md` covers the data browser, `result()`, `on_change()`, `QuerySettings` and `DataExplorer`'s
   options.
 - DEVELOPMENT.md has custom icons, in "Customizing", and how the code fits together, in "Architecture".
-- `docs/actions.md`, "Writing actions", is the users' guide to actions of their own, in their actions files.
+- `docs/action-development-guide.md` is the users' guide to actions of their own, in their actions files.
 - docs/plugin-development-guide.md covers extending the explorer in Python and packaging plugins, with the conventions.
-  It has the full rules of actions; `docs/actions.md` links to them rather than repeating them.
+  It has the full rules of actions, which the action development guide links to rather than repeats.
 
 Update the docs when operations, formats or options change. Keep user docs short: what users do, not how it works.
 
