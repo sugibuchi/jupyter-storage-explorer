@@ -71,7 +71,7 @@ writing tests. The traps:
 ## Architecture
 
 DEVELOPMENT.md's Architecture section describes each part: read it before changing one. docs/development-plugin.md
-has the rules for formats, supports, options, operations, mappers and plugins: follow them, and keep them in step with
+has the rules for formats, actions, options, operations, mappers and plugins: follow them, and keep them in step with
 the code. The traps:
 
 - Traits are underscore-prefixed in every widget: a public trait would be public API.
@@ -112,14 +112,20 @@ the code. The traps:
   sorting and filters in `_explorer/listing.py` must follow the browser's.
 - `open_preview` is deprecated, with a `DeprecationWarning`.
 - A format's `matches` reads nothing: it runs for every file listed. A signature check goes in `sniff`.
-- `formats` never imports `_explorer`. Supports import their libraries only inside methods, through
-  `PythonPackage.load()`, so that plugins load without them.
-- The explorer calls a support's method only for items its `supports()` accepts, and then tries no other support. Its
-  errors are the item's. `supports()` never reads the storage: it runs on the main thread for each item clicked.
+- `formats` never imports `_explorer`. Actions import their libraries only inside their functions, e.g.
+  `import polars as pl`, so that plugins load without them.
+- An action's options class comes from its `options` annotation: import it at run time, at the module's top level.
+  ruff's `runtime-evaluated-decorators` keeps it out of `TYPE_CHECKING`.
+- The explorer calls an action only for items its `check` accepts, and then tries no other action. Its errors are the
+  item's. A check never reads the storage: it runs on the main thread for each item clicked.
+- Two actions of one kind, format, engine and label are an error, wherever they come from. The page names an action
+  by its `id`, never by its label.
 - A view reading much, such as a whole large file, asks first: it returns a `ViewWithPrompt`.
-- Supports never check their packages, and take no `__init__` arguments.
-- A recipe's title never names the library.
-- Generated code gets options only through `SupportOptions.code_value`, which leaves out secrets.
+- Actions never check their packages: the chain calls only installed ones.
+- Options are data: what actions do with them goes in functions taking them. Methods only give views of them.
+- A code action's label never names the library: "Python code" shows the engine. Multi-line code comes from
+  `inspect.cleandoc` templates.
+- Generated code gets options only through `ActionOptions.code_value`, which leaves out secrets.
 - Plugins never depend on their libraries: their `full` extra installs them. A new dependency of a plugin goes in its
   `hatch_build.py`.
 - Each library's options are listed in its plugin's README only. Update it when an options model changes.
@@ -143,7 +149,8 @@ Docstrings of the public API are in numpy style: `Parameters`, `Returns`, `Raise
 - `StorageExplorer`, `DataExplorer`, `fetch_rows` and `QuerySettings`;
 - `ExplorerStates`, with `Bookmark` and `QueryState`;
 - `FileSystemOperations` and its subclasses, with `_copy_file` and `_move_file`, and `Measurement` and `Progress`;
-- `DataFormat`, `FormatSupport` and `View`, with `LocalFileCache`;
+- `DataFormat`, `View` and `LocalFileCache`;
+- the actions' decorators `view` and `code`, `register_actions`, `ActionOptions` and the plugins' actions;
 - `Location`, `FileSystemMapper` and their subclasses, `MapperChain` and `same_filesystem`.
 
 Internal docstrings stay prose: underscore names, `DataQuery`, `FileTasks`, `JobRunner`, the mixins and the like.
@@ -173,7 +180,7 @@ Write docs so that people can review them. That covers this file, DEVELOPMENT.md
 
 Update the docs when operations, formats or options change. Keep user docs short: what users do, not how it works.
 
-`actions`, `supports`, `operations` and `filesystem_mappers` are for development. They come last in the options table of
+`actions`, `operations` and `filesystem_mappers` are for development. They come last in the options table of
 docs/storage-explorer.md and in the launcher's template. Only docs/development-plugin.md explains them, in "Trying
 components in an explorer".
 

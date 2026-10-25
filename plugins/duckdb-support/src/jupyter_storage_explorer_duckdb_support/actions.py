@@ -39,24 +39,20 @@ from fsspec.implementations.dirfs import DirFileSystem
 from fsspec.spec import AbstractFileSystem
 
 from jupyter_storage_explorer.filesystems.locations import LocalLocation
-from jupyter_storage_explorer.formats.actions import code, register_actions, view
+from jupyter_storage_explorer.formats.actions import (
+    ActionOptions,
+    code,
+    register_actions,
+    view,
+)
 from jupyter_storage_explorer.formats.base import DataFormat, ItemContext
 from jupyter_storage_explorer.formats.delta import DeltaLake
 from jupyter_storage_explorer.formats.engine import Engine
 from jupyter_storage_explorer.formats.local_files import local_file_cache
-from jupyter_storage_explorer.formats.package import PythonPackage
-from jupyter_storage_explorer.formats.packages import PyArrow
+from jupyter_storage_explorer.formats.packages import PyArrow, PythonPackage
 from jupyter_storage_explorer.formats.parquet import Parquet
-from jupyter_storage_explorer.formats.support import (
-    LIBRARY_DEFAULT,
-    LibraryDefault,
-    SupportOptions,
-    format_arguments,
-    format_kwargs,
-    secret_dict_field,
-)
 from jupyter_storage_explorer.formats.text import Csv, JsonLines
-from jupyter_storage_explorer.formats.view import (
+from jupyter_storage_explorer.formats.views import (
     Leaf,
     Node,
     QueryView,
@@ -67,7 +63,14 @@ from jupyter_storage_explorer.formats.view import (
     ViewWithChoice,
     ViewWithConfirmation,
 )
-from jupyter_storage_explorer.util import format_size
+from jupyter_storage_explorer.util import (
+    LIBRARY_DEFAULT,
+    LibraryDefault,
+    format_arguments,
+    format_kwargs,
+    format_size,
+    secret_dict_field,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
@@ -156,7 +159,7 @@ _FSSPEC_SECRETS = (
 
 
 @dataclass(frozen=True, kw_only=True)
-class DuckDBOptions(SupportOptions):
+class DuckDBOptions(ActionOptions):
     """The options of every DuckDB action: the connection, and how DuckDB
     reaches the storage.
 
@@ -457,7 +460,7 @@ def _parquet_data_url(fmt: Parquet, ctx: ItemContext, url: str) -> str:
     return url
 
 
-@code(format=Parquet, engine=DuckDBEngine, name=AS_RELATION, requires=_REQUIRES)
+@code(format=Parquet, engine=DuckDBEngine, label=AS_RELATION, requires=_REQUIRES)
 def parquet_as_relation(
     fmt: Parquet, ctx: ItemContext, options: ParquetByDuckDBOptions
 ) -> str:
@@ -598,7 +601,7 @@ def _text_code(
     )
 
 
-@code(format=Csv, engine=DuckDBEngine, name=AS_RELATION, requires=_REQUIRES)
+@code(format=Csv, engine=DuckDBEngine, label=AS_RELATION, requires=_REQUIRES)
 def csv_as_relation(fmt: Csv, ctx: ItemContext, options: CsvByDuckDBOptions) -> str:
     """The code reading the CSV file into a relation."""
     return _text_code("read_csv", {}, fmt, ctx, options)
@@ -612,7 +615,7 @@ def csv_view(
     return _text_view("read_csv", {}, fmt, ctx, options, limits=limits)
 
 
-@code(format=JsonLines, engine=DuckDBEngine, name=AS_RELATION, requires=_REQUIRES)
+@code(format=JsonLines, engine=DuckDBEngine, label=AS_RELATION, requires=_REQUIRES)
 def json_lines_as_relation(
     fmt: JsonLines, ctx: ItemContext, options: JsonLinesByDuckDBOptions
 ) -> str:
@@ -662,7 +665,7 @@ def _delta_query(ctx: ItemContext, options: DeltaLakeByDuckDBOptions) -> str:
 @code(
     format=DeltaLake,
     engine=DuckDBEngine,
-    name=AS_RELATION,
+    label=AS_RELATION,
     requires=_REQUIRES,
     check=_code_read_by_duckdb,
 )
@@ -740,7 +743,7 @@ _REMOTE_DATABASE_CODE = cleandoc("""
 
 
 @code(
-    format=DuckDBDatabase, engine=DuckDBEngine, name=OPEN_DATABASE, requires=_REQUIRES
+    format=DuckDBDatabase, engine=DuckDBEngine, label=OPEN_DATABASE, requires=_REQUIRES
 )
 def database_code(fmt: DuckDBDatabase, ctx: ItemContext, options: DuckDBOptions) -> str:
     """The code opening the database read only, and listing its tables; a

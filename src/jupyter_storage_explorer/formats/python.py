@@ -21,18 +21,18 @@ from pygments.formatters import HtmlFormatter
 from pygments.lexers import get_lexer_by_name
 from pygments.util import ClassNotFound
 
-from jupyter_storage_explorer.formats.actions import code, register_actions, view
+from jupyter_storage_explorer.formats.actions import (
+    ActionOptions,
+    code,
+    register_actions,
+    view,
+)
 from jupyter_storage_explorer.formats.base import ItemContext
 from jupyter_storage_explorer.formats.engine import Engine
 from jupyter_storage_explorer.formats.images import Image
 from jupyter_storage_explorer.formats.packages import Fsspec, Pillow
-from jupyter_storage_explorer.formats.support import (
-    SupportOptions,
-    format_kwargs,
-    secret_dict_field,
-)
 from jupyter_storage_explorer.formats.text import Json, Markdown, Text
-from jupyter_storage_explorer.formats.view import (
+from jupyter_storage_explorer.formats.views import (
     MarkdownView,
     MediaView,
     TextView,
@@ -40,7 +40,7 @@ from jupyter_storage_explorer.formats.view import (
     View,
     ViewLimits,
 )
-from jupyter_storage_explorer.util import format_size
+from jupyter_storage_explorer.util import format_kwargs, format_size, secret_dict_field
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -109,7 +109,7 @@ OPEN_IMAGE = "Open the image"
 
 
 @dataclass(frozen=True, kw_only=True)
-class FsspecOptions(SupportOptions):
+class FsspecOptions(ActionOptions):
     """The options of code opening the file with ``fsspec.open``.
 
     Attributes
@@ -173,7 +173,7 @@ def _fsspec_code(template: str, ctx: ItemContext, options: FsspecOptions) -> str
     )
 
 
-@code(format=Text, engine=PythonEngine, name=READ_TEXT, requires=(Fsspec(),))
+@code(format=Text, engine=PythonEngine, label=READ_TEXT, requires=(Fsspec(),))
 def text_code(fmt: Text, ctx: ItemContext, options: FsspecOptions) -> str:
     """Text read with fsspec."""
     return _fsspec_code(TEXT_TEMPLATE, ctx, options)
@@ -192,7 +192,7 @@ def text_view(
 
 @view(format=Markdown, engine=PythonEngine)
 def markdown_view(
-    fmt: Markdown, ctx: ItemContext, options: SupportOptions, limits: ViewLimits
+    fmt: Markdown, ctx: ItemContext, options: ActionOptions, limits: ViewLimits
 ) -> View:
     """Markdown, rendered by the browser. Registered before ``text_view``:
     Markdown is a Text format."""
@@ -201,7 +201,7 @@ def markdown_view(
     return MarkdownView(text=text, note=note)
 
 
-@code(format=Json, engine=PythonEngine, name=LOAD_VALUE, requires=(Fsspec(),))
+@code(format=Json, engine=PythonEngine, label=LOAD_VALUE, requires=(Fsspec(),))
 def json_code(fmt: Json, ctx: ItemContext, options: FsspecOptions) -> str:
     """The JSON value, loaded with fsspec and Python's json."""
     return _fsspec_code(JSON_TEMPLATE, ctx, options)
@@ -224,7 +224,7 @@ def json_view(
 
 @view(format=Image, engine=PythonEngine)
 def image_view(
-    fmt: Image, ctx: ItemContext, options: SupportOptions, limits: ViewLimits
+    fmt: Image, ctx: ItemContext, options: ActionOptions, limits: ViewLimits
 ) -> View:
     """Images, shown by the browser: their bytes, or a temporary link for
     those too large to send through the kernel."""
@@ -241,7 +241,7 @@ def image_view(
         raise ValueError(f"too large to view (over {limit})") from None
 
 
-def _not_svg(fmt: Image, ctx: ItemContext, options: SupportOptions) -> bool:
+def _not_svg(fmt: Image, ctx: ItemContext, options: ActionOptions) -> bool:
     """Whether Pillow can open the image: not SVG."""
     return fmt.mime_type(ctx.path) != "image/svg+xml"
 
@@ -249,7 +249,7 @@ def _not_svg(fmt: Image, ctx: ItemContext, options: SupportOptions) -> bool:
 @code(
     format=Image,
     engine=PythonEngine,
-    name=OPEN_IMAGE,
+    label=OPEN_IMAGE,
     requires=(Fsspec(), Pillow()),
     check=_not_svg,
 )

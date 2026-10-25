@@ -3,17 +3,15 @@
 from __future__ import annotations
 
 import pytest
-from all_supports import NO_PLUGINS
+from all_actions import NO_PLUGINS
 
 from jupyter_storage_explorer import StorageExplorer
+from jupyter_storage_explorer._explorer.actions import ActionChain
 from jupyter_storage_explorer._explorer.icons import format_icons
-from jupyter_storage_explorer._explorer.supports import ActionChain
-from jupyter_storage_explorer.formats import (
-    FILE_ICONS,
-    Csv,
-    FormatSupport,
-)
+from jupyter_storage_explorer.formats import FILE_ICONS, Csv
+from jupyter_storage_explorer.formats.actions import view
 from jupyter_storage_explorer.formats.defaults import DEFAULT_ACTIONS, DEFAULT_FORMATS
+from jupyter_storage_explorer.formats.python import PythonEngine
 
 
 class TestFileIcons:
@@ -26,11 +24,14 @@ class TestFileIcons:
         return type("Avro", (Csv,), {"name": "avro", "file_icon": icon})()
 
     def explorer(self, icon):
-        """An explorer with a support of an Avro format: its format is the
+        """An explorer with an action of an Avro format: its format is the
         explorer's. Without plugins, whose formats have icons of their own."""
-        fmt = type(self.avro(icon))
-        avro = type("AvroByPython", (FormatSupport,), {"format": fmt})
-        return StorageExplorer(fs=None, supports=[avro], plugin_options=NO_PLUGINS)
+
+        @view(format=type(self.avro(icon)), engine=PythonEngine)
+        def avro_view(fmt, ctx, options, limits):
+            return None
+
+        return StorageExplorer(fs=None, actions=[avro_view], plugin_options=NO_PLUGINS)
 
     def test_default_formats(self):
         assert format_icons(

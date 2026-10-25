@@ -10,18 +10,17 @@ import threading
 import narwhals as nw
 import polars as pl
 import pytest
-from all_supports import NO_PLUGINS, installed_only
+from all_actions import NO_PLUGINS, installed_only
 from explorers import entries, make, path_of
 from format_samples import DUCKDB_BYTES, SQLITE_BYTES, DuckDB, SQLite
 from in_a_kernel import listed, until
 
 from jupyter_storage_explorer._explorer import previews
-from jupyter_storage_explorer._explorer.supports import ActionChain
+from jupyter_storage_explorer._explorer.actions import ActionChain
 from jupyter_storage_explorer._explorer.view_tab import ViewTab
 from jupyter_storage_explorer._query.settings import QuerySettings
 from jupyter_storage_explorer.data_explorer import DataExplorer
 from jupyter_storage_explorer.formats import (
-    FormatSupport,
     PythonPackage,
     QueryView,
     TableView,
@@ -29,7 +28,8 @@ from jupyter_storage_explorer.formats import (
     TextView,
     ViewLimits,
 )
-from jupyter_storage_explorer.formats.actions import ViewAction
+from jupyter_storage_explorer.formats.actions import ViewAction, code, view
+from jupyter_storage_explorer.formats.python import PythonEngine
 
 
 class TestPreview:
@@ -140,7 +140,7 @@ class TestPreview:
         assert "cannot be previewed as image" in mem_explorer._preview["error"]
 
     def test_no_library_installed(self, memfs, monkeypatch):
-        # No engine installed: an error, without calling the supports' view,
+        # No engine installed: an error, without calling the actions' view,
         # in the panel and for a tab.
         memfs.pipe_file("/data/a.csv", b"x,y\n1,2\n")
         monkeypatch.setattr(PythonPackage, "is_installed", lambda self: False)
@@ -180,30 +180,33 @@ def test_menu_info(mem_explorer, monkeypatch):
     assert folder["formats"] == ["delta"]
 
 
-class SqliteByPython(FormatSupport):
-    format = SQLite
-
-    def recipe(self, fmt, ctx, options):
-        return {"Connect": "import sqlite3"}
+@code(format=SQLite, engine=PythonEngine, label="Connect")
+def sqlite_code(fmt, ctx, options):
+    return "import sqlite3"
 
 
-class DuckdbByPython(FormatSupport):
-    format = DuckDB
-
-    def recipe(self, fmt, ctx, options):
-        return {"Connect": "import duckdb"}
+@code(format=DuckDB, engine=PythonEngine, label="Connect")
+def duckdb_code(fmt, ctx, options):
+    return "import duckdb"
 
 
-class HeldText(FormatSupport):
-    """Views text files once ``release`` is set, as a Spark session starting
-    holds a view up; before the built-in views, as it is given first."""
+class HeldText:
+    """Holds ``held_text``'s views until ``release`` is set; they raise
+    ``error`` instead, if set."""
 
-    format = Text
     release = threading.Event()
+    error: Exception | None = None
 
-    def view(self, fmt, ctx, options, limits):
-        assert self.release.wait(5)
-        return TextView(text=ctx.name)
+
+@view(format=Text, engine=PythonEngine, label="Held")
+def held_text(fmt, ctx, options, limits):
+    """Views text files once ``HeldText.release`` is set, as a Spark session
+    starting holds a view up; before the built-in views, as it is given
+    first."""
+    if HeldText.error is not None:
+        raise HeldText.error
+    assert HeldText.release.wait(5)
+    return TextView(text=ctx.name)
 
 
 class TestPreviewLoadsInTheBackground:
@@ -224,7 +227,7 @@ class TestPreviewLoadsInTheBackground:
 
         async def main():
             return await test(
-                await listed(make("/data", fs=memfs, supports=[HeldText]))
+                await listed(make("/data", fs=memfs, actions=[held_text]))
             )
 
         return asyncio.run(main())
@@ -274,10 +277,7 @@ class TestPreviewLoadsInTheBackground:
         assert closed == ["a.txt"]
 
     def test_an_error_shows_in_the_panel(self, memfs, monkeypatch):
-        def failing(self, fmt, ctx, options, limits):
-            raise ValueError("no Spark")
-
-        monkeypatch.setattr(HeldText, "view", failing)
+        monkeypatch.setattr(HeldText, "error", ValueError("no Spark"))
 
         async def test(explorer):
             explorer.message({"type": "preview", "path": "/data/a.txt"})
@@ -326,10 +326,7 @@ class TestPreviewLoadsInTheBackground:
         assert not explorer._view_tabs
 
     def test_a_view_tab_failing(self, memfs, monkeypatch):
-        def failing(self, fmt, ctx, options, limits):
-            raise ValueError("no Spark")
-
-        monkeypatch.setattr(HeldText, "view", failing)
+        monkeypatch.setattr(HeldText, "error", ValueError("no Spark"))
 
         async def test(explorer):
             explorer.request({"type": "view_tab", "rid": 1, "path": "/data/a.txt"})
@@ -517,7 +514,7 @@ def test_signatures_decide_formats_once_clicked(memfs):
     explorer = make(
         "/dbs",
         fs=memfs,
-        supports=[SqliteByPython, DuckdbByPython],
+        actions=[sqlite_code, duckdb_code],
         plugin_options=NO_PLUGINS,
     )
     assert {e["name"]: e["format"] for e in entries(explorer)} == {
@@ -734,7 +731,7 @@ def test_vendor(mem_explorer):
 
 
 def test_the_views_own_reads(memfs):
-    # A support's QueryView(fetch=...): the data browser reads its rows so,
+    # An action's QueryView(fetch=...): the data browser reads its rows so,
     # when opening and for each live page, after the explorer's fetch_rows.
     reads = []
 
@@ -742,16 +739,14 @@ def test_the_views_own_reads(memfs):
         reads.append((offset, length))
         return lf.to_native().slice(offset, length).collect().pipe(nw.from_native)
 
-    class Fetching(FormatSupport):
-        format = Text
-
-        def view(self, fmt, ctx, options, limits):
-            data = pl.LazyFrame({"n": list(range(30))})
-            return QueryView(data=data, fetch=fetch)
+    @view(format=Text, engine=PythonEngine, label="Fetch")
+    def fetching(fmt, ctx, options, limits):
+        data = pl.LazyFrame({"n": list(range(30))})
+        return QueryView(data=data, fetch=fetch)
 
     memfs.pipe_file("/data/a.txt", b"a")
     explorer = make(
-        "/data", fs=memfs, supports=[Fetching], view_limits=ViewLimits(max_live_rows=10)
+        "/data", fs=memfs, actions=[fetching], view_limits=ViewLimits(max_live_rows=10)
     )
     explorer.message({"type": "preview", "path": "/data/a.txt"})
     reply = explorer.request(

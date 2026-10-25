@@ -25,12 +25,16 @@ final. Each file may have these functions, all optional:
     ``plugin_options``), e.g. ``{"pandas-support": {"enabled": False}}``,
     merged by plugin, then option. Every plugin installed is used unless
     disabled.
-``supports()``
-    ``[FormatSupport, ...]``: how formats' data is handled with libraries
-    of your own (classes or objects), tried before the defaults; a later
-    layer's come first. Their formats are detected with the defaults'.
+``actions()``
+    ``[action, ...]``: what explorers do with formats' data, functions of
+    your own decorated with ``formats.actions.view`` or ``code``, tried
+    before the plugins' and the defaults; a later layer's come first. Their
+    formats are detected with the defaults'. Two actions of one kind,
+    format, engine and name stop the tab with an error: give yours another
+    name, or disable the plugin whose action it replaces in
+    ``plugin_options()``.
 ``engine_options()``
-    ``{engine key: {format or "*": {option: value}}}`` for the supports (see
+    ``{engine key: {format or "*": {option: value}}}`` for the actions (see
     ``StorageExplorer``'s ``engine_options``), merged option by option (a
     value is replaced whole, e.g. a ``storage_options`` dict). Options may
     be a function of the item's location returning them: merged with
@@ -118,7 +122,7 @@ LAUNCHER_FILE = pathlib.Path("storage-explorer", "launcher.py")
 HOOKS = (
     "filesystems",
     "plugin_options",
-    "supports",
+    "actions",
     "engine_options",
     "operations",
     "filesystem_mappers",
@@ -136,8 +140,10 @@ RETIRED = {
     # CSS applied to the page while the tab was open: not to explorers in
     # notebooks, which JupyterLab's custom.css reaches.
     "style": "use JupyterLab's custom.css instead, for every page (see Icons in the project's DEVELOPMENT.md)",
-    # Formats are those of the supports.
-    "formats": "give supports() of your formats instead: explorers detect their formats",
+    # Formats are those of the actions.
+    "formats": "give actions() of your formats instead: explorers detect their formats",
+    # FormatSupport classes, replaced by actions.
+    "supports": "give actions() instead: functions decorated with @view or @code (see the plugin guide)",
 }
 
 # StorageExplorer arguments that are not "parameters": set by their own
@@ -149,7 +155,7 @@ _NOT_PARAMETERS = frozenset(
         "fs",
         "filesystems",
         "plugin_options",
-        "supports",
+        "actions",
         "engine_options",
         # engine_options' former name (see ALIASES).
         "format_options",
@@ -178,7 +184,7 @@ class Settings:
     filesystems: dict[str, Any] = dataclasses.field(default_factory=dict)
     # {plugin key: {option: value}}
     plugin_options: dict[str, dict[str, Any]] = dataclasses.field(default_factory=dict)
-    supports: list[Any] = dataclasses.field(default_factory=list)
+    actions: list[Any] = dataclasses.field(default_factory=list)
     # {engine key: {format or "*": a dict of options, or a function of the location}}
     engine_options: dict[str, dict[str, Any]] = dataclasses.field(default_factory=dict)
     operations: list[Any] = dataclasses.field(default_factory=list)
@@ -203,8 +209,8 @@ class Settings:
         }
         if self.plugin_options:
             kwargs["plugin_options"] = self.plugin_options
-        if self.supports:
-            kwargs["supports"] = list(self.supports)
+        if self.actions:
+            kwargs["actions"] = list(self.actions)
         if self.engine_options:
             kwargs["engine_options"] = self.engine_options
         if self.operations:
@@ -415,7 +421,7 @@ def _allowed(
 _MERGES = {
     "filesystems": "by name",
     "plugin_options": "by plugin",
-    "supports": "first",
+    "actions": "first",
     "engine_options": "by option",
     "operations": "first",
     "filesystem_mappers": "first",

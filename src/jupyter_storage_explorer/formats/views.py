@@ -1,4 +1,4 @@
-"""Views of a format's data: ``FormatSupport.view`` returns one of these, and
+"""Views of a format's data: a view action returns one of these, and
 the explorer shows it in the preview panel or a tab of its own: the data
 browser for a ``QueryView``, and for the table chosen of a
 ``TableSetView``'s; the others rendered by the frontend according to their
@@ -13,6 +13,24 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal, get_args
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
+
+__all__ = [
+    "Leaf",
+    "MarkdownView",
+    "MediaView",
+    "Node",
+    "QueryView",
+    "TableSetView",
+    "TableView",
+    "TextView",
+    "TreeView",
+    "View",
+    "ViewLimits",
+    "ViewWithChoice",
+    "ViewWithConfirmation",
+    "ViewWithInput",
+    "ViewWithPrompt",
+]
 
 log = logging.getLogger(__name__)
 
@@ -50,7 +68,7 @@ class ViewLimits:
 
 @dataclass(frozen=True, kw_only=True)
 class View:
-    """What a support's ``view()`` returns: one of the subclasses below,
+    """What a view action returns: one of the subclasses below,
     which the explorer shows by their ``kind``.
 
     Parameters
@@ -97,7 +115,7 @@ class View:
 
         Examples
         --------
-        In a support's ``view()``, a DuckDB table closed with its connection:
+        In a view action, a DuckDB table closed with its connection:
 
         >>> con = duckdb.connect(path, read_only=True)
         >>> view = QueryView(data=con.table("orders"))
@@ -265,7 +283,7 @@ class TableSetView(View):
 
     Examples
     --------
-    In a support's ``view()``, a workbook's sheets:
+    In a view action, a workbook's sheets:
 
     >>> sheets = pl.read_excel(path, sheet_id=0)  # {name: DataFrame}
     >>> TableSetView(
@@ -391,7 +409,7 @@ class ViewWithPrompt(View):
     nothing.
 
     The answers are kept with the view: when the data browser reads the data
-    again, the prompts the support returns are answered the same way,
+    again, the prompts the action returns are answered the same way,
     without asking.
 
     The prompt is closed with the view its answer made, or when cancelled,
@@ -456,7 +474,7 @@ class ViewWithConfirmation(ViewWithPrompt):
 
     Examples
     --------
-    In a support's ``view()``:
+    In a view action:
 
     >>> return ViewWithConfirmation(
     ...     message=f"This reads the whole file ({size_mb} MB).",

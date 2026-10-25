@@ -13,7 +13,7 @@ rules are stated explicitly, and the templates are complete. When generating a p
 - [Writing a plugin with an AI assistant](#writing-a-plugin-with-an-ai-assistant)
 - [Formats](#formats)
 - [Engines and packages](#engines-and-packages)
-- [Format supports](#format-supports)
+- [Actions](#actions)
 - [File operations](#file-operations)
 - [Filesystem mappers](#filesystem-mappers)
 - [Packaging a plugin](#packaging-a-plugin)
@@ -23,11 +23,12 @@ rules are stated explicitly, and the templates are complete. When generating a p
 
 ## What can be extended
 
-| Component                | Base class (import from)                                         | What it does                                                                   |
+| Component                | Defined with (import from)                                       | What it does                                                                   |
 |--------------------------|------------------------------------------------------------------|--------------------------------------------------------------------------------|
 | Format                   | `DataFormat` (`jupyter_storage_explorer.formats`)                | Recognizes a kind of file or folder (e.g. Avro files, a DuckDB database).      |
 | Engine                   | `Engine` (`jupyter_storage_explorer.formats`)                    | A library users choose to view data with (e.g. DuckDB), shown in the status bar. |
-| Format support           | `FormatSupport` (`jupyter_storage_explorer.formats`)             | Views a format's data with an engine, and generates code loading it.           |
+| View action              | `@view` (`jupyter_storage_explorer.formats.actions`)             | A function viewing a format's data with an engine: the preview panel, a tab.   |
+| Code action              | `@code` (`jupyter_storage_explorer.formats.actions`)             | A function giving code loading a format's data with an engine: "Python code".  |
 | File operations          | `FileSystemOperations` (`jupyter_storage_explorer.filesystems`)  | Moves, copies, deletes, uploads, downloads files for a storage, its own way.   |
 | Filesystem mapper        | `FileSystemMapper` (`jupyter_storage_explorer.filesystems`)      | Gives a storage's paths their locations (URLs), and tells storages apart.       |
 | Plugin                   | `StorageExplorerPlugin` (`jupyter_storage_explorer`)             | Packages the above, so that every explorer uses them.                         |
@@ -38,26 +39,29 @@ Each component can be tried in an explorer before packaging it: see
 ## Rules for generated code
 
 1. **Never import the backend library at module level.** Plugins load whether or not their libraries are installed.
-   Import them inside methods, through a `PythonPackage`'s `load()` (format supports), or lazily (operations).
+   Import it inside the functions of actions, e.g. `import duckdb`, and lazily in operations.
 2. **Never add the backend library to the package's dependencies.** It goes in the `full` extra and the `dev`
    dependency group (see [Packaging a plugin](#packaging-a-plugin)).
-3. **Format supports take no `__init__` arguments.** Their options are the fields of their `options_model`, set
-   through `engine_options`. Explorers create them from their classes.
+3. **Options are data.** An action's options are the fields of the class its `options` parameter is annotated with,
+   set through `engine_options`. Write what an action does with them as functions taking them. Methods of options only
+   give views of them, e.g. `code_value`.
 4. **Refuse what a component cannot handle**, so that the next one is tried:
-   - A format support overrides `supports(fmt, ctx, options, task)`, without reading the storage. Once it accepts an item, no
-     other support is tried, and what its method raises is the item's error.
+   - An action's `check` refuses the items its library cannot handle, without reading the storage. Once an action is
+     chosen, no other is tried, and what it raises is the item's error.
    - File operations raise `FileSystemOperations.NotSupported`. Never raise it for real errors: raise those as they are.
 5. **Ask before reading much.** A view reading a whole large file, or whose every query of the data browser does,
    returns a `ViewWithConfirmation` or a `ViewWithChoice`, which reads once the user answers.
 6. **Never put credentials in locations or generated code.** Locations are sent to the browser. Declare secret options
    with `secret_field` or `secret_dict_field`, and give code its options through `options.code_value(name)`.
 7. **Use frozen, keyword-only dataclasses for options and locations**, each field with a default (options).
-8. **Name things by convention:** supports `<Format>By<Library>` (e.g. `ParquetByDuckDB`), their options
-   `<Library>Options`, engines `<Library>Engine`, plugins `<Name>Support`, packages
-   `jupyter-storage-explorer-<name>-support`.
+8. **Name things by convention:**
+   - views `<format>_view`, code `<format>_as_<what it loads>`, e.g. `parquet_view` and `parquet_as_relation`;
+   - checks by what they decide, e.g. `_read_by_duckdb` or `_can_offer_recipe`;
+   - options `<Library>Options`, and each format's `<Format>By<Library>Options`;
+   - engines `<Library>Engine`, plugins `<Name>Support`, packages `jupyter-storage-explorer-<name>-support`.
 9. **Reach any storage the explorer reaches.** Where the library cannot read the item's URL itself, hand it the
    explorer's filesystem, or read through the item's context: see [Reading the item](#reading-the-item).
-10. **Write docstrings** for every public class and method, in numpy style (`Parameters`, `Returns`, `Raises`).
+10. **Write docstrings** for every public class and function, in numpy style (`Parameters`, `Returns`, `Raises`).
 
 ## Writing a plugin with an AI assistant
 
@@ -141,16 +145,21 @@ class DuckDBDatabase(DataFormat):
         return head[8:12] == b"DUCK"  # DuckDB's magic number (fewer bytes if the file is shorter)
 ```
 
-`ctx` is an `ItemContext`: `ctx.location`, `ctx.fs`, `ctx.path`, `ctx.info`, `ctx.children` (a folder's listing, None
-for a file), and `ctx.is_dir`, `ctx.name`, `ctx.child_names`, `ctx.size`, `ctx.head(n)`, `ctx.head_text(n)`. A format
-keeps what detection found for its supports, by location (e.g. `Parquet.layout(ctx)`). Explorers detect the formats of
-their supports: a new format comes with a support of it (or a plugin's `formats`). The standard formats (Delta Lake,
-Parquet, CSV, JSON Lines, JSON, Excel, Markdown, text, images) are always detected; a support can handle one of them
-with another engine.
+`ctx` is an `ItemContext`, with these:
+
+- `ctx.location`, `ctx.fs`, `ctx.path` and `ctx.info`;
+- `ctx.children`, a folder's listing, None for a file;
+- `ctx.is_dir`, `ctx.name`, `ctx.child_names` and `ctx.size`;
+- `ctx.head(n)` and `ctx.head_text(n)`.
+
+A format keeps what detection found for its actions, by location, e.g. `Parquet.layout(ctx)`. Explorers detect the
+formats of their actions: a new format comes with an action of it, or with a plugin's `formats`. The standard formats
+are always detected: Delta Lake, Parquet, CSV, JSON Lines, JSON, Excel, Markdown, text and images. An action can handle
+one of them with another engine.
 
 ## Engines and packages
 
-A `PythonPackage` names a package a component needs, without importing it; an `Engine` is the library users choose,
+A `PythonPackage` names a package a component needs, without importing it. An `Engine` is the library users choose,
 made of packages:
 
 ```python
@@ -168,15 +177,25 @@ class DuckDBEngine(Engine):
     requirements = (DuckDB(),)  # all needed
 ```
 
-`DuckDB().is_installed()` checks without importing; `DuckDB().load()` imports it (`load("submodule")` a submodule).
-An engine is defined once, by one plugin: another plugin using it imports its class (two classes of one key are an
-error). The predefined ones are `PolarsEngine`, `PandasEngine`, `DuckDBEngine`, `PySparkEngine`, `DaskEngine` and `DatabricksConnectEngine`, from
-their plugins' packages (`jupyter_storage_explorer_polars_support`, ...). The explorer offers the engines installed
-that view something.
+`DuckDB().is_installed()` checks without importing. The explorer checks so before offering an engine or an action.
+Actions import the library themselves, inside their functions.
+
+A package whose module other packages may bring a copy of sets `own_distribution = True`. Its module then counts only
+with the package's own distribution installed: pyspark-support's `PySpark` does so, as Databricks Connect brings a
+pyspark module of its own.
+
+An engine is defined once, by one plugin: another plugin using it imports its class. Two engine classes of one key are
+an error. The predefined engines come from their plugins' packages, e.g. `jupyter_storage_explorer_polars_support`:
+
+- `PolarsEngine`, `PandasEngine`, `DuckDBEngine` and `DaskEngine`;
+- `PySparkEngine` and `DatabricksConnectEngine`.
+
+`PythonEngine`, in `jupyter_storage_explorer.formats.python`, is the engine of the built-in actions: Python alone, with
+the explorer's own packages. The explorer offers the engines installed that view something, never `PythonEngine`.
 
 Packages are defined where they belong: an engine's own (`Polars`, `Pandas`, `PySpark`, `DatabricksConnect`) and
 the libraries only that engine uses (`Fastexcel` for polars, `DeltaSpark` for Spark) by the engine's plugin, beside
-its `Engine`; the support libraries several engines may use (`Fsspec`, `PyArrow`, `DeltaLake`, `Openpyxl`, and the
+its `Engine`; the libraries several engines may use (`Fsspec`, `PyArrow`, `DeltaLake`, `Openpyxl`, and the
 core's `Pillow`) by the core, in `jupyter_storage_explorer.formats.packages`. A new plugin imports those, and defines
 its own engine's and its engine-only libraries.
 
@@ -184,67 +203,111 @@ A package another engine's plugin defines, e.g. pandas-support's `Pandas`, may b
 unlike engines, may be defined twice. Never import another plugin for it, which would make yours depend on it.
 
 Where the library keeps global settings deciding how queries run, e.g. a Dask distributed `Client` or its scheduler,
-never change them from a support. Use what is active, and say in the README how the user's settings apply.
+never change them from an action. Use what is active, and say in the README how the user's settings apply.
 
-## Format supports
+## Actions
 
-A `FormatSupport` handles one format's data with one engine:
+An action is a function doing one thing with one format's data and one engine. There are two kinds, each made by a
+decorator of `jupyter_storage_explorer.formats.actions`:
+
+- `@view` makes a view, shown in the preview panel or a tab of its own;
+- `@code` gives one snippet of Python loading the data, shown in the right-click menu's **Python code**.
+
+A format and an engine may have any number of actions, e.g. Parquet with DuckDB viewed in the data browser and in a
+widget. A plugin registers its actions in order with `register_actions`. Explorers try them in that order: the first
+view doing an item is its default, and **Preview as** lists the others of its engine by their labels.
 
 ```python
 from inspect import cleandoc
 
 from jupyter_storage_explorer.filesystems import LocalLocation
-from jupyter_storage_explorer.formats import FormatSupport, Parquet, QueryView, format_kwargs
+from jupyter_storage_explorer.formats import DataFormat, ItemContext, Parquet, QueryView, View, ViewLimits
+from jupyter_storage_explorer.formats.actions import code, register_actions, view
 from jupyter_storage_explorer.formats.packages import PyArrow
+from jupyter_storage_explorer.util import format_kwargs
 
 
-class ParquetByDuckDB(FormatSupport):
-    """Parquet files and folders with DuckDB: the data browser, and code."""
+def _read_by_duckdb(fmt: DataFormat, ctx: ItemContext, options: DuckDBOptions) -> bool:
+    """Whether DuckDB reads the item: local files only. DuckDB reads cloud storage only with its extensions
+    configured, and other storages through the explorer's filesystem (see "Reading the item")."""
+    return isinstance(ctx.location, LocalLocation)
 
-    format = Parquet                   # matched with isinstance: subclasses too
-    engine = DuckDBEngine
-    additional_requirements = (PyArrow(),)  # other packages it needs: here, the data browser's (see below)
-    options_model = DuckDBOptions      # see "Options"; SupportOptions (none) by default
 
-    def supports(self, fmt, ctx, options, task):
-        # By default, what the class implements. Here local files only: DuckDB reads cloud storage only with its
-        # extensions configured, and other storages through the explorer's filesystem (see "Reading the item").
-        local = isinstance(ctx.location, LocalLocation)
-        return super().supports(fmt, ctx, options, task) and local
+def _data_url(fmt: Parquet, ctx: ItemContext) -> str:
+    url = fmt.data_url(ctx)  # a file's path, or a glob of a folder's data files
+    if ctx.is_dir and fmt.layout(ctx).files == "*":
+        # Data files without an extension (Hive's): not "_SUCCESS" or ".crc" checksums, which DuckDB would read.
+        url = url.removesuffix("*") + "[!_.]*"
+    return url
 
-    def data_url(self, fmt, ctx):
-        url = fmt.data_url(ctx)  # a file's path, or a glob of a folder's data files
-        if ctx.is_dir and fmt.layout(ctx).files == "*":
-            # Data files without an extension (Hive's): not "_SUCCESS" or ".crc" checksums, which DuckDB would read.
-            url = url.removesuffix("*") + "[!_.]*"
-        return url
 
-    def view(self, fmt, ctx, options, limits):
-        duckdb = DuckDB().load()
-        partitioned = ctx.is_dir and bool(fmt.layout(ctx).keys)
-        con = duckdb.connect(**options.connect_kwargs())
-        relation = con.read_parquet(self.data_url(fmt, ctx), hive_partitioning=partitioned)
-        view = QueryView(data=relation)
-        view.on_close(lambda view: con.close())  # once the explorer no longer shows it
-        return view
+# The code's template: {url}, the location as DuckDB reads it, and {kwargs}, the keyword arguments.
+_RELATION = cleandoc("""
+    import duckdb
 
-    relation_template = cleandoc("""
-        import duckdb
+    rel = duckdb.read_parquet({url}{kwargs})
+    """)
 
-        rel = duckdb.read_parquet({url}{kwargs})
-        """)
 
-    def recipe(self, fmt, ctx, options):
-        kwargs = format_kwargs(hive_partitioning=True if ctx.is_dir else None)
-        url = repr(self.data_url(fmt, ctx))
-        return {"Load as relation": self.relation_template.format(url=url, kwargs=kwargs)}
+@code(format=Parquet, engine=DuckDBEngine, label="Load as relation", requires=(PyArrow(),), check=_read_by_duckdb)
+def parquet_as_relation(fmt: Parquet, ctx: ItemContext, options: DuckDBOptions) -> str:
+    """A Parquet file or folder, as a DuckDB relation."""
+    kwargs = format_kwargs(hive_partitioning=True if ctx.is_dir else None)
+    return _RELATION.format(url=repr(_data_url(fmt, ctx)), kwargs=kwargs)
+
+
+@view(format=Parquet, engine=DuckDBEngine, requires=(PyArrow(),), check=_read_by_duckdb, code=parquet_as_relation)
+def parquet_view(fmt: Parquet, ctx: ItemContext, options: DuckDBOptions, limits: ViewLimits) -> View:
+    """A Parquet file or folder in the data browser."""
+    import duckdb  # inside the function: the plugin loads without DuckDB
+
+    partitioned = ctx.is_dir and bool(fmt.layout(ctx).keys)
+    con = duckdb.connect(**connect_kwargs(options))
+    relation = con.read_parquet(_data_url(fmt, ctx), hive_partitioning=partitioned)
+    view = QueryView(data=relation)
+    view.on_close(lambda view: con.close())  # once the explorer no longer shows it
+    return view
+
+
+# In the order tried.
+DUCKDB_ACTIONS = register_actions(parquet_view, parquet_as_relation)
 ```
 
-`additional_requirements` gate the whole support: without them, neither its views nor its code are offered. List
-there what the data browser needs too. It collects each page of lazy data, in either mode, into the library narwhals
-collects it into, e.g. PyArrow for a DuckDB relation or a Spark DataFrame.
+The decorators' arguments:
 
-### `view(fmt, ctx, options, limits)`
+| Argument   | Of            | What                                                                                              |
+|------------|---------------|---------------------------------------------------------------------------------------------------|
+| `format`   | both          | The format, matched with `isinstance`: its subclasses too.                                        |
+| `engine`   | both          | The engine; `PythonEngine` for Python alone.                                                      |
+| `label`    | both          | What users see; `{format}` and `{engine}` are replaced by their labels. A view's default is `"View as {format} ({engine})"`; code has none. |
+| `requires` | both          | Packages needed besides the engine's, as instances. The action is offered only when they are installed. |
+| `check`    | both          | `check(fmt, ctx, options) -> bool`: whether the action does an item. By default, every item of `format`. |
+| `code`     | `@view` only  | The code action reproducing what the view shows, of the same format and engine.                    |
+
+The rules for the functions:
+
+- Their parameters are positional, in a fixed order, under any names: `(fmt, ctx, options, limits)` for a view,
+  `(fmt, ctx, options)` for code. The decorator checks it.
+- The class of `options` comes from the parameter's annotation, read when the function is decorated. Import that class
+  at run time, not only for type checkers, and define it at the module's top level.
+- A label is unique for its kind, format and engine, whatever plugin it comes from: two actions of one label are an
+  error, as users could not tell them apart. Label a view by what it shows, e.g. "Sheets in a tree ({engine})".
+- **Preview as** shows a view's label only when its engine has several views of an item; otherwise it shows the
+  format and the engine, e.g. "CSV (Polars)".
+- Explorers tell actions apart by their `id`, a number each action gets when it is made. The page sends it back to
+  choose a view, so the label is free to change.
+- `requires` lists what the data browser needs too. It collects each page of lazy data, in either mode, into the
+  library narwhals collects it into, e.g. PyArrow for a DuckDB relation or a Spark DataFrame.
+- An action reads as its function: `help()`, IDEs and errors show its name, docstring and signature.
+
+### Checks
+
+`check(fmt, ctx, options)` runs on the kernel's main thread, for each item clicked. It decides from the format, the
+location, the path, the info and the options, never by reading the storage. Name it by what it decides, e.g.
+`_read_by_duckdb`, and use the same function inside the actions when they choose how to read. Once an action is chosen,
+no other is tried, and what it raises is the item's error.
+
+### `@view`: `view(fmt, ctx, options, limits)`
 
 Returns one view. A `QueryView` opens the data browser (filters, sort, pages). A `TableSetView` offers several tables,
 and opens the data browser on the one chosen. The others show what was read:
@@ -267,7 +330,7 @@ page of live queries. `lf` is a narwhals LazyFrame of the data with the browser'
 applied, and `fetch` returns rows `offset` to `offset + length` as a narwhals DataFrame, or None to pass them on:
 
 1. the explorer's `fetch_rows`, the user's;
-2. the view's `fetch`, a support's, for a library with a cheaper way than the default, e.g. pyspark-support's
+2. the view's `fetch`, an action's, for a library with a cheaper way than the default, e.g. pyspark-support's
    `spark_rows`, which skips rows with Spark's `offset`;
 3. the core's default, which skips rows itself for polars and DuckDB, reads Dask partition by partition (sorted
    data in one pass), and reads all rows up to `offset + length` for others.
@@ -313,8 +376,8 @@ A `TableSetView` needs at least one table: show another view, e.g. a `TextView`,
 The last three ask the user before the view is made, e.g. before reading a whole large file:
 
 - The question shows where the view would be, in the preview panel or the tab.
-- Once the user answers, the explorer calls `factory` in a worker thread, as it calls `view`. It may return another
-  prompt.
+- Once the user answers, the explorer calls `factory` in a worker thread, as it calls a view action. It may return
+  another prompt.
 - When the data browser reads the data again, the same answers are given without asking.
 - The prompt is closed with the view of its answer, so its `on_close` may release what that view reads.
 
@@ -330,66 +393,91 @@ return ViewWithChoice(
 )
 ```
 
-`view` runs in a worker thread, so that a slow view leaves the kernel free:
+A view action runs in a worker thread, so that a slow view leaves the kernel free:
 
 - The preview or tab shows "Loading…" until it returns.
 - Views of other items may be made at the same time.
 - It never touches widgets or displays anything.
 - What the view holds is read later in other threads, one request at a time: the data browser's pages, a table chosen.
-  A connection opened in `view` must allow that, e.g. `sqlite3.connect(path, check_same_thread=False)`.
+  A connection opened in the view must allow that, e.g. `sqlite3.connect(path, check_same_thread=False)`.
 
-### `recipe(fmt, ctx, options)`
+### `@code`: `code(fmt, ctx, options)`
 
-Returns code by title, e.g. `{"Load as DataFrame": "import duckdb\n..."}`, shown in the right-click menu's **Python
-code**, with the engine's label. Titles say what the code does, not the library. The code runs as it is in a new
-notebook: imports first. Write it as class attributes `*_template` (`inspect.cleandoc`, just before the method), filled
-with `str.format`: `{url}` (`repr` of the location as the library reads it) and `{kwargs}` (`format_kwargs(...)`, which
-leaves out `None` and gives `", a=1, b=2"`). As with views, recipes are shown only when the support's packages are
-installed.
+Returns one snippet of Python, shown in the right-click menu's **Python code** under the engine's label. Its `label` is
+its title, e.g. "Load as LazyFrame": it says what the code does, as the engine is shown already. Give several snippets as several
+code actions, e.g. a LazyFrame and a DataFrame.
+
+- The code runs as it is in a new notebook: its imports first, then what else it needs, e.g. a Spark session.
+- Installing the packages and configuring access to the storage are left to the user.
+- It reads the location as the library reads it, `ctx.url_or_local_path`.
+- Write multi-line code as a module-level template made with `inspect.cleandoc`, filled with `str.format`, e.g.
+  `{url}` (`repr` of the location) and `{kwargs}`. `format_kwargs(...)` gives `", a=1, b=2"`, leaving out `None`.
+- The function runs in a worker thread. It reads the item only for what the code needs to know, e.g. a CSV file's
+  separator.
+- What it raises is shown in place of its code; the other snippets are still shown.
+
+As with views, code is offered only when the action's packages are installed, and its check agrees.
 
 ### Options
 
-A support's options are the fields of its `options_model`: a frozen, keyword-only dataclass subclassing
-`SupportOptions`, each field with a default. Users set them with `engine_options`, by engine key, then format name or
-`"*"`; a function of the item's `Location` may give them per storage:
+An action's options are the fields of the class its `options` parameter is annotated with: a frozen, keyword-only
+dataclass subclassing `ActionOptions`, each field with a default. Without an annotation, it gets `ActionOptions`, which
+has none.
+
+- Users set them with `engine_options`, by engine key, then format name or `"*"`.
+- A function of the item's `Location` may give them per storage.
+- The options of a format and an engine are those of all their actions' classes. A field of one name has one type in
+  all of them, and is secret in all or none.
+- An option no action of the engine takes is an error, so typos are caught.
+
+Options are data. What an action does with them goes in functions taking them; methods only give views of them, e.g.
+`code_value` or pyspark-support's `format_options()`.
 
 ```python
 from dataclasses import dataclass
 from typing import Any
 
-from jupyter_storage_explorer.formats import SupportOptions, secret_dict_field, secret_field
+from jupyter_storage_explorer.formats import ActionOptions
+from jupyter_storage_explorer.util import secret_dict_field, secret_field
 
 
 @dataclass(frozen=True, kw_only=True)
-class DuckDBOptions(SupportOptions):
+class DuckDBOptions(ActionOptions):
     memory_limit: str | None = None
     token: str | None = secret_field(default=None)  # never shown in code
     config: dict[str, Any] | None = secret_dict_field(default=None, secret_keys=["s3_secret_access_key"])
 
-    def connect_kwargs(self) -> dict[str, Any]:
-        return {"config": {**(self.config or {}), **({"memory_limit": self.memory_limit} if self.memory_limit else {})}}
+
+def connect_kwargs(options: DuckDBOptions) -> dict[str, Any]:
+    """duckdb.connect's keyword arguments."""
+    limit = {"memory_limit": options.memory_limit} if options.memory_limit else {}
+    return {"config": {**(options.config or {}), **limit}}
 ```
 
 ```python
 StorageExplorer(engine_options={"duckdb": {"*": {"memory_limit": "2GB"}, "parquet": {"config": {...}}}})
 ```
 
-Recipes read options with `options.code_value(name)`: `None` for a secret field, and a mapping without its secret keys.
-An option that no support of the engine has is an error, so typos are caught.
+Code reads options with `options.code_value(name)`: `None` for a secret field, and a mapping without its secret keys.
 
-**A reader's arguments.** Give each format its own model (`<Format>By<Library>Options`, subclassing the library's) whose
-fields are its reader's arguments, of the same names, from the library's API documentation (e.g. `read_parquet`'s),
-each defaulting to `LIBRARY_DEFAULT`: not passed, so the library's own default applies (unlike `None`, which some
-arguments take as a value). Leave out the source, functions (callables) and arguments that change what the reader
-returns (iterators, chunks). A reader passing arguments on to another library's, as Dask's `read_csv` does to pandas',
-takes those too, less those it refuses: check them with the installed library. A reader taking `**kwargs` shows
-none in its signature, and may take an unknown name given `None`: check each with a real value. Pass `options.arguments()` (those given) to the reader, after the support's own defaults
-(e.g. a separator detected), so that the user's win; the code gets `format_arguments(options.code_arguments())`, which
-leaves out secrets and Python objects (e.g. data types) but keeps `None`. List them in the plugin's README, a table per
-format, their descriptions from the library's documentation.
+**A reader's arguments.** Give each format its own model, `<Format>By<Library>Options`, subclassing the library's.
+
+- Its fields are its reader's arguments, of the same names, from the library's API documentation, e.g. `read_parquet`'s.
+- Each defaults to `LIBRARY_DEFAULT`: not passed, so the library's own default applies. `None` would not do, as some
+  arguments take it as a value.
+- Leave out the source, functions and arguments that change what the reader returns, e.g. iterators or chunks.
+- A reader passing arguments on to another library's, as Dask's `read_csv` does to pandas', takes those too, less
+  those it refuses: check them with the installed library.
+- A reader taking `**kwargs` shows none in its signature, and may take an unknown name given `None`: check each with a
+  real value.
+- Pass `options.arguments()`, those given, to the reader after the action's own defaults, e.g. a separator detected,
+  so that the user's win.
+- The code gets `format_arguments(options.code_arguments())`, which leaves out secrets and Python objects, e.g. data
+  types, but keeps `None`.
+- List them in the plugin's README, a table per format, their descriptions from the library's documentation.
 
 ```python
-from jupyter_storage_explorer.formats import LIBRARY_DEFAULT, LibraryDefault, format_arguments
+from jupyter_storage_explorer.util import LIBRARY_DEFAULT, LibraryDefault, format_arguments
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -400,15 +488,15 @@ class ParquetByDuckDBOptions(DuckDBOptions):
     hive_partitioning: bool | LibraryDefault = LIBRARY_DEFAULT
 
 
-relation = con.read_parquet(url, **options.arguments())      # in view()
-code = f"con.read_parquet({url!r}{format_arguments(options.code_arguments())})"  # in recipe()
+relation = con.read_parquet(url, **options.arguments())  # in the view
+code = f"con.read_parquet({url!r}{format_arguments(options.code_arguments())})"  # in the code
 ```
 
 ### Reading the item
 
 | `ctx`                      | What                                                                                       |
 |----------------------------|--------------------------------------------------------------------------------------------|
-| `ctx.url_or_local_path`          | The location as libraries read it: a local file's plain path, else its URL                 |
+| `ctx.url_or_local_path`    | The location as libraries read it: a local file's plain path, else its URL                 |
 | `ctx.location`             | Where it is (`AbfsLocation`, `S3Location`, `LocalLocation`, ...): `ctx.location.url`       |
 | `ctx.fs`, `ctx.path`       | The explorer's fsspec filesystem (with its credentials) and the item's path in it         |
 | `ctx.head(n)`, `ctx.head_text(n)` | The first bytes; the first text and whether it was cut                             |
@@ -416,7 +504,7 @@ code = f"con.read_parquet({url!r}{format_arguments(options.code_arguments())})" 
 | `ctx.info`, `ctx.size`     | Its fsspec info; its size                                                                  |
 | `ctx.children`, `ctx.child_names`, `ctx.is_dir` | A folder's listing, its names, whether it is a folder                 |
 
-A library reads the item in one of five ways. Choose per storage in `supports`, as polars-support does:
+A library reads the item in one of five ways. Choose per storage in the check and the actions, as polars-support does:
 
 | Way | When | Examples |
 |---|---|---|
@@ -434,14 +522,14 @@ A library reads the item in one of five ways. Choose per storage in `supports`, 
 - A library registering filesystems by protocol, as DuckDB's `register_filesystem`, takes `ctx.fs` as it is: read
   `ctx.fs.unstrip_protocol(ctx.path)`, its own URL of the item. That works for a `DirFileSystem` too.
   - DuckDB calls `modified()`, and fails where the filesystem has none, e.g. fsspec's HTTP and zip filesystems: refuse
-    those in `supports`, or give a wrapper a `modified()` of the info's time.
+    those in the check, or give a wrapper a `modified()` of the info's time.
   - The library may also read that protocol itself, e.g. DuckDB's `s3://`. Check with the real filesystem which one
     reads it.
 - By URL, fsspec rebuilds the filesystem from its protocol and `storage_options`, and only some instances can be
   rebuilt so. Arguments given by position are not in `storage_options`, e.g. a `DirFileSystem("/data", fs=...)`'s
-  folder, and a subclass not registered for its protocol comes back as its parent. Check in `supports` that
-  `fsspec.filesystem(protocol, **ctx.fs.storage_options) is ctx.fs`, and refuse the view if it is not, or raises (the
-  `DirFileSystem` above does). That reads nothing: fsspec returns the instance it cached.
+  folder, and a subclass not registered for its protocol comes back as its parent. Check that
+  `fsspec.filesystem(protocol, **ctx.fs.storage_options) is ctx.fs` in the check, and refuse the item if it is not, or
+  raises, as the `DirFileSystem` above does. That reads nothing: fsspec returns the instance it cached.
 - Lazy is not enough. Some lazy data reads all of the file, or of every partition, for each query of the data
   browser: Dask's `head(n)` through narwhals does. Measure what each query reads. Give the view a `fetch` reading
   only what a page needs, if the library can; else ask first as for whole files.
@@ -578,7 +666,7 @@ Write the answers in the plugin's docstrings, and build the tests' fakes from th
 ### Writing a mapper
 
 A `FileSystemMapper` turns the paths of one fsspec implementation's filesystems into locations, and back. Locations are
-where files are, independently of the implementation: their `url` is what "Copy URL", previews, recipes and the transfer
+where files are, independently of the implementation: their `url` is what "Copy URL", previews, "Python code" and the transfer
 policy use, and how files copied from another kernel are found.
 
 ```python
@@ -695,10 +783,11 @@ jupyter-storage-explorer-duckdb-support/
 ├── src/
 │   └── jupyter_storage_explorer_duckdb_support/
 │       ├── __init__.py      # the plugin class and its options; exports
-│       └── supports.py      # engine, packages, formats, supports, their options
+│       ├── actions.py       # engine, packages, formats, options, actions: DUCKDB_ACTIONS
+│       └── operations.py    # file operations, if any
 └── tests/
     ├── conftest.py          # the explorer's test fixtures (see Testing)
-    └── test_duckdb_supports.py
+    └── test_duckdb_actions.py
 ```
 
 ### `pyproject.toml`
@@ -758,13 +847,15 @@ packages = ["src/jupyter_storage_explorer_duckdb_support"]
 from dataclasses import dataclass
 
 from jupyter_storage_explorer import StorageExplorerPlugin, StorageExplorerPluginOptions
-from jupyter_storage_explorer_duckdb_support.supports import (
-    DuckDBDatabase,
+from jupyter_storage_explorer_duckdb_support.actions import (
+    DUCKDB_ACTIONS,
     DuckDBEngine,
     DuckDBOptions,
-    ParquetByDuckDB,
-    ServerSideCopy,
+    database_view,
+    parquet_as_relation,
+    parquet_view,
 )
+from jupyter_storage_explorer_duckdb_support.operations import ServerSideCopy
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -773,6 +864,7 @@ class DuckDBSupportOptions(StorageExplorerPluginOptions):
     priority, and its own."""
 
     concurrency: int = 16
+    databases: bool = True
 
 
 class DuckDBSupport(StorageExplorerPlugin):
@@ -781,11 +873,13 @@ class DuckDBSupport(StorageExplorerPlugin):
     options: DuckDBSupportOptions
 
     @property
-    def format_supports(self):  # FormatSupport classes (their options: engine_options)
-        return (ParquetByDuckDB,)
+    def actions(self):  # functions decorated with @view or @code, in the order tried
+        if self.options.databases:
+            return DUCKDB_ACTIONS
+        return tuple(a for a in DUCKDB_ACTIONS if a is not database_view)
 
     @property
-    def formats(self):  # DataFormat classes no support names (rare)
+    def formats(self):  # DataFormat classes no action names (rare)
         return ()
 
     @property
@@ -797,15 +891,25 @@ class DuckDBSupport(StorageExplorerPlugin):
         return ()
 
 
-__all__ = ["DuckDBEngine", "DuckDBOptions", "DuckDBSupport", "DuckDBSupportOptions", "ParquetByDuckDB"]
+__all__ = [
+    "DUCKDB_ACTIONS",
+    "DuckDBEngine",
+    "DuckDBOptions",
+    "DuckDBSupport",
+    "DuckDBSupportOptions",
+    "parquet_as_relation",
+    "parquet_view",
+]
 ```
 
-- Explorers create the plugin with its options, an `options_model` object (`self.options`), from
-  `plugin_options={"duckdb-support": {"concurrency": 8}}` (in the launcher's tabs, `plugin_options()`). Every plugin
-  has `enabled` (False: not used, not even imported) and `priority` (higher first; then by key). An option the model
-  lacks is an error.
-- Plugin options configure the components made with arguments (operations, mappers). Format supports get theirs from
-  `engine_options`, by engine key.
+- Explorers create the plugin with its options, an `options_model` object, `self.options`. Users give them with
+  `plugin_options={"duckdb-support": {"concurrency": 8}}`, or `plugin_options()` in the launcher's tabs.
+- Every plugin has `enabled` and `priority`. `enabled=False`: not used, not even imported. Plugins of a higher
+  `priority` come first, then by key.
+- An option the model lacks is an error.
+- Plugin options configure the components made with arguments, such as operations and mappers. For actions, they only
+  include or leave some out: actions get their own options from `engine_options`, by engine key.
+- Export the actions, so that users and other plugins can import them, e.g. to give one before the others.
 - `name`, `description` and `version` come from the package's metadata (`[project]`): the class does not repeat them.
 - A plugin that cannot be imported or created is left out with a warning, and greyed out in "About".
 
@@ -860,11 +964,11 @@ def plugin_options():
 | Option     | Default | Meaning                                                                                                  |
 |------------|---------|----------------------------------------------------------------------------------------------------------|
 | `enabled`  | `True`  | Whether explorers use the plugin. `False`: not even imported.                                            |
-| `priority` | lowest  | Plugins of a higher priority come first: their supports are tried before the others'. Equal ones by key. |
+| `priority` | lowest  | Plugins of a higher priority come first: their actions are tried before the others'. Equal ones by key.  |
 
 ## Engine options
 
-The supports' options, in `engine_options["duckdb"]` (by format, or `"*"` for all), with an example, then a table per
+The plugin's options, in `engine_options["duckdb"]` (by format, or `"*"` for all), with an example, then a table per
 format: each option, its default and its meaning, from the library's documentation.
 ````
 
@@ -898,13 +1002,18 @@ changing `pyproject.toml` (the description, the entry point), run `uv sync` agai
 
 ## Testing
 
-A plugin's tests are in its own `tests/` and test its own code: its supports' views and code, their options, its
-engine, operations and mappers, and its entry point. They need no browser: components get items as the explorer gives
-them (`ItemContext`), made by `jupyter_storage_explorer.testing` on fsspec's memory filesystem, or local files for
-libraries reading by URL. Its fixtures come through `tests/conftest.py`:
+A plugin's tests are in its own `tests/` and test its own code:
+
+- its actions: views, code and checks, with their options;
+- its engine, operations and mappers;
+- its entry point.
+
+They need no browser. Actions are called as their functions, with items as the explorer gives them, `ItemContext`.
+`jupyter_storage_explorer.testing` makes those on fsspec's memory filesystem, or from local files for libraries reading
+by URL. Its fixtures come through `tests/conftest.py`:
 
 ```python
-"""Items as the explorer gives them to the plugin's supports."""
+"""Items as the explorer gives them to the plugin's actions."""
 
 from jupyter_storage_explorer.testing import make_item, memfs  # noqa: F401
 ```
@@ -925,7 +1034,7 @@ from jupyter_storage_explorer.testing import local_item
 def test_view(tmp_path):
     path = tmp_path / "a.parquet"
     ...  # write a Parquet file
-    view = ParquetByDuckDB().view(Parquet(), local_item(path), DuckDBOptions(), ViewLimits())
+    view = parquet_view(Parquet(), local_item(path), DuckDBOptions(), ViewLimits())
     assert isinstance(view, QueryView)
     view.close()
 
@@ -933,14 +1042,14 @@ def test_view(tmp_path):
 def test_code(tmp_path):
     path = tmp_path / "a.parquet"
     ...  # write a Parquet file
-    code = ParquetByDuckDB().recipe(Parquet(), local_item(path), DuckDBOptions())
-    assert f"read_parquet({path.as_posix()!r})" in code["Load as relation"]
+    code = parquet_as_relation(Parquet(), local_item(path), DuckDBOptions())
+    assert f"read_parquet({path.as_posix()!r})" in code
 
 
-def test_supports_what_duckdb_reads(tmp_path, make_item):
-    support = ParquetByDuckDB()
-    assert support.supports(Parquet(), local_item(tmp_path), DuckDBOptions(), "view")
-    assert not support.supports(Parquet(), make_item("/a.parquet", b""), DuckDBOptions(), "view")
+def test_what_duckdb_reads(tmp_path, make_item):
+    # does(): of the action's format, and its check agrees.
+    assert parquet_view.does(Parquet(), local_item(tmp_path), DuckDBOptions())
+    assert not parquet_view.does(Parquet(), make_item("/a.parquet", b""), DuckDBOptions())
 
 
 def test_plugin_registered():
@@ -950,6 +1059,7 @@ def test_plugin_registered():
     plugin = entry_point.load()()  # loads without the backend library
     assert plugin.key == "duckdb-support"
     assert plugin.description == "DuckDB support for Storage Explorer"
+    assert plugin.actions == DUCKDB_ACTIONS
 ```
 
 A storage plugin's tests need no real storage either:
@@ -984,12 +1094,11 @@ takes components as arguments:
 
 ```python
 from jupyter_storage_explorer import StorageExplorer
-from my_components import MyMapper, ParquetByDuckDB, ServerSideCopy, parquet_widget
+from my_components import MyMapper, ServerSideCopy, parquet_as_relation, parquet_view
 
 StorageExplorer(
     "s3://bucket/data",
-    actions=[parquet_widget],  # functions decorated with formats.actions.view or code
-    supports=[ParquetByDuckDB],  # FormatSupport classes: their formats come with them
+    actions=[parquet_view, parquet_as_relation],  # functions decorated with @view or @code: their formats come with them
     operations=[ServerSideCopy()],  # FileSystemOperations objects
     filesystem_mappers=[MyMapper()],  # FileSystemMapper objects
 )
@@ -999,20 +1108,22 @@ What an explorer is given comes first, then the plugins' components, then the de
 can do it does it. So the component tried handles what it can, and leaves the rest to the others:
 
 - an action, the items its `check` refuses;
-- a support, the items its `supports` refuses;
 - an operation, what it raises `NotSupported` for.
 
-The first view an item matches is its default. **Preview as** lists the others of its engine by name.
+The first view an item matches is its default. **Preview as** lists the others of its engine by their labels.
+
+An action of the same kind, format, engine and label as a plugin's is an error. Give yours another label, or disable
+that plugin with `plugin_options` to replace its actions.
 
 Restart the kernel after changing the component's module: Python imports a module only once.
 
 The launcher's tab and side panel take the same components from functions of the same names in `launcher.py`:
 
 ```python
-def supports():
-    from my_components import ParquetByDuckDB
+def actions():
+    from my_components import parquet_as_relation, parquet_view
 
-    return [ParquetByDuckDB]
+    return [parquet_view, parquet_as_relation]
 
 
 def operations():
@@ -1038,9 +1149,13 @@ def filesystem_mappers():
   shown in "About" (`StorageExplorerPlugin.authors`, `license`, `urls`).
 - [ ] `dependencies`: the explorer only; the backend libraries in the `full` extra and the `dev` group.
 - [ ] Entry point in `jupyter_storage_explorer.plugins`, named by the plugin's `key`.
-- [ ] No backend import at module level; packages through `PythonPackage.load()` inside methods.
-- [ ] Supports: `format`, `engine`, `options_model`; no `__init__` arguments.
-- [ ] Supports refuse in `supports()` the items their library cannot handle, without reading the storage.
+- [ ] No backend import at module level: actions import the library inside their functions.
+- [ ] Actions made with `@view` and `@code`, registered in order with `register_actions` and given by the plugin's
+      `actions` property; one code action per snippet.
+- [ ] Each action's options class imported at run time and named in the `options` parameter's annotation; options
+      classes are data, with what actions do with them in functions.
+- [ ] Checks refuse the items their library cannot handle, without reading the storage, named by what they decide.
+- [ ] Code text from module-level `inspect.cleandoc` templates, filled with `str.format`.
 - [ ] Views reading a whole large file ask first, with a `ViewWithPrompt`.
 - [ ] Secrets declared with `secret_field` / `secret_dict_field`; code options through `options.code_value`.
 - [ ] A model per format whose fields are its reader's arguments (default `LIBRARY_DEFAULT`), passed with `arguments()`
@@ -1061,7 +1176,7 @@ def filesystem_mappers():
 The plugins in [`plugins/`](../plugins) (polars, pandas, duckdb, pyspark, dask, abfs, databricks) follow these conventions and are released with the
 explorer, at its version: each requires the explorer of exactly its own version (its `hatch_build.py`: the version comes from git), and the
 explorer's extras install them (`polars`: with its libraries; `polars-support`: alone). databricks-support also
-requires pyspark-support of its own version, whose supports its engine extends. To add one:
+requires pyspark-support of its own version, whose helpers its actions share. To add one:
 
 1. Copy one of them (e.g. `plugins/polars-support`), renaming the package, module, plugin class and entry point. Its
    tests are in its `tests/`, named `test_<name>_*.py` (pytest at the root runs every plugin's, and imports test files

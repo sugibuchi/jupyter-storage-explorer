@@ -12,26 +12,21 @@ from inspect import cleandoc
 from typing import TYPE_CHECKING, Any
 
 from jupyter_storage_explorer.filesystems.locations import LocalLocation
-from jupyter_storage_explorer.formats.actions import code, register_actions, view
+from jupyter_storage_explorer.formats.actions import (
+    ActionOptions,
+    code,
+    register_actions,
+    view,
+)
 from jupyter_storage_explorer.formats.base import DataFormat, ItemContext
 from jupyter_storage_explorer.formats.delta import DeltaLake
 from jupyter_storage_explorer.formats.engine import Engine
 from jupyter_storage_explorer.formats.excel import Excel
-from jupyter_storage_explorer.formats.package import PythonPackage
 from jupyter_storage_explorer.formats.packages import DeltaLake as DeltaLakePackage
-from jupyter_storage_explorer.formats.packages import Fsspec, PyArrow
+from jupyter_storage_explorer.formats.packages import Fsspec, PyArrow, PythonPackage
 from jupyter_storage_explorer.formats.parquet import Parquet
-from jupyter_storage_explorer.formats.support import (
-    LIBRARY_DEFAULT,
-    LibraryDefault,
-    SupportOptions,
-    format_arguments,
-    format_kwargs,
-    secret_dict_field,
-    secret_field,
-)
 from jupyter_storage_explorer.formats.text import Csv, Json, JsonLines
-from jupyter_storage_explorer.formats.view import (
+from jupyter_storage_explorer.formats.views import (
     Leaf,
     QueryView,
     TableSetView,
@@ -39,7 +34,15 @@ from jupyter_storage_explorer.formats.view import (
     ViewLimits,
     ViewWithChoice,
 )
-from jupyter_storage_explorer.util import format_size
+from jupyter_storage_explorer.util import (
+    LIBRARY_DEFAULT,
+    LibraryDefault,
+    format_arguments,
+    format_kwargs,
+    format_size,
+    secret_dict_field,
+    secret_field,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
@@ -73,7 +76,7 @@ class PolarsEngine(Engine):
 
 
 @dataclass(frozen=True, kw_only=True)
-class FsspecCodeOptions(SupportOptions):
+class FsspecCodeOptions(ActionOptions):
     """The options of code opening the file with fsspec for polars: Excel's
     always, the other formats' on storages polars cannot read itself.
 
@@ -318,7 +321,7 @@ _READ_BY_POLARS = frozenset(
 # which would read it whole all the same. Folders have no code there.
 
 
-def _read_by_polars(fmt: DataFormat, ctx: ItemContext, options: SupportOptions) -> bool:
+def _read_by_polars(fmt: DataFormat, ctx: ItemContext, options: ActionOptions) -> bool:
     """Whether polars reads the item by its location itself, lazily: the
     LazyFrame code's and Delta Lake's check."""
     if isinstance(ctx.location, LocalLocation):
@@ -327,7 +330,7 @@ def _read_by_polars(fmt: DataFormat, ctx: ItemContext, options: SupportOptions) 
 
 
 def _can_offer_recipe(
-    fmt: DataFormat, ctx: ItemContext, options: SupportOptions
+    fmt: DataFormat, ctx: ItemContext, options: ActionOptions
 ) -> bool:
     """Whether DataFrame code can load the item: polars reads it itself, or
     the code opens the file with fsspec."""
@@ -335,7 +338,7 @@ def _can_offer_recipe(
 
 
 def _opened_with_fsspec(
-    fmt: DataFormat, ctx: ItemContext, options: SupportOptions
+    fmt: DataFormat, ctx: ItemContext, options: ActionOptions
 ) -> bool:
     """Whether the item's DataFrame code opens it with fsspec: a file polars
     cannot read itself."""
@@ -428,7 +431,7 @@ def _read_through_fsspec(
 
 
 def _code_kwargs(
-    options: SupportOptions,
+    options: ActionOptions,
     defaults: Mapping[str, Any] | None = None,
     *,
     storage: bool = True,
@@ -446,7 +449,7 @@ def _code_kwargs(
 # CSV
 
 
-@code(format=Csv, engine=PolarsEngine, name=AS_DATA_FRAME, check=_can_offer_recipe)
+@code(format=Csv, engine=PolarsEngine, label=AS_DATA_FRAME, check=_can_offer_recipe)
 def csv_as_data_frame(fmt: Csv, ctx: ItemContext, options: CsvByPolarsOptions) -> str:
     """A DataFrame, with the separator detected unless one is given."""
     defaults = {"separator": fmt.code_separator(ctx)}
@@ -492,7 +495,7 @@ def csv_view(
 # JSON Lines
 
 
-@code(format=JsonLines, engine=PolarsEngine, name=AS_LAZY_FRAME, check=_read_by_polars)
+@code(format=JsonLines, engine=PolarsEngine, label=AS_LAZY_FRAME, check=_read_by_polars)
 def json_lines_as_lazy_frame(
     fmt: JsonLines, ctx: ItemContext, options: JsonLinesByPolarsOptions
 ) -> str:
@@ -501,7 +504,7 @@ def json_lines_as_lazy_frame(
 
 
 @code(
-    format=JsonLines, engine=PolarsEngine, name=AS_DATA_FRAME, check=_can_offer_recipe
+    format=JsonLines, engine=PolarsEngine, label=AS_DATA_FRAME, check=_can_offer_recipe
 )
 def json_lines_as_data_frame(
     fmt: JsonLines, ctx: ItemContext, options: JsonLinesByPolarsOptions
@@ -536,7 +539,7 @@ def json_lines_view(
 # JSON: code only, as JSON is viewed as a tree (the built-in ``json_view``).
 
 
-@code(format=Json, engine=PolarsEngine, name=AS_DATA_FRAME, check=_can_offer_recipe)
+@code(format=Json, engine=PolarsEngine, label=AS_DATA_FRAME, check=_can_offer_recipe)
 def json_as_data_frame(
     fmt: Json, ctx: ItemContext, options: JsonByPolarsOptions
 ) -> str:
@@ -565,7 +568,7 @@ def _sheets(names: list[str], loader: Callable[[str], Any]) -> TableSetView:
 @code(
     format=Excel,
     engine=PolarsEngine,
-    name=AS_DATA_FRAME,
+    label=AS_DATA_FRAME,
     requires=(Fastexcel(), Fsspec()),
 )
 def excel_as_data_frame(
@@ -638,7 +641,7 @@ def _pyarrow_dataset(ctx: ItemContext, layout: ParquetLayout | None) -> Any:
     return pl.scan_pyarrow_dataset(dataset)
 
 
-def _can_view_parquet(fmt: Parquet, ctx: ItemContext, options: SupportOptions) -> bool:
+def _can_view_parquet(fmt: Parquet, ctx: ItemContext, options: ActionOptions) -> bool:
     """Whether polars reads the item itself, or PyArrow is installed to read
     it through the explorer's filesystem."""
     return _read_by_polars(fmt, ctx, options) or PyArrow().is_installed()
@@ -661,7 +664,7 @@ def _parquet_code_kwargs(
     return _code_kwargs(options, defaults), scanned
 
 
-@code(format=Parquet, engine=PolarsEngine, name=AS_LAZY_FRAME, check=_read_by_polars)
+@code(format=Parquet, engine=PolarsEngine, label=AS_LAZY_FRAME, check=_read_by_polars)
 def parquet_as_lazy_frame(
     fmt: Parquet, ctx: ItemContext, options: ParquetByPolarsOptions
 ) -> str:
@@ -670,7 +673,7 @@ def parquet_as_lazy_frame(
     return _polars_code("scan_parquet", fmt.data_url(ctx), kwargs)
 
 
-@code(format=Parquet, engine=PolarsEngine, name=AS_DATA_FRAME, check=_can_offer_recipe)
+@code(format=Parquet, engine=PolarsEngine, label=AS_DATA_FRAME, check=_can_offer_recipe)
 def parquet_as_data_frame(
     fmt: Parquet, ctx: ItemContext, options: ParquetByPolarsOptions
 ) -> str:
@@ -732,7 +735,7 @@ def parquet_view(
 @code(
     format=DeltaLake,
     engine=PolarsEngine,
-    name=AS_LAZY_FRAME,
+    label=AS_LAZY_FRAME,
     requires=(DeltaLakePackage(),),
     check=_read_by_polars,
 )
@@ -746,7 +749,7 @@ def delta_as_lazy_frame(
 @code(
     format=DeltaLake,
     engine=PolarsEngine,
-    name=AS_DATA_FRAME,
+    label=AS_DATA_FRAME,
     requires=(DeltaLakePackage(),),
     check=_read_by_polars,
 )

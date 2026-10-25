@@ -159,8 +159,8 @@ class TestCode:
         )
 
     def test_names(self):
-        assert [a.name for a in PANDAS_ACTIONS if a.format is Parquet] == [
-            "View Parquet",
+        assert [a.label for a in PANDAS_ACTIONS if a.format is Parquet] == [
+            "View as Parquet (pandas)",
             "Load as DataFrame",
         ]
 

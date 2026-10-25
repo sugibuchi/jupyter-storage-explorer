@@ -12,28 +12,31 @@ from dataclasses import dataclass
 from inspect import cleandoc
 from typing import TYPE_CHECKING, Any
 
-from jupyter_storage_explorer.formats.actions import code, register_actions, view
+from jupyter_storage_explorer.formats.actions import (
+    ActionOptions,
+    code,
+    register_actions,
+    view,
+)
 from jupyter_storage_explorer.formats.base import ItemContext
 from jupyter_storage_explorer.formats.engine import Engine
 from jupyter_storage_explorer.formats.excel import Excel
-from jupyter_storage_explorer.formats.package import PythonPackage
-from jupyter_storage_explorer.formats.packages import Openpyxl, PyArrow
+from jupyter_storage_explorer.formats.packages import Openpyxl, PyArrow, PythonPackage
 from jupyter_storage_explorer.formats.parquet import Parquet
-from jupyter_storage_explorer.formats.support import (
-    LIBRARY_DEFAULT,
-    LibraryDefault,
-    SupportOptions,
-    format_arguments,
-    format_kwargs,
-    secret_dict_field,
-)
 from jupyter_storage_explorer.formats.text import Csv, Json, JsonLines
-from jupyter_storage_explorer.formats.view import (
+from jupyter_storage_explorer.formats.views import (
     Leaf,
     QueryView,
     TableSetView,
     View,
     ViewLimits,
+)
+from jupyter_storage_explorer.util import (
+    LIBRARY_DEFAULT,
+    LibraryDefault,
+    format_arguments,
+    format_kwargs,
+    secret_dict_field,
 )
 
 if TYPE_CHECKING:
@@ -71,7 +74,7 @@ class PandasEngine(Engine):
 
 
 @dataclass(frozen=True, kw_only=True)
-class PandasOptions(SupportOptions):
+class PandasOptions(ActionOptions):
     """The options of the formats pandas reads.
 
     Attributes
@@ -256,7 +259,7 @@ def _code_kwargs(
     )
 
 
-def _view_arguments(options: SupportOptions, limits: ViewLimits) -> dict[str, Any]:
+def _view_arguments(options: ActionOptions, limits: ViewLimits) -> dict[str, Any]:
     """The options' arguments for the data browser's rows: ``nrows`` at most
     ``_rows(limits)``."""
     arguments = options.arguments()
@@ -282,7 +285,7 @@ def _pandas_code(reader: str, url: str, kwargs: str) -> str:
 # CSV
 
 
-@code(format=Csv, engine=PandasEngine, name=AS_DATA_FRAME)
+@code(format=Csv, engine=PandasEngine, label=AS_DATA_FRAME)
 def csv_as_data_frame(fmt: Csv, ctx: ItemContext, options: CsvByPandasOptions) -> str:
     """A DataFrame, with the separator detected unless one is given."""
     kwargs = _code_kwargs(options, {"sep": fmt.code_separator(ctx)})
@@ -311,7 +314,7 @@ def csv_view(
 # JSON Lines
 
 
-@code(format=JsonLines, engine=PandasEngine, name=AS_DATA_FRAME)
+@code(format=JsonLines, engine=PandasEngine, label=AS_DATA_FRAME)
 def json_lines_as_data_frame(
     fmt: JsonLines, ctx: ItemContext, options: JsonLinesByPandasOptions
 ) -> str:
@@ -338,7 +341,7 @@ def json_lines_view(
 # JSON: code only, as JSON is viewed as a tree (the built-in ``json_view``).
 
 
-@code(format=Json, engine=PandasEngine, name=AS_DATA_FRAME)
+@code(format=Json, engine=PandasEngine, label=AS_DATA_FRAME)
 def json_as_data_frame(
     fmt: Json, ctx: ItemContext, options: JsonByPandasOptions
 ) -> str:
@@ -361,7 +364,7 @@ def _sheets(
     )
 
 
-@code(format=Excel, engine=PandasEngine, name=AS_DATA_FRAME, requires=(Openpyxl(),))
+@code(format=Excel, engine=PandasEngine, label=AS_DATA_FRAME, requires=(Openpyxl(),))
 def excel_as_data_frame(
     fmt: Excel, ctx: ItemContext, options: ExcelByPandasOptions
 ) -> str:
@@ -414,7 +417,7 @@ def excel_view(
 # Parquet: pyarrow is pandas' Parquet engine.
 
 
-@code(format=Parquet, engine=PandasEngine, name=AS_DATA_FRAME, requires=(PyArrow(),))
+@code(format=Parquet, engine=PandasEngine, label=AS_DATA_FRAME, requires=(PyArrow(),))
 def parquet_as_data_frame(
     fmt: Parquet, ctx: ItemContext, options: ParquetByPandasOptions
 ) -> str:

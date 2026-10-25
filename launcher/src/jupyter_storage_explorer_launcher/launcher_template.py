@@ -71,12 +71,13 @@ def filesystems():
 # --- For development: extending the explorer in Python, tried before the
 # defaults (see the project's docs/development-plugin.md). ---
 
-# Formats and the libraries handling their data (FormatSupport subclasses).
+# What the explorer does with formats' data: views and code, functions
+# decorated with @view or @code.
 #
-# def supports():
-#     from my_supports import ParquetByDuckDB
+# def actions():
+#     from my_actions import parquet_in_my_widget
 #
-#     return [ParquetByDuckDB]
+#     return [parquet_in_my_widget]
 
 
 # File operations (FileSystemOperations subclasses), e.g. server-side copies

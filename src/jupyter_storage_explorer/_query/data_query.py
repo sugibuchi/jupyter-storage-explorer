@@ -158,7 +158,7 @@ class DataQuery:
 
     Every read of lazy data, the first rows when opening and each live page,
     goes through ``fetch`` if given (an explorer's: its ``fetch_rows``, the
-    user's, then the view's ``fetch``, a support's), then ``fetch_rows``,
+    user's, then the view's ``fetch``, an action's), then ``fetch_rows``,
     the default: the first giving rows reads them.
 
     ``cut``, if given, tells whether the data the source gave holds only the

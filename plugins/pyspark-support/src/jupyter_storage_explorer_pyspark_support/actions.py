@@ -17,16 +17,20 @@ from typing import TYPE_CHECKING, Any
 
 import narwhals as nw
 
-from jupyter_storage_explorer.formats.actions import code, register_actions, view
+from jupyter_storage_explorer.formats.actions import (
+    ActionOptions,
+    code,
+    register_actions,
+    view,
+)
 from jupyter_storage_explorer.formats.base import DataFormat, ItemContext
 from jupyter_storage_explorer.formats.delta import DeltaLake
 from jupyter_storage_explorer.formats.engine import Engine
-from jupyter_storage_explorer.formats.package import PythonPackage
-from jupyter_storage_explorer.formats.packages import PyArrow
+from jupyter_storage_explorer.formats.packages import PyArrow, PythonPackage
 from jupyter_storage_explorer.formats.parquet import Parquet
-from jupyter_storage_explorer.formats.support import SupportOptions, format_kwargs
 from jupyter_storage_explorer.formats.text import Csv, JsonLines
-from jupyter_storage_explorer.formats.view import QueryView, View, ViewLimits
+from jupyter_storage_explorer.formats.views import QueryView, View, ViewLimits
+from jupyter_storage_explorer.util import format_kwargs
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
@@ -178,7 +182,7 @@ def _merged(*options: Mapping[str, Any]) -> dict[str, Any]:
 
 
 @dataclass(frozen=True, kw_only=True)
-class PySparkOptions(SupportOptions):
+class PySparkOptions(ActionOptions):
     """The options of the formats Spark reads, for the data browser and the
     code. Each format's subclass adds its reader options as fields
     (``CsvByPySparkOptions``, ...): None, their default, leaves the option to
@@ -641,7 +645,7 @@ AS_DATA_FRAME = "Load as DataFrame"
 @code(
     format=DeltaLake,
     engine=PySparkEngine,
-    name=AS_DATA_FRAME,
+    label=AS_DATA_FRAME,
     requires=(DeltaSpark(),),
     check=spark_can_read,
 )
@@ -669,7 +673,7 @@ def delta_view(
     return spark_delta_view(PYSPARK_SESSIONS, ctx, options)
 
 
-@code(format=Parquet, engine=PySparkEngine, name=AS_DATA_FRAME, check=spark_can_read)
+@code(format=Parquet, engine=PySparkEngine, label=AS_DATA_FRAME, check=spark_can_read)
 def parquet_as_data_frame(
     fmt: Parquet, ctx: ItemContext, options: ParquetByPySparkOptions
 ) -> str:
@@ -693,7 +697,7 @@ def parquet_view(
     return spark_parquet_view(PYSPARK_SESSIONS, ctx, options)
 
 
-@code(format=Csv, engine=PySparkEngine, name=AS_DATA_FRAME, check=spark_can_read)
+@code(format=Csv, engine=PySparkEngine, label=AS_DATA_FRAME, check=spark_can_read)
 def csv_as_data_frame(fmt: Csv, ctx: ItemContext, options: CsvByPySparkOptions) -> str:
     """CSV into a DataFrame."""
     return spark_csv_code(PYSPARK_SESSIONS, fmt, ctx, options)
@@ -707,7 +711,7 @@ def csv_view(
     return spark_csv_view(PYSPARK_SESSIONS, fmt, ctx, options, limits)
 
 
-@code(format=JsonLines, engine=PySparkEngine, name=AS_DATA_FRAME, check=spark_can_read)
+@code(format=JsonLines, engine=PySparkEngine, label=AS_DATA_FRAME, check=spark_can_read)
 def json_lines_as_data_frame(
     fmt: JsonLines, ctx: ItemContext, options: JsonLinesByPySparkOptions
 ) -> str:

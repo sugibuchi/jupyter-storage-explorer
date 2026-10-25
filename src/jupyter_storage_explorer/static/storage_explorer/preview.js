@@ -20,8 +20,8 @@ function createPreview(x) {
 
   // `format` (a format name) previews with that format instead of the best
   // match; `engine` (a key, or null for the built-in views) with that
-  // engine instead of the one chosen ("Preview as"); `action` (a view's name)
-  // with that view of the engine instead of its first.
+  // engine instead of the one chosen ("Preview as"); `action` (a view's id,
+  // a number) with that view of the engine instead of its first.
   function open(path, format = null, engine = undefined, action = null) {
     model.send({ type: "preview", path, format, ...(engine === undefined ? {} : { engine }), ...(action ? { action } : {}) });
   }

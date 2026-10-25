@@ -353,9 +353,9 @@ Folders of Parquet files written by Spark or Hive, partitioned or not, are suppo
 may work, but are not guaranteed to.
 
 The preview and the data browser use the [engine](#engines) chosen. **Python code** shows the code of every engine
-installed in the kernel, each recipe under its engine. A support given for an engine replaces that engine's default one.
+installed in the kernel, each snippet under its engine.
 The name identifies the format in CSS (see [Icons](../DEVELOPMENT.md#icons)) and in [Engine options](#engine-options).
-To handle a format with another library, see [Format supports](development-plugin.md#format-supports).
+To handle a format with another library, see [Actions](development-plugin.md#actions).
 
 ## Engine options
 
@@ -385,7 +385,7 @@ StorageExplorer(
 | `dask`               | `parquet`, `csv`, `json-lines`                           | dask-support's [Engine options](../plugins/dask-support/README.md#engine-options)             |
 | `python`             | `json`, `text` (also Markdown's code), `image`           | `storage_options`: `fsspec.open`'s keyword arguments, in the code                             |
 
-Options that look like credentials are left out of the code. An engine, format or option name that no support takes is
+Options that look like credentials are left out of the code. An engine, format or option name that no action takes is
 an error.
 
 Options that depend on where the data is, e.g. one key per Azure storage account, are given by a function of the item's
@@ -530,6 +530,5 @@ For extending the explorer, tried before the defaults:
 | Option                     | Meaning                                                                                                               |
 |----------------------------|-----------------------------------------------------------------------------------------------------------------------|
 | `operations=[...]`         | File operations; see [File operations](development-plugin.md#file-operations).                                     |
-| `actions=[...]`            | Views and code of formats with libraries, as functions; see [Trying components](development-plugin.md#trying-components-in-an-explorer). |
-| `supports=[...]`           | Formats and the libraries handling them; see [Format supports](development-plugin.md#format-supports).            |
+| `actions=[...]`            | Views and code of formats with libraries, as functions; see [Actions](development-plugin.md#actions).              |
 | `filesystem_mappers=[...]` | How storages are told apart; see [Filesystem mappers](development-plugin.md#filesystem-mappers).                   |

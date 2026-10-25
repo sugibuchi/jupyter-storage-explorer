@@ -56,7 +56,12 @@ for i in range(150):
     memory.pipe_file(f"/scratch/some/file_{i:03}.txt", b"x")
 for i in range(250):
     memory.pipe_file(f"/scratch/many/file_{i:03}.txt", b"x")
-StorageExplorer(filesystems=storages, supports=demo_data.supports(), max_browser_items=200)"""
+StorageExplorer(
+    filesystems=storages,
+    actions=demo_data.actions(),
+    plugin_options=demo_data.PLUGIN_OPTIONS,
+    max_browser_items=200,
+)"""
 
 # A switch or button that is on.
 ON = re.compile(r"\bjse-on\b")
@@ -260,15 +265,18 @@ def about(x: Explorer) -> None:
         "href", re.compile(f"^{re.escape(github)}")
     )
     expect(dialog.locator(".jse-about-head")).to_contain_text("License: MIT")
+    # polars-support is disabled here: the demo's actions replace its own.
     polars = dialog.locator(".jse-about-plugin", has_text="polars-support")
-    expect(polars).not_to_have_class(re.compile("jse-disabled"))
-    link = polars.locator("a.jse-about-plugin-name")
-    expect(link).to_have_attribute("href", f"{github}/tree/main/plugins/polars-support")
+    expect(polars).to_have_class(re.compile("jse-disabled"))
+    pandas = dialog.locator(".jse-about-plugin", has_text="pandas-support")
+    expect(pandas).not_to_have_class(re.compile("jse-disabled"))
+    link = pandas.locator("a.jse-about-plugin-name")
+    expect(link).to_have_attribute("href", f"{github}/tree/main/plugins/pandas-support")
     expect(link).to_have_attribute("target", "_blank")
-    info = polars.locator(".jse-about-info")
+    info = pandas.locator(".jse-about-info")
     expect(info).to_have_attribute(
         "title",
-        "Polars support for Storage Explorer\nBy Tsuyoshi SUGIBUCHI\nLicense: MIT",
+        "pandas support for Storage Explorer\nBy Tsuyoshi SUGIBUCHI\nLicense: MIT",
     )
     dialog.press("Escape")
     expect(dialog).to_be_hidden()
@@ -1125,7 +1133,10 @@ import ipywidgets
 from jupyter_storage_explorer import StorageExplorer
 
 explorer = StorageExplorer(
-    filesystems=demo_data.filesystems(), supports=demo_data.supports(), preview_panel="open"
+    filesystems=demo_data.filesystems(),
+    actions=demo_data.actions(),
+    plugin_options=demo_data.PLUGIN_OPTIONS,
+    preview_panel="open",
 )
 selected = ipywidgets.Label("-").add_class("smoke-selected")
 rows = ipywidgets.Label("-").add_class("smoke-rows")
@@ -1271,31 +1282,29 @@ def storage_levels(lab: Lab, page: Page) -> None:
         expect(style).to_have_count(1)
 
 
-# A support taking seconds to view text files, as a Spark session starting.
+# Actions taking seconds to view text files, as a Spark session starting;
+# given first, so the default views.
 SLOW_PREVIEW = """\
 import io
 import time
 import fsspec
 import polars as pl
 from jupyter_storage_explorer import StorageExplorer
-from jupyter_storage_explorer.formats import Csv, FormatSupport, QueryView, Text, TextView, ViewLimits
+from jupyter_storage_explorer.formats import Csv, QueryView, Text, TextView, ViewLimits
+from jupyter_storage_explorer.formats.actions import view
+from jupyter_storage_explorer.formats.python import PythonEngine
 from jupyter_storage_explorer_polars_support import PolarsEngine
 
-class SlowText(FormatSupport):
-    format = Text
+@view(format=Text, engine=PythonEngine, label="Slow text")
+def slow_text(fmt, ctx, options, limits):
+    if ctx.name == "broken.txt":
+        raise ValueError("cannot read broken.txt")
+    time.sleep(4)
+    return TextView(text=ctx.fs.cat_file(ctx.path).decode())
 
-    def view(self, fmt, ctx, options, limits):
-        if ctx.name == "broken.txt":
-            raise ValueError("cannot read broken.txt")
-        time.sleep(4)
-        return TextView(text=ctx.fs.cat_file(ctx.path).decode())
-
-class CsvInMemory(FormatSupport):
-    format = Csv
-    engine = PolarsEngine
-
-    def view(self, fmt, ctx, options, limits):
-        return QueryView(data=pl.read_csv(io.BytesIO(ctx.fs.cat_file(ctx.path))).lazy())
+@view(format=Csv, engine=PolarsEngine, label="CSV in memory")
+def csv_in_memory(fmt, ctx, options, limits):
+    return QueryView(data=pl.read_csv(io.BytesIO(ctx.fs.cat_file(ctx.path))).lazy())
 
 def slow_page(lf, offset, length):
     time.sleep(3)  # as a Spark job for each page; then polars reads it
@@ -1308,7 +1317,7 @@ memory.pipe_file("/slow/inner/other.txt", b"x")
 StorageExplorer(
     "/slow",
     fs=memory,
-    supports=[SlowText, CsvInMemory],
+    actions=[slow_text, csv_in_memory],
     preview_panel="open",
     fetch_rows=slow_page,
     view_limits=ViewLimits(max_live_rows=1),  # live queries: each page fetched
@@ -1395,25 +1404,25 @@ def prompts(lab: Lab, page: Page) -> None:
     x.back_to_notebook()
 
 
-# A support failing as Spark does, with the Java stack trace, and a file whose
+# An action failing as Spark does, with the Java stack trace, and a file whose
 # info cannot be read.
 ERRORS = """\
 from fsspec.implementations.memory import MemoryFileSystem
 from jupyter_storage_explorer import StorageExplorer
-from jupyter_storage_explorer.formats import FormatSupport, Text
+from jupyter_storage_explorer.formats import Text
+from jupyter_storage_explorer.formats.actions import view
+from jupyter_storage_explorer.formats.python import PythonEngine
 
 class Py4JJavaError(Exception):
     pass
 
-class SparkLike(FormatSupport):
-    format = Text
-
-    def view(self, fmt, ctx, options, limits):
-        raise Py4JJavaError(
-            "An error occurred while calling o57.parquet.\\n"
-            ": java.lang.ClassNotFoundException: Class AzureBlobFileSystem not found\\n"
-            "\\tat org.apache.hadoop.conf.Configuration.getClass(Configuration.java:2688)\\n"
-        )
+@view(format=Text, engine=PythonEngine, label="Spark-like")
+def spark_like(fmt, ctx, options, limits):
+    raise Py4JJavaError(
+        "An error occurred while calling o57.parquet.\\n"
+        ": java.lang.ClassNotFoundException: Class AzureBlobFileSystem not found\\n"
+        "\\tat org.apache.hadoop.conf.Configuration.getClass(Configuration.java:2688)\\n"
+    )
 
 class Locked(MemoryFileSystem):
     store, pseudo_dirs = {}, [""]
@@ -1426,7 +1435,7 @@ class Locked(MemoryFileSystem):
 fs = Locked()
 fs.pipe_file("/errors/data.txt", b"x")
 fs.pipe_file("/errors/locked.txt", b"x")
-StorageExplorer("/errors", fs=fs, supports=[SparkLike], preview_panel="open")"""
+StorageExplorer("/errors", fs=fs, actions=[spark_like], preview_panel="open")"""
 
 
 @lab_check
@@ -1465,7 +1474,7 @@ from jupyter_storage_explorer.formats import Text, TextView
 from jupyter_storage_explorer.formats.actions import view
 from jupyter_storage_explorer.formats.python import PythonEngine
 
-@view(format=Text, engine=PythonEngine, name="Shout")
+@view(format=Text, engine=PythonEngine, label="Shout")
 def shout(fmt, ctx, options, limits):
     return TextView(text=ctx.head_text(100)[0].upper())
 
@@ -1477,7 +1486,7 @@ StorageExplorer("/named", fs=memory, actions=[shout], preview_panel="open")"""
 @lab_check
 def views_by_name(lab: Lab, page: Page) -> None:
     # The first view is the default; "Preview as" lists each view of an
-    # engine with several by name.
+    # engine with several by its label.
     x = Explorer(lab, page, VIEWS_BY_NAME)
     text = x.preview.locator(".jse-text")
     x.row("a.txt").click()
@@ -1485,7 +1494,7 @@ def views_by_name(lab: Lab, page: Page) -> None:
     x.row("a.txt").click(button="right")
     x.menu_item("Preview as").hover()
     views = x.el.locator(".jse-submenu .jse-menu-item:visible")
-    expect(views).to_have_text(["Text: Shout", "Text: View Text"])
+    expect(views).to_have_text(["Shout", "View as Text (Python)"])
     views.last.click()
     expect(text).to_have_text("quiet")
     x.preview.press("Escape")
@@ -1558,26 +1567,27 @@ def excel_sheets(x: Explorer) -> None:
     x.preview.press("Escape")
 
 
-# A support of the explorer's own, viewing Excel workbooks' sheets in a tree,
-# under a group: a table set's other selector.
+# An action of the explorer's own, viewing Excel workbooks' sheets in a tree,
+# under a group: a table set's other selector. Given first, so the default.
 TABLE_SET_TREE = """\
 import demo_data
 import polars as pl
 from jupyter_storage_explorer import StorageExplorer
-from jupyter_storage_explorer.formats import Excel, FormatSupport, Leaf, Node, TableSetView
+from jupyter_storage_explorer.formats import Excel, Leaf, Node, TableSetView
+from jupyter_storage_explorer.formats.actions import view
 from jupyter_storage_explorer_polars_support import PolarsEngine
 
-class SheetsByPolars(FormatSupport):
-    format = Excel
-    engine = PolarsEngine
+@view(format=Excel, engine=PolarsEngine, label="Sheets in a tree")
+def sheets_in_a_tree(fmt, ctx, options, limits):
+    sheets = pl.read_excel(ctx.fs.cat_file(ctx.path), sheet_id=0)
+    tables = [Leaf(label=name, id=name) for name in sheets]
+    return TableSetView(nodes=[Node(label="workbook", children=tables)], loader=sheets.__getitem__)
 
-    def view(self, fmt, ctx, options, limits):
-        sheets = pl.read_excel(ctx.fs.cat_file(ctx.path), sheet_id=0)
-        tables = [Leaf(label=name, id=name) for name in sheets]
-        return TableSetView(nodes=[Node(label="workbook", children=tables)], loader=sheets.__getitem__)
-
-supports = [SheetsByPolars, *demo_data.supports()]
-StorageExplorer(filesystems=demo_data.filesystems(), supports=supports)"""
+StorageExplorer(
+    filesystems=demo_data.filesystems(),
+    actions=[sheets_in_a_tree, *demo_data.actions()],
+    plugin_options=demo_data.PLUGIN_OPTIONS,
+)"""
 
 
 @lab_check

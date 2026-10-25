@@ -5,7 +5,7 @@ offered on demand, always or never; code_snippet, which engines' code
 from __future__ import annotations
 
 import pytest
-from all_supports import installed_only
+from all_actions import installed_only
 from explorers import make, path_of
 
 
@@ -94,7 +94,7 @@ class TestCodeSnippet:
         assert "Python" in self.engines(explorer, "b.json")
 
     def test_unknown_engines_left_out_with_a_warning(self, folder):
-        with pytest.warns(RuntimeWarning, match="no support of vaex"):
+        with pytest.warns(RuntimeWarning, match="no action of vaex"):
             explorer = make(folder, code_snippet=["vaex", "pandas"])
         assert self.engines(explorer) == ["pandas"]
 

@@ -45,29 +45,32 @@ from fsspec.core import split_protocol
 from fsspec.implementations.dirfs import DirFileSystem
 
 from jupyter_storage_explorer.filesystems.locations import LocalLocation
-from jupyter_storage_explorer.formats.actions import code, register_actions, view
+from jupyter_storage_explorer.formats.actions import (
+    ActionOptions,
+    code,
+    register_actions,
+    view,
+)
 from jupyter_storage_explorer.formats.base import ItemContext
 from jupyter_storage_explorer.formats.engine import Engine
 from jupyter_storage_explorer.formats.local_files import local_file_cache
-from jupyter_storage_explorer.formats.package import PythonPackage
-from jupyter_storage_explorer.formats.packages import PyArrow
+from jupyter_storage_explorer.formats.packages import PyArrow, PythonPackage
 from jupyter_storage_explorer.formats.parquet import Parquet
-from jupyter_storage_explorer.formats.support import (
-    LIBRARY_DEFAULT,
-    LibraryDefault,
-    SupportOptions,
-    format_arguments,
-    format_kwargs,
-    secret_dict_field,
-)
 from jupyter_storage_explorer.formats.text import Csv, JsonLines
-from jupyter_storage_explorer.formats.view import (
+from jupyter_storage_explorer.formats.views import (
     QueryView,
     View,
     ViewLimits,
     ViewWithConfirmation,
 )
-from jupyter_storage_explorer.util import format_size
+from jupyter_storage_explorer.util import (
+    LIBRARY_DEFAULT,
+    LibraryDefault,
+    format_arguments,
+    format_kwargs,
+    format_size,
+    secret_dict_field,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -105,7 +108,7 @@ class DaskEngine(Engine):
 
 
 @dataclass(frozen=True, kw_only=True)
-class DaskOptions(SupportOptions):
+class DaskOptions(ActionOptions):
     """The options of every Dask action.
 
     Attributes
@@ -306,7 +309,7 @@ def _hive_files(fmt: Parquet, ctx: ItemContext) -> bool:
     return ctx.is_dir and fmt.layout(ctx).files == "*"
 
 
-@code(format=Parquet, engine=DaskEngine, name=AS_DATA_FRAME)
+@code(format=Parquet, engine=DaskEngine, label=AS_DATA_FRAME)
 def parquet_as_data_frame(
     fmt: Parquet, ctx: ItemContext, options: ParquetByDaskOptions
 ) -> str:
@@ -399,7 +402,7 @@ def _text_view(
     )
 
 
-@code(format=Csv, engine=DaskEngine, name=AS_DATA_FRAME)
+@code(format=Csv, engine=DaskEngine, label=AS_DATA_FRAME)
 def csv_as_data_frame(fmt: Csv, ctx: ItemContext, options: CsvByDaskOptions) -> str:
     """The code reading the file into a Dask DataFrame, with the separator
     detected."""
@@ -421,7 +424,7 @@ def csv_view(
     return _text_view("read_csv", ctx, defaults, options, limits)
 
 
-@code(format=JsonLines, engine=DaskEngine, name=AS_DATA_FRAME)
+@code(format=JsonLines, engine=DaskEngine, label=AS_DATA_FRAME)
 def json_lines_as_data_frame(
     fmt: JsonLines, ctx: ItemContext, options: JsonLinesByDaskOptions
 ) -> str:

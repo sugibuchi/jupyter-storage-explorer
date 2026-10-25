@@ -382,11 +382,11 @@ def test_plugin_registered():
     assert plugin.key == "dask-support"
     assert plugin.description == "Dask support for Storage Explorer"
     assert plugin.actions == DASK_ACTIONS
-    assert [a.name for a in DASK_ACTIONS] == [
-        "View Parquet",
+    assert [a.label for a in DASK_ACTIONS] == [
+        "View as Parquet (Dask)",
         "Load as DataFrame",
-        "View CSV",
+        "View as CSV (Dask)",
         "Load as DataFrame",
-        "View JSON Lines",
+        "View as JSON Lines (Dask)",
         "Load as DataFrame",
     ]

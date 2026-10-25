@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from all_supports import NO_PLUGINS
+from all_actions import NO_PLUGINS
 from explorers import Explorer, entries, make, storage, without_ids
 from jupyter_storage_explorer_abfs_support import AzureDataLakeGen2Operation
 
