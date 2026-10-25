@@ -14,8 +14,8 @@
 # from jupyter_storage_explorer.formats.python import PythonEngine
 #
 #
-# # A second view of text files, in upper case: "Preview as" offers it, and
-# # since your actions come first, it is their default.
+# # A second view of text files, in upper case: your actions add to the
+# # explorer's, so "Preview as" offers it after the explorer's own view.
 # @view(format=Text, engine=PythonEngine, label="Shout")
 # def shout(fmt, ctx, options, limits):
 #     return TextView(text=ctx.head_text(limits.max_bytes)[0].upper())

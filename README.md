@@ -40,7 +40,7 @@ Storage Explorer. See
   write a plugin for it: see [Developing plugins](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/development-plugin.md).
   Or drop a few functions in
   [a file of your own](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#actions-of-your-own),
-  and every explorer views your formats your way.
+  and every explorer offers your views beside its own.
 - **Safe file operations**: keep calm and copy on. Copy, move and delete large folders
   [in the background](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#background-operations),
   with progress and Cancel. Folder operations wait for

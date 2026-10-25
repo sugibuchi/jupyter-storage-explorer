@@ -378,13 +378,13 @@ def shout(fmt, ctx, options, limits):
     return TextView(text=ctx.head_text(limits.max_bytes)[0].upper())
 ```
 
-Text files are then previewed in upper case. **Preview as** offers "Shout" and the explorer's own view of them.
+**Preview as** then offers "Shout" for text files, after the explorer's own view of them.
 
 - A file gives the actions defined in it, in order. An `ACTIONS` list in the file gives those it names instead.
 - Your directory comes first, then the environment's and the system's. In each, `actions.py` comes first, then the
   folder's files by name, except those whose names start with `_`, which can hold shared code.
-- Your actions come after those given to the explorer's `actions`, and before the plugins' and the explorer's own.
-  The first view of an engine that does an item is its default.
+- Your actions add to those of the plugins and of the explorer, and come after them, and after those given to its
+  `actions`. The first view of an engine that does an item is its default; **Preview as** offers the others.
 - A file with an error, or with an action of the same label as another for the same format and engine, is left out,
   with a warning. Change the file, then create the explorer again.
 - `StorageExplorer(user_actions="disabled")` uses none of them, and its menu has no **Edit actions**. In the launcher,

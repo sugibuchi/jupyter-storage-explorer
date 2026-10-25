@@ -28,11 +28,10 @@ final. Each file may have these functions, all optional:
 ``actions()``
     ``[action, ...]``: what explorers do with formats' data, functions of
     your own decorated with ``formats.actions.view`` or ``code``, tried
-    before the plugins' and the defaults; a later layer's come first. Their
-    formats are detected with the defaults'. Two actions of one kind,
-    format, engine and name stop the tab with an error: give yours another
-    name, or disable the plugin whose action it replaces in
-    ``plugin_options()``.
+    after the plugins' and the explorer's own, as additions offered in its
+    menus; a later layer's come first. Their formats are detected with the
+    defaults'. Two actions of one kind, format, engine and label stop the
+    tab with an error: give yours another label.
 ``engine_options()``
     ``{engine key: {format or "*": {option: value}}}`` for the actions (see
     ``StorageExplorer``'s ``engine_options``), merged option by option (a

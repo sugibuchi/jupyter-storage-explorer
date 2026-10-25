@@ -26,7 +26,8 @@ EVENTS: list[str] = []
 
 @view(format=Text, engine=PythonEngine, label="Ask")
 def asking(fmt, ctx, options, limits):
-    """Asks how to show a text file's name; before the built-in views."""
+    """Asks how to show a text file's name: an added view of text files,
+    after the built-in one, chosen by its id."""
 
     def make_view(case):
         if case is None:
@@ -62,14 +63,27 @@ def events():
 
 
 def explorer_of(memfs, action=asking):
+    """An explorer given ``action``, which the requests below choose (see
+    ``chosen``)."""
     memfs.pipe_file("/data/a.txt", b"a")
     memfs.pipe_file("/data/b.txt", b"b")
-    return make("/data", fs=memfs, actions=[action])
+    explorer = make("/data", fs=memfs, actions=[action])
+    explorer.chosen = action.id
+    return explorer
 
 
 def preview(explorer, path="/data/a.txt"):
-    explorer.message({"type": "preview", "path": path})
+    """The preview of ``path``, by the view chosen if any, else the default."""
+    action = getattr(explorer, "chosen", None)
+    explorer.message({"type": "preview", "path": path, "action": action})
     return explorer._preview
+
+
+def open_tab(explorer, path="/data/a.txt"):
+    """ "View in a new tab" of ``path``, by the view chosen."""
+    explorer.request(
+        {"type": "view_tab", "rid": 1, "path": path, "action": explorer.chosen}
+    )
 
 
 def answer(explorer, **content):
@@ -156,7 +170,7 @@ class TestViewTab:
 
     def test_asked_in_the_tab(self, memfs, events):
         explorer = explorer_of(memfs)
-        explorer.request({"type": "view_tab", "rid": 1, "path": "/data/a.txt"})
+        open_tab(explorer)
         [asking] = self.loaded(explorer)
         assert asking["asking"] is True
         tab = explorer._view_tabs[asking["model_id"]]
@@ -181,7 +195,7 @@ class TestViewTab:
 
     def test_cancelled_in_the_tab(self, memfs, events):
         explorer = explorer_of(memfs)
-        explorer.request({"type": "view_tab", "rid": 1, "path": "/data/a.txt"})
+        open_tab(explorer)
         [asking] = self.loaded(explorer)
         tab = explorer._view_tabs[asking["model_id"]]
         tab._on_custom_msg(
@@ -192,7 +206,7 @@ class TestViewTab:
 
     def test_an_error_after_the_answer(self, memfs):
         explorer = explorer_of(memfs)
-        explorer.request({"type": "view_tab", "rid": 1, "path": "/data/a.txt"})
+        open_tab(explorer)
         [asking] = self.loaded(explorer)
         tab = explorer._view_tabs[asking["model_id"]]
         tab._on_custom_msg(

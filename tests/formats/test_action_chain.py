@@ -311,14 +311,14 @@ class TestSecretsInCode:
         assert "account_key" not in recipe.code
 
     def test_formats_of_the_explorer(self):
-        # The format of an action given, first, and its options.
+        # The format of an action given, detected too, and its options.
         avro = type("Avro", (Csv,), {"name": "avro"})
         explorer = StorageExplorer(
             fs=None,
             actions=[viewer("", name="Avro", fmt=avro)],
             engine_options={"python": {"avro": {}}},
         )
-        assert explorer._formats[0].name == "avro"
+        assert "avro" in [f.name for f in explorer._formats]
 
 
 class TestChain:

@@ -201,8 +201,8 @@ class HeldText:
 @view(format=Text, engine=PythonEngine, label="Held")
 def held_text(fmt, ctx, options, limits):
     """Views text files once ``HeldText.release`` is set, as a Spark session
-    starting holds a view up; before the built-in views, as it is given
-    first."""
+    starting holds a view up: an added view of text files, chosen by its
+    id."""
     if HeldText.error is not None:
         raise HeldText.error
     assert HeldText.release.wait(5)
@@ -234,7 +234,9 @@ class TestPreviewLoadsInTheBackground:
 
     def test_loading_then_the_view(self, memfs):
         async def test(explorer):
-            explorer.message({"type": "preview", "path": "/data/a.txt"})
+            explorer.message(
+                {"type": "preview", "path": "/data/a.txt", "action": held_text.id}
+            )
             assert explorer._preview["loading"]
             # The kernel is free: the explorer still lists folders.
             assert "error" not in explorer.request({"type": "list", "rid": 1})
@@ -251,8 +253,12 @@ class TestPreviewLoadsInTheBackground:
         monkeypatch.setattr(TextView, "close", lambda view: closed.append(view.text))
 
         async def test(explorer):
-            explorer.message({"type": "preview", "path": "/data/a.txt"})
-            explorer.message({"type": "preview", "path": "/data/b.txt"})
+            explorer.message(
+                {"type": "preview", "path": "/data/a.txt", "action": held_text.id}
+            )
+            explorer.message(
+                {"type": "preview", "path": "/data/b.txt", "action": held_text.id}
+            )
             HeldText.release.set()
             await until(lambda: not explorer._preview.get("loading"))
             await until(lambda: closed)
@@ -267,7 +273,9 @@ class TestPreviewLoadsInTheBackground:
         monkeypatch.setattr(TextView, "close", lambda view: closed.append(view.text))
 
         async def test(explorer):
-            explorer.message({"type": "preview", "path": "/data/a.txt"})
+            explorer.message(
+                {"type": "preview", "path": "/data/a.txt", "action": held_text.id}
+            )
             explorer._preview = {}  # the frontend's close button
             HeldText.release.set()
             await until(lambda: closed)
@@ -280,7 +288,9 @@ class TestPreviewLoadsInTheBackground:
         monkeypatch.setattr(HeldText, "error", ValueError("no Spark"))
 
         async def test(explorer):
-            explorer.message({"type": "preview", "path": "/data/a.txt"})
+            explorer.message(
+                {"type": "preview", "path": "/data/a.txt", "action": held_text.id}
+            )
             await until(lambda: not explorer._preview.get("loading"))
             return explorer._preview
 
@@ -294,7 +304,12 @@ class TestPreviewLoadsInTheBackground:
     def test_a_view_tab_opens_at_once(self, memfs):
         async def test(explorer):
             reply = explorer.request(
-                {"type": "view_tab", "rid": 1, "path": "/data/a.txt"}
+                {
+                    "type": "view_tab",
+                    "rid": 1,
+                    "path": "/data/a.txt",
+                    "action": held_text.id,
+                }
             )
             assert (reply["title"], reply["url"]) == ("a.txt", "memory:///data/a.txt")
             assert not self.loaded(explorer)  # still loading
@@ -313,7 +328,12 @@ class TestPreviewLoadsInTheBackground:
 
         async def test(explorer):
             reply = explorer.request(
-                {"type": "view_tab", "rid": 1, "path": "/data/a.txt"}
+                {
+                    "type": "view_tab",
+                    "rid": 1,
+                    "path": "/data/a.txt",
+                    "action": held_text.id,
+                }
             )
             explorer.message({"type": "view_tab_closed", "load_id": reply["load_id"]})
             HeldText.release.set()
@@ -329,7 +349,14 @@ class TestPreviewLoadsInTheBackground:
         monkeypatch.setattr(HeldText, "error", ValueError("no Spark"))
 
         async def test(explorer):
-            explorer.request({"type": "view_tab", "rid": 1, "path": "/data/a.txt"})
+            explorer.request(
+                {
+                    "type": "view_tab",
+                    "rid": 1,
+                    "path": "/data/a.txt",
+                    "action": held_text.id,
+                }
+            )
             await until(lambda: self.loaded(explorer))
             return explorer
 
@@ -748,7 +775,8 @@ def test_the_views_own_reads(memfs):
     explorer = make(
         "/data", fs=memfs, actions=[fetching], view_limits=ViewLimits(max_live_rows=10)
     )
-    explorer.message({"type": "preview", "path": "/data/a.txt"})
+    # An added view of text files, chosen by its id.
+    explorer.message({"type": "preview", "path": "/data/a.txt", "action": fetching.id})
     reply = explorer.request(
         {
             "type": "query_rows",

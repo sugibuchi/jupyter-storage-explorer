@@ -1104,16 +1104,22 @@ StorageExplorer(
 )
 ```
 
-What an explorer is given comes first, then the plugins' components, then the defaults. For each job, the first that
-can do it does it. So the component tried handles what it can, and leaves the rest to the others:
+For each job, the first component that can do it does it, and the component tried leaves the rest to the others:
 
 - an action, the items its `check` refuses;
 - an operation, what it raises `NotSupported` for.
 
-The first view an item matches is its default. **Preview as** lists the others of its engine by their labels.
+The order differs between actions and the other components:
+
+- Operations and mappers given come first, then the plugins', then the defaults.
+- Actions come in this order: the plugins', the explorer's own, those given, then those of the user's files. Plugins
+  are installed to enrich or change the explorer, while actions given and the user's add to it.
+
+The first view an item matches is its default. **Preview as** lists the others of its engine by their labels. To try
+your view as the default of a format a plugin views, disable that plugin with `plugin_options`.
 
 An action of the same kind, format, engine and label as a plugin's is an error. Give yours another label, or disable
-that plugin with `plugin_options` to replace its actions.
+that plugin.
 
 Restart the kernel after changing the component's module: Python imports a module only once.
 
@@ -1144,7 +1150,8 @@ def filesystem_mappers():
 ```
 
 - The module must be importable by the tab's kernel, e.g. installed in its environment or on `PYTHONPATH`.
-- A later layer's components come before an earlier layer's, and all before the plugins' and the defaults.
+- A later layer's components come before an earlier layer's. Operations and mappers come before the plugins' and the
+  defaults, and actions after them, as above.
 - Open a new tab after changing the module. A reloaded page keeps its kernel, and with it the module imported.
 
 ## Checklist

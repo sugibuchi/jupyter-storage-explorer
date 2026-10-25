@@ -1283,7 +1283,7 @@ def storage_levels(lab: Lab, page: Page) -> None:
 
 
 # Actions taking seconds to view text files, as a Spark session starting;
-# given first, so the default views.
+# the default views, as the explorer has no others for them.
 SLOW_PREVIEW = """\
 import io
 import time
@@ -1314,10 +1314,19 @@ memory.pipe_file("/slow/notes.txt", b"read slowly")
 memory.pipe_file("/slow/broken.txt", b"x")
 memory.pipe_file("/slow/table.csv", b"a\\n1\\n2\\n3\\n")
 memory.pipe_file("/slow/inner/other.txt", b"x")
-StorageExplorer(
+
+class OwnViewsOnly(StorageExplorer):
+    # Actions given come after the built-in ones: none here, so that the
+    # slow ones are the defaults.
+    @staticmethod
+    def default_actions():
+        return []
+
+OwnViewsOnly(
     "/slow",
     fs=memory,
     actions=[slow_text, csv_in_memory],
+    plugin_options={"polars-support": {"enabled": False}},  # its CSV view first
     preview_panel="open",
     fetch_rows=slow_page,
     view_limits=ViewLimits(max_live_rows=1),  # live queries: each page fetched
@@ -1435,7 +1444,15 @@ class Locked(MemoryFileSystem):
 fs = Locked()
 fs.pipe_file("/errors/data.txt", b"x")
 fs.pipe_file("/errors/locked.txt", b"x")
-StorageExplorer("/errors", fs=fs, actions=[spark_like], preview_panel="open")"""
+
+class OwnViewsOnly(StorageExplorer):
+    # Actions given come after the built-in ones: none here, so that the
+    # failing one is the default.
+    @staticmethod
+    def default_actions():
+        return []
+
+OwnViewsOnly("/errors", fs=fs, actions=[spark_like], preview_panel="open")"""
 
 
 @lab_check
@@ -1465,8 +1482,8 @@ def readable_errors(lab: Lab, page: Page) -> None:
     expect(x.status).not_to_contain_text("locked.txt is not yours")
 
 
-# An action of the explorer's own: a second view of text files, given first,
-# so the default one.
+# An action given to the explorer: a second view of text files, after the
+# built-in one, which stays the default.
 VIEWS_BY_NAME = """\
 import fsspec
 from jupyter_storage_explorer import StorageExplorer
@@ -1490,18 +1507,18 @@ def views_by_name(lab: Lab, page: Page) -> None:
     x = Explorer(lab, page, VIEWS_BY_NAME)
     text = x.preview.locator(".jse-text")
     x.row("a.txt").click()
-    expect(text).to_have_text("QUIET")
+    expect(text).to_have_text("quiet")
     x.row("a.txt").click(button="right")
     x.menu_item("Preview as").hover()
     views = x.el.locator(".jse-submenu .jse-menu-item:visible")
-    expect(views).to_have_text(["Shout", "View as Text (Python)"])
+    expect(views).to_have_text(["View as Text (Python)", "Shout"])
     views.last.click()
-    expect(text).to_have_text("quiet")
+    expect(text).to_have_text("QUIET")
     x.preview.press("Escape")
 
 
 # A user's actions file, in the Jupyter configuration folder: an explorer
-# created in a notebook uses it, before the built-in view.
+# created in a notebook uses it, after the built-in view.
 USER_ACTIONS_FILE = """\
 from jupyter_storage_explorer.formats import Text, TextView
 from jupyter_storage_explorer.formats.actions import view
@@ -1524,19 +1541,25 @@ StorageExplorer("/mine", fs=memory, preview_panel="open")"""
 
 @lab_check
 def user_actions(lab: Lab, page: Page) -> None:
-    # The user's file gives a view of text files, tried before the built-in
-    # one, so the default; "Preview as" offers both.
+    # The user's file adds a view of text files, after the built-in one,
+    # which stays the default; "Preview as" offers both.
     with lab.user_actions("reversed.py", USER_ACTIONS_FILE):
         x = Explorer(lab, page, USER_ACTIONS)
+    reversed_view(x)
+
+
+def reversed_view(x: Explorer) -> None:
+    """In ``x``, a.txt's default view, then the user's "Reversed" chosen in
+    "Preview as"."""
     text = x.preview.locator(".jse-text")
     x.row("a.txt").click()
-    expect(text).to_have_text("desserts")
+    expect(text).to_have_text("stressed")
     x.row("a.txt").click(button="right")
     x.menu_item("Preview as").hover()
     views = x.el.locator(".jse-submenu .jse-menu-item:visible")
-    expect(views).to_have_text(["Reversed", "View as Text (Python)"])
+    expect(views).to_have_text(["View as Text (Python)", "Reversed"])
     views.last.click()
-    expect(text).to_have_text("stressed")
+    expect(text).to_have_text("desserts")
     x.preview.press("Escape")
 
 
@@ -1985,9 +2008,7 @@ def edit_actions(lab: Lab, page: Page) -> None:
         page.keyboard.insert_text("\n" + USER_ACTIONS_FILE)
         page.keyboard.press("Control+s")
         wait_for(lambda: "Reversed" in path.read_text(encoding="utf-8"), "the save")
-        x = Explorer(lab, page, USER_ACTIONS)
-        x.row("a.txt").click()
-        expect(x.preview.locator(".jse-text")).to_have_text("desserts")
+        reversed_view(Explorer(lab, page, USER_ACTIONS))
     finally:
         path.unlink(missing_ok=True)
 

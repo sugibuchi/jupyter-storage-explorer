@@ -83,7 +83,7 @@ class ActionChain:
 
     ``formats`` are the formats files are detected as: one of each
     ``format`` of the actions, in their order (on a tie in priority, the
-    first wins: those of actions given before the defaults), then of the
+    first wins: the plugins' actions come first in an explorer), then of the
     format classes given as ``formats`` (the standard ones, detected even
     without an action installed, and plugins' own).
 
