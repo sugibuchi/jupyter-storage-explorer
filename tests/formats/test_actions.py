@@ -578,6 +578,16 @@ class TestExplorer:
         duck = [v for v in self.menu_views(explorer, "/a.csv") if v[0] == "duck"]
         assert duck == [("duck", None, "CSV (Duck)")]
 
+    def test_a_parent_formats_view_under_that_format_only(self, memfs):
+        # A Markdown file is also Text: the Text view, which does Markdown
+        # files too, is listed under Text, not again under Markdown.
+        memfs.pipe_file("/a.md", b"# A\n")
+        explorer = StorageExplorer(fs=memfs)
+        assert [v[2] for v in self.menu_views(explorer, "/a.md")] == [
+            "Markdown",
+            "Text",
+        ]
+
     def test_preview_by_id(self, memfs):
         memfs.pipe_file("/a.csv", b"a\n1\n")
         explorer = StorageExplorer(

@@ -16,6 +16,7 @@ the pictures are taken at 2× (`data-explorer.png`, `launcher.png` and the GIFs 
 | `hero.py`                 | `docs/figs/storage-explorer.png`                                      |
 | `using.py`                | `docs/figs/using-*.png` ("Using the explorer")                        |
 | `unsafe.py`               | `docs/figs/unsafe-mode.png`                                           |
+| `actions_menu.py`         | `docs/figs/actions-*.png` (Edit and Reload actions; the first action) |
 | `browser.py`              | `docs/figs/browser-*.png` ("Using the data browser")                  |
 | `data_explorer.py`        | `docs/figs/data-explorer.png`                                         |
 | `launcher_item.py`        | `launcher/figs/launcher.png`                                          |
