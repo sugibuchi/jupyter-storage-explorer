@@ -431,6 +431,8 @@ def partitioned_parquet(x: Explorer) -> None:
 def python_code(x: Explorer) -> None:
     x.go("curated")
     x.row("orders.parquet").click(button="right")
+    # The menu grows when the item's views arrive: hover after them.
+    expect(x.menu_item("Preview as")).to_be_visible()
     x.menu_item("Python code").hover()
     code = x.page.locator(".jse-submenu .jse-menu-item:visible")
     # The engines installed only: development has no pyspark.
@@ -1676,6 +1678,7 @@ def toggles(lab: Lab, page: Page) -> None:
     expect(x.menu_item("Delete")).to_be_visible()
     page.keyboard.press("Escape")
     x.row("a.csv").click(button="right")
+    expect(x.menu_item("Preview as")).to_be_visible()  # the views arrived
     x.menu_item("Python code").hover()
     code = x.page.locator(".jse-submenu .jse-menu-item:visible")
     expect(code.first).to_contain_text("(pandas)")
