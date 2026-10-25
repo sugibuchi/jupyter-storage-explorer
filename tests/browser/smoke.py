@@ -1389,7 +1389,7 @@ def prompts(lab: Lab, page: Page) -> None:
     # In a new tab, the tab asks, then shows the data instead.
     x.menu(x.row("large.csv"), "View CSV in new tab")
     tab = x.page.locator(".jse-query-tab")
-    tab.get_by_role("button", name="The whole file (5 KB)").click()
+    tab.get_by_role("button", name="The whole file (5.9 KB)").click()
     expect(tab.locator(".jse-query tbody tr").first).to_be_visible()
     expect(tab.locator(".jse-prompt")).to_have_count(0)
     x.back_to_notebook()
@@ -1463,8 +1463,9 @@ import fsspec
 from jupyter_storage_explorer import StorageExplorer
 from jupyter_storage_explorer.formats import Text, TextView
 from jupyter_storage_explorer.formats.actions import view
+from jupyter_storage_explorer.formats.python import PythonEngine
 
-@view(format=Text, engine=None, name="Shout")
+@view(format=Text, engine=PythonEngine, name="Shout")
 def shout(fmt, ctx, options, limits):
     return TextView(text=ctx.head_text(100)[0].upper())
 

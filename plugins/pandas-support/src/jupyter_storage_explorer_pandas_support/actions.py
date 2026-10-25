@@ -1,5 +1,9 @@
-"""Formats handled with pandas: the data browser, on the first rows (pandas
-reads eagerly), and load code."""
+"""Formats handled with pandas, as actions: the data browser, on the first
+rows (pandas reads eagerly), and load code.
+
+Each format has a view and its code, registered in order in
+``PANDAS_ACTIONS``. pandas is imported inside the functions, so that the
+plugin loads without it."""
 
 from __future__ import annotations
 
@@ -8,6 +12,8 @@ from dataclasses import dataclass
 from inspect import cleandoc
 from typing import TYPE_CHECKING, Any
 
+from jupyter_storage_explorer.formats.actions import code, register_actions, view
+from jupyter_storage_explorer.formats.base import ItemContext
 from jupyter_storage_explorer.formats.engine import Engine
 from jupyter_storage_explorer.formats.excel import Excel
 from jupyter_storage_explorer.formats.package import PythonPackage
@@ -15,7 +21,6 @@ from jupyter_storage_explorer.formats.packages import Openpyxl, PyArrow
 from jupyter_storage_explorer.formats.parquet import Parquet
 from jupyter_storage_explorer.formats.support import (
     LIBRARY_DEFAULT,
-    FormatSupport,
     LibraryDefault,
     SupportOptions,
     format_arguments,
@@ -23,13 +28,16 @@ from jupyter_storage_explorer.formats.support import (
     secret_dict_field,
 )
 from jupyter_storage_explorer.formats.text import Csv, Json, JsonLines
-from jupyter_storage_explorer.formats.view import Leaf, QueryView, TableSetView
+from jupyter_storage_explorer.formats.view import (
+    Leaf,
+    QueryView,
+    TableSetView,
+    View,
+    ViewLimits,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
-
-    from jupyter_storage_explorer.formats.base import ItemContext
-    from jupyter_storage_explorer.formats.view import View, ViewLimits
 
 AS_DATA_FRAME = "Load as DataFrame"
 
@@ -257,99 +265,88 @@ def _view_arguments(options: SupportOptions, limits: ViewLimits) -> dict[str, An
     return arguments
 
 
-class _PandasByUrl(FormatSupport):
-    """A format whose code pandas reads by URL, with storage options."""
+# The code reading {url} with pandas' {reader}, e.g. "read_csv", given
+# {kwargs}.
+_PANDAS_TEMPLATE = cleandoc("""
+    import pandas as pd
 
-    engine = PandasEngine
-    options_model = PandasOptions
-
-
-class CsvByPandas(_PandasByUrl):
-    format = Csv
-    options_model = CsvByPandasOptions
-
-    def view(
-        self,
-        fmt: Csv,
-        ctx: ItemContext,
-        options: CsvByPandasOptions,
-        limits: ViewLimits,
-    ) -> View:
-        pd = Pandas().load()
-        # The separator, from the beginning; the rows, read through the
-        # explorer's filesystem, so any storage works.
-        arguments = _view_arguments(options, limits)
-        if "sep" not in arguments:
-            text, _ = ctx.head_text(limits.max_bytes)
-            arguments["sep"] = fmt.separator(ctx.name, text)
-        with ctx.fs.open(ctx.path, "rb") as f:
-            df = pd.read_csv(f, **arguments)
-        return _query_view(df, limits)
-
-    data_frame_template = cleandoc("""
-        import pandas as pd
-
-        df = pd.read_csv({url}{kwargs})
-        """)
-
-    def recipe(
-        self, fmt: Csv, ctx: ItemContext, options: CsvByPandasOptions
-    ) -> dict[str, str]:
-        kwargs = _code_kwargs(options, {"sep": fmt.code_separator(ctx)})
-        code = self.data_frame_template.format(url=repr(ctx.library_url), kwargs=kwargs)
-        return {AS_DATA_FRAME: code}
+    df = pd.{reader}({url}{kwargs})
+    """)
 
 
-class JsonLinesByPandas(_PandasByUrl):
-    format = JsonLines
-    options_model = JsonLinesByPandasOptions
-
-    def view(
-        self,
-        fmt: JsonLines,
-        ctx: ItemContext,
-        options: JsonLinesByPandasOptions,
-        limits: ViewLimits,
-    ) -> View:
-        pd = Pandas().load()
-        with ctx.fs.open(ctx.path, "rb") as f:
-            df = pd.read_json(f, lines=True, **_view_arguments(options, limits))
-        return _query_view(df, limits)
-
-    data_frame_template = cleandoc("""
-        import pandas as pd
-
-        df = pd.read_json({url}, lines=True{kwargs})
-        """)
-
-    def recipe(
-        self, fmt: JsonLines, ctx: ItemContext, options: JsonLinesByPandasOptions
-    ) -> dict[str, str]:
-        code = self.data_frame_template.format(
-            url=repr(ctx.library_url), kwargs=_code_kwargs(options)
-        )
-        return {AS_DATA_FRAME: code}
+def _pandas_code(reader: str, url: str, kwargs: str) -> str:
+    """The code reading ``url`` with pandas' ``reader``, e.g. "read_csv"."""
+    return _PANDAS_TEMPLATE.format(reader=reader, url=repr(url), kwargs=kwargs)
 
 
-class JsonByPandas(_PandasByUrl):
-    """Load code only: JSON is viewed as a tree (the built-in ``json_view``)."""
+# CSV
 
-    format = Json
-    options_model = JsonByPandasOptions
 
-    data_frame_template = cleandoc("""
-        import pandas as pd
+@code(format=Csv, engine=PandasEngine, name=AS_DATA_FRAME)
+def csv_as_data_frame(fmt: Csv, ctx: ItemContext, options: CsvByPandasOptions) -> str:
+    """A DataFrame, with the separator detected unless one is given."""
+    kwargs = _code_kwargs(options, {"sep": fmt.code_separator(ctx)})
+    return _pandas_code("read_csv", ctx.url_or_local_path, kwargs)
 
-        df = pd.read_json({url}{kwargs})
-        """)
 
-    def recipe(
-        self, fmt: Json, ctx: ItemContext, options: JsonByPandasOptions
-    ) -> dict[str, str]:
-        code = self.data_frame_template.format(
-            url=repr(ctx.library_url), kwargs=_code_kwargs(options)
-        )
-        return {AS_DATA_FRAME: code}
+@view(format=Csv, engine=PandasEngine, code=csv_as_data_frame)
+def csv_view(
+    fmt: Csv, ctx: ItemContext, options: CsvByPandasOptions, limits: ViewLimits
+) -> View:
+    """CSV's first rows in the data browser, with the separator detected
+    unless one is given."""
+    import pandas as pd
+
+    # The separator, from the beginning; the rows, read through the
+    # explorer's filesystem, so any storage works.
+    arguments = _view_arguments(options, limits)
+    if "sep" not in arguments:
+        text, _ = ctx.head_text(limits.max_bytes)
+        arguments["sep"] = fmt.separator(ctx.name, text)
+    with ctx.fs.open(ctx.path, "rb") as f:
+        df = pd.read_csv(f, **arguments)
+    return _query_view(df, limits)
+
+
+# JSON Lines
+
+
+@code(format=JsonLines, engine=PandasEngine, name=AS_DATA_FRAME)
+def json_lines_as_data_frame(
+    fmt: JsonLines, ctx: ItemContext, options: JsonLinesByPandasOptions
+) -> str:
+    """A DataFrame of the lines."""
+    kwargs = f", lines=True{_code_kwargs(options)}"
+    return _pandas_code("read_json", ctx.url_or_local_path, kwargs)
+
+
+@view(format=JsonLines, engine=PandasEngine, code=json_lines_as_data_frame)
+def json_lines_view(
+    fmt: JsonLines,
+    ctx: ItemContext,
+    options: JsonLinesByPandasOptions,
+    limits: ViewLimits,
+) -> View:
+    """JSON Lines' first rows in the data browser."""
+    import pandas as pd
+
+    with ctx.fs.open(ctx.path, "rb") as f:
+        df = pd.read_json(f, lines=True, **_view_arguments(options, limits))
+    return _query_view(df, limits)
+
+
+# JSON: code only, as JSON is viewed as a tree (the built-in ``json_view``).
+
+
+@code(format=Json, engine=PandasEngine, name=AS_DATA_FRAME)
+def json_as_data_frame(
+    fmt: Json, ctx: ItemContext, options: JsonByPandasOptions
+) -> str:
+    """A DataFrame of the JSON value."""
+    return _pandas_code("read_json", ctx.url_or_local_path, _code_kwargs(options))
+
+
+# Excel: openpyxl is pandas' Excel engine.
 
 
 def _sheets(
@@ -364,122 +361,121 @@ def _sheets(
     )
 
 
-class ExcelByPandas(_PandasByUrl):
-    format = Excel
-    options_model = ExcelByPandasOptions
-    additional_requirements = (Openpyxl(),)  # pandas' Excel engine
+@code(format=Excel, engine=PandasEngine, name=AS_DATA_FRAME, requires=(Openpyxl(),))
+def excel_as_data_frame(
+    fmt: Excel, ctx: ItemContext, options: ExcelByPandasOptions
+) -> str:
+    """A DataFrame of the workbook's sheet."""
+    return _pandas_code("read_excel", ctx.url_or_local_path, _code_kwargs(options))
 
-    def view(
-        self,
-        fmt: Excel,
-        ctx: ItemContext,
-        options: ExcelByPandasOptions,
-        limits: ViewLimits,
-    ) -> View:
-        # As polars' (ExcelByPolars): the sheets sheet_name gives (several on
-        # tabs), else the workbook's on tabs, or its only sheet.
-        pd = Pandas().load()
-        arguments = {"engine": "openpyxl", **_view_arguments(options, limits)}
-        workbook = io.BytesIO(ctx.read_whole(limits))
-        if "sheet_name" in arguments:
-            data = pd.read_excel(workbook, **arguments)
-            if not isinstance(data, dict):
-                return _query_view(data, limits)
-            return _sheets(
-                [str(name) for name in data],
-                {str(name): df for name, df in data.items()},
-                limits,
-            )
-        # The workbook, parsed once; each sheet read when chosen.
-        # ExcelFile takes the engine's arguments; parse() the others.
-        workbook_arguments = {
-            key: arguments.pop(key)
-            for key in ("engine", "engine_kwargs")
-            if key in arguments
-        }
-        excel = pd.ExcelFile(workbook, **workbook_arguments)
-        names = [str(name) for name in excel.sheet_names]
-        if len(names) == 1:
-            return _query_view(excel.parse(names[0], **arguments), limits)
-        return TableSetView(
-            nodes=[Leaf(label=name, id=name) for name in names],
-            loader=lambda name: _query_view(excel.parse(name, **arguments), limits),
-            selector="tab",
+
+@view(
+    format=Excel,
+    engine=PandasEngine,
+    requires=(Openpyxl(),),
+    code=excel_as_data_frame,
+)
+def excel_view(
+    fmt: Excel, ctx: ItemContext, options: ExcelByPandasOptions, limits: ViewLimits
+) -> View:
+    """As polars' (``excel_view``): the sheets ``sheet_name`` gives (several
+    on tabs), else the workbook's on tabs, or its only sheet."""
+    import pandas as pd
+
+    arguments = {"engine": "openpyxl", **_view_arguments(options, limits)}
+    workbook = io.BytesIO(ctx.read_whole(limits))
+    if "sheet_name" in arguments:
+        data = pd.read_excel(workbook, **arguments)
+        if not isinstance(data, dict):
+            return _query_view(data, limits)
+        return _sheets(
+            [str(name) for name in data],
+            {str(name): df for name, df in data.items()},
+            limits,
         )
+    # The workbook, parsed once; each sheet read when chosen.
+    # ExcelFile takes the engine's arguments; parse() the others.
+    workbook_arguments = {
+        key: arguments.pop(key)
+        for key in ("engine", "engine_kwargs")
+        if key in arguments
+    }
+    excel = pd.ExcelFile(workbook, **workbook_arguments)
+    names = [str(name) for name in excel.sheet_names]
+    if len(names) == 1:
+        return _query_view(excel.parse(names[0], **arguments), limits)
+    return TableSetView(
+        nodes=[Leaf(label=name, id=name) for name in names],
+        loader=lambda name: _query_view(excel.parse(name, **arguments), limits),
+        selector="tab",
+    )
 
-    data_frame_template = cleandoc("""
-        import pandas as pd
 
-        df = pd.read_excel({url}{kwargs})
-        """)
+# Parquet: pyarrow is pandas' Parquet engine.
 
-    def recipe(
-        self, fmt: Excel, ctx: ItemContext, options: ExcelByPandasOptions
-    ) -> dict[str, str]:
-        code = self.data_frame_template.format(
-            url=repr(ctx.library_url), kwargs=_code_kwargs(options)
+
+@code(format=Parquet, engine=PandasEngine, name=AS_DATA_FRAME, requires=(PyArrow(),))
+def parquet_as_data_frame(
+    fmt: Parquet, ctx: ItemContext, options: ParquetByPandasOptions
+) -> str:
+    """A DataFrame of the file or folder: pyarrow finds partitions itself."""
+    return _pandas_code("read_parquet", ctx.url_or_local_path, _code_kwargs(options))
+
+
+@view(
+    format=Parquet,
+    engine=PandasEngine,
+    requires=(PyArrow(),),
+    code=parquet_as_data_frame,
+)
+def parquet_view(
+    fmt: Parquet, ctx: ItemContext, options: ParquetByPandasOptions, limits: ViewLimits
+) -> View:
+    """A Parquet file's or folder's first rows in the data browser."""
+    import pyarrow.dataset as ds
+    import pyarrow.parquet as pq
+
+    # pyarrow reads through the explorer's fsspec filesystem, so any
+    # storage works. A directory's data files are those polars reads
+    # (Parquet.data_url): its partition folders' (their columns from the
+    # folders' names), not its other folders' (e.g. Spark's "_temporary").
+    partitioning: dict[str, Any] = {}
+    if not ctx.is_dir:
+        source: Any = ctx.path
+    else:
+        source = sorted(
+            path
+            for path in ctx.fs.glob(fmt.data_url(ctx, ctx.path))
+            if not path.rstrip("/").rsplit("/", 1)[-1].startswith((".", "_"))
         )
-        return {AS_DATA_FRAME: code}
+        if fmt.layout(ctx).keys:
+            partitioning = {"partitioning": "hive", "partition_base_dir": ctx.path}
+    if not source:
+        raise ValueError("no Parquet files found")
+    dataset = ds.dataset(source, filesystem=ctx.fs, format="parquet", **partitioning)
+    # read_parquet's arguments, as pandas applies them with pyarrow.
+    arguments = options.arguments()
+    filters = arguments.get("filters")
+    table = dataset.head(
+        _rows(limits),
+        columns=arguments.get("columns"),
+        filter=None if filters is None else pq.filters_to_expression(filters),
+    )
+    df = table.to_pandas(**(arguments.get("to_pandas_kwargs") or {}))
+    if arguments.get("dtype_backend") is not None:
+        df = df.convert_dtypes(dtype_backend=arguments["dtype_backend"])
+    return _query_view(df, limits)
 
 
-class ParquetByPandas(_PandasByUrl):
-    format = Parquet
-    options_model = ParquetByPandasOptions
-    additional_requirements = (PyArrow(),)  # pandas' Parquet engine
-
-    def view(
-        self,
-        fmt: Parquet,
-        ctx: ItemContext,
-        options: ParquetByPandasOptions,
-        limits: ViewLimits,
-    ) -> View:
-        pa_dataset = PyArrow().load("dataset")
-        # pyarrow reads through the explorer's fsspec filesystem, so any
-        # storage works. A directory's data files are those polars reads
-        # (Parquet.data_url): its partition folders' (their columns from the
-        # folders' names), not its other folders' (e.g. Spark's "_temporary").
-        partitioning: dict[str, Any] = {}
-        if not ctx.is_dir:
-            source: Any = ctx.path
-        else:
-            source = sorted(
-                path
-                for path in ctx.fs.glob(fmt.data_url(ctx, ctx.path))
-                if not path.rstrip("/").rsplit("/", 1)[-1].startswith((".", "_"))
-            )
-            if fmt.layout(ctx).keys:
-                partitioning = {"partitioning": "hive", "partition_base_dir": ctx.path}
-        if not source:
-            raise ValueError("no Parquet files found")
-        dataset = pa_dataset.dataset(
-            source, filesystem=ctx.fs, format="parquet", **partitioning
-        )
-        # read_parquet's arguments, as pandas applies them with pyarrow.
-        arguments = options.arguments()
-        filters = arguments.get("filters")
-        table = dataset.head(
-            _rows(limits),
-            columns=arguments.get("columns"),
-            filter=None
-            if filters is None
-            else PyArrow().load("parquet").filters_to_expression(filters),
-        )
-        df = table.to_pandas(**(arguments.get("to_pandas_kwargs") or {}))
-        if arguments.get("dtype_backend") is not None:
-            df = df.convert_dtypes(dtype_backend=arguments["dtype_backend"])
-        return _query_view(df, limits)
-
-    data_frame_template = cleandoc("""
-        import pandas as pd
-
-        df = pd.read_parquet({url}{kwargs})
-        """)
-
-    def recipe(
-        self, fmt: Parquet, ctx: ItemContext, options: ParquetByPandasOptions
-    ) -> dict[str, str]:
-        code = self.data_frame_template.format(
-            url=repr(ctx.library_url), kwargs=_code_kwargs(options)
-        )
-        return {AS_DATA_FRAME: code}
+# In the order tried; within a format, its view, then its code.
+PANDAS_ACTIONS = register_actions(
+    parquet_view,
+    parquet_as_data_frame,
+    csv_view,
+    csv_as_data_frame,
+    excel_view,
+    excel_as_data_frame,
+    json_as_data_frame,
+    json_lines_view,
+    json_lines_as_data_frame,
+)

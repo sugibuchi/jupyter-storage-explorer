@@ -337,7 +337,7 @@ class FormatSupport:
       view once the user answers.
     - Each method gets the detected format, then the item as an
       ``ItemContext`` (``ctx``): its location (where it is, for libraries
-      doing their own I/O and for the code: ``ctx.library_url``, for Spark
+      doing their own I/O and for the code: ``ctx.url_or_local_path``, for Spark
       ``supports.pyspark.spark_url(ctx.location.url)``), the explorer's
       fsspec filesystem and the item's path in it (to read it through the
       explorer's filesystem: ``ctx.head_text(n)``, ``ctx.read_whole(limits)``),
@@ -376,9 +376,9 @@ class FormatSupport:
 
     @classmethod
     def requirements(cls) -> tuple[PythonPackage, ...]:
-        """All the packages it needs: its engine's (``Engine.packages``),
+        """All the packages it needs: its engine's (``Engine.requirements``),
         then ``additional_requirements``."""
-        engine = cls.engine.packages() if cls.engine is not None else ()
+        engine = cls.engine.requirements if cls.engine is not None else ()
         return (*engine, *cls.additional_requirements)
 
     @classmethod
@@ -455,7 +455,7 @@ class FormatSupport:
         A ``QueryView`` of the data opens it in the data browser: read it
         lazily where the format allows, as the browser only fetches the rows
         it shows. Libraries doing their own I/O (polars, DuckDB, Spark) read
-        the location (``ctx.library_url``), with credentials from the
+        the location (``ctx.url_or_local_path``), with credentials from the
         environment or the options. Other views show what they read, mostly
         the beginning of the file through the explorer's filesystem
         (``ctx.head_text``, ``ctx.read_whole``), so any storage the explorer
@@ -507,7 +507,7 @@ class FormatSupport:
         The code runs as it is in a new notebook: its imports first, and what
         else it needs, e.g. a Spark session. Installing the packages and
         configuring access to the storage are left to the user. It reads the
-        location (``ctx.library_url``; for Spark,
+        location (``ctx.url_or_local_path``; for Spark,
         ``supports.pyspark.spark_url(ctx.location.url)``); reading the file
         is for what the code needs to know of it, e.g. a CSV file's
         separator.

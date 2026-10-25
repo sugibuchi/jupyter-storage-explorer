@@ -12,17 +12,21 @@ import polars as pl
 import pytest
 from all_supports import ALL_SUPPORTS, NO_PLUGINS, all_supports, installed_only
 from items import local_item
-from jupyter_storage_explorer_dask_support import CsvByDask
-from jupyter_storage_explorer_duckdb_support import CsvByDuckDB
-from jupyter_storage_explorer_pandas_support import CsvByPandas, CsvByPandasOptions
+from jupyter_storage_explorer_dask_support import csv_view as csv_by_dask
+from jupyter_storage_explorer_duckdb_support import csv_view as csv_by_duckdb
+from jupyter_storage_explorer_pandas_support import (
+    CsvByPandasOptions,
+    PandasEngine,
+)
+from jupyter_storage_explorer_pandas_support import csv_view as csv_by_pandas
 from jupyter_storage_explorer_polars_support import (
-    CsvByPolars,
     CsvByPolarsOptions,
-    DeltaLakeByPolars,
     DeltaLakeByPolarsOptions,
-    ExcelByPolars,
     ExcelByPolarsOptions,
-    ParquetByPolars,
+    csv_view,
+    delta_view,
+    excel_view,
+    parquet_view,
 )
 
 from jupyter_storage_explorer import StorageExplorer
@@ -52,7 +56,7 @@ from jupyter_storage_explorer.formats import (
     secret_field,
 )
 from jupyter_storage_explorer.formats.defaults import DEFAULT_ACTIONS, DEFAULT_FORMATS
-from jupyter_storage_explorer.formats.supports import FsspecOptions, text_code
+from jupyter_storage_explorer.formats.python import FsspecOptions, text_code
 
 LIMITS = ViewLimits(max_display_rows=2)
 
@@ -85,6 +89,21 @@ def support(fmt=Csv, engine=None, **methods):
     return type("Fake", (FormatSupport,), {**attributes, **methods})
 
 
+class CsvByPandas(FormatSupport):
+    """A support of the former interface for an engine of a plugin, as
+    plugins wrote them."""
+
+    format = Csv
+    engine = PandasEngine
+    options_model = CsvByPandasOptions
+
+    def view(self, fmt, ctx, options, limits):
+        return QueryView(data=pl.LazyFrame({"a": [1]}))
+
+    def recipe(self, fmt, ctx, options):
+        return {"Load as DataFrame": "df = old_pandas()"}
+
+
 # Where an item is, for options that depend on it.
 ACCOUNT_A = AbfsLocation(account_name="a", container_name="c", path="x")
 ACCOUNT_B = AbfsLocation(account_name="b", container_name="c", path="x")
@@ -97,13 +116,16 @@ def on_s3(key):
 
 
 def options_by_class(engine_options=None, location=ACCOUNT_A):
-    """The default supports' options for ``location``, by class, made from
-    ``engine_options``."""
+    """The default supports' options for ``location``, by class, and the
+    actions', by themselves, made from ``engine_options``."""
     chain = ActionChain(ALL_SUPPORTS, engine_options)
     return {
         **{type(s): chain.options_of(s, location) for s in chain.supports},
-        # The core's actions, by themselves.
-        **{a: chain.options_of(a, location) for a in DEFAULT_ACTIONS},
+        **{
+            a: chain.options_of(a, location)
+            for a in chain.actions
+            if not hasattr(a, "support")
+        },
     }
 
 
@@ -163,14 +185,14 @@ class TestOptions:
                 }
             }
         )
-        assert options[CsvByPolars] == CsvByPolarsOptions(storage_options={"a": 1})
-        assert options[ParquetByPolars].storage_options == {"a": 1}
-        delta = options[DeltaLakeByPolars]
+        assert options[csv_view] == CsvByPolarsOptions(storage_options={"a": 1})
+        assert options[parquet_view].storage_options == {"a": 1}
+        delta = options[delta_view]
         assert isinstance(delta, DeltaLakeByPolarsOptions)
         assert (delta.storage_options, delta.use_pyarrow) == ({"b": 2}, True)
         # Only the options a support's model has: Excel's code reads with fsspec.
-        assert options[ExcelByPolars] == ExcelByPolarsOptions()
-        assert options[CsvByPandas] == CsvByPandasOptions()  # pandas' own
+        assert options[excel_view] == ExcelByPolarsOptions()
+        assert options[csv_by_pandas] == CsvByPandasOptions()  # pandas' own
         assert options[text_code] == FsspecOptions()  # "python"'s
 
     def test_by_library(self):
@@ -210,12 +232,12 @@ class TestOptions:
     def test_objects_get_options_as_classes(self):
         # Supports carry no options: objects given are used as they are, and
         # get theirs as classes do.
-        given = CsvByPolars()
+        given = CsvByPandas()
         chain = ActionChain(
-            [given, CsvByPolars], {"polars": {"*": {"storage_options": {"y": 2}}}}
+            [given, CsvByPandas], {"pandas": {"*": {"storage_options": {"y": 2}}}}
         )
         assert chain.supports[0] is given
-        expected = CsvByPolarsOptions(storage_options={"y": 2})
+        expected = CsvByPandasOptions(storage_options={"y": 2})
         assert [chain.options_of(s, ACCOUNT_A) for s in chain.supports] == [
             expected,
             expected,
@@ -269,9 +291,9 @@ class TestOptionsByLocation:
     def test_by_account(self):
         for location, key in ((ACCOUNT_A, "key-a"), (ACCOUNT_B, "key-b")):
             options = options_by_class(self.engine_options(), location)
-            assert options[CsvByPolars].storage_options == {"account_key": key}
+            assert options[csv_view].storage_options == {"account_key": key}
             # A format's dict over the function for all formats.
-            delta = options[DeltaLakeByPolars]
+            delta = options[delta_view]
             assert (delta.storage_options, delta.use_pyarrow) == (
                 {"account_key": key},
                 True,
@@ -286,16 +308,15 @@ class TestOptionsByLocation:
                 }
             }
         )
-        delta = options[DeltaLakeByPolars]
+        delta = options[delta_view]
         assert (delta.storage_options, delta.use_pyarrow) == ({"region": "eu"}, True)
 
     def test_unknown_options_returned(self):
         chain = ActionChain(
             ALL_SUPPORTS, {"polars": {"csv": lambda location: {"use_pyarrow": 1}}}
         )
-        [csv] = [s for s in chain.supports if isinstance(s, CsvByPolars)]
         with pytest.raises(ValueError, match=r"\(.*abfs://c@a.*\): unknown options"):
-            chain.options_of(csv, ACCOUNT_A)
+            chain.options_of(csv_view, ACCOUNT_A)
 
     def test_format_names_checked_at_once(self):
         with pytest.raises(ValueError, match="unknown format"):
@@ -437,12 +458,12 @@ class TestChain:
     def test_of_lists_the_installed_only(self, make_item, monkeypatch):
         chain = ActionChain(all_supports())
         item = make_item("/a.csv", b"")
-        # In the supports' order: the plugins', by key.
-        assert [type(a.support) for a in chain.of(Csv(), item)] == [
-            CsvByDask,
-            CsvByDuckDB,
-            CsvByPandas,
-            CsvByPolars,
+        # In the actions' order: the plugins', by key.
+        assert chain.of(Csv(), item) == [
+            csv_by_dask,
+            csv_by_duckdb,
+            csv_by_pandas,
+            csv_view,
         ]
         monkeypatch.setattr(PythonPackage, "is_installed", lambda self: False)
         # None of the registered supports can.
@@ -562,11 +583,11 @@ class TestExplorer:
         ]
 
     def test_a_library_given_replaces_the_default_code(self, make_item, monkeypatch):
-        explorer = StorageExplorer(fs=None, supports=[CsvByPolars()])
+        explorer = StorageExplorer(fs=None, supports=[CsvByPandas()])
         installed_only(monkeypatch, "polars", "pandas", "pyspark", "pyarrow")
         item = make_item("/a.csv", b"a\n", location=on_s3("a.csv"))
         recipes = explorer._supports.recipes(Csv(), item)
-        # Its recipes replace the default CsvByPolars': one each.
+        # Its recipes replace the default CsvByPandas': one each.
         assert [r.requirements[0].package for r in recipes] == [
             "polars",
             "pandas",
@@ -577,10 +598,10 @@ class TestExplorer:
         class Explorer(StorageExplorer):
             @staticmethod
             def default_supports():
-                return [CsvByPolars]
+                return [CsvByPandas]
 
         explorer = Explorer(fs=None, plugin_options=NO_PLUGINS)
-        assert [type(s) for s in explorer._supports.supports] == [CsvByPolars]
+        assert [type(s) for s in explorer._supports.supports] == [CsvByPandas]
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)

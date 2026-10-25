@@ -1,5 +1,5 @@
 """Helpers for testing plugins' components without a browser: items as the
-explorer gives them to formats and supports (``ItemContext``), on fsspec's
+explorer gives them to formats and actions (``ItemContext``), on fsspec's
 memory filesystem or local files.
 
 Needs pytest (for the fixtures). In a plugin's ``tests/conftest.py``::
@@ -10,7 +10,7 @@ then, in its tests::
 
     def test_view(make_item):
         item = make_item("/a.csv", b"x,y\\n1,2\\n")
-        view = CsvByDuckDB().view(Csv(), item, DuckDBOptions(), ViewLimits())
+        view = csv_view(Csv(), item, CsvByDuckDBOptions(), ViewLimits())
 """
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-"""pyspark-support: its supports' views and options, on a local Spark session
+"""pyspark-support: its actions' views and options, on a local Spark session
 (skipped without Java, or without pyspark, which the repository's shared
 environment leaves out: CI runs them alone, with Java); their code; the
 session's builder, faked; its engine and entry point."""
@@ -6,8 +6,11 @@ session's builder, faked; its engine and entry point."""
 from __future__ import annotations
 
 import concurrent.futures
+import importlib.metadata
+import importlib.util
 import os
 import shutil
+import sys
 from dataclasses import fields
 from importlib.metadata import entry_points
 from types import SimpleNamespace
@@ -15,22 +18,25 @@ from types import SimpleNamespace
 import narwhals as nw
 import pytest
 from jupyter_storage_explorer_pyspark_support import (
-    CsvByPySpark,
+    PYSPARK_ACTIONS,
     CsvByPySparkOptions,
-    DeltaLakeByPySpark,
     DeltaLakeByPySparkOptions,
-    JsonLinesByPySpark,
     JsonLinesByPySparkOptions,
-    ParquetByPySpark,
     ParquetByPySparkOptions,
     PySpark,
     PySparkEngine,
     PySparkOptions,
     PySparkSupport,
+    csv_as_data_frame,
+    csv_view,
+    delta_as_data_frame,
+    json_lines_view,
+    parquet_as_data_frame,
+    parquet_view,
     spark_rows,
     spark_url,
 )
-from jupyter_storage_explorer_pyspark_support import supports as pyspark
+from jupyter_storage_explorer_pyspark_support import actions as pyspark
 
 from jupyter_storage_explorer._explorer.supports import ActionChain
 from jupyter_storage_explorer.filesystems import S3Location
@@ -116,16 +122,29 @@ def test_plugin_registered():
     plugin = entry_point.load()()
     assert isinstance(plugin, PySparkSupport)
     assert plugin.description == "PySpark support for Storage Explorer"
-    assert CsvByPySpark in plugin.format_supports
+    assert plugin.actions == PYSPARK_ACTIONS
+    assert csv_view in plugin.actions
 
 
-def test_engine_not_with_databricks_connects_pyspark(monkeypatch):
-    # Its pyspark makes no session with SparkSession.builder: databricks-
-    # support's engine uses it instead.
-    monkeypatch.setattr(pyspark._DatabricksConnect, "is_installed", lambda self: True)
+def test_one_options_class_per_format():
+    # A format's view and code take the same options.
+    by_format: dict[type, set[type]] = {}
+    for action in PYSPARK_ACTIONS:
+        by_format.setdefault(action.format, set()).add(action.options_model)
+    assert all(len(models) == 1 for models in by_format.values())
+
+
+def test_engine_not_with_another_packages_pyspark(monkeypatch):
+    # A pyspark module of another distribution, e.g. Databricks Connect's,
+    # makes no session with SparkSession.builder.
+    def missing(name):
+        raise importlib.metadata.PackageNotFoundError(name)
+
+    monkeypatch.setattr(importlib.util, "find_spec", lambda name: object())
+    monkeypatch.setattr(importlib.metadata, "distribution", missing)
     assert not PySpark().is_installed()
     assert not PySparkEngine.is_installed()
-    assert [p.package for p in PySparkEngine.packages()] == ["pyspark", "pyarrow"]
+    assert [p.package for p in PySparkEngine.requirements] == ["pyspark", "pyarrow"]
 
 
 def test_spark_url(tmp_path):
@@ -145,16 +164,14 @@ def test_spark_url(tmp_path):
 
 def test_parquet(tmp_path, session):
     path = parquet_file(session, tmp_path / "a.parquet", [1, 2, 3], "a")
-    view = ParquetByPySpark().view(
-        Parquet(), local_item(path), ParquetByPySparkOptions(), LIMITS
-    )
+    view = parquet_view(Parquet(), local_item(path), ParquetByPySparkOptions(), LIMITS)
     assert rows(view) == [(1,), (2,), (3,)]
 
 
 def test_csv_with_its_separator(tmp_path, session):
     path = tmp_path / "a.csv"
     path.write_text("x;y\n1;2\n3;4\n")
-    view = CsvByPySpark().view(Csv(), local_item(path), CsvByPySparkOptions(), LIMITS)
+    view = csv_view(Csv(), local_item(path), CsvByPySparkOptions(), LIMITS)
     assert view.data.columns == ["x", "y"]
     assert rows(view) == [(1, 2), (3, 4)]
 
@@ -166,7 +183,7 @@ def test_viewed_in_a_worker_read_on_the_main_thread(tmp_path, session):
     path.write_text("x\n1\n2\n")
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as worker:
         view = worker.submit(
-            CsvByPySpark().view, Csv(), local_item(path), CsvByPySparkOptions(), LIMITS
+            csv_view, Csv(), local_item(path), CsvByPySparkOptions(), LIMITS
         ).result()
     assert rows(view) == [(1,), (2,)]
 
@@ -175,7 +192,7 @@ def test_rows_skipped_by_spark(tmp_path, session):
     # The data browser reads pages with Spark's offset, not all rows before.
     path = tmp_path / "a.csv"
     path.write_text("x\n1\n2\n3\n4\n5\n")
-    view = CsvByPySpark().view(Csv(), local_item(path), CsvByPySparkOptions(), LIMITS)
+    view = csv_view(Csv(), local_item(path), CsvByPySparkOptions(), LIMITS)
     assert view.fetch is spark_rows
     page = spark_rows(nw.from_native(view.data), 2, 2)
     assert page["x"].to_list() == [3, 4]
@@ -195,7 +212,7 @@ def test_rows_left_to_the_default_without_offset():
 def test_json_lines(tmp_path, session):
     path = tmp_path / "a.jsonl"
     path.write_text('{"i": 1}\n{"i": 2}\n')
-    view = JsonLinesByPySpark().view(
+    view = json_lines_view(
         JsonLines(), local_item(path), JsonLinesByPySparkOptions(), LIMITS
     )
     assert rows(view) == [(1,), (2,)]
@@ -206,7 +223,8 @@ class TestSupportedProtocols:
 
     def supports(self, item, options=None, task="view"):
         options = options or ParquetByPySparkOptions()
-        return ParquetByPySpark().supports(Parquet(), item, options, task)
+        action = parquet_view if task == "view" else parquet_as_data_frame
+        return action.does(Parquet(), item, options)
 
     def test_by_default(self, make_item, tmp_path):
         on_s3 = make_item("/a.parquet", b"", location=S3Location(bucket="b", key="a"))
@@ -227,18 +245,17 @@ class TestSupportedProtocols:
         assert self.supports(make_item("/a.parquet", b""), options)
 
     def test_not_a_reader_option(self):
-        assert "supportedProtocols" not in PySparkOptions().spark_options()
-        assert ".option" not in PySparkOptions().reader_code()
+        assert "supportedProtocols" not in PySparkOptions().format_options()
+        assert ".option" not in pyspark.spark_reader_code(PySparkOptions())
 
     def test_by_engine_options(self, make_item, monkeypatch):
         monkeypatch.setattr(PySpark, "is_installed", lambda self: True)
         chain = ActionChain(
-            [ParquetByPySpark], {"pyspark": {"*": {"supported_protocols": None}}}
+            [parquet_view, parquet_as_data_frame],
+            {"pyspark": {"*": {"supported_protocols": None}}},
         )
         item = make_item("/a.parquet", b"")
-        assert [type(a.support) for a in chain.of(Parquet(), item, CodeAction)] == [
-            ParquetByPySpark
-        ]
+        assert chain.of(Parquet(), item, CodeAction) == [parquet_as_data_frame]
 
 
 class TestOptions:
@@ -247,7 +264,7 @@ class TestOptions:
         path = tmp_path / "a.csv"
         path.write_text("1;2\n3;4\n")
         options = CsvByPySparkOptions(reader_options={"header": False})
-        view = CsvByPySpark().view(Csv(), local_item(path), options, LIMITS)
+        view = csv_view(Csv(), local_item(path), options, LIMITS)
         assert rows(view) == [(1, 2), (3, 4)]
 
     def test_fields_reach_the_reader(self):
@@ -262,7 +279,7 @@ class TestOptions:
         options = CsvByPySparkOptions(
             null_value="NA", reader_options={"nullvalue": "-"}
         )
-        options.reader(SimpleNamespace(read=Reader()), {"sep": ";"})
+        pyspark.spark_reader(options, SimpleNamespace(read=Reader()), {"sep": ";"})
         # The defaults, the fields, then the reader options, which override
         # them whatever their case.
         assert given == [
@@ -277,19 +294,19 @@ class TestOptions:
         options = ParquetByPySparkOptions(
             session_options={"spark.sql.shuffle.partitions": "4"}
         )
-        ParquetByPySpark().view(Parquet(), local_item(path), options, LIMITS)
+        parquet_view(Parquet(), local_item(path), options, LIMITS)
         assert session.asked == [{"spark.sql.shuffle.partitions": "4"}]
 
     def test_spark_names(self):
         options = CsvByPySparkOptions(
             null_value="NA", timestamp_ntz_format="yyyy", header=None
         )
-        assert options.spark_options() == {
+        assert options.format_options() == {
             "inferSchema": True,
             "nullValue": "NA",
             "timestampNTZFormat": "yyyy",
         }
-        assert PySparkOptions().spark_options() == {}
+        assert PySparkOptions().format_options() == {}
 
     @pytest.mark.parametrize("model", FORMAT_OPTIONS)
     def test_options_left_to_spark_by_default(self, model):
@@ -301,7 +318,7 @@ class TestOptions:
             if model is CsvByPySparkOptions
             else {}
         )
-        assert model().spark_options() == expected
+        assert model().format_options() == expected
 
     def test_code(self, make_item):
         options = CsvByPySparkOptions(
@@ -312,11 +329,7 @@ class TestOptions:
             },
             reader_options={"mode": "DROPMALFORMED"},
         )
-        [code] = (
-            CsvByPySpark()
-            .recipe(Csv(), make_item("/a.csv", b"x,y\n"), options)
-            .values()
-        )
+        code = csv_as_data_frame(Csv(), make_item("/a.csv", b"x,y\n"), options)
         assert code.splitlines()[2:] == [
             "spark = (",
             "    SparkSession.builder",
@@ -330,11 +343,7 @@ class TestOptions:
 
     def test_code_with_fields(self, make_item, memfs):
         options = CsvByPySparkOptions(sep="|", mode="FAILFAST")
-        [code] = (
-            CsvByPySpark()
-            .recipe(Csv(), make_item("/a.csv", b"x;y\n"), options)
-            .values()
-        )
+        code = csv_as_data_frame(Csv(), make_item("/a.csv", b"x;y\n"), options)
         # The separator given replaces the one detected.
         assert code.splitlines()[-1] == (
             "df = spark.read.options(sep='|', header=True, inferSchema=True,"
@@ -342,11 +351,7 @@ class TestOptions:
         )
         memfs.pipe_file("/t/_delta_log/0.json", b"{}")
         delta_options = DeltaLakeByPySparkOptions(version_as_of=3)
-        [delta] = (
-            DeltaLakeByPySpark()
-            .recipe(DeltaLake(), make_item("/t"), delta_options)
-            .values()
-        )
+        delta = delta_as_data_frame(DeltaLake(), make_item("/t"), delta_options)
         assert delta.splitlines()[-1] == (
             "df = spark.read.options(versionAsOf=3)"
             ".format(\"delta\").load('memory:///t')"
@@ -354,11 +359,7 @@ class TestOptions:
 
     def test_code_without_the_options_overridden(self, make_item, memfs):
         options = CsvByPySparkOptions(reader_options={"header": False})
-        [code] = (
-            CsvByPySpark()
-            .recipe(Csv(), make_item("/a.csv", b"x,y\n"), options)
-            .values()
-        )
+        code = csv_as_data_frame(Csv(), make_item("/a.csv", b"x,y\n"), options)
         assert code.splitlines()[-1] == (
             "df = spark.read.options(inferSchema=True).option('header', False)"
             ".csv('memory:///a.csv')"
@@ -367,15 +368,13 @@ class TestOptions:
         parquet = ParquetByPySparkOptions(
             merge_schema=True, reader_options={"MERGESCHEMA": False}
         )
-        assert parquet.reader_code() == ".option('MERGESCHEMA', False)"
+        assert pyspark.spark_reader_code(parquet) == ".option('MERGESCHEMA', False)"
 
 
 class TestRecipes:
     def test_csv_with_its_separator(self, make_item):
-        [code] = (
-            CsvByPySpark()
-            .recipe(Csv(), make_item("/a.tsv", b"x\ty\n"), CsvByPySparkOptions())
-            .values()
+        code = csv_as_data_frame(
+            Csv(), make_item("/a.tsv", b"x\ty\n"), CsvByPySparkOptions()
         )
         assert code.splitlines()[-1] == (
             "df = spark.read.options(sep='\\t', header=True, inferSchema=True)"
@@ -383,10 +382,8 @@ class TestRecipes:
         )
 
     def test_spark_session_created(self, make_item):
-        [code] = (
-            ParquetByPySpark()
-            .recipe(Parquet(), make_item("/a.parquet", b""), ParquetByPySparkOptions())
-            .values()
+        code = parquet_as_data_frame(
+            Parquet(), make_item("/a.parquet", b""), ParquetByPySparkOptions()
         )
         assert code == (
             "from pyspark.sql import SparkSession\n"
@@ -398,21 +395,15 @@ class TestRecipes:
     def test_partitioned_parquet(self, make_item, memfs):
         # Spark finds partitions itself.
         memfs.pipe_file("/t/year=2025/month=1/part-0.parquet", b"")
-        [code] = (
-            ParquetByPySpark()
-            .recipe(Parquet(), make_item("/t"), ParquetByPySparkOptions())
-            .values()
+        code = parquet_as_data_frame(
+            Parquet(), make_item("/t"), ParquetByPySparkOptions()
         )
         assert code.splitlines()[-1] == "df = spark.read.parquet('memory:///t')"
 
     def test_delta(self, make_item, memfs):
         memfs.pipe_file("/t/_delta_log/0.json", b"{}")
         item = make_item("/t", location=S3Location(bucket="b", key="t"))
-        [code] = (
-            DeltaLakeByPySpark()
-            .recipe(DeltaLake(), item, DeltaLakeByPySparkOptions())
-            .values()
-        )
+        code = delta_as_data_frame(DeltaLake(), item, DeltaLakeByPySparkOptions())
         # The session is obtained, not configured: Delta Lake's setup in
         # Spark is left to the user. Spark's URL: s3a.
         assert code == (
@@ -451,11 +442,10 @@ class TestSession:
             getActiveSession = staticmethod(lambda: state.active)
 
         SparkSession.builder = builder
-        monkeypatch.setattr(
-            PySpark,
-            "load",
-            lambda self, sub=None: SimpleNamespace(SparkSession=SparkSession),
-        )
+        # What spark_session imports: pyspark.sql's SparkSession.
+        module = SimpleNamespace(SparkSession=SparkSession)
+        monkeypatch.setitem(sys.modules, "pyspark", SimpleNamespace(sql=module))
+        monkeypatch.setitem(sys.modules, "pyspark.sql", module)
         state.builder = builder
         return state
 

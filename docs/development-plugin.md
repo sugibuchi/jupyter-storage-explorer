@@ -165,7 +165,7 @@ class DuckDB(PythonPackage):
 class DuckDBEngine(Engine):
     key = "duckdb"          # in engine_preference and engine_options
     label = "DuckDB"        # shown in the status bar's engine menu
-    requirements = (DuckDB(),)  # all needed; alternatives: ((DuckDB(),), (MotherDuck(),))
+    requirements = (DuckDB(),)  # all needed
 ```
 
 `DuckDB().is_installed()` checks without importing; `DuckDB().load()` imports it (`load("submodule")` a submodule).
@@ -408,7 +408,7 @@ code = f"con.read_parquet({url!r}{format_arguments(options.code_arguments())})" 
 
 | `ctx`                      | What                                                                                       |
 |----------------------------|--------------------------------------------------------------------------------------------|
-| `ctx.library_url`          | The location as libraries read it: a local file's plain path, else its URL                 |
+| `ctx.url_or_local_path`          | The location as libraries read it: a local file's plain path, else its URL                 |
 | `ctx.location`             | Where it is (`AbfsLocation`, `S3Location`, `LocalLocation`, ...): `ctx.location.url`       |
 | `ctx.fs`, `ctx.path`       | The explorer's fsspec filesystem (with its credentials) and the item's path in it         |
 | `ctx.head(n)`, `ctx.head_text(n)` | The first bytes; the first text and whether it was cut                             |
@@ -420,7 +420,7 @@ A library reads the item in one of five ways. Choose per storage in `supports`, 
 
 | Way | When | Examples |
 |---|---|---|
-| By URL, `ctx.library_url` | The library reads the storage itself, with its own credentials: the environment, or options | polars on S3 (object_store), Spark |
+| By URL, `ctx.url_or_local_path` | The library reads the storage itself, with its own credentials: the environment, or options | polars on S3 (object_store), Spark |
 | The explorer's filesystem, `ctx.fs` | The library takes an fsspec filesystem and reads lazily through it | PyArrow's `FSSpecHandler` (polars-support's Parquet), DuckDB's `register_filesystem` |
 | The explorer's filesystem by URL, `ctx.fs.unstrip_protocol(ctx.path)` with `storage_options=ctx.fs.storage_options` | The library takes only a URL and fsspec's `storage_options`: fsspec gives back the explorer's own instance, from its cache | Dask's `read_csv` |
 | Bytes, `ctx.head(n)`, `ctx.read_whole(limits)` | The library reads only a file object or bytes, so the file is read whole | pandas, polars' CSV elsewhere, images |
@@ -975,7 +975,7 @@ Checks opening view tabs need the launcher's JupyterLab extension built: `uv run
 in `launcher/labextension`, then `uv sync`.
 
 Plugins outside this repository use only the public API: the top level, `filesystems`, `formats`, `formats.actions`,
-`formats.supports` and `testing`. This repository's plugins may also use the explorer's internals, as they are released with it.
+`formats.python`, `util` and `testing`. This repository's plugins may also use the explorer's internals, as they are released with it.
 
 ### Trying components in an explorer
 

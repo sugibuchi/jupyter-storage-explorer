@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib
+import importlib.metadata
 import importlib.util
 import threading
 from typing import TYPE_CHECKING, ClassVar
@@ -28,6 +29,10 @@ class PythonPackage:
     # finding "a.b" imports "a"; dotted when "a" is a namespace other packages
     # share (e.g. "databricks.connect").
     import_name: ClassVar[str]
+    # Whether the module counts only when the distribution ``package`` itself
+    # is installed: for a module other packages may bring a copy of, which
+    # may not work as the package's does (e.g. pyspark's).
+    own_distribution: ClassVar[bool] = False
 
     def is_installed(self) -> bool:
         # The import system caches directory listings, so a package installed
@@ -38,9 +43,16 @@ class PythonPackage:
         with _probing:
             importlib.invalidate_caches()
             try:
-                return importlib.util.find_spec(self.import_name) is not None
+                if importlib.util.find_spec(self.import_name) is None:
+                    return False
             except ModuleNotFoundError:  # "a" of "a.b" missing
                 return False
+        if self.own_distribution:
+            try:
+                importlib.metadata.distribution(self.package)
+            except importlib.metadata.PackageNotFoundError:
+                return False
+        return True
 
     def load(self, submodule: str | None = None) -> types.ModuleType:
         """Import the package, or one of its submodules (e.g. ``"dataset"`` for pyarrow.dataset)."""

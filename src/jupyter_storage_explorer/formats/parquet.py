@@ -278,10 +278,10 @@ class Parquet(DataFormat):
 
     def data_url(self, ctx: ItemContext, url: str | None = None) -> str:
         """The URL of the data files, from ``url`` (the location as the
-        library reads it; by default ``ctx.library_url``): a file's as it is, a
+        library reads it; by default ``ctx.url_or_local_path``): a file's as it is, a
         directory's data files as a glob (see ``ParquetLayout.glob``), rather
         than the directory itself, which libraries would search recursively."""
-        url = url if url is not None else ctx.library_url
+        url = url if url is not None else ctx.url_or_local_path
         return self.layout(ctx).glob(url) if ctx.is_dir else url
 
     def first_files(self, ctx: ItemContext, limit: int) -> list[str]:

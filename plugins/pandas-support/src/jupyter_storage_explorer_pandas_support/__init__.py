@@ -6,20 +6,25 @@ The plugin, ``PandasSupport``, is found by explorers through its entry point
 (``pandas-support``); its libraries are installed with the "full" extra."""
 
 from jupyter_storage_explorer import StorageExplorerPlugin
-from jupyter_storage_explorer_pandas_support.supports import (
-    CsvByPandas,
+from jupyter_storage_explorer_pandas_support.actions import (
+    PANDAS_ACTIONS,
     CsvByPandasOptions,
-    ExcelByPandas,
     ExcelByPandasOptions,
-    JsonByPandas,
     JsonByPandasOptions,
-    JsonLinesByPandas,
     JsonLinesByPandasOptions,
     Pandas,
     PandasEngine,
     PandasOptions,
-    ParquetByPandas,
     ParquetByPandasOptions,
+    csv_as_data_frame,
+    csv_view,
+    excel_as_data_frame,
+    excel_view,
+    json_as_data_frame,
+    json_lines_as_data_frame,
+    json_lines_view,
+    parquet_as_data_frame,
+    parquet_view,
 )
 
 
@@ -27,29 +32,28 @@ class PandasSupport(StorageExplorerPlugin):
     key = "pandas-support"
 
     @property
-    def format_supports(self):
-        return (
-            ParquetByPandas,
-            CsvByPandas,
-            ExcelByPandas,
-            JsonByPandas,
-            JsonLinesByPandas,
-        )
+    def actions(self):
+        return PANDAS_ACTIONS
 
 
 __all__ = [
-    "CsvByPandas",
+    "PANDAS_ACTIONS",
     "CsvByPandasOptions",
-    "ExcelByPandas",
     "ExcelByPandasOptions",
-    "JsonByPandas",
     "JsonByPandasOptions",
-    "JsonLinesByPandas",
     "JsonLinesByPandasOptions",
     "Pandas",
     "PandasEngine",
     "PandasOptions",
     "PandasSupport",
-    "ParquetByPandas",
     "ParquetByPandasOptions",
+    "csv_as_data_frame",
+    "csv_view",
+    "excel_as_data_frame",
+    "excel_view",
+    "json_as_data_frame",
+    "json_lines_as_data_frame",
+    "json_lines_view",
+    "parquet_as_data_frame",
+    "parquet_view",
 ]

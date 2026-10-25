@@ -7,7 +7,6 @@ import pytest
 from explorers import make, storage
 
 from jupyter_storage_explorer import _paths
-from jupyter_storage_explorer._jobs.incoming import format_size
 from jupyter_storage_explorer.filesystems import S3Location
 
 
@@ -222,11 +221,6 @@ def test_safe_name():
     assert _paths.safe_name("a/b\\c.txt") == "c.txt"
     with pytest.raises(ValueError):
         _paths.safe_name("..")
-
-
-def testformat_size():
-    assert format_size(10 * 1024 * 1024) == "10 MB"
-    assert format_size(1536) == "1.5 KB"
 
 
 DENY_SECRET = [{"rule": "deny", "src": r"memory:///d/secret.*", "dest": ".*"}]

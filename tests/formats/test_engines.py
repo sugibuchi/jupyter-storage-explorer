@@ -1,4 +1,4 @@
-"""Engines (formats/engine.py, the predefined ones in formats/supports/): which are offered, in which order,
+"""Engines (formats/engine.py, PythonEngine in formats/python.py, the others in the plugins): which are offered, in which order,
 which views an item, and the explorer's choice of one."""
 
 from __future__ import annotations
@@ -10,7 +10,6 @@ import traitlets
 from all_supports import all_supports
 from explorers import make, path_of
 from jupyter_storage_explorer_databricks_support import DatabricksConnect
-from jupyter_storage_explorer_polars_support import DeltaLakeByPolars
 
 from jupyter_storage_explorer._explorer.states import ExplorerStates
 from jupyter_storage_explorer._explorer.supports import ActionChain
@@ -24,6 +23,8 @@ from jupyter_storage_explorer.formats import (
     PythonPackage,
     package,
 )
+from jupyter_storage_explorer.formats.packages import DeltaLake as DeltaLakePackage
+from jupyter_storage_explorer.formats.python import PythonEngine
 
 
 class Installed(PythonPackage):
@@ -58,14 +59,9 @@ class TestEngine:
         assert engine("a").is_installed()
         assert not engine("b", (Installed(), Missing())).is_installed()
 
-    def test_alternatives(self):
-        either = engine("c", ((Missing(),), (Installed(),)))
-        assert either.is_installed()
-        assert [type(p) for p in either.packages()] == [Installed]  # the one installed
-        neither = engine("d", ((Missing(),), (Missing(),)))
-        assert not neither.is_installed()
-        assert [type(p) for p in neither.packages()] == [Missing]  # the first
-        assert engine("e", ()).is_installed()  # none needed
+    def test_none_needed(self):
+        assert engine("e", ()).is_installed()
+        assert PythonEngine.is_installed()
 
     def test_dotted_import_names(self):
         # "databricks.connect": a missing parent is not installed, not an error.
@@ -131,9 +127,7 @@ class TestWhichEngineViews:
     def test_no_fallback_to_another_engine(self, item, monkeypatch):
         # Polars handles Delta tables, but needs deltalake: pandas, which
         # does not handle them, is not used instead.
-        monkeypatch.setattr(
-            DeltaLakeByPolars, "is_installed", classmethod(lambda cls: False)
-        )
+        monkeypatch.setattr(DeltaLakePackage, "is_installed", lambda self: False)
         with pytest.raises(LookupError):
             self.chain.engine_for(DeltaLake(), item, "polars")
 

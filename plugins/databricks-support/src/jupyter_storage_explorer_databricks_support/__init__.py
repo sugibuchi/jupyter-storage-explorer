@@ -11,23 +11,29 @@ point (``databricks-support``); its libraries are installed with the "full"
 extra."""
 
 from jupyter_storage_explorer import StorageExplorerPlugin
-from jupyter_storage_explorer_databricks_support.mapper import (
-    DatabricksLocation,
-    DatabricksWorkspaceMapper,
-)
-from jupyter_storage_explorer_databricks_support.supports import (
+from jupyter_storage_explorer_databricks_support.actions import (
+    DATABRICKS_ACTIONS,
     DATABRICKS_PROTOCOLS,
-    CsvByDatabricksConnect,
+    DATABRICKS_SESSIONS,
     CsvByDatabricksConnectOptions,
     DatabricksConnect,
     DatabricksConnectEngine,
-    DeltaLakeByDatabricksConnect,
     DeltaLakeByDatabricksConnectOptions,
-    JsonLinesByDatabricksConnect,
     JsonLinesByDatabricksConnectOptions,
-    ParquetByDatabricksConnect,
     ParquetByDatabricksConnectOptions,
+    csv_as_data_frame,
+    csv_view,
     databricks_session,
+    delta_as_data_frame,
+    delta_view,
+    json_lines_as_data_frame,
+    json_lines_view,
+    parquet_as_data_frame,
+    parquet_view,
+)
+from jupyter_storage_explorer_databricks_support.mapper import (
+    DatabricksLocation,
+    DatabricksWorkspaceMapper,
 )
 
 
@@ -39,29 +45,30 @@ class DatabricksSupport(StorageExplorerPlugin):
         return (DatabricksWorkspaceMapper(),)
 
     @property
-    def format_supports(self):
-        return (
-            DeltaLakeByDatabricksConnect,
-            ParquetByDatabricksConnect,
-            CsvByDatabricksConnect,
-            JsonLinesByDatabricksConnect,
-        )
+    def actions(self):
+        return DATABRICKS_ACTIONS
 
 
 __all__ = [
+    "DATABRICKS_ACTIONS",
     "DATABRICKS_PROTOCOLS",
-    "CsvByDatabricksConnect",
+    "DATABRICKS_SESSIONS",
     "CsvByDatabricksConnectOptions",
     "DatabricksConnect",
     "DatabricksConnectEngine",
     "DatabricksLocation",
     "DatabricksSupport",
     "DatabricksWorkspaceMapper",
-    "DeltaLakeByDatabricksConnect",
     "DeltaLakeByDatabricksConnectOptions",
-    "JsonLinesByDatabricksConnect",
     "JsonLinesByDatabricksConnectOptions",
-    "ParquetByDatabricksConnect",
     "ParquetByDatabricksConnectOptions",
+    "csv_as_data_frame",
+    "csv_view",
     "databricks_session",
+    "delta_as_data_frame",
+    "delta_view",
+    "json_lines_as_data_frame",
+    "json_lines_view",
+    "parquet_as_data_frame",
+    "parquet_view",
 ]

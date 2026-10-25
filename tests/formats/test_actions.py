@@ -4,6 +4,7 @@ how explorers use actions (``ActionChain``)."""
 from __future__ import annotations
 
 import dataclasses
+import inspect
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -29,6 +30,7 @@ from jupyter_storage_explorer.formats.actions import (
     register_actions,
     view,
 )
+from jupyter_storage_explorer.formats.python import PythonEngine
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -89,7 +91,18 @@ class TestDecorators:
         assert csv_widget.name == "Widget for CSV"
         assert csv_view.options_model is DuckOptions
         assert csv_view.code is csv_code
-        assert csv_view.library == "duck"
+        assert csv_view.engine.key == "duck"
+
+    def test_reads_as_the_function(self):
+        # Its name, docstring and signature, for help(), IDEs and errors.
+        assert csv_view.__name__ == "csv_view"
+        assert csv_view.__wrapped__ is csv_view.function
+        assert list(inspect.signature(csv_view).parameters) == [
+            "fmt",
+            "ctx",
+            "options",
+            "limits",
+        ]
 
     def test_called_as_the_function(self, make_item):
         item = make_item("/a.csv", b"")
@@ -99,12 +112,12 @@ class TestDecorators:
         )
 
     def test_options_without_annotation(self):
-        @view(format=Csv, engine=None)
+        @view(format=Csv, engine=PythonEngine)
         def plain(fmt, ctx, options, limits):
             return TextView(text="")
 
         assert plain.options_model is SupportOptions
-        assert plain.library == "python"
+        assert plain.engine.key == "python"
 
     @pytest.mark.parametrize(
         "function",
@@ -130,7 +143,7 @@ class TestDecorators:
         ("arguments", "message"),
         [
             ({"format": str}, "format must be a DataFormat class"),
-            ({"engine": "duck"}, "engine must be an Engine class or None"),
+            ({"engine": "duck"}, "engine must be an Engine class"),
             ({"requires": [MissingPackage()]}, "requires must be a tuple"),
             ({"check": True}, "check must be callable"),
             ({"name": "View {library}"}, r"name may hold only \{format\}"),
@@ -213,7 +226,7 @@ class TestRegister:
         def parquet(fmt, ctx, options, limits):
             return TextView(text="")
 
-        @view(format=Csv, engine=None)
+        @view(format=Csv, engine=PythonEngine)
         def python(fmt, ctx, options, limits):
             return TextView(text="")
 
@@ -370,6 +383,26 @@ class TestChain:
         item = make_item("/a.csv", b"")
         assert text_of(chain.view(Csv(), item, LIMITS, "duck")) == "old"
         assert chain.of(Csv(), item)[1] is csv_view
+
+    def test_a_support_given_replaces_the_engines_default(self, make_item):
+        # Its view, named as the default view, hides the action of that name;
+        # its recipes replace the engine's code actions.
+        old = type(
+            "OldDuck",
+            (FormatSupport,),
+            {
+                "format": Csv,
+                "engine": Duck,
+                "view": lambda self, *args: TextView(text="old"),
+                "recipe": lambda self, *args: {"Load the old way": "old"},
+            },
+        )
+        chain = ActionChain([old, csv_view, csv_widget, csv_code])
+        item = make_item("/a.csv", b"")
+        assert chain.view_names(Csv(), item, "duck") == ["View CSV", "Widget for CSV"]
+        assert text_of(chain.view(Csv(), item, LIMITS, "duck", "View CSV")) == "old"
+        recipes = chain.recipes(Csv(), item)
+        assert [(r.title, r.code) for r in recipes] == [("Load the old way", "old")]
 
 
 class TestExplorer:

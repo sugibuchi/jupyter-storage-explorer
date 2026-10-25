@@ -82,11 +82,11 @@ class TestReading:
             item.read_whole(ViewLimits(max_whole_file_bytes=5))
 
 
-def test_library_url(tmp_path, make_item):
+def test_url_or_local_path(tmp_path, make_item):
     local = local_item(tmp_path)
-    assert local.library_url == tmp_path.as_posix()  # polars and pandas take it
+    assert local.url_or_local_path == tmp_path.as_posix()  # polars and pandas take it
     s3 = make_item("/k", b"", location=S3Location(bucket="b", key="k"))
-    assert s3.library_url == "s3://b/k"
+    assert s3.url_or_local_path == "s3://b/k"
 
 
 def test_format_kwargs_leaves_out_none():

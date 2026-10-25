@@ -1,8 +1,9 @@
-"""The built-in actions, which need no engine, only the explorer's own
-packages: views of text and code (highlighted), Markdown and JSON from the
-beginning of the file, and of images, which the browser shows; and code
-reading text and JSON with fsspec, and images with Pillow, for any storage.
-Their options are the "python" entry of ``engine_options``.
+"""Python alone as an engine (``PythonEngine``) and its actions, the
+built-in ones, which need only the explorer's own packages: views of text and
+code (highlighted), Markdown and JSON from the beginning of the file, and of
+images, which the browser shows; and code reading text and JSON with fsspec,
+and images with Pillow, for any storage. Their options are the "python"
+entry of ``engine_options``.
 
 They are the models of actions for plugins: each a function, its options
 class imported at run time (``FsspecOptions`` here), registered in order in
@@ -12,6 +13,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from inspect import cleandoc
 from typing import TYPE_CHECKING, Any
 
 from pygments import highlight
@@ -21,6 +23,7 @@ from pygments.util import ClassNotFound
 
 from jupyter_storage_explorer.formats.actions import code, register_actions, view
 from jupyter_storage_explorer.formats.base import ItemContext
+from jupyter_storage_explorer.formats.engine import Engine
 from jupyter_storage_explorer.formats.images import Image
 from jupyter_storage_explorer.formats.packages import Fsspec, Pillow
 from jupyter_storage_explorer.formats.support import (
@@ -37,15 +40,40 @@ from jupyter_storage_explorer.formats.view import (
     View,
     ViewLimits,
 )
+from jupyter_storage_explorer.util import format_size
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
+__all__ = [
+    "BUILT_IN_ACTIONS",
+    "FsspecOptions",
+    "PythonEngine",
+    "image_code",
+    "image_view",
+    "json_code",
+    "json_view",
+    "markdown_view",
+    "text_code",
+    "text_view",
+]
+
+
+class PythonEngine(Engine):
+    """Python alone, with the explorer's own packages: the engine of the
+    built-in actions. Explorers offer it in no menu: its views are those of
+    formats no engine chosen handles. Its actions' options are
+    ``engine_options["python"]``."""
+
+    key = "python"
+    label = "Python"
+    requirements = ()
+
 
 def _size_note(ctx: ItemContext, limits: ViewLimits) -> str:
     """The note under a view of the file's beginning."""
-    total = f" of {ctx.size:,} bytes" if ctx.size is not None else ""
-    return f"First {limits.max_bytes // 1024} KB{total}"
+    total = f" of {format_size(ctx.size)}" if ctx.size is not None else ""
+    return f"First {format_size(limits.max_bytes)}{total}"
 
 
 def _highlight(text: str, language: str | None) -> str | None:
@@ -110,17 +138,48 @@ class FsspecOptions(SupportOptions):
         return format_kwargs(**(self.code_value("storage_options") or {}))
 
 
-@code(format=Text, engine=None, name=READ_TEXT, requires=(Fsspec(),))
+# The code's templates: {url} and {kwargs}, the storage options fit to show.
+TEXT_TEMPLATE = cleandoc("""
+    import fsspec
+
+    with fsspec.open({url}, 'rt'{kwargs}) as f:
+        text = f.read()
+    """)
+
+JSON_TEMPLATE = cleandoc("""
+    import json
+
+    import fsspec
+
+    with fsspec.open({url}, 'rt'{kwargs}) as f:
+        data = json.load(f)
+    """)
+
+IMAGE_TEMPLATE = cleandoc("""
+    import fsspec
+    import PIL.Image
+
+    with fsspec.open({url}, 'rb'{kwargs}) as f:
+        img = PIL.Image.open(f)
+        img.load()
+    img
+    """)
+
+
+def _fsspec_code(template: str, ctx: ItemContext, options: FsspecOptions) -> str:
+    """``template`` filled for the item."""
+    return template.format(
+        url=repr(ctx.url_or_local_path), kwargs=options.code_kwargs()
+    )
+
+
+@code(format=Text, engine=PythonEngine, name=READ_TEXT, requires=(Fsspec(),))
 def text_code(fmt: Text, ctx: ItemContext, options: FsspecOptions) -> str:
     """Text read with fsspec."""
-    return f"""\
-import fsspec
-
-with fsspec.open({ctx.library_url!r}, 'rt'{options.code_kwargs()}) as f:
-    text = f.read()"""
+    return _fsspec_code(TEXT_TEMPLATE, ctx, options)
 
 
-@view(format=Text, engine=None, code=text_code)
+@view(format=Text, engine=PythonEngine, code=text_code)
 def text_view(
     fmt: Text, ctx: ItemContext, options: FsspecOptions, limits: ViewLimits
 ) -> View:
@@ -131,7 +190,7 @@ def text_view(
     return _text_view(text, fmt.language(ctx.path), note)
 
 
-@view(format=Markdown, engine=None)
+@view(format=Markdown, engine=PythonEngine)
 def markdown_view(
     fmt: Markdown, ctx: ItemContext, options: SupportOptions, limits: ViewLimits
 ) -> View:
@@ -142,19 +201,13 @@ def markdown_view(
     return MarkdownView(text=text, note=note)
 
 
-@code(format=Json, engine=None, name=LOAD_VALUE, requires=(Fsspec(),))
+@code(format=Json, engine=PythonEngine, name=LOAD_VALUE, requires=(Fsspec(),))
 def json_code(fmt: Json, ctx: ItemContext, options: FsspecOptions) -> str:
     """The JSON value, loaded with fsspec and Python's json."""
-    return f"""\
-import json
-
-import fsspec
-
-with fsspec.open({ctx.library_url!r}, 'rt'{options.code_kwargs()}) as f:
-    data = json.load(f)"""
+    return _fsspec_code(JSON_TEMPLATE, ctx, options)
 
 
-@view(format=Json, engine=None, code=json_code)
+@view(format=Json, engine=PythonEngine, code=json_code)
 def json_view(
     fmt: Json, ctx: ItemContext, options: FsspecOptions, limits: ViewLimits
 ) -> View:
@@ -169,7 +222,7 @@ def json_view(
         return _text_view(text, "json", f"Invalid JSON: {exc}")
 
 
-@view(format=Image, engine=None)
+@view(format=Image, engine=PythonEngine)
 def image_view(
     fmt: Image, ctx: ItemContext, options: SupportOptions, limits: ViewLimits
 ) -> View:
@@ -184,8 +237,8 @@ def image_view(
     try:
         return MediaView(mime=mime, src=ctx.fs.sign(ctx.path))
     except NotImplementedError:
-        limit = limits.max_whole_file_bytes // (1024 * 1024)
-        raise ValueError(f"too large to view (over {limit} MB)") from None
+        limit = format_size(limits.max_whole_file_bytes)
+        raise ValueError(f"too large to view (over {limit})") from None
 
 
 def _not_svg(fmt: Image, ctx: ItemContext, options: SupportOptions) -> bool:
@@ -195,7 +248,7 @@ def _not_svg(fmt: Image, ctx: ItemContext, options: SupportOptions) -> bool:
 
 @code(
     format=Image,
-    engine=None,
+    engine=PythonEngine,
     name=OPEN_IMAGE,
     requires=(Fsspec(), Pillow()),
     check=_not_svg,
@@ -203,14 +256,7 @@ def _not_svg(fmt: Image, ctx: ItemContext, options: SupportOptions) -> bool:
 def image_code(fmt: Image, ctx: ItemContext, options: FsspecOptions) -> str:
     """The image, read with fsspec and opened with Pillow. Pillow is needed
     by this code only: images are viewed without it."""
-    return f"""\
-import fsspec
-import PIL.Image
-
-with fsspec.open({ctx.library_url!r}, 'rb'{options.code_kwargs()}) as f:
-    img = PIL.Image.open(f)
-    img.load()
-img"""
+    return _fsspec_code(IMAGE_TEMPLATE, ctx, options)
 
 
 # In the order tried: Markdown before Text, of which it is one.

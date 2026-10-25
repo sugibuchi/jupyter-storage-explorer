@@ -12,6 +12,7 @@ from jupyter_storage_explorer._explorer.common import (
     error_text,
     within_top,
 )
+from jupyter_storage_explorer.util import format_size
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -88,7 +89,7 @@ class JupyterLabFilesMixin:
             if size is not None and size > jupyterlab_files.MAX_BYTES:
                 raise ValueError(
                     f"too large to open in JupyterLab "
-                    f"(over {jupyterlab_files.MAX_BYTES // (1024 * 1024)} MB)"
+                    f"(over {format_size(jupyterlab_files.MAX_BYTES)})"
                 )
             data = self._read_bytes(path, fs)
             model = jupyterlab_files.contents_model(

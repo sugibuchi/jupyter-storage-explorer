@@ -15,6 +15,8 @@ import os
 import tempfile
 from typing import TYPE_CHECKING
 
+from jupyter_storage_explorer.util import format_size
+
 if TYPE_CHECKING:
     from fsspec import AbstractFileSystem
 
@@ -71,12 +73,3 @@ class IncomingFiles:
         if incoming is not None:
             with contextlib.suppress(FileNotFoundError):
                 os.unlink(incoming.path)
-
-
-def format_size(size: float) -> str:
-    """E.g. "10 MB" or "1.5 GB", as shown to users."""
-    for unit in ("B", "KB", "MB", "GB"):
-        if size < 1024 or unit == "GB":
-            return f"{size:g} {unit}" if size == int(size) else f"{size:.1f} {unit}"
-        size /= 1024
-    raise AssertionError("unreachable")

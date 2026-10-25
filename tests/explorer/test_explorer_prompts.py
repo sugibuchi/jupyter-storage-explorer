@@ -240,5 +240,5 @@ def test_the_first_part_said_in_the_data_browser(memfs):
     first = answer(explorer, value="Its first 1 KB")
     assert first["query"]["mode"]["partial"] is True
     preview(explorer, "/data/large.csv")
-    whole = answer(explorer, value="The whole file (5 KB)")
+    whole = answer(explorer, value="The whole file (5.9 KB)")
     assert whole["query"]["mode"]["partial"] is False

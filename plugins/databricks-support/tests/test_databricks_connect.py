@@ -4,26 +4,29 @@ the workspace of fsspec-databricks' filesystem, and the code."""
 
 from __future__ import annotations
 
+import sys
 from types import SimpleNamespace
 
 import pytest
 from fsspec import AbstractFileSystem
 from fsspec.implementations.dirfs import DirFileSystem
 from jupyter_storage_explorer_databricks_support import (
+    DATABRICKS_ACTIONS,
     DATABRICKS_PROTOCOLS,
-    CsvByDatabricksConnect,
-    DatabricksConnect,
+    DATABRICKS_SESSIONS,
     DatabricksConnectEngine,
     DatabricksSupport,
-    DeltaLakeByDatabricksConnect,
-    JsonLinesByDatabricksConnect,
-    ParquetByDatabricksConnect,
     databricks_session,
+    delta_as_data_frame,
+    delta_view,
+    parquet_as_data_frame,
+    parquet_view,
 )
+from jupyter_storage_explorer_pyspark_support import ParquetByPySparkOptions
 from jupyter_storage_explorer_pyspark_support import (
-    ParquetByPySpark,
-    ParquetByPySparkOptions,
+    parquet_as_data_frame as parquet_by_pyspark,
 )
+from jupyter_storage_explorer_pyspark_support import parquet_view as pyspark_view
 
 from jupyter_storage_explorer.filesystems import S3Location
 from jupyter_storage_explorer.formats import Parquet
@@ -67,8 +70,10 @@ def connect(monkeypatch):
         def getOrCreate(self):
             return state.session
 
+    # What databricks_session imports: databricks.connect's DatabricksSession.
     module = SimpleNamespace(DatabricksSession=SimpleNamespace(builder=Builder()))
-    monkeypatch.setattr(DatabricksConnect, "load", lambda self, sub=None: module)
+    monkeypatch.setitem(sys.modules, "databricks", SimpleNamespace(connect=module))
+    monkeypatch.setitem(sys.modules, "databricks.connect", module)
     return state
 
 
@@ -92,7 +97,7 @@ class TestSession:
     def test_the_views_session(self, connect, make_item):
         item = make_item("/a.parquet", b"")
         options = ParquetByPySparkOptions(session_options={"a.b": "1"})
-        assert ParquetByDatabricksConnect().session(item, options) is connect.session
+        assert DATABRICKS_SESSIONS.session(item, options) is connect.session
         assert connect.session.set == [("a.b", "1")]
 
 
@@ -105,11 +110,7 @@ class TestCode:
                 "spark.hadoop.fs.azure.account.key.a.dfs.core.windows.net": "s3cr3t",
             }
         )
-        [code] = (
-            ParquetByDatabricksConnect()
-            .recipe(Parquet(), make_item("/a.parquet", b""), options)
-            .values()
-        )
+        code = parquet_as_data_frame(Parquet(), make_item("/a.parquet", b""), options)
         assert code == (
             "from databricks.connect import DatabricksSession\n"
             "\n"
@@ -119,55 +120,47 @@ class TestCode:
         )
 
     def test_pysparks_unchanged(self, make_item):
-        [code] = (
-            ParquetByPySpark()
-            .recipe(Parquet(), make_item("/a.parquet", b""), ParquetByPySparkOptions())
-            .values()
-        )
+        item = make_item("/a.parquet", b"")
+        code = parquet_by_pyspark(Parquet(), item, ParquetByPySparkOptions())
         assert code.startswith("from pyspark.sql import SparkSession\n")
 
 
 def test_the_engine():
-    supports = DatabricksSupport().format_supports
-    assert set(supports) == {
-        CsvByDatabricksConnect,
-        DeltaLakeByDatabricksConnect,
-        JsonLinesByDatabricksConnect,
-        ParquetByDatabricksConnect,
-    }
-    for support in supports:
-        assert support.engine is DatabricksConnectEngine
+    actions = DatabricksSupport().actions
+    assert actions == DATABRICKS_ACTIONS
+    assert {a.format.name for a in actions} == {"csv", "delta", "json-lines", "parquet"}
+    for action in actions:
+        assert action.engine is DatabricksConnectEngine
     assert DatabricksConnectEngine.key == "databricks-connect"
-    assert [p.package for p in DatabricksConnectEngine.packages()] == [
+    assert [p.package for p in DatabricksConnectEngine.requirements] == [
         "databricks-connect"
     ]
     # Databricks has Delta Lake: no delta-spark.
-    assert DeltaLakeByDatabricksConnect.additional_requirements == ()
+    assert delta_view.requires == delta_as_data_frame.requires == ()
+
+
+def test_one_options_class_per_format():
+    # A format's view and code take the same options.
+    by_format: dict[type, set[type]] = {}
+    for action in DATABRICKS_ACTIONS:
+        by_format.setdefault(action.format, set()).add(action.options_model)
+    assert all(len(models) == 1 for models in by_format.values())
 
 
 class TestSupportedProtocols:
     """The cluster reads the item's URL: not the kernel's local files."""
 
     def test_databricks_default(self, make_item, tmp_path):
-        support = ParquetByDatabricksConnect()
-        options = support.options_model()
+        options = parquet_view.options_model()
         assert options.supported_protocols == DATABRICKS_PROTOCOLS
         on_s3 = make_item("/a.parquet", b"", location=S3Location(bucket="b", key="a"))
-        assert support.supports(Parquet(), on_s3, options, "view")
-        assert not support.supports(Parquet(), local_item(tmp_path), options, "view")
+        assert parquet_view.does(Parquet(), on_s3, options)
+        assert not parquet_view.does(Parquet(), local_item(tmp_path), options)
         # pyspark-support's own default still takes local files.
-        assert ParquetByPySpark().supports(
-            Parquet(), local_item(tmp_path), ParquetByPySparkOptions(), "view"
+        assert pyspark_view.does(
+            Parquet(), local_item(tmp_path), ParquetByPySparkOptions()
         )
 
-    @pytest.mark.parametrize(
-        "support",
-        [
-            CsvByDatabricksConnect,
-            JsonLinesByDatabricksConnect,
-            ParquetByDatabricksConnect,
-            DeltaLakeByDatabricksConnect,
-        ],
-    )
-    def test_every_format(self, support):
-        assert "file" not in support.options_model().supported_protocols
+    @pytest.mark.parametrize("action", DATABRICKS_ACTIONS)
+    def test_every_format(self, action):
+        assert "file" not in action.options_model().supported_protocols

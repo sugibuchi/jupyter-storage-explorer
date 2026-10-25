@@ -7,20 +7,26 @@ The plugin, ``DuckDBSupport``, is found by explorers through its entry point
 (``duckdb-support``); its libraries are installed with the "full" extra."""
 
 from jupyter_storage_explorer import StorageExplorerPlugin
-from jupyter_storage_explorer_duckdb_support.supports import (
-    CsvByDuckDB,
+from jupyter_storage_explorer_duckdb_support.actions import (
+    DUCKDB_ACTIONS,
     CsvByDuckDBOptions,
-    DeltaLakeByDuckDB,
     DeltaLakeByDuckDBOptions,
     DuckDB,
     DuckDBDatabase,
-    DuckDBDatabaseByDuckDB,
     DuckDBEngine,
     DuckDBOptions,
-    JsonLinesByDuckDB,
     JsonLinesByDuckDBOptions,
-    ParquetByDuckDB,
     ParquetByDuckDBOptions,
+    csv_as_relation,
+    csv_view,
+    database_code,
+    database_view,
+    delta_as_relation,
+    delta_view,
+    json_lines_as_relation,
+    json_lines_view,
+    parquet_as_relation,
+    parquet_view,
 )
 
 
@@ -28,29 +34,29 @@ class DuckDBSupport(StorageExplorerPlugin):
     key = "duckdb-support"
 
     @property
-    def format_supports(self):
-        return (
-            DeltaLakeByDuckDB,
-            ParquetByDuckDB,
-            CsvByDuckDB,
-            JsonLinesByDuckDB,
-            DuckDBDatabaseByDuckDB,
-        )
+    def actions(self):
+        return DUCKDB_ACTIONS
 
 
 __all__ = [
-    "CsvByDuckDB",
+    "DUCKDB_ACTIONS",
     "CsvByDuckDBOptions",
-    "DeltaLakeByDuckDB",
     "DeltaLakeByDuckDBOptions",
     "DuckDB",
     "DuckDBDatabase",
-    "DuckDBDatabaseByDuckDB",
     "DuckDBEngine",
     "DuckDBOptions",
     "DuckDBSupport",
-    "JsonLinesByDuckDB",
     "JsonLinesByDuckDBOptions",
-    "ParquetByDuckDB",
     "ParquetByDuckDBOptions",
+    "csv_as_relation",
+    "csv_view",
+    "database_code",
+    "database_view",
+    "delta_as_relation",
+    "delta_view",
+    "json_lines_as_relation",
+    "json_lines_view",
+    "parquet_as_relation",
+    "parquet_view",
 ]

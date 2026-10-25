@@ -150,10 +150,10 @@ class TestMerging:
             "system",
             """
             from jupyter_storage_explorer.filesystems import FsspecOperations
-            from jupyter_storage_explorer_pandas_support import CsvByPandas
+            from jupyter_storage_explorer_pandas_support import csv_view
 
             def supports():
-                return [CsvByPandas]
+                return [csv_view]
 
             def operations():
                 return [FsspecOperations()]
@@ -168,10 +168,10 @@ class TestMerging:
             "user",
             """
             from jupyter_storage_explorer.filesystems.operation import FileSystemOperations
-            from jupyter_storage_explorer_pandas_support import JsonByPandas
+            from jupyter_storage_explorer_pandas_support import json_lines_view
 
             def supports():
-                return [JsonByPandas()]
+                return [json_lines_view]
 
             def operations():
                 return [FileSystemOperations()]
@@ -183,8 +183,8 @@ class TestMerging:
         )
         _, kwargs = load_settings([user, system]).explorer_arguments()
         # The user's first; the explorer tries the defaults after them.
-        supports = [s if isinstance(s, type) else type(s) for s in kwargs["supports"]]
-        assert [s.__name__ for s in supports] == ["JsonByPandas", "CsvByPandas"]
+        names = [s.function.__name__ for s in kwargs["supports"]]
+        assert names == ["json_lines_view", "csv_view"]
         kinds = [type(o) for o in kwargs["operations"]]
         assert kinds == [FileSystemOperations, FsspecOperations]
         mappers = [type(m).__name__ for m in kwargs["filesystem_mappers"]]

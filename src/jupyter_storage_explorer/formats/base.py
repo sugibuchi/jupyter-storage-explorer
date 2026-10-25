@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from jupyter_storage_explorer import _paths
 from jupyter_storage_explorer.filesystems.locations import LocalLocation
+from jupyter_storage_explorer.util import format_size
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
@@ -35,7 +36,7 @@ class ItemContext:
     location : Location
         Where it is, independently of fsspec: what formats keep what they
         find by (e.g. a Parquet dataset's layout); libraries doing their own
-        I/O read ``library_url``.
+        I/O read ``url_or_local_path``.
     fs : AbstractFileSystem
         The explorer's filesystem it is on, with its credentials, which
         ``head``, ``head_text`` and ``read_whole`` read it through.
@@ -57,11 +58,11 @@ class ItemContext:
         The names of a folder's items; empty for a file.
     size : int or None
         A file's size in bytes, if its filesystem tells it (from ``info``).
-    library_url : str
+    url_or_local_path : str
         Where most libraries read it (polars, pandas, DuckDB, ...): its
         location's URL, but a local file's plain path, which they all take
         (not all of them read ``file://`` URLs). Spark reads its own
-        spelling of ``location.url`` (``supports.pyspark.spark_url``).
+        spelling of ``location.url`` (pyspark-support's ``spark_url``).
     """
 
     location: Location
@@ -92,7 +93,7 @@ class ItemContext:
         return self.info.get("size")
 
     @property
-    def library_url(self) -> str:
+    def url_or_local_path(self) -> str:
         location = self.location
         return location.path if isinstance(location, LocalLocation) else location.url
 
@@ -128,8 +129,8 @@ class ItemContext:
         """The whole file, for formats that cannot be read in part.
         ValueError if it is larger than ``limits.max_whole_file_bytes``."""
         if self.size is not None and self.size > limits.max_whole_file_bytes:
-            limit = limits.max_whole_file_bytes // (1024 * 1024)
-            raise ValueError(f"too large to view (over {limit} MB)")
+            limit = format_size(limits.max_whole_file_bytes)
+            raise ValueError(f"too large to view (over {limit})")
         return self.fs.cat_file(self.path)
 
 
