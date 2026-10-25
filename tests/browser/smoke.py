@@ -1562,6 +1562,21 @@ def user_actions(lab: Lab, page: Page) -> None:
     reversed_view(x)
 
 
+@lab_check
+def reload_actions(lab: Lab, page: Page) -> None:
+    # An explorer created before the user's file: "Reload actions", in the
+    # settings menu, reads it and lists the folder again with its format.
+    x = Explorer(lab, page, USER_ACTIONS)
+    expect(x.row("b.abc")).to_be_visible()
+    with lab.user_actions("reversed.py", USER_ACTIONS_FILE):
+        x.el.locator(".jse-settings-btn").click()
+        x.menu_item("Reload actions").click()
+        expect(x.status).to_contain_text("Actions reloaded: 2 of yours")
+    x.row("b.abc").click()
+    expect(x.preview.locator(".jse-text")).to_have_text("QUIET")
+    reversed_view(x)
+
+
 def reversed_view(x: Explorer) -> None:
     """In ``x``, a.txt's default view, then the user's "Reversed" chosen in
     "Preview as"."""

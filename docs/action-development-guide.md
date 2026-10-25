@@ -50,7 +50,7 @@ def pretty_print_json(url):
     return PRETTY_PRINT.format(url=url)
 ```
 
-Save it in your actions file, and create the explorer again: run its cell again, or open a new tab. Right-click a file named `*.json`: **Python code** now
+Save it in your actions file, and choose **Reload actions** in the explorer's ⚙ menu. Right-click a file named `*.json`: **Python code** now
 offers "Pretty print json".
 
 The template is a multi-line string, with `{url!r}` where the file's URL goes, in quotes. `.strip()` removes the
@@ -366,6 +366,7 @@ format, the name, the path, the size and the options. It never reads the file.
 
 - A file that cannot be read, e.g. with a syntax error, is left out with a warning, under the explorer's cell. The
   explorer still opens, with the other files' actions.
+- On **Reload actions**, the explorer shows such a file's error instead, and keeps the other files' actions.
 - A file with an action of the same label as another one is left out too: give it another label.
 - What a view raises is shown in the preview panel as the item's error.
 - What a code action raises is shown in **Python code** in place of its snippet.
@@ -373,6 +374,8 @@ format, the name, the path, the size and the options. It never reads the file.
 ## How the files are read
 
 - Every explorer reads the files when it is created, in notebooks, the launcher's tabs and the side panel.
+- **Reload actions** reads them again, and lists the folder shown again. The preview open keeps its view until you open
+  another.
 - It reads `actions.py` first, then the folder's files by name.
 - Files whose names start with `_` are not read, so they can hold code the others share.
 - A file gives every action defined in it, in order. A list named `ACTIONS` gives only the actions it names.
@@ -381,7 +384,8 @@ format, the name, the path, the size and the options. It never reads the file.
 
 ## Turning them off
 
-`StorageExplorer(user_actions="disabled")` reads no actions files, and its menu has no **Edit actions**.
+`StorageExplorer(user_actions="disabled")` reads no actions files, and its menu has neither **Edit actions** nor
+**Reload actions**.
 
 In the launcher's tabs, an administrator can turn them off for everyone in a system `launcher.py`:
 

@@ -14,7 +14,6 @@ import traitlets
 from jupyter_storage_explorer import _paths, _static
 from jupyter_storage_explorer._callbacks import Callbacks
 from jupyter_storage_explorer._explorer.about import AboutMixin
-from jupyter_storage_explorer._explorer.actions import ActionChain
 from jupyter_storage_explorer._explorer.bookmarks import BookmarksMixin
 from jupyter_storage_explorer._explorer.common import (
     explorers,
@@ -22,7 +21,6 @@ from jupyter_storage_explorer._explorer.common import (
     within_top,
 )
 from jupyter_storage_explorer._explorer.folders import FoldersMixin
-from jupyter_storage_explorer._explorer.icons import format_icons
 from jupyter_storage_explorer._explorer.jobs import JobsMixin
 from jupyter_storage_explorer._explorer.jupyterlab import JupyterLabFilesMixin
 from jupyter_storage_explorer._explorer.listing import Listing
@@ -30,6 +28,7 @@ from jupyter_storage_explorer._explorer.mapper_css import mapper_key, mapper_sty
 from jupyter_storage_explorer._explorer.previews import PreviewsMixin, action_id
 from jupyter_storage_explorer._explorer.requests import FileRequestsMixin
 from jupyter_storage_explorer._explorer.states import ExplorerStates, explorer_states
+from jupyter_storage_explorer._explorer.user_actions import UserActionsMixin
 from jupyter_storage_explorer._extensions.plugins import PluginComponents, load_plugins
 from jupyter_storage_explorer._extensions.user_actions import (
     create_user_actions_file,
@@ -52,7 +51,6 @@ from jupyter_storage_explorer.filesystems import (
 from jupyter_storage_explorer.filesystems.mapper import protocols
 from jupyter_storage_explorer.formats import (
     DataFormat,
-    Text,
     ViewLimits,
 )
 from jupyter_storage_explorer.formats.defaults import (
@@ -67,6 +65,7 @@ if TYPE_CHECKING:
     import narwhals as nw
     from fsspec import AbstractFileSystem
 
+    from jupyter_storage_explorer._explorer.actions import ActionChain
     from jupyter_storage_explorer._explorer.previews import _Asking, _Detected
     from jupyter_storage_explorer._explorer.table_set_tab import TableSetTab
     from jupyter_storage_explorer._explorer.view_tab import ViewTab
@@ -179,6 +178,7 @@ class StorageExplorer(
     JupyterLabFilesMixin,
     JobsMixin,
     FileRequestsMixin,
+    UserActionsMixin,
     anywidget.AnyWidget,
 ):
     """Browse any fsspec-supported storage with a directory tree and a file list.
@@ -642,15 +642,14 @@ class StorageExplorer(
         # Plugins, installed to enrich or change the explorer, come first;
         # then its own; then actions given and the user's files', additions
         # to them rather than replacements.
+        # The user's are read again by "Reload actions" (see
+        # _explorer/user_actions.py), so the rest is kept.
         given = list(actions or ())
-        others = [*components.actions, *self.default_actions(), *given]
-        mine = self._users_actions(user_actions, others)
-        self._actions = ActionChain(
-            [*others, *mine],
-            engine_options,
-            formats=[*components.formats, *DEFAULT_FORMATS],
-            engine_preference=engine_preference,
-        )
+        self._other_actions = [*components.actions, *self.default_actions(), *given]
+        self._chain_formats = [*components.formats, *DEFAULT_FORMATS]
+        self._chain_options = (engine_options, engine_preference)
+        mine = self._users_actions(user_actions, self._other_actions)
+        self._actions = self._chain_of(mine)
         self._formats = self._actions.formats
         # The engines whose code "Python code" shows (None: all).
         self._code_engines = _code_engines(code_snippet, self._actions)
@@ -682,7 +681,6 @@ class StorageExplorer(
         self._remembered: dict[str, str] = {}
         name = next(iter(self._filesystems))
         self._fs: AbstractFileSystem = self._filesystems[name].fs
-        icons, svgs = format_icons(self._formats)
         super().__init__(
             _height=height,
             _tree_view=tree_view,
@@ -695,10 +693,7 @@ class StorageExplorer(
             _columns=_DEFAULT_COLUMNS[layout]
             if (remembered := self._states.columns(layout)) is None
             else remembered,
-            _format_labels={f.name: f.label for f in self._formats},
-            _text_formats=[f.name for f in self._formats if isinstance(f, Text)],
-            _format_icons=icons,
-            _file_icon_svgs=svgs,
+            **self._format_traits(),
             _mapper_css=mapper_styles(
                 self._mappers.mapper_in(storage.fs)
                 for storage in self._filesystems.values()
@@ -1148,6 +1143,7 @@ class StorageExplorer(
             "jupyterlab_get": self._jupyterlab_get,
             "jupyterlab_save": self._jupyterlab_save,
             "settings_open": self._settings_open,
+            "reload_actions": self._reload_actions,
             "about": lambda c: self._about(),
             # File operations: most start a job (see _start).
             "move": self._move_request,

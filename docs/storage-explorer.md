@@ -361,7 +361,8 @@ To view or load a format your own way, see [Actions of your own](#actions-of-you
 
 Views and code of your own, called actions, go in `~/.jupyter/storage-explorer/actions.py`. The ⚙ menu's
 **Edit actions** opens it in JupyterLab's editor, created from a commented example if it is missing. Every explorer
-then offers them in **Preview as** and **Python code**, beside its own.
+then offers them in **Preview as** and **Python code**, beside its own. **Reload actions**, in the same menu, applies
+a change to the file.
 
 The [Action development guide](action-development-guide.md) shows how, step by step.
 

@@ -2,9 +2,9 @@
 #
 # Views and code of your own, for every explorer: in notebooks, the launcher's
 # tabs and the side panel. Each function decorated with @view or @code below
-# is an action. Uncomment the example and edit it, then create the explorer
-# again (run its cell again, or open a new tab) to apply the changes; a file
-# with an error is left out, with a warning.
+# is an action. Uncomment the example and edit it, then choose "Reload
+# actions" in the explorer's settings menu to apply the changes; a file with
+# an error is left out, with its error.
 #
 # See "Action development guide":
 # https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/action-development-guide.md
