@@ -31,7 +31,7 @@ def make(lab: Lab) -> None:
         _lab.calm(page)
         # From the Unsafe mode switch to the settings button, its menu open.
         tab.locator(".jse-settings-btn").click()
-        menu = tab.locator(".jse-menu:not(.jse-submenu)").first
+        menu = page.locator(".jse-menu:not(.jse-submenu)").first
         menu.wait_for(state="visible")
         page.wait_for_timeout(500)
         _, y0, _, _ = box(tab.locator(".jse-toolbar"))
@@ -43,7 +43,7 @@ def make(lab: Lab) -> None:
 
         # A user without settings yet: the file is created from the template.
         path.unlink()  # read when the tab started
-        tab.locator(
+        page.locator(
             ".jse-menu:not(.jse-submenu) > .jse-menu-item:visible",
             has_text="Edit configuration",
         ).click()

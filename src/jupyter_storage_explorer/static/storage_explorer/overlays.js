@@ -88,10 +88,16 @@ function createModal(widgetEl) {
   };
 }
 
-// Menus: right-click menus, and the bookmarks button's. Kept inside the
-// widget (`widgetEl`), which clips what is outside it.
-function createMenu(widgetEl) {
+// Menus: right-click menus, and the toolbar's and status bar's. Shown in a
+// layer of the page's own (`document.body`), as JupyterLab's menus are, so
+// that they may cross the widget's borders, e.g. out of the narrow side
+// panel; kept inside the browser's window. The layer has the widget's class
+// for its colours and font, and is on the page only while a menu is open.
+function createMenu() {
   const el = h("div", { className: "jse-menu", hidden: true });
+  const layer = h("div", { className: "jse-widget jse-menu-layer" }, el);
+  // As the widget: JupyterLab's shortcuts do not fire on keys pressed in it.
+  layer.dataset.lmSuppressShortcuts = "true";
   // The button that opened the menu, if one did: pressing it again is left
   // to its click handler, which closes the menu, rather than closing it here
   // for the click to open it again.
@@ -112,6 +118,7 @@ function createMenu(widgetEl) {
 
   function hide() {
     el.hidden = true;
+    layer.remove();
     document.removeEventListener("pointerdown", onOutsidePointer, true);
     document.removeEventListener("keydown", onKey, true);
   }
@@ -160,6 +167,7 @@ function createMenu(widgetEl) {
     ev.preventDefault();
     ev.stopPropagation(); // keep JupyterLab's own context menu from opening
     el.replaceChildren(...rows(items));
+    document.body.append(layer);
     el.hidden = false;
     owner = null;
     at = { x: ev.clientX, y: ev.clientY };
@@ -186,25 +194,32 @@ function createMenu(widgetEl) {
     }
   }
 
-  // Places the menu at the pointer, kept inside the widget. Called again when
-  // rows appear later ("Preview as").
+  // The browser's window, which menus stay inside (client coordinates).
+  function windowBox() {
+    const { clientWidth, clientHeight } = document.documentElement;
+    return { left: 0, top: 0, right: clientWidth, bottom: clientHeight };
+  }
+
+  // Places the menu at the pointer, kept inside the window. The layer is at
+  // the window's top left, so the menu's position is the pointer's. Called
+  // again when rows appear later ("Preview as").
   function place() {
     if (el.hidden) return;
     tidySeparators();
-    const box = widgetEl.getBoundingClientRect();
-    const x = Math.min(at.x - box.left, box.width - el.offsetWidth - 4);
-    const y = Math.min(at.y - box.top, box.height - el.offsetHeight - 4);
+    const box = windowBox();
+    const x = Math.min(at.x, box.right - el.offsetWidth - 4);
+    const y = Math.min(at.y, box.bottom - el.offsetHeight - 4);
     el.style.left = `${Math.max(0, x)}px`;
     el.style.top = `${Math.max(0, y)}px`;
   }
 
-  // Places the submenu `sub` of `row` inside the widget, from its own size:
+  // Places the submenu `sub` of `row` inside the window, from its own size:
   // on the right of the menu, else on its left, else, where neither has
-  // room (e.g. the side panel), over the menu below its row, so that the row
-  // stays in sight. It never goes above or below the widget either.
+  // room, over the menu below its row, so that the row stays in sight. It
+  // never goes above or below the window either.
   function placeSub(row, sub) {
     sub.style.display = "block"; // measured even before :hover shows it
-    const box = widgetEl.getBoundingClientRect();
+    const box = windowBox();
     const r = row.getBoundingClientRect();
     const width = sub.offsetWidth;
     const height = sub.offsetHeight;
