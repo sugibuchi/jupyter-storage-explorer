@@ -150,15 +150,9 @@ A view returns what to show:
 | A `str`                            | As text.                                                      |
 | A `dict` or a `list`               | As a collapsible tree.                                        |
 | A dataframe                        | In the data browser, to page, sort and filter. Best lazy.     |
-| `TextView(text=...)`               | Text; with `language`, e.g. `"sql"`, highlighted.             |
-| `MarkdownView(text=...)`           | Markdown, rendered.                                           |
-| `TreeView(value=...)`              | A JSON-like value, as a collapsible tree.                     |
-| `QueryView(data=...)`              | A dataframe, in the data browser.                             |
-| `TableView(columns=..., rows=...)` | A small table of values, without the data browser.            |
-| `MediaView(mime=..., data=...)`    | An image, from its bytes.                                     |
-| `TableSetView(nodes=..., loader=...)` | Several tables, e.g. a database's, in a tree or on tabs.   |
+| A view object                      | As the object says: see [Views](#views).                      |
 
-The view classes are in `jupyter_storage_explorer.formats`. For example, this view shows text files in upper case:
+For example, this view shows text files in upper case:
 
 ```python
 from jupyter_storage_explorer.formats import Text
@@ -171,11 +165,65 @@ def shout(ctx, limits):
     return text.upper()
 ```
 
-A view reading much, e.g. a whole large file, should ask first. Return a `ViewWithConfirmation`, `ViewWithChoice` or
-`ViewWithInput`, whose function makes the view once the user answers. The
-[Plugin development guide](plugin-development-guide.md#view-viewfmt-ctx-options-limits) has the details.
-
 ## Advanced actions
+
+### Views
+
+A view object shows more than plain data, e.g. highlighted text. The view classes are in
+`jupyter_storage_explorer.formats`:
+
+| View                                  | Shows                                                       |
+|---------------------------------------|-------------------------------------------------------------|
+| `TextView(text=...)`                  | Text; with `language`, e.g. `"sql"`, highlighted.           |
+| `MarkdownView(text=...)`              | Markdown, rendered.                                         |
+| `TreeView(value=...)`                 | A JSON-like value, as a collapsible tree.                   |
+| `QueryView(data=...)`                 | A dataframe, in the data browser.                           |
+| `TableView(columns=..., rows=...)`    | A small table of values, without the data browser.          |
+| `MediaView(mime=..., data=...)`       | An image, from its bytes.                                   |
+| `TableSetView(nodes=..., loader=...)` | Several tables, e.g. a database's, in a tree or on tabs.    |
+
+Each also takes a `title`, shown above the view, and a `note`, shown under it.
+
+A view reading much, e.g. a whole large file, should ask the user first. It returns a question, which shows a message
+and a button where the view would be:
+
+- `ViewWithConfirmation` makes the view once the user clicks the button;
+- `ViewWithChoice` offers choices, and makes the view of the one chosen;
+- `ViewWithInput` asks for a text, e.g. a password, and makes the view of it.
+
+Each takes a `message` and a `factory`, the function making the view of the answer. The factory returns a view
+object, not plain data.
+
+```python
+from jupyter_storage_explorer.formats import Csv, TextView, ViewWithChoice, ViewWithConfirmation
+from jupyter_storage_explorer.formats.actions import view
+
+
+@view(format=Csv, label="Whole file")
+def whole_file(fs, path, size):
+    def read():
+        return TextView(text=fs.cat_file(path).decode())
+
+    return ViewWithConfirmation(message=f"This reads the whole file ({size:,} bytes).", factory=read)
+
+
+@view(format=Csv, label="Head")
+def head(fs, path):
+    def read(n):
+        return TextView(text=fs.cat_file(path, start=0, end=n).decode(errors="replace"))
+
+    return ViewWithChoice(
+        message="How much to read?",
+        choices={"1 KB": 1024, "1 MB": 1024**2},
+        factory=read,
+        style="button",
+    )
+```
+
+- `button` is the button's label, "View" by default.
+- `ViewWithChoice`'s `style` is `"radio"`, `"dropdown"` or `"button"`, a button for each choice.
+- `with_cancel=True` adds a **Cancel** button to a choice, which shows nothing.
+- The answers are kept: when the data browser reads the data again, it asks no more.
 
 ### Labels
 
