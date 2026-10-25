@@ -1,38 +1,35 @@
-"""Formats handled with Spark (PySpark): the data browser, on a Spark
-DataFrame (lazy: each page a Spark job), and load code. Spark reads with its
-own storage configuration (``PySparkOptions.session_options``), and reads the
-item's URL, rewritten as Spark reads it (``spark_url``): the explorer's
-filesystem is not used, and storages Spark cannot reach (e.g. fsspec's
-memory filesystem) cannot be viewed."""
+"""Formats handled with Spark (PySpark), as actions: the data browser, on a
+Spark DataFrame (lazy: each page a Spark job), and load code. Spark reads
+with its own storage configuration (``PySparkOptions.session_options``), and
+reads the item's URL, rewritten as Spark reads it (``spark_url``): the
+explorer's filesystem is not used, and storages Spark cannot reach (e.g.
+fsspec's memory filesystem) cannot be viewed.
+
+Each format has a view and its code, registered in order in
+``PYSPARK_ACTIONS``. pyspark is imported inside the functions, so that the
+plugin loads without it."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field, fields
-from inspect import cleandoc
 from typing import TYPE_CHECKING, Any
 
 import narwhals as nw
 
+from jupyter_storage_explorer.formats.actions import code, register_actions, view
+from jupyter_storage_explorer.formats.base import DataFormat, ItemContext
 from jupyter_storage_explorer.formats.delta import DeltaLake
 from jupyter_storage_explorer.formats.engine import Engine
 from jupyter_storage_explorer.formats.package import PythonPackage
 from jupyter_storage_explorer.formats.packages import PyArrow
 from jupyter_storage_explorer.formats.parquet import Parquet
-from jupyter_storage_explorer.formats.support import (
-    FormatSupport,
-    SupportOptions,
-    format_kwargs,
-)
+from jupyter_storage_explorer.formats.support import SupportOptions, format_kwargs
 from jupyter_storage_explorer.formats.text import Csv, JsonLines
-from jupyter_storage_explorer.formats.view import QueryView
+from jupyter_storage_explorer.formats.view import QueryView, View, ViewLimits
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping, Sequence
+    from collections.abc import Callable, Mapping, Sequence
     from dataclasses import Field
-
-    from jupyter_storage_explorer.formats.base import DataFormat, ItemContext
-    from jupyter_storage_explorer.formats.support import Task
-    from jupyter_storage_explorer.formats.view import View, ViewLimits
 
 # Spark (Hadoop) names for storage URLs: TLS "abfss" for Azure, as Spark
 # expects it (storage accounts usually require secure transfer); "s3a", the
@@ -95,11 +92,12 @@ def spark_session(session_options: Mapping[str, Any] | None = None) -> Any:
     ``session_options`` are given to the session's builder (``config(key,
     value)``); with a session already running, ``getOrCreate`` returns it,
     applying those Spark can still change (runtime configuration)."""
-    spark_session_class = PySpark().load("sql").SparkSession
-    active = spark_session_class.getActiveSession()
+    from pyspark.sql import SparkSession
+
+    active = SparkSession.getActiveSession()
     if active is not None and not session_options:
         return active
-    builder = spark_session_class.builder
+    builder = SparkSession.builder
     for key, value in (session_options or {}).items():
         builder = builder.config(key, value)
     return builder.getOrCreate()
@@ -423,181 +421,267 @@ class DeltaLakeByPySparkOptions(PySparkOptions):
     version_as_of: int | None = None
 
 
-class _BySpark(FormatSupport):
-    """A format Spark reads, with its session and reader options.
+# How the actions make Spark sessions: pyspark-support's with pyspark's
+# SparkSession.builder (``PYSPARK_SESSIONS``). Another engine making them
+# another way, e.g. databricks-support's with Databricks Connect, defines its
+# own actions with the same helpers (``spark_csv_view``, ...) and its sessions.
 
-    Subclasses for another way of making sessions (databricks-support's, by
-    Databricks Connect) override ``session``, ``session_import`` and
-    ``session_code``, and set their own ``engine``."""
 
-    engine = PySparkEngine
-    options_model = PySparkOptions
-    # The code's import of what ``session_code`` uses.
-    session_import = "from pyspark.sql import SparkSession"
+@dataclass(frozen=True)
+class SparkSessions:
+    """How an engine makes Spark sessions, for the views and the code.
 
-    def supports(
-        self, fmt: DataFormat, ctx: ItemContext, options: PySparkOptions, task: Task
-    ) -> bool:
-        # Spark reads the item's URL itself, for the view and the code alike.
-        return super().supports(fmt, ctx, options, task) and options.reads(ctx)
+    Attributes
+    ----------
+    session : callable
+        ``session(ctx, options)``: the Spark session to read ``ctx``'s item
+        with, for a view.
+    code_import : str
+        The code's import of what ``code`` uses.
+    code : callable
+        ``code(ctx, options)``: the code's lines making the session,
+        ``spark``.
+    """
 
-    def session(self, ctx: ItemContext, options: PySparkOptions) -> Any:
-        """The Spark session to read ``ctx``'s item with."""
-        return spark_session(options.session_options)
+    session: Callable[[ItemContext, PySparkOptions], Any]
+    code_import: str
+    code: Callable[[ItemContext, PySparkOptions], str]
 
-    def session_code(self, ctx: ItemContext, options: PySparkOptions) -> str:
-        """The code's lines making the session, ``spark``."""
-        return options.session_code()
+
+def _pyspark_session(ctx: ItemContext, options: PySparkOptions) -> Any:
+    return spark_session(options.session_options)
+
+
+def _pyspark_session_code(ctx: ItemContext, options: PySparkOptions) -> str:
+    return options.session_code()
+
+
+PYSPARK_SESSIONS = SparkSessions(
+    session=_pyspark_session,
+    code_import="from pyspark.sql import SparkSession",
+    code=_pyspark_session_code,
+)
+
+
+def spark_reads(fmt: DataFormat, ctx: ItemContext, options: PySparkOptions) -> bool:
+    """The actions' check: Spark reads the item's URL itself, for the view
+    and the code alike (``PySparkOptions.reads``)."""
+    return options.reads(ctx)
+
+
+def _spark_view(
+    sessions: SparkSessions,
+    ctx: ItemContext,
+    options: PySparkOptions,
+    read: Callable[[Any, str], Any],
+    defaults: Mapping[str, Any] | None = None,
+) -> View:
+    """The data browser on ``read(reader, url)``, a Spark DataFrame: each
+    page a Spark job."""
+    spark = sessions.session(ctx, options)
+    data = read(options.reader(spark, defaults), _url(ctx))
+    return QueryView(data=data, fetch=spark_rows)
+
+
+def _spark_code(
+    sessions: SparkSessions,
+    ctx: ItemContext,
+    options: PySparkOptions,
+    call: str,
+    *,
+    defaults: Mapping[str, Any] | None = None,
+    note: str = "",
+) -> str:
+    """The code loading the item into a DataFrame: the session, then
+    ``spark.read``, its options and ``call`` of the URL, e.g. ".csv({url})"."""
+    session = sessions.code(ctx, options)
+    read = call.format(url=repr(_url(ctx)))
+    return (
+        f"{sessions.code_import}\n\n{note}{session}\n"
+        f"df = spark.read{options.reader_code(defaults)}{read}"
+    )
+
+
+def spark_csv_view(
+    sessions: SparkSessions,
+    fmt: Csv,
+    ctx: ItemContext,
+    options: CsvByPySparkOptions,
+    limits: ViewLimits,
+) -> View:
+    """CSV in the data browser, with the separator detected from the file's
+    beginning, read through the explorer, unless the options give one."""
+    defaults = {}
+    if options.sep is None:
+        text, _ = ctx.head_text(limits.max_bytes)
+        defaults["sep"] = fmt.separator(ctx.name, text)
+    return _spark_view(
+        sessions, ctx, options, lambda reader, url: reader.csv(url), defaults
+    )
+
+
+def spark_csv_code(
+    sessions: SparkSessions, fmt: Csv, ctx: ItemContext, options: CsvByPySparkOptions
+) -> str:
+    """CSV into a DataFrame, with the separator detected unless one is given."""
+    defaults = {} if options.sep is not None else {"sep": fmt.code_separator(ctx)}
+    return _spark_code(sessions, ctx, options, ".csv({url})", defaults=defaults)
+
+
+def spark_json_lines_view(
+    sessions: SparkSessions, ctx: ItemContext, options: JsonLinesByPySparkOptions
+) -> View:
+    """JSON Lines in the data browser."""
+    return _spark_view(sessions, ctx, options, lambda reader, url: reader.json(url))
+
+
+def spark_json_lines_code(
+    sessions: SparkSessions, ctx: ItemContext, options: JsonLinesByPySparkOptions
+) -> str:
+    """JSON Lines into a DataFrame: Spark reads one record per line by
+    default."""
+    return _spark_code(sessions, ctx, options, ".json({url})")
+
+
+def spark_parquet_view(
+    sessions: SparkSessions, ctx: ItemContext, options: ParquetByPySparkOptions
+) -> View:
+    """A Parquet file or a folder of them in the data browser: Spark finds
+    partitions itself."""
+    return _spark_view(sessions, ctx, options, lambda reader, url: reader.parquet(url))
+
+
+def spark_parquet_code(
+    sessions: SparkSessions, ctx: ItemContext, options: ParquetByPySparkOptions
+) -> str:
+    """A Parquet file or a folder of them into a DataFrame."""
+    return _spark_code(sessions, ctx, options, ".parquet({url})")
+
+
+def spark_delta_view(
+    sessions: SparkSessions, ctx: ItemContext, options: DeltaLakeByPySparkOptions
+) -> View:
+    """A Delta Lake table in the data browser."""
+    return _spark_view(
+        sessions, ctx, options, lambda reader, url: reader.format("delta").load(url)
+    )
+
+
+def spark_delta_code(
+    sessions: SparkSessions, ctx: ItemContext, options: DeltaLakeByPySparkOptions
+) -> str:
+    """A Delta Lake table into a DataFrame. The session is obtained, not
+    configured: Delta Lake's setup in Spark is left to the user."""
+    note = "# Needs Delta Lake in the Spark session (Databricks has it)\n"
+    return _spark_code(
+        sessions, ctx, options, '.format("delta").load({url})', note=note
+    )
 
 
 AS_DATA_FRAME = "Load as DataFrame"
 
 
-class CsvByPySpark(_BySpark):
-    format = Csv
-    options_model = CsvByPySparkOptions
-
-    def view(
-        self,
-        fmt: Csv,
-        ctx: ItemContext,
-        options: CsvByPySparkOptions,
-        limits: ViewLimits,
-    ) -> View:
-        # The separator from the beginning, read through the explorer, unless
-        # the options give one.
-        defaults = {}
-        if options.sep is None:
-            text, _ = ctx.head_text(limits.max_bytes)
-            defaults["sep"] = fmt.separator(ctx.name, text)
-        spark = self.session(ctx, options)
-        data = options.reader(spark, defaults).csv(_url(ctx))
-        return QueryView(data=data, fetch=spark_rows)
-
-    data_frame_template = cleandoc("""
-        {session_import}
-
-        {session}
-        df = spark.read{reader}.csv({url})
-        """)
-
-    def recipe(
-        self, fmt: Csv, ctx: ItemContext, options: CsvByPySparkOptions
-    ) -> dict[str, str]:
-        defaults = {} if options.sep is not None else {"sep": fmt.code_separator(ctx)}
-        return {
-            AS_DATA_FRAME: self.data_frame_template.format(
-                session_import=self.session_import,
-                session=self.session_code(ctx, options),
-                reader=options.reader_code(defaults),
-                url=repr(_url(ctx)),
-            )
-        }
+# Delta Lake: set up in the Spark session (on Databricks, it is).
 
 
-class JsonLinesByPySpark(_BySpark):
-    format = JsonLines
-    options_model = JsonLinesByPySparkOptions
-
-    def view(
-        self,
-        fmt: JsonLines,
-        ctx: ItemContext,
-        options: JsonLinesByPySparkOptions,
-        limits: ViewLimits,
-    ) -> View:
-        spark = self.session(ctx, options)
-        data = options.reader(spark).json(_url(ctx))
-        return QueryView(data=data, fetch=spark_rows)
-
-    # Spark reads JSON Lines (one record per line) by default.
-    data_frame_template = cleandoc("""
-        {session_import}
-
-        {session}
-        df = spark.read{reader}.json({url})
-        """)
-
-    def recipe(
-        self, fmt: JsonLines, ctx: ItemContext, options: JsonLinesByPySparkOptions
-    ) -> dict[str, str]:
-        code = self.data_frame_template.format(
-            session_import=self.session_import,
-            session=self.session_code(ctx, options),
-            reader=options.reader_code(),
-            url=repr(_url(ctx)),
-        )
-        return {AS_DATA_FRAME: code}
+@code(
+    format=DeltaLake,
+    engine=PySparkEngine,
+    name=AS_DATA_FRAME,
+    requires=(DeltaSpark(),),
+    check=spark_reads,
+)
+def delta_as_data_frame(
+    fmt: DeltaLake, ctx: ItemContext, options: DeltaLakeByPySparkOptions
+) -> str:
+    """A Delta Lake table into a DataFrame."""
+    return spark_delta_code(PYSPARK_SESSIONS, ctx, options)
 
 
-class ParquetByPySpark(_BySpark):
-    format = Parquet
-    options_model = ParquetByPySparkOptions
-
-    def view(
-        self,
-        fmt: Parquet,
-        ctx: ItemContext,
-        options: ParquetByPySparkOptions,
-        limits: ViewLimits,
-    ) -> View:
-        # A file or a folder of them; Spark finds partitions itself.
-        spark = self.session(ctx, options)
-        data = options.reader(spark).parquet(_url(ctx))
-        return QueryView(data=data, fetch=spark_rows)
-
-    # A file or a folder of them; Spark finds partitions itself.
-    data_frame_template = cleandoc("""
-        {session_import}
-
-        {session}
-        df = spark.read{reader}.parquet({url})
-        """)
-
-    def recipe(
-        self, fmt: Parquet, ctx: ItemContext, options: ParquetByPySparkOptions
-    ) -> dict[str, str]:
-        code = self.data_frame_template.format(
-            session_import=self.session_import,
-            session=self.session_code(ctx, options),
-            reader=options.reader_code(),
-            url=repr(_url(ctx)),
-        )
-        return {AS_DATA_FRAME: code}
+@view(
+    format=DeltaLake,
+    engine=PySparkEngine,
+    requires=(DeltaSpark(),),
+    check=spark_reads,
+    code=delta_as_data_frame,
+)
+def delta_view(
+    fmt: DeltaLake,
+    ctx: ItemContext,
+    options: DeltaLakeByPySparkOptions,
+    limits: ViewLimits,
+) -> View:
+    """A Delta Lake table in the data browser."""
+    return spark_delta_view(PYSPARK_SESSIONS, ctx, options)
 
 
-class DeltaLakeByPySpark(_BySpark):
-    format = DeltaLake
-    options_model = DeltaLakeByPySparkOptions
-    # Delta Lake set up in the Spark session (on Databricks, it is).
-    additional_requirements = (DeltaSpark(),)
+@code(format=Parquet, engine=PySparkEngine, name=AS_DATA_FRAME, check=spark_reads)
+def parquet_as_data_frame(
+    fmt: Parquet, ctx: ItemContext, options: ParquetByPySparkOptions
+) -> str:
+    """A Parquet file or a folder of them into a DataFrame."""
+    return spark_parquet_code(PYSPARK_SESSIONS, ctx, options)
 
-    def view(
-        self,
-        fmt: DeltaLake,
-        ctx: ItemContext,
-        options: DeltaLakeByPySparkOptions,
-        limits: ViewLimits,
-    ) -> View:
-        spark = self.session(ctx, options)
-        data = options.reader(spark).format("delta").load(_url(ctx))
-        return QueryView(data=data, fetch=spark_rows)
 
-    data_frame_template = cleandoc("""
-        {session_import}
+@view(
+    format=Parquet, engine=PySparkEngine, check=spark_reads, code=parquet_as_data_frame
+)
+def parquet_view(
+    fmt: Parquet,
+    ctx: ItemContext,
+    options: ParquetByPySparkOptions,
+    limits: ViewLimits,
+) -> View:
+    """A Parquet file or a folder of them in the data browser."""
+    return spark_parquet_view(PYSPARK_SESSIONS, ctx, options)
 
-        # Needs Delta Lake in the Spark session (Databricks has it)
-        {session}
-        df = spark.read{reader}.format("delta").load({url})
-        """)
 
-    def recipe(
-        self, fmt: DeltaLake, ctx: ItemContext, options: DeltaLakeByPySparkOptions
-    ) -> dict[str, str]:
-        code = self.data_frame_template.format(
-            session_import=self.session_import,
-            session=self.session_code(ctx, options),
-            reader=options.reader_code(),
-            url=repr(_url(ctx)),
-        )
-        return {AS_DATA_FRAME: code}
+@code(format=Csv, engine=PySparkEngine, name=AS_DATA_FRAME, check=spark_reads)
+def csv_as_data_frame(fmt: Csv, ctx: ItemContext, options: CsvByPySparkOptions) -> str:
+    """CSV into a DataFrame."""
+    return spark_csv_code(PYSPARK_SESSIONS, fmt, ctx, options)
+
+
+@view(format=Csv, engine=PySparkEngine, check=spark_reads, code=csv_as_data_frame)
+def csv_view(
+    fmt: Csv, ctx: ItemContext, options: CsvByPySparkOptions, limits: ViewLimits
+) -> View:
+    """CSV in the data browser."""
+    return spark_csv_view(PYSPARK_SESSIONS, fmt, ctx, options, limits)
+
+
+@code(format=JsonLines, engine=PySparkEngine, name=AS_DATA_FRAME, check=spark_reads)
+def json_lines_as_data_frame(
+    fmt: JsonLines, ctx: ItemContext, options: JsonLinesByPySparkOptions
+) -> str:
+    """JSON Lines into a DataFrame."""
+    return spark_json_lines_code(PYSPARK_SESSIONS, ctx, options)
+
+
+@view(
+    format=JsonLines,
+    engine=PySparkEngine,
+    check=spark_reads,
+    code=json_lines_as_data_frame,
+)
+def json_lines_view(
+    fmt: JsonLines,
+    ctx: ItemContext,
+    options: JsonLinesByPySparkOptions,
+    limits: ViewLimits,
+) -> View:
+    """JSON Lines in the data browser."""
+    return spark_json_lines_view(PYSPARK_SESSIONS, ctx, options)
+
+
+# In the order tried.
+PYSPARK_ACTIONS = register_actions(
+    delta_view,
+    delta_as_data_frame,
+    parquet_view,
+    parquet_as_data_frame,
+    csv_view,
+    csv_as_data_frame,
+    json_lines_view,
+    json_lines_as_data_frame,
+)

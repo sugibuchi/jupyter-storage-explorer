@@ -12,9 +12,13 @@ import polars as pl
 import pytest
 from all_supports import ALL_SUPPORTS, NO_PLUGINS, all_supports, installed_only
 from items import local_item
-from jupyter_storage_explorer_dask_support import CsvByDask
-from jupyter_storage_explorer_duckdb_support import CsvByDuckDB
-from jupyter_storage_explorer_pandas_support import CsvByPandas, CsvByPandasOptions
+from jupyter_storage_explorer_dask_support import csv_view as csv_by_dask
+from jupyter_storage_explorer_duckdb_support import csv_view as csv_by_duckdb
+from jupyter_storage_explorer_pandas_support import (
+    CsvByPandasOptions,
+    PandasEngine,
+)
+from jupyter_storage_explorer_pandas_support import csv_view as csv_by_pandas
 from jupyter_storage_explorer_polars_support import (
     CsvByPolarsOptions,
     DeltaLakeByPolarsOptions,
@@ -83,6 +87,21 @@ def support(fmt=Csv, engine=None, **methods):
     maybe ``supports``."""
     attributes = {"format": fmt, "engine": engine}
     return type("Fake", (FormatSupport,), {**attributes, **methods})
+
+
+class CsvByPandas(FormatSupport):
+    """A support of the former interface for an engine of a plugin, as
+    plugins wrote them."""
+
+    format = Csv
+    engine = PandasEngine
+    options_model = CsvByPandasOptions
+
+    def view(self, fmt, ctx, options, limits):
+        return QueryView(data=pl.LazyFrame({"a": [1]}))
+
+    def recipe(self, fmt, ctx, options):
+        return {"Load as DataFrame": "df = old_pandas()"}
 
 
 # Where an item is, for options that depend on it.
@@ -173,7 +192,7 @@ class TestOptions:
         assert (delta.storage_options, delta.use_pyarrow) == ({"b": 2}, True)
         # Only the options a support's model has: Excel's code reads with fsspec.
         assert options[excel_view] == ExcelByPolarsOptions()
-        assert options[CsvByPandas] == CsvByPandasOptions()  # pandas' own
+        assert options[csv_by_pandas] == CsvByPandasOptions()  # pandas' own
         assert options[text_code] == FsspecOptions()  # "python"'s
 
     def test_by_library(self):
@@ -439,11 +458,13 @@ class TestChain:
     def test_of_lists_the_installed_only(self, make_item, monkeypatch):
         chain = ActionChain(all_supports())
         item = make_item("/a.csv", b"")
-        # In the supports' order: the plugins', by key.
-        assert [
-            type(a.support) if hasattr(a, "support") else a
-            for a in chain.of(Csv(), item)
-        ] == [CsvByDask, CsvByDuckDB, CsvByPandas, csv_view]
+        # In the actions' order: the plugins', by key.
+        assert chain.of(Csv(), item) == [
+            csv_by_dask,
+            csv_by_duckdb,
+            csv_by_pandas,
+            csv_view,
+        ]
         monkeypatch.setattr(PythonPackage, "is_installed", lambda self: False)
         # None of the registered supports can.
         assert chain.of(Csv(), item) == []

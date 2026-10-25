@@ -75,11 +75,11 @@ def plugin_options():
 | Option     | Default | Meaning                                                                                                  |
 |------------|---------|----------------------------------------------------------------------------------------------------------|
 | `enabled`  | `True`  | Whether explorers use the plugin. `False`: not even imported.                                            |
-| `priority` | lowest  | Plugins of a higher priority come first: their supports are tried before the others'. Equal ones by key. |
+| `priority` | lowest  | Plugins of a higher priority come first: their actions are tried before the others'. Equal ones by key.  |
 
 ## Engine options
 
-The supports' options, in `engine_options["dask"]` (by format, or `"*"` for all), for the data browser and the code:
+The plugin's options, in `engine_options["dask"]` (by format, or `"*"` for all), for the data browser and the code:
 
 ```python
 StorageExplorer(

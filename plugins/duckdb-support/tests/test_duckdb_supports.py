@@ -1,4 +1,4 @@
-"""duckdb-support: its supports' views, by URL (local files) and through the
+"""duckdb-support: its actions' views, by URL (local files) and through the
 explorer's filesystem (fsspec's memory filesystem), their code, its database
 format, its options, and its entry point."""
 
@@ -18,17 +18,24 @@ from fsspec.implementations.dirfs import DirFileSystem
 from fsspec.implementations.local import LocalFileSystem
 from fsspec.spec import AbstractFileSystem
 from jupyter_storage_explorer_duckdb_support import (
-    CsvByDuckDB,
+    DUCKDB_ACTIONS,
     CsvByDuckDBOptions,
-    DeltaLakeByDuckDB,
     DeltaLakeByDuckDBOptions,
     DuckDBDatabase,
-    DuckDBDatabaseByDuckDB,
     DuckDBOptions,
     DuckDBSupport,
-    JsonLinesByDuckDB,
-    ParquetByDuckDB,
+    JsonLinesByDuckDBOptions,
     ParquetByDuckDBOptions,
+    csv_as_relation,
+    csv_view,
+    database_code,
+    database_view,
+    delta_as_relation,
+    delta_view,
+    json_lines_as_relation,
+    json_lines_view,
+    parquet_as_relation,
+    parquet_view,
 )
 from jupyter_storage_explorer_duckdb_support import supports as duckdb_supports
 from jupyter_storage_explorer_duckdb_support.supports import reads_by_url
@@ -60,7 +67,7 @@ SQLITE_BYTES = b"SQLite format 3\0" + b"\0" * 100
 
 @pytest.fixture(autouse=True)
 def cache(tmp_path, monkeypatch) -> LocalFileCache:
-    """The supports' local copies, in a cache of each test's own."""
+    """The actions' local copies, in a cache of each test's own."""
     cache = LocalFileCache(tmp_path / "copies")
     monkeypatch.setattr(duckdb_supports, "local_file_cache", lambda: cache)
     return cache
@@ -78,8 +85,8 @@ def rows(data) -> list[dict]:
     return nw.from_native(data).collect().to_native().to_pylist()
 
 
-def query_view(support, fmt, item, options=None, limits=LIMITS) -> QueryView:
-    view = support.view(fmt, item, options or support.options_model(), limits)
+def query_view(action, fmt, item, options=None, limits=LIMITS) -> QueryView:
+    view = action(fmt, item, options or action.options_model(), limits)
     assert isinstance(view, QueryView)
     return view
 
@@ -97,8 +104,32 @@ def test_plugin_registered():
     plugin = entry_point.load()()
     assert isinstance(plugin, DuckDBSupport)
     assert plugin.description == "DuckDB support for Storage Explorer"
-    assert ParquetByDuckDB in plugin.format_supports
-    assert DuckDBDatabaseByDuckDB in plugin.format_supports
+    assert plugin.actions == DUCKDB_ACTIONS
+    assert parquet_view in plugin.actions
+    assert database_view in plugin.actions
+
+
+def test_one_options_class_per_format():
+    # A format's view and code take the same options.
+    by_format: dict[type, set[type]] = {}
+    for action in DUCKDB_ACTIONS:
+        by_format.setdefault(action.format, set()).add(action.options_model)
+    assert all(len(models) == 1 for models in by_format.values())
+
+
+def test_names():
+    assert [(a.format, a.name) for a in DUCKDB_ACTIONS] == [
+        (DeltaLake, "View Delta Lake table"),
+        (DeltaLake, "Load as relation"),
+        (Parquet, "View Parquet"),
+        (Parquet, "Load as relation"),
+        (Csv, "View CSV"),
+        (Csv, "Load as relation"),
+        (JsonLines, "View JSON Lines"),
+        (JsonLines, "Load as relation"),
+        (DuckDBDatabase, "View DuckDB database"),
+        (DuckDBDatabase, "Open the database"),
+    ]
 
 
 class TestDatabaseFormat:
@@ -118,9 +149,7 @@ class TestDatabaseFormat:
 class TestParquet:
     def test_local_file(self, tmp_path):
         pq.write_table(pa.table({"a": [1, 2]}), tmp_path / "a.parquet")
-        view = query_view(
-            ParquetByDuckDB(), Parquet(), local_item(tmp_path / "a.parquet")
-        )
+        view = query_view(parquet_view, Parquet(), local_item(tmp_path / "a.parquet"))
         assert rows(view.data) == [{"a": 1}, {"a": 2}]
         view.close()
 
@@ -128,7 +157,7 @@ class TestParquet:
         pq.write_table(pa.table({"a": [1]}), tmp_path / "part-0.parquet")
         pq.write_table(pa.table({"a": [2]}), tmp_path / "part-1.parquet")
         (tmp_path / "_SUCCESS").write_bytes(b"")
-        data = query_view(ParquetByDuckDB(), Parquet(), local_item(tmp_path)).data
+        data = query_view(parquet_view, Parquet(), local_item(tmp_path)).data
         assert sorted(r["a"] for r in rows(data)) == [1, 2]
 
     def write_partitions(self, fs, root: str) -> None:
@@ -150,7 +179,7 @@ class TestParquet:
         fmt = Parquet()
         item = local_item(tmp_path)
         assert fmt.matches(item)
-        data = query_view(ParquetByDuckDB(), fmt, item).data
+        data = query_view(parquet_view, fmt, item).data
         assert sorted(rows(data), key=lambda r: r["a"]) == [
             {"a": 202501, "month": 1, "year": 2025},
             {"a": 202502, "month": 2, "year": 2025},
@@ -162,7 +191,7 @@ class TestParquet:
         # The memory filesystem: no storage DuckDB reads itself.
         item = make_item("/d/a.parquet", parquet_bytes(pa.table({"a": [1, 2]})))
         assert not reads_by_url(item, ParquetByDuckDBOptions())
-        view = query_view(ParquetByDuckDB(), Parquet(), item)
+        view = query_view(parquet_view, Parquet(), item)
         assert rows(view.data) == [{"a": 1}, {"a": 2}]
         view.close()
 
@@ -173,7 +202,7 @@ class TestParquet:
         fmt = Parquet()
         item = make_item("/d/t")
         assert fmt.matches(item)
-        data = query_view(ParquetByDuckDB(), fmt, item).data
+        data = query_view(parquet_view, fmt, item).data
         assert sorted(r["a"] for r in rows(data)) == [202501, 202502, 202601, 202602]
 
     def test_hive_files_through_the_explorers_filesystem(self, memfs, make_item):
@@ -184,7 +213,7 @@ class TestParquet:
         item = make_item("/h")
         assert fmt.matches(item)
         assert fmt.layout(item).files == "*"
-        data = query_view(ParquetByDuckDB(), fmt, item).data
+        data = query_view(parquet_view, fmt, item).data
         assert rows(data) == [{"a": 1, "dt": 1}, {"a": 2, "dt": 1}]
 
     def test_relative_paths_of_a_dir_filesystem(self, memfs):
@@ -192,12 +221,12 @@ class TestParquet:
         memfs.pipe_file("/root/d/a.parquet", parquet_bytes(pa.table({"a": [1]})))
         fs = DirFileSystem("/root", fs=memfs)
         item = item_of(fs, "d/a.parquet")
-        assert rows(query_view(ParquetByDuckDB(), Parquet(), item).data) == [{"a": 1}]
+        assert rows(query_view(parquet_view, Parquet(), item).data) == [{"a": 1}]
 
     def test_read_in_another_thread(self, make_item):
         # The data browser reads the data in its lane's thread, not the view's.
         item = make_item("/d/a.parquet", parquet_bytes(pa.table({"a": [1, 2, 3]})))
-        data = query_view(ParquetByDuckDB(), Parquet(), item).data
+        data = query_view(parquet_view, Parquet(), item).data
         found = {}
         thread = threading.Thread(
             target=lambda: found.update(
@@ -210,9 +239,7 @@ class TestParquet:
 
     def test_closing_closes_the_connection(self, tmp_path):
         pq.write_table(pa.table({"a": [1]}), tmp_path / "a.parquet")
-        view = query_view(
-            ParquetByDuckDB(), Parquet(), local_item(tmp_path / "a.parquet")
-        )
+        view = query_view(parquet_view, Parquet(), local_item(tmp_path / "a.parquet"))
         view.close()
         with pytest.raises(duckdb.ConnectionException):
             view.data.fetchall()
@@ -221,7 +248,7 @@ class TestParquet:
         pq.write_table(pa.table({"a": [1]}), tmp_path / "a.parquet")
         options = ParquetByDuckDBOptions(filename=True, config={"threads": 1})
         data = query_view(
-            ParquetByDuckDB(), Parquet(), local_item(tmp_path / "a.parquet"), options
+            parquet_view, Parquet(), local_item(tmp_path / "a.parquet"), options
         ).data
         assert set(rows(data)[0]) == {"a", "filename"}
 
@@ -241,7 +268,7 @@ class TestTheExplorersFilesystem:
         memfs.pipe_file("/root/data/a.parquet", parquet_bytes(pa.table({"n": [1, 2]})))
         fs = DirFileSystem("/root", fs=memfs)
         item = item_of(fs, "data/a.parquet")
-        data = query_view(ParquetByDuckDB(), Parquet(), item).data
+        data = query_view(parquet_view, Parquet(), item).data
         assert rows(data) == [{"n": 1}, {"n": 2}]
 
     def test_refused_without_modified(self, make_item):
@@ -251,34 +278,32 @@ class TestTheExplorersFilesystem:
 
         item = dataclasses.replace(make_item("/a.parquet", b""), fs=NoModified())
         options = ParquetByDuckDBOptions()
-        assert not ParquetByDuckDB().supports(Parquet(), item, options, "view")
-        assert ParquetByDuckDB().supports(Parquet(), item, options, "recipe")
+        assert not parquet_view.does(Parquet(), item, options)
+        assert parquet_as_relation.does(Parquet(), item, options)
 
 
 class TestText:
     def test_local_csv_with_its_separator(self, tmp_path):
         (tmp_path / "a.csv").write_text("x;y\n1;a\n2;b\n")
-        data = query_view(CsvByDuckDB(), Csv(), local_item(tmp_path / "a.csv")).data
+        data = query_view(csv_view, Csv(), local_item(tmp_path / "a.csv")).data
         assert rows(data) == [{"x": 1, "y": "a"}, {"x": 2, "y": "b"}]
 
     def test_local_json_lines(self, tmp_path):
         (tmp_path / "a.jsonl").write_text('{"a": 1}\n{"a": 2}\n')
         data = query_view(
-            JsonLinesByDuckDB(), JsonLines(), local_item(tmp_path / "a.jsonl")
+            json_lines_view, JsonLines(), local_item(tmp_path / "a.jsonl")
         ).data
         assert rows(data) == [{"a": 1}, {"a": 2}]
 
     def test_options_are_read_csvs_arguments(self, tmp_path):
         (tmp_path / "a.csv").write_text("1,2\n3,4\n")
         options = CsvByDuckDBOptions(header=False, names=["p", "q"])
-        data = query_view(
-            CsvByDuckDB(), Csv(), local_item(tmp_path / "a.csv"), options
-        ).data
+        data = query_view(csv_view, Csv(), local_item(tmp_path / "a.csv"), options).data
         assert rows(data) == [{"p": 1, "q": 2}, {"p": 3, "q": 4}]
 
     def test_small_remote_file_copied(self, make_item, cache):
         item = make_item("/d/a.csv", b"x,y\n1,2\n")
-        view = query_view(CsvByDuckDB(), Csv(), item)
+        view = query_view(csv_view, Csv(), item)
         assert cache.status(item) == "cached"
         assert rows(view.data) == [{"x": 1, "y": 2}]
         view.close()
@@ -288,7 +313,7 @@ class TestText:
         lines = b"".join(b"%d,%d\n" % (i, i * 2) for i in range(1000))
         item = make_item("/d/a.csv", b"a,b\n" + lines)
         limits = ViewLimits(max_whole_file_bytes=100)
-        prompt = CsvByDuckDB().view(Csv(), item, CsvByDuckDBOptions(), limits)
+        prompt = csv_view(Csv(), item, CsvByDuckDBOptions(), limits)
         assert isinstance(prompt, ViewWithChoice)
         assert list(prompt.choices) == ["Its first 1 KB", "The whole file (8 KB)"]
         assert cache.status(item) == "not_cached"
@@ -300,16 +325,16 @@ class TestText:
         assert not whole.more and len(rows(whole.data)) == 1000
         assert cache.status(item) == "cached"
         # Copied: viewed again without asking.
-        view = CsvByDuckDB().view(Csv(), item, CsvByDuckDBOptions(), limits)
+        view = csv_view(Csv(), item, CsvByDuckDBOptions(), limits)
         assert isinstance(view, QueryView)
 
     def test_remote_json_lines_first_bytes(self, make_item):
         lines = b"".join(b'{"a": %d}\n' % i for i in range(100))
         item = make_item("/d/a.jsonl", lines)
-        prompt = JsonLinesByDuckDB().view(
+        prompt = json_lines_view(
             JsonLines(),
             item,
-            JsonLinesByDuckDB.options_model(),
+            JsonLinesByDuckDBOptions(),
             ViewLimits(max_whole_file_bytes=50),
         )
         view = prompt.answer("Its first 1 KB")
@@ -337,29 +362,27 @@ class TestDeltaLake:
     def test_local_table(self, tmp_path, delta_extension):
         self.write(tmp_path / "t")
         item = local_item(tmp_path / "t")
-        data = query_view(DeltaLakeByDuckDB(), DeltaLake(), item).data
+        data = query_view(delta_view, DeltaLake(), item).data
         assert sorted(r["a"] for r in rows(data)) == [1, 2]
         options = DeltaLakeByDuckDBOptions(version=0)
-        data = query_view(DeltaLakeByDuckDB(), DeltaLake(), item, options).data
+        data = query_view(delta_view, DeltaLake(), item, options).data
         assert rows(data) == [{"a": 1}]
 
     def test_by_url_only(self, make_item):
-        support, options = DeltaLakeByDuckDB(), DeltaLakeByDuckDBOptions()
+        options = DeltaLakeByDuckDBOptions()
         on_memory = make_item("/t", b"")
-        assert not support.supports(DeltaLake(), on_memory, options, "view")
-        assert not support.supports(DeltaLake(), on_memory, options, "recipe")
+        assert not delta_view.does(DeltaLake(), on_memory, options)
+        assert not delta_as_relation.does(DeltaLake(), on_memory, options)
         on_s3 = make_item("/t", b"", location=S3Location(bucket="b", key="t"))
-        assert not support.supports(DeltaLake(), on_s3, options, "view")
-        assert support.supports(DeltaLake(), on_s3, options, "recipe")
+        assert not delta_view.does(DeltaLake(), on_s3, options)
+        assert delta_as_relation.does(DeltaLake(), on_s3, options)
         s3 = DeltaLakeByDuckDBOptions(url_schemes=["s3"])
-        assert support.supports(DeltaLake(), on_s3, s3, "view")
+        assert delta_view.does(DeltaLake(), on_s3, s3)
 
     def test_code(self, make_item):
         item = make_item("/t", b"", location=S3Location(bucket="b", key="it's"))
         options = DeltaLakeByDuckDBOptions(version=3)
-        code = DeltaLakeByDuckDB().recipe(DeltaLake(), item, options)[
-            "Load as relation"
-        ]
+        code = delta_as_relation(DeltaLake(), item, options)
         assert "select * from delta_scan('s3://b/it''s', version := 3)" in code
 
 
@@ -372,9 +395,7 @@ class TestDatabase:
     def test_tables_and_views_by_schema(self, tmp_path):
         database(tmp_path / "a.duckdb", self.SQL)
         item = local_item(tmp_path / "a.duckdb")
-        view = DuckDBDatabaseByDuckDB().view(
-            DuckDBDatabase(), item, DuckDBOptions(), LIMITS
-        )
+        view = database_view(DuckDBDatabase(), item, DuckDBOptions(), LIMITS)
         assert isinstance(view, TableSetView)
         assert [(n.label, [c.label for c in n.children]) for n in view.nodes] == [
             ("main", ["t", "v"]),
@@ -393,9 +414,7 @@ class TestDatabase:
     def test_one_schema_without_it(self, tmp_path):
         database(tmp_path / "a.duckdb", 'create table "my ""t""" as select 1 as a')
         item = local_item(tmp_path / "a.duckdb")
-        view = DuckDBDatabaseByDuckDB().view(
-            DuckDBDatabase(), item, DuckDBOptions(), LIMITS
-        )
+        view = database_view(DuckDBDatabase(), item, DuckDBOptions(), LIMITS)
         [leaf] = view.nodes
         assert leaf.label == 'my "t"'
         assert rows(view.loader(leaf.id)) == [{"a": 1}]
@@ -404,16 +423,13 @@ class TestDatabase:
     def test_no_tables(self, tmp_path):
         database(tmp_path / "a.duckdb", "select 1")
         item = local_item(tmp_path / "a.duckdb")
-        view = DuckDBDatabaseByDuckDB().view(
-            DuckDBDatabase(), item, DuckDBOptions(), LIMITS
-        )
+        view = database_view(DuckDBDatabase(), item, DuckDBOptions(), LIMITS)
         assert isinstance(view, TextView)
 
     def test_remote_database_copied(self, tmp_path, make_item, cache):
         database(tmp_path / "a.duckdb", self.SQL)
         item = make_item("/dbs/a.duckdb", (tmp_path / "a.duckdb").read_bytes())
-        support = DuckDBDatabaseByDuckDB()
-        view = support.view(DuckDBDatabase(), item, DuckDBOptions(), ViewLimits())
+        view = database_view(DuckDBDatabase(), item, DuckDBOptions(), ViewLimits())
         assert isinstance(view, TableSetView)
         assert cache.status(item) == "cached"
         assert rows(view.loader('"main"."t"')) == [{"a": 1}]
@@ -423,15 +439,14 @@ class TestDatabase:
         database(tmp_path / "a.duckdb", self.SQL)
         item = make_item("/dbs/a.duckdb", (tmp_path / "a.duckdb").read_bytes())
         limits = ViewLimits(max_whole_file_bytes=1000)
-        support = DuckDBDatabaseByDuckDB()
-        prompt = support.view(DuckDBDatabase(), item, DuckDBOptions(), limits)
+        prompt = database_view(DuckDBDatabase(), item, DuckDBOptions(), limits)
         assert isinstance(prompt, ViewWithConfirmation)
         assert cache.status(item) == "not_cached"
         view = prompt.answer()
         assert isinstance(view, TableSetView)
         view.close()
         # Copied: viewed again without asking.
-        view = support.view(DuckDBDatabase(), item, DuckDBOptions(), limits)
+        view = database_view(DuckDBDatabase(), item, DuckDBOptions(), limits)
         assert isinstance(view, TableSetView)
         view.close()
 
@@ -439,9 +454,7 @@ class TestDatabase:
         monkeypatch.setattr(duckdb_supports, "_COPY_KEPT", 0)
         database(tmp_path / "a.duckdb", self.SQL)
         item = make_item("/dbs/a.duckdb", (tmp_path / "a.duckdb").read_bytes())
-        view = DuckDBDatabaseByDuckDB().view(
-            DuckDBDatabase(), item, DuckDBOptions(), ViewLimits()
-        )
+        view = database_view(DuckDBDatabase(), item, DuckDBOptions(), ViewLimits())
         view.close()
         assert cache.status(item) == "not_cached"
 
@@ -449,8 +462,7 @@ class TestDatabase:
         database(tmp_path / "a.duckdb", self.SQL)
         local = local_item(tmp_path / "a.duckdb")
         options = DuckDBOptions(config={"threads": 2, "s3_secret_access_key": "x"})
-        code = DuckDBDatabaseByDuckDB().recipe(DuckDBDatabase(), local, options)
-        [source] = code.values()
+        source = database_code(DuckDBDatabase(), local, options)
         path = (tmp_path / "a.duckdb").as_posix()
         assert (
             f"duckdb.connect({path!r}, read_only=True, config={{'threads': 2}})"
@@ -464,9 +476,7 @@ class TestDatabase:
         options = DuckDBOptions(
             fsspec_storage_options={"username": "u", "password": "p"}
         )
-        [source] = (
-            DuckDBDatabaseByDuckDB().recipe(DuckDBDatabase(), remote, options).values()
-        )
+        source = database_code(DuckDBDatabase(), remote, options)
         assert (
             "fsspec.open_local('simplecache::sftp://h:22/dbs/a.duckdb', sftp={'username': 'u'})"
             in source
@@ -477,9 +487,7 @@ class TestCode:
     def test_local_parquet_runs(self, tmp_path):
         pq.write_table(pa.table({"a": [1, 2]}), tmp_path / "a.parquet")
         item = local_item(tmp_path / "a.parquet")
-        [source] = (
-            ParquetByDuckDB().recipe(Parquet(), item, ParquetByDuckDBOptions()).values()
-        )
+        source = parquet_as_relation(Parquet(), item, ParquetByDuckDBOptions())
         assert f"rel = con.read_parquet({item.library_url!r})" in source
         namespace = {}
         exec(source, namespace)
@@ -488,9 +496,7 @@ class TestCode:
     def test_partitioned_parquet(self, make_item, memfs):
         memfs.pipe_file("/t/year=1/a.parquet", parquet_bytes(pa.table({"a": [1]})))
         item = make_item("/t", location=S3Location(bucket="b", key="t"))
-        [source] = (
-            ParquetByDuckDB().recipe(Parquet(), item, ParquetByDuckDBOptions()).values()
-        )
+        source = parquet_as_relation(Parquet(), item, ParquetByDuckDBOptions())
         assert (
             "con.read_parquet('s3://b/t/year=*/*.parquet', hive_partitioning=True)"
             in source
@@ -499,9 +505,7 @@ class TestCode:
     def test_storages_duckdb_does_not_read_through_fsspec(self, make_item):
         # The memory filesystem's code: fsspec's, registered with DuckDB.
         item = make_item("/d/a.parquet", parquet_bytes(pa.table({"a": [1]})))
-        [source] = (
-            ParquetByDuckDB().recipe(Parquet(), item, ParquetByDuckDBOptions()).values()
-        )
+        source = parquet_as_relation(Parquet(), item, ParquetByDuckDBOptions())
         assert "fsspec.url_to_fs('memory:///d/a.parquet')" in source
         namespace = {}
         exec(source, namespace)
@@ -510,17 +514,17 @@ class TestCode:
     def test_azure_as_duckdb_reads_it(self, make_item):
         location = AbfsLocation(account_name="acc", container_name="c", path="a.csv")
         item = make_item("/c/a.csv", b"a\n1\n", location=location)
-        [source] = CsvByDuckDB().recipe(Csv(), item, CsvByDuckDBOptions()).values()
+        source = csv_as_relation(Csv(), item, CsvByDuckDBOptions())
         assert "con.read_csv('abfss://c@acc.dfs.core.windows.net/a.csv')" in source
 
     def test_options_without_secrets(self, make_item):
         item = make_item(
             "/b/a.jsonl", b"", location=S3Location(bucket="b", key="a.jsonl")
         )
-        options = JsonLinesByDuckDB.options_model(
+        options = JsonLinesByDuckDBOptions(
             config={"threads": 2, "s3_secret_access_key": "x"}, ignore_errors=True
         )
-        [source] = JsonLinesByDuckDB().recipe(JsonLines(), item, options).values()
+        source = json_lines_as_relation(JsonLines(), item, options)
         assert "con = duckdb.connect(config={'threads': 2})" in source
         assert (
             "con.read_json('s3://b/a.jsonl', format='newline_delimited', ignore_errors=True)"
@@ -534,6 +538,6 @@ class TestCode:
         options = CsvByDuckDBOptions(
             fsspec_storage_options={"username": "u", "password": "p"}, header=True
         )
-        [source] = CsvByDuckDB().recipe(Csv(), item, options).values()
+        source = csv_as_relation(Csv(), item, options)
         assert "fs, _ = fsspec.url_to_fs('sftp://h:22/d/a.csv', username='u')" in source
         assert "con.read_csv('sftp://h:22/d/a.csv', header=True)" in source

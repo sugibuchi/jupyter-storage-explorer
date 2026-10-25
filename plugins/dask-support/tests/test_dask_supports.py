@@ -1,8 +1,8 @@
-"""dask-support's supports: their views, the reads of the data browser, the
+"""dask-support's actions: their views, the reads of the data browser, the
 code and the options.
 
 The fakes follow what Dask 2026.8 was measured to do through a filesystem
-counting the bytes read (see the supports' module docstring)."""
+counting the bytes read (see the actions' module docstring)."""
 
 from __future__ import annotations
 
@@ -18,14 +18,18 @@ import pytest
 from fsspec.implementations.dirfs import DirFileSystem
 from fsspec.implementations.memory import MemoryFileSystem
 from jupyter_storage_explorer_dask_support import (
-    CsvByDask,
+    DASK_ACTIONS,
     CsvByDaskOptions,
     DaskEngine,
     DaskOptions,
-    JsonLinesByDask,
     JsonLinesByDaskOptions,
-    ParquetByDask,
     ParquetByDaskOptions,
+    csv_as_data_frame,
+    csv_view,
+    json_lines_as_data_frame,
+    json_lines_view,
+    parquet_as_data_frame,
+    parquet_view,
 )
 
 from jupyter_storage_explorer._query.data_query import fetch_rows
@@ -128,10 +132,18 @@ def test_the_engine():
     assert {p.package for p in DaskEngine.requirements} == {"dask", "pandas", "pyarrow"}
 
 
-def test_supports_view_and_code_everywhere(make_item):
+def test_view_and_code_everywhere(make_item):
     item = make_item("/a.csv", csv_bytes())
-    for task in ("view", "recipe"):
-        assert CsvByDask().supports(Csv(), item, CsvByDaskOptions(), task)
+    for action in (csv_view, csv_as_data_frame):
+        assert action.does(Csv(), item, CsvByDaskOptions())
+
+
+def test_one_options_class_per_format():
+    # A format's view and code take the same options.
+    by_format: dict[type, set[type]] = {}
+    for action in DASK_ACTIONS:
+        by_format.setdefault(action.format, set()).add(action.options_model)
+    assert all(len(models) == 1 for models in by_format.values())
 
 
 # --- Parquet ---
@@ -139,7 +151,7 @@ def test_supports_view_and_code_everywhere(make_item):
 
 def test_parquet_file_partitions_are_its_row_groups(make_item):
     item = make_item("/a.parquet", parquet_bytes())
-    view = ParquetByDask().view(Parquet(), item, ParquetByDaskOptions(), ViewLimits())
+    view = parquet_view(Parquet(), item, ParquetByDaskOptions(), ViewLimits())
     assert isinstance(view, QueryView)
     assert view.fetch is None  # the core reads Dask's partitions
     assert view.data.npartitions == ROWS // 100
@@ -149,7 +161,7 @@ def test_parquet_file_partitions_are_its_row_groups(make_item):
 def test_parquet_options_win(make_item):
     item = make_item("/a.parquet", parquet_bytes())
     options = ParquetByDaskOptions(split_row_groups=False, columns=["x"])
-    view = ParquetByDask().view(Parquet(), item, options, ViewLimits())
+    view = parquet_view(Parquet(), item, options, ViewLimits())
     assert view.data.npartitions == 1
     assert list(view.data.columns) == ["x"]
 
@@ -160,7 +172,7 @@ def test_parquet_first_page_reads_the_first_row_groups(counting):
     counting.pipe_file("/big.parquet", parquet_bytes(big, row_group_size=20_000))
     size = counting.size("/big.parquet")
     item = item_of(counting, "/big.parquet")
-    view = ParquetByDask().view(Parquet(), item, ParquetByDaskOptions(), ViewLimits())
+    view = parquet_view(Parquet(), item, ParquetByDaskOptions(), ViewLimits())
     READ["bytes"] = 0
     assert len(rows(view, 0, 101)) == 101
     # The first of 10 row groups, its footer read again, and no other.
@@ -174,12 +186,12 @@ def test_parquet_hive_folder_of_files_without_extension(memfs, make_item):
     item = make_item("/t")
     fmt = Parquet()
     assert fmt.matches(item)
-    view = ParquetByDask().view(fmt, item, ParquetByDaskOptions(), ViewLimits())
+    view = parquet_view(fmt, item, ParquetByDaskOptions(), ViewLimits())
     df = rows(view, 0, 3 * ROWS)
     assert len(df) == 2 * ROWS
     assert sorted(df["year"].astype(int).unique()) == [2024, 2025]
-    code = ParquetByDask().recipe(fmt, item, ParquetByDaskOptions())
-    assert "parquet_file_extension=None" in code["Load as DataFrame"]
+    code = parquet_as_data_frame(fmt, item, ParquetByDaskOptions())
+    assert "parquet_file_extension=None" in code
 
 
 def test_parquet_through_a_dir_filesystem(memfs):
@@ -189,7 +201,7 @@ def test_parquet_through_a_dir_filesystem(memfs):
     item = item_of(fs, "t")
     fmt = Parquet()
     assert fmt.matches(item)
-    view = ParquetByDask().view(fmt, item, ParquetByDaskOptions(), ViewLimits())
+    view = parquet_view(fmt, item, ParquetByDaskOptions(), ViewLimits())
     assert view.data.npartitions == 2
     assert len(rows(view, 0, 3 * ROWS)) == 2 * ROWS
 
@@ -199,7 +211,7 @@ def test_parquet_through_a_dir_filesystem(memfs):
 
 def test_sorted_pages_are_read_in_one_pass(make_item):
     item = make_item("/a.parquet", parquet_bytes())
-    view = ParquetByDask().view(Parquet(), item, ParquetByDaskOptions(), ViewLimits())
+    view = parquet_view(Parquet(), item, ParquetByDaskOptions(), ViewLimits())
     lf = nw.from_native(view.data)
     query = lf.sort("x", "id", descending=[True, False]).select("id", "x")
     expected = pd.DataFrame(FRAME).sort_values(["x", "id"], ascending=[False, True])
@@ -209,7 +221,7 @@ def test_sorted_pages_are_read_in_one_pass(make_item):
 
 def test_the_data_is_read_in_another_thread(make_item):
     item = make_item("/a.csv", csv_bytes())
-    view = CsvByDask().view(Csv(), item, CsvByDaskOptions(), ViewLimits())
+    view = csv_view(Csv(), item, CsvByDaskOptions(), ViewLimits())
     out = {}
     thread = threading.Thread(target=lambda: out.update(df=rows(view, 0, 10)))
     thread.start()
@@ -223,7 +235,7 @@ def test_the_data_is_read_in_another_thread(make_item):
 def test_csv_in_blocks_with_its_separator(make_item):
     item = make_item("/a.csv", csv_bytes(sep=";"))
     limits = ViewLimits(max_whole_file_bytes=2000)
-    view = CsvByDask().view(Csv(), item, CsvByDaskOptions(), limits)
+    view = csv_view(Csv(), item, CsvByDaskOptions(), limits)
     assert view.data.npartitions > 1
     df = rows(view)
     assert list(df.columns) == ["id", "x"]
@@ -233,7 +245,7 @@ def test_csv_in_blocks_with_its_separator(make_item):
 def test_csv_options_win(make_item):
     item = make_item("/a.csv", csv_bytes())
     options = CsvByDaskOptions(blocksize=None, dtype={"x": "float64"}, usecols=["x"])
-    view = CsvByDask().view(Csv(), item, options, ViewLimits())
+    view = csv_view(Csv(), item, options, ViewLimits())
     assert view.data.npartitions == 1
     assert str(view.data.dtypes["x"]) == "float64"
 
@@ -241,14 +253,14 @@ def test_csv_options_win(make_item):
 def test_csv_local_file(tmp_path):
     path = tmp_path / "a.tsv"
     path.write_bytes(csv_bytes(sep="\t"))
-    view = CsvByDask().view(Csv(), local_item(path), CsvByDaskOptions(), ViewLimits())
+    view = csv_view(Csv(), local_item(path), CsvByDaskOptions(), ViewLimits())
     assert rows(view)["x"].tolist() == FRAME["x"]
 
 
 def test_json_lines_in_blocks(make_item):
     item = make_item("/a.jsonl", jsonl_bytes())
     limits = ViewLimits(max_whole_file_bytes=4000)
-    view = JsonLinesByDask().view(JsonLines(), item, JsonLinesByDaskOptions(), limits)
+    view = json_lines_view(JsonLines(), item, JsonLinesByDaskOptions(), limits)
     assert view.data.npartitions > 1
     assert rows(view)["id"].tolist() == FRAME["id"]
 
@@ -260,7 +272,7 @@ def test_a_filesystem_fsspec_cannot_rebuild_is_copied_first(memfs):
     fs.pipe_file("/copied.csv", csv_bytes())
     item = item_of(fs, "/copied.csv")
     cache = local_file_cache()
-    small = CsvByDask().view(Csv(), item, CsvByDaskOptions(), ViewLimits())
+    small = csv_view(Csv(), item, CsvByDaskOptions(), ViewLimits())
     assert isinstance(small, QueryView)
     assert rows(small)["id"].tolist() == FRAME["id"]
     small.close()
@@ -268,7 +280,7 @@ def test_a_filesystem_fsspec_cannot_rebuild_is_copied_first(memfs):
     fs.pipe_file("/large.csv", csv_bytes())
     large_item = item_of(fs, "/large.csv")
     limits = ViewLimits(max_whole_file_bytes=100)
-    prompt = CsvByDask().view(Csv(), large_item, CsvByDaskOptions(), limits)
+    prompt = csv_view(Csv(), large_item, CsvByDaskOptions(), limits)
     assert isinstance(prompt, ViewWithConfirmation)
     view = prompt.answer()
     assert cache.status(large_item) == "cached"
@@ -288,16 +300,16 @@ def run(code: str):
 def test_parquet_code_reads_the_file(tmp_path):
     path = tmp_path / "a.parquet"
     path.write_bytes(parquet_bytes())
-    code = ParquetByDask().recipe(Parquet(), local_item(path), ParquetByDaskOptions())
-    assert f"dd.read_parquet({path.as_posix()!r})" in code["Load as DataFrame"]
-    assert run(code["Load as DataFrame"])["id"].tolist() == FRAME["id"]
+    code = parquet_as_data_frame(Parquet(), local_item(path), ParquetByDaskOptions())
+    assert f"dd.read_parquet({path.as_posix()!r})" in code
+    assert run(code)["id"].tolist() == FRAME["id"]
 
 
 def test_csv_code_has_the_separator(tmp_path):
     path = tmp_path / "a.csv"
     path.write_bytes(csv_bytes(sep="|"))
     options = CsvByDaskOptions(assume_missing=True)
-    [code] = CsvByDask().recipe(Csv(), local_item(path), options).values()
+    code = csv_as_data_frame(Csv(), local_item(path), options)
     assert "sep='|'" in code and "assume_missing=True" in code
     assert run(code)["x"].tolist() == FRAME["x"]
 
@@ -306,9 +318,7 @@ def test_json_lines_code(tmp_path):
     path = tmp_path / "a.jsonl"
     path.write_bytes(jsonl_bytes())
     item = local_item(path)
-    [code] = (
-        JsonLinesByDask().recipe(JsonLines(), item, JsonLinesByDaskOptions()).values()
-    )
+    code = json_lines_as_data_frame(JsonLines(), item, JsonLinesByDaskOptions())
     assert "lines=True" in code
     assert run(code)["id"].tolist() == FRAME["id"]
 
@@ -317,7 +327,7 @@ def test_remote_code_by_url_without_secrets(make_item):
     location = S3Location(bucket="lake", key="a.csv")
     item = make_item("/a.csv", csv_bytes(), location=location)
     options = CsvByDaskOptions(storage_options={"anon": False, "secret": "s3cr3t"})
-    [code] = CsvByDask().recipe(Csv(), item, options).values()
+    code = csv_as_data_frame(Csv(), item, options)
     assert "dd.read_csv('s3://lake/a.csv', storage_options={'anon': False})" in code
     assert "s3cr3t" not in code
 
@@ -360,7 +370,7 @@ def test_parquet_keyword_options_are_taken(make_item):
         read={},
         open_file_options={"precache_options": {"method": "parquet"}},
     )
-    view = ParquetByDask().view(Parquet(), item, options, ViewLimits())
+    view = parquet_view(Parquet(), item, options, ViewLimits())
     assert len(rows(view)) == ROWS
 
 
@@ -371,4 +381,12 @@ def test_plugin_registered():
     plugin = entry_point.load()()
     assert plugin.key == "dask-support"
     assert plugin.description == "Dask support for Storage Explorer"
-    assert set(plugin.format_supports) == {ParquetByDask, CsvByDask, JsonLinesByDask}
+    assert plugin.actions == DASK_ACTIONS
+    assert [a.name for a in DASK_ACTIONS] == [
+        "View Parquet",
+        "Load as DataFrame",
+        "View CSV",
+        "Load as DataFrame",
+        "View JSON Lines",
+        "Load as DataFrame",
+    ]

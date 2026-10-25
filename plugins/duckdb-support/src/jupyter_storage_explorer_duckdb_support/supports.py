@@ -22,20 +22,24 @@ measured with DuckDB 1.5 (the plugin's README says it for users):
   first rows. So other storages' tables are refused.
 - DuckDB databases: DuckDB opens only local files, also with a filesystem
   registered. Other storages' are copied to the kernel's disk first.
+
+Each format has a view and a code action, registered in order in
+``DUCKDB_ACTIONS``. duckdb is imported inside the functions, so that the
+plugin loads without it.
 """
 
 from __future__ import annotations
 
 import io
 from dataclasses import dataclass
-from inspect import cleandoc
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any
 
 from fsspec.implementations.dirfs import DirFileSystem
 from fsspec.spec import AbstractFileSystem
 
 from jupyter_storage_explorer.filesystems.locations import LocalLocation
-from jupyter_storage_explorer.formats.base import DataFormat
+from jupyter_storage_explorer.formats.actions import code, register_actions, view
+from jupyter_storage_explorer.formats.base import DataFormat, ItemContext
 from jupyter_storage_explorer.formats.delta import DeltaLake
 from jupyter_storage_explorer.formats.engine import Engine
 from jupyter_storage_explorer.formats.local_files import local_file_cache
@@ -44,7 +48,6 @@ from jupyter_storage_explorer.formats.packages import PyArrow
 from jupyter_storage_explorer.formats.parquet import Parquet
 from jupyter_storage_explorer.formats.support import (
     LIBRARY_DEFAULT,
-    FormatSupport,
     LibraryDefault,
     SupportOptions,
     format_arguments,
@@ -58,16 +61,14 @@ from jupyter_storage_explorer.formats.view import (
     QueryView,
     TableSetView,
     TextView,
+    View,
+    ViewLimits,
     ViewWithChoice,
     ViewWithConfirmation,
 )
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
-
-    from jupyter_storage_explorer.formats.base import ItemContext
-    from jupyter_storage_explorer.formats.support import Task
-    from jupyter_storage_explorer.formats.view import View, ViewLimits
 
 AS_RELATION = "Load as relation"
 OPEN_DATABASE = "Open the database"
@@ -154,7 +155,7 @@ _FSSPEC_SECRETS = (
 
 @dataclass(frozen=True, kw_only=True)
 class DuckDBOptions(SupportOptions):
-    """The options of every DuckDB support: the connection, and how DuckDB
+    """The options of every DuckDB action: the connection, and how DuckDB
     reaches the storage.
 
     Attributes
@@ -337,7 +338,7 @@ def reads_by_url(ctx: ItemContext, options: DuckDBOptions) -> bool:
     ctx : ItemContext
         The item.
     options : DuckDBOptions
-        The support's options for it.
+        The action's options for it.
 
     Returns
     -------
@@ -386,454 +387,321 @@ def _quoted(*names: str) -> str:
     return ".".join('"' + name.replace('"', '""') + '"' for name in names)
 
 
-class _DuckDBSupport(FormatSupport):
-    """A format read with DuckDB, on a connection of each view's own, closed
-    with it."""
-
-    engine = DuckDBEngine
-    # The data browser collects DuckDB's results into PyArrow tables
-    # (narwhals' default for DuckDB).
-    additional_requirements = (PyArrow(),)
-    options_model = DuckDBOptions
-
-    @staticmethod
-    def _connect(
-        options: DuckDBOptions, database: str = ":memory:", **kwargs: Any
-    ) -> Any:
-        return DuckDB().load().connect(database, **kwargs, **options.connect_kwargs())
-
-    @staticmethod
-    def _query_view(con: Any, read: Callable[[Any], Any], **kwargs: Any) -> View:
-        """A ``QueryView`` of ``read(con)``, closing the connection with the
-        view, or at once if ``read`` fails."""
-        try:
-            view = QueryView(data=read(con), **kwargs)
-        except BaseException:
-            con.close()
-            raise
-        view.on_close(lambda view: con.close())
-        return view
+# Every action reads with DuckDB, on a connection of each view's own, closed
+# with it. The data browser collects DuckDB's results into PyArrow tables
+# (narwhals' default for DuckDB): all of them require PyArrow.
+_REQUIRES = (PyArrow(),)
 
 
-class ParquetByDuckDB(_DuckDBSupport):
-    """Parquet files and folders with DuckDB: lazily by URL where DuckDB reads
-    the storage itself; elsewhere, as lazily, through the explorer's
-    filesystem, where DuckDB can read through it."""
+def _connect(options: DuckDBOptions, database: str = ":memory:", **kwargs: Any) -> Any:
+    import duckdb
 
-    format = Parquet
-    options_model = ParquetByDuckDBOptions
-
-    def supports(
-        self,
-        fmt: Parquet,
-        ctx: ItemContext,
-        options: ParquetByDuckDBOptions,
-        task: Task,
-    ) -> bool:
-        """Views by URL, or through the explorer's filesystem where DuckDB
-        reads it (``modified``); code everywhere.
-
-        Parameters
-        ----------
-        fmt : Parquet
-            The format.
-        ctx : ItemContext
-            The file or folder.
-        options : ParquetByDuckDBOptions
-            Its options: ``url_schemes``.
-        task : {"view", "recipe"}
-            What the explorer asks.
-
-        Returns
-        -------
-        bool
-        """
-        reached = (
-            task != "view" or reads_by_url(ctx, options) or _readable_registered(ctx.fs)
-        )
-        return super().supports(fmt, ctx, options, task) and reached
-
-    def data_url(self, fmt: Parquet, ctx: ItemContext, url: str) -> str:
-        """The data files of the item at ``url``: a file's URL, or a glob of a
-        folder's data files.
-
-        Parameters
-        ----------
-        fmt : Parquet
-            The format, with the folder's layout.
-        ctx : ItemContext
-            The file or folder.
-        url : str
-            Its URL as DuckDB reads it.
-
-        Returns
-        -------
-        str
-        """
-        url = fmt.data_url(ctx, url)
-        if ctx.is_dir and fmt.layout(ctx).files == "*":
-            # Data files without an extension (Hive's): not "_SUCCESS" or
-            # ".crc" checksums, which DuckDB would read.
-            url = url.removesuffix("*") + "[!_.]*"
-        return url
-
-    def view(
-        self,
-        fmt: Parquet,
-        ctx: ItemContext,
-        options: ParquetByDuckDBOptions,
-        limits: ViewLimits,
-    ) -> View:
-        """A relation of the Parquet file, or of the folder's data files, with
-        a folder's partition columns.
-
-        Parameters
-        ----------
-        fmt : Parquet
-            The format, with the folder's layout.
-        ctx : ItemContext
-            The file or folder.
-        options : ParquetByDuckDBOptions
-            The connection's options and ``read_parquet``'s arguments.
-        limits : ViewLimits
-            Not used: DuckDB reads only what the data browser asks.
-
-        Returns
-        -------
-        QueryView
-        """
-        partitioned = ctx.is_dir and bool(fmt.layout(ctx).keys)
-        arguments = {"hive_partitioning": partitioned, **options.arguments()}
-
-        def read(con: Any) -> Any:
-            if reads_by_url(ctx, options):
-                url = _duckdb_url(ctx)
-            else:
-                # The explorer's filesystem as it is, on this connection only:
-                # DuckDB reads it before its own readers (e.g. httpfs' s3://),
-                # and its own URL of the item, not the location's.
-                con.register_filesystem(ctx.fs)
-                url = ctx.fs.unstrip_protocol(ctx.path)
-            return con.read_parquet(self.data_url(fmt, ctx, url), **arguments)
-
-        return self._query_view(self._connect(options), read)
-
-    relation_template = cleandoc("""
-        import duckdb
-
-        con = duckdb.connect({connect})
-        rel = con.read_parquet({url}{kwargs})
-        """)
-
-    fsspec_template = cleandoc("""
-        import duckdb
-        import fsspec
-
-        con = duckdb.connect({connect})
-        fs, _ = fsspec.url_to_fs({url}{fsspec_kwargs})
-        con.register_filesystem(fs)
-        rel = con.read_parquet({url}{kwargs})
-        """)
-
-    def recipe(
-        self, fmt: Parquet, ctx: ItemContext, options: ParquetByDuckDBOptions
-    ) -> dict[str, str]:
-        """The code reading the file or folder into a relation.
-
-        Parameters
-        ----------
-        fmt : Parquet
-            The format, with the folder's layout.
-        ctx : ItemContext
-            The file or folder.
-        options : ParquetByDuckDBOptions
-            The connection's options and ``read_parquet``'s arguments.
-
-        Returns
-        -------
-        dict of str to str
-        """
-        partitioned = ctx.is_dir and bool(fmt.layout(ctx).keys)
-        arguments = {"hive_partitioning": True} if partitioned else {}
-        arguments.update(options.code_arguments())
-        by_url = _code_reads_url(ctx, options)
-        template = self.relation_template if by_url else self.fsspec_template
-        url = _duckdb_url(ctx) if by_url else ctx.location.url
-        code = template.format(
-            connect=options.connect_code().removeprefix(", "),
-            url=repr(self.data_url(fmt, ctx, url)),
-            kwargs=format_arguments(arguments),
-            fsspec_kwargs=options.fsspec_kwargs(),
-        )
-        return {AS_RELATION: code}
+    return duckdb.connect(database, **kwargs, **options.connect_kwargs())
 
 
-class _TextByDuckDB(_DuckDBSupport):
-    """A text format of files (CSV, JSON Lines), which DuckDB reads whole for
-    each filter, sort or count: by URL where DuckDB reads the storage itself;
-    elsewhere from a copy on the kernel's disk, or the file's beginning in
-    memory, as the user chooses for a large file."""
+def _query_view(con: Any, read: Callable[[Any], Any], **kwargs: Any) -> View:
+    """A ``QueryView`` of ``read(con)``, closing the connection with the
+    view, or at once if ``read`` fails."""
+    try:
+        view = QueryView(data=read(con), **kwargs)
+    except BaseException:
+        con.close()
+        raise
+    view.on_close(lambda view: con.close())
+    return view
 
-    # The reader's method of a connection, and the support's own arguments.
-    reader: ClassVar[str] = ""
-    defaults: ClassVar[Mapping[str, Any]] = {}
 
-    def _read(self, con: Any, source: Any, options: SupportOptions) -> Any:
-        arguments = {**self.defaults, **options.arguments()}
-        return getattr(con, self.reader)(source, **arguments)
+def _relation_code(
+    reader: str, url: str, kwargs: str, options: DuckDBOptions, *, by_url: bool
+) -> str:
+    """The code reading ``url`` into a relation with the connection's
+    ``reader`` (e.g. "read_csv"): by URL, or through fsspec's filesystem
+    registered with DuckDB."""
+    connect = options.connect_code().removeprefix(", ")
+    if by_url:
+        return f"""\
+import duckdb
 
-    def view(
-        self,
-        fmt: DataFormat,
-        ctx: ItemContext,
-        options: DuckDBOptions,
-        limits: ViewLimits,
-    ) -> View:
-        """A relation of the file.
+con = duckdb.connect({connect})
+rel = con.{reader}({url!r}{kwargs})"""
+    return f"""\
+import duckdb
+import fsspec
 
-        Off the storages DuckDB reads itself, a file larger than
-        ``limits.max_whole_file_bytes`` and not copied yet is read once the
-        user chooses: copied to the kernel's disk whole, or its first bytes up
-        to that size, cut after their last line, read into memory.
+con = duckdb.connect({connect})
+fs, _ = fsspec.url_to_fs({url!r}{options.fsspec_kwargs()})
+con.register_filesystem(fs)
+rel = con.{reader}({url!r}{kwargs})"""
 
-        Parameters
-        ----------
-        fmt : DataFormat
-            The format.
-        ctx : ItemContext
-            The file.
-        options : DuckDBOptions
-            The connection's options and the reader's arguments.
-        limits : ViewLimits
-            ``max_whole_file_bytes``: the largest file copied without asking.
 
-        Returns
-        -------
-        QueryView or ViewWithChoice
-        """
+# Parquet files and folders: lazily by URL where DuckDB reads the storage
+# itself; elsewhere, as lazily, through the explorer's filesystem, where
+# DuckDB can read through it.
+
+
+def _parquet_reached(
+    fmt: Parquet, ctx: ItemContext, options: ParquetByDuckDBOptions
+) -> bool:
+    """Whether the view reaches the item: by URL, or through the explorer's
+    filesystem where DuckDB reads it (``modified``)."""
+    return reads_by_url(ctx, options) or _readable_registered(ctx.fs)
+
+
+def _parquet_data_url(fmt: Parquet, ctx: ItemContext, url: str) -> str:
+    """The data files of the item at ``url``, its URL as DuckDB reads it: a
+    file's URL, or a glob of a folder's data files."""
+    url = fmt.data_url(ctx, url)
+    if ctx.is_dir and fmt.layout(ctx).files == "*":
+        # Data files without an extension (Hive's): not "_SUCCESS" or
+        # ".crc" checksums, which DuckDB would read.
+        url = url.removesuffix("*") + "[!_.]*"
+    return url
+
+
+@code(format=Parquet, engine=DuckDBEngine, name=AS_RELATION, requires=_REQUIRES)
+def parquet_as_relation(
+    fmt: Parquet, ctx: ItemContext, options: ParquetByDuckDBOptions
+) -> str:
+    """The code reading the file or folder into a relation, on any storage."""
+    partitioned = ctx.is_dir and bool(fmt.layout(ctx).keys)
+    arguments = {"hive_partitioning": True} if partitioned else {}
+    arguments.update(options.code_arguments())
+    by_url = _code_reads_url(ctx, options)
+    url = _duckdb_url(ctx) if by_url else ctx.location.url
+    return _relation_code(
+        "read_parquet",
+        _parquet_data_url(fmt, ctx, url),
+        format_arguments(arguments),
+        options,
+        by_url=by_url,
+    )
+
+
+@view(
+    format=Parquet,
+    engine=DuckDBEngine,
+    requires=_REQUIRES,
+    check=_parquet_reached,
+    code=parquet_as_relation,
+)
+def parquet_view(
+    fmt: Parquet, ctx: ItemContext, options: ParquetByDuckDBOptions, limits: ViewLimits
+) -> View:
+    """A relation of the Parquet file, or of the folder's data files, with a
+    folder's partition columns. ``limits`` are not used: DuckDB reads only
+    what the data browser asks."""
+    partitioned = ctx.is_dir and bool(fmt.layout(ctx).keys)
+    arguments = {"hive_partitioning": partitioned, **options.arguments()}
+
+    def read(con: Any) -> Any:
         if reads_by_url(ctx, options):
             url = _duckdb_url(ctx)
-            return self._query_view(
-                self._connect(options), lambda con: self._read(con, url, options)
-            )
-        cache = local_file_cache()
+        else:
+            # The explorer's filesystem as it is, on this connection only:
+            # DuckDB reads it before its own readers (e.g. httpfs' s3://),
+            # and its own URL of the item, not the location's.
+            con.register_filesystem(ctx.fs)
+            url = ctx.fs.unstrip_protocol(ctx.path)
+        return con.read_parquet(_parquet_data_url(fmt, ctx, url), **arguments)
 
-        def copied() -> View:
-            path = cache.get(ctx).as_posix()
-            try:
-                view = self._query_view(
-                    self._connect(options), lambda con: self._read(con, path, options)
-                )
-            except BaseException:
-                cache.release(ctx.location, delay=_COPY_KEPT)
-                raise
-            view.on_close(lambda view: cache.release(ctx.location, delay=_COPY_KEPT))
-            return view
+    return _query_view(_connect(options), read)
 
-        def first(size: int) -> View:
-            with ctx.fs.open(ctx.path, "rb") as f:
-                data = f.read(size + 1)
-            cut = len(data) > size
-            if cut:
-                data = data[: data.rfind(b"\n", 0, size) + 1] or data[:size]
-            return self._query_view(
-                self._connect(options),
-                lambda con: self._read(con, io.BytesIO(data), options),
-                more=cut,
-            )
 
-        size = ctx.size
-        limit = limits.max_whole_file_bytes
-        if cache.status(ctx) == "cached" or (size is not None and size <= limit):
-            return copied()
-        whole = f"The whole file ({_size_text(size)})" if size else "The whole file"
-        return ViewWithChoice(
-            message=(
-                "DuckDB cannot read this storage itself, and reads the whole file "
-                "for each query: the file is copied to the kernel's disk first, "
-                "or its beginning read into memory."
-            ),
-            choices={f"Its first {_size_text(limit)}": limit, whole: None},
-            factory=lambda size: copied() if size is None else first(size),
-            style="button",
-            with_cancel=True,
+# Text formats of files (CSV, JSON Lines), which DuckDB reads whole for each
+# filter, sort or count: by URL where DuckDB reads the storage itself;
+# elsewhere from a copy on the kernel's disk, or the file's beginning in
+# memory, as the user chooses for a large file.
+
+# JSON Lines' own argument, rather than DuckDB's detection, which also takes
+# a JSON array.
+_JSON_LINES_DEFAULTS: Mapping[str, Any] = {"format": "newline_delimited"}
+
+
+def _text_view(
+    reader: str,
+    defaults: Mapping[str, Any],
+    ctx: ItemContext,
+    options: DuckDBOptions,
+    limits: ViewLimits,
+) -> View:
+    """A relation of the file, read by the connection's ``reader`` with
+    ``defaults``, then the options' arguments.
+
+    Off the storages DuckDB reads itself, a file larger than
+    ``limits.max_whole_file_bytes`` and not copied yet is read once the user
+    chooses: copied to the kernel's disk whole, or its first bytes up to that
+    size, cut after their last line, read into memory."""
+
+    def read(con: Any, source: Any) -> Any:
+        return getattr(con, reader)(source, **{**defaults, **options.arguments()})
+
+    if reads_by_url(ctx, options):
+        url = _duckdb_url(ctx)
+        return _query_view(_connect(options), lambda con: read(con, url))
+    cache = local_file_cache()
+
+    def copied() -> View:
+        path = cache.get(ctx).as_posix()
+        try:
+            view = _query_view(_connect(options), lambda con: read(con, path))
+        except BaseException:
+            cache.release(ctx.location, delay=_COPY_KEPT)
+            raise
+        view.on_close(lambda view: cache.release(ctx.location, delay=_COPY_KEPT))
+        return view
+
+    def first(size: int) -> View:
+        with ctx.fs.open(ctx.path, "rb") as f:
+            data = f.read(size + 1)
+        cut = len(data) > size
+        if cut:
+            data = data[: data.rfind(b"\n", 0, size) + 1] or data[:size]
+        return _query_view(
+            _connect(options), lambda con: read(con, io.BytesIO(data)), more=cut
         )
 
-    relation_template = cleandoc("""
-        import duckdb
-
-        con = duckdb.connect({connect})
-        rel = con.{reader}({url}{kwargs})
-        """)
-
-    fsspec_template = cleandoc("""
-        import duckdb
-        import fsspec
-
-        con = duckdb.connect({connect})
-        fs, _ = fsspec.url_to_fs({url}{fsspec_kwargs})
-        con.register_filesystem(fs)
-        rel = con.{reader}({url}{kwargs})
-        """)
-
-    def recipe(
-        self, fmt: DataFormat, ctx: ItemContext, options: DuckDBOptions
-    ) -> dict[str, str]:
-        """The code reading the file into a relation.
-
-        Parameters
-        ----------
-        fmt : DataFormat
-            The format.
-        ctx : ItemContext
-            The file.
-        options : DuckDBOptions
-            The connection's options and the reader's arguments.
-
-        Returns
-        -------
-        dict of str to str
-        """
-        by_url = _code_reads_url(ctx, options)
-        template = self.relation_template if by_url else self.fsspec_template
-        code = template.format(
-            connect=options.connect_code().removeprefix(", "),
-            reader=self.reader,
-            url=repr(_duckdb_url(ctx) if by_url else ctx.location.url),
-            kwargs=format_arguments({**self.defaults, **options.code_arguments()}),
-            fsspec_kwargs=options.fsspec_kwargs(),
-        )
-        return {AS_RELATION: code}
+    size = ctx.size
+    limit = limits.max_whole_file_bytes
+    if cache.status(ctx) == "cached" or (size is not None and size <= limit):
+        return copied()
+    whole = f"The whole file ({_size_text(size)})" if size else "The whole file"
+    return ViewWithChoice(
+        message=(
+            "DuckDB cannot read this storage itself, and reads the whole file "
+            "for each query: the file is copied to the kernel's disk first, "
+            "or its beginning read into memory."
+        ),
+        choices={f"Its first {_size_text(limit)}": limit, whole: None},
+        factory=lambda size: copied() if size is None else first(size),
+        style="button",
+        with_cancel=True,
+    )
 
 
-class CsvByDuckDB(_TextByDuckDB):
-    """CSV files with DuckDB, whose sniffer detects the dialect: the data
-    browser, and code."""
-
-    format = Csv
-    options_model = CsvByDuckDBOptions
-    reader = "read_csv"
-
-
-class JsonLinesByDuckDB(_TextByDuckDB):
-    """JSON Lines files with DuckDB: the data browser, and code."""
-
-    format = JsonLines
-    options_model = JsonLinesByDuckDBOptions
-    reader = "read_json"
-    # Rather than DuckDB's detection, which also takes a JSON array.
-    defaults: ClassVar[Mapping[str, Any]] = {"format": "newline_delimited"}
+def _text_code(
+    reader: str, defaults: Mapping[str, Any], ctx: ItemContext, options: DuckDBOptions
+) -> str:
+    """The code reading the file into a relation with the connection's
+    ``reader``."""
+    by_url = _code_reads_url(ctx, options)
+    return _relation_code(
+        reader,
+        _duckdb_url(ctx) if by_url else ctx.location.url,
+        format_arguments({**defaults, **options.code_arguments()}),
+        options,
+        by_url=by_url,
+    )
 
 
-class DeltaLakeByDuckDB(_DuckDBSupport):
-    """Delta Lake tables with DuckDB's delta extension, by URL only: locally,
-    and on the storages DuckDB reads itself (``url_schemes``; in the code, those
-    its extensions reach).
+@code(format=Csv, engine=DuckDBEngine, name=AS_RELATION, requires=_REQUIRES)
+def csv_as_relation(fmt: Csv, ctx: ItemContext, options: CsvByDuckDBOptions) -> str:
+    """The code reading the CSV file into a relation."""
+    return _text_code("read_csv", {}, ctx, options)
 
-    DuckDB installs and loads the extension at the first query, unless its
-    settings forbid it.
-    """
 
-    format = DeltaLake
-    options_model = DeltaLakeByDuckDBOptions
+@view(format=Csv, engine=DuckDBEngine, requires=_REQUIRES, code=csv_as_relation)
+def csv_view(
+    fmt: Csv, ctx: ItemContext, options: CsvByDuckDBOptions, limits: ViewLimits
+) -> View:
+    """CSV files in the data browser: DuckDB's sniffer detects the dialect."""
+    return _text_view("read_csv", {}, ctx, options, limits)
 
-    def supports(
-        self,
-        fmt: DeltaLake,
-        ctx: ItemContext,
-        options: DeltaLakeByDuckDBOptions,
-        task: Task,
-    ) -> bool:
-        """Views where DuckDB reads the storage itself, code also where its
-        extensions do: ``delta_scan`` reads no registered filesystem.
 
-        Parameters
-        ----------
-        fmt : DeltaLake
-            The format.
-        ctx : ItemContext
-            The table's folder.
-        options : DeltaLakeByDuckDBOptions
-            Its options: ``url_schemes``.
-        task : {"view", "recipe"}
-            What the explorer asks.
+@code(format=JsonLines, engine=DuckDBEngine, name=AS_RELATION, requires=_REQUIRES)
+def json_lines_as_relation(
+    fmt: JsonLines, ctx: ItemContext, options: JsonLinesByDuckDBOptions
+) -> str:
+    """The code reading the JSON Lines file into a relation."""
+    return _text_code("read_json", _JSON_LINES_DEFAULTS, ctx, options)
 
-        Returns
-        -------
-        bool
-        """
-        reached = (
-            reads_by_url(ctx, options)
-            if task == "view"
-            else _code_reads_url(ctx, options)
-        )
-        return super().supports(fmt, ctx, options, task) and reached
 
-    @staticmethod
-    def _query(ctx: ItemContext, options: DeltaLakeByDuckDBOptions) -> str:
-        parameters = "".join(
-            f", {name} := {_sql_literal(value)}"
-            for name, value in options.arguments().items()
-        )
-        return f"select * from delta_scan({_sql_literal(_duckdb_url(ctx))}{parameters})"
+@view(
+    format=JsonLines,
+    engine=DuckDBEngine,
+    requires=_REQUIRES,
+    code=json_lines_as_relation,
+)
+def json_lines_view(
+    fmt: JsonLines,
+    ctx: ItemContext,
+    options: JsonLinesByDuckDBOptions,
+    limits: ViewLimits,
+) -> View:
+    """JSON Lines files in the data browser."""
+    return _text_view("read_json", _JSON_LINES_DEFAULTS, ctx, options, limits)
 
-    def view(
-        self,
-        fmt: DeltaLake,
-        ctx: ItemContext,
-        options: DeltaLakeByDuckDBOptions,
-        limits: ViewLimits,
-    ) -> View:
-        """A relation of the table, by ``delta_scan``.
 
-        Parameters
-        ----------
-        fmt : DeltaLake
-            The format.
-        ctx : ItemContext
-            The table's folder.
-        options : DeltaLakeByDuckDBOptions
-            The connection's options and ``delta_scan``'s parameters.
-        limits : ViewLimits
-            Not used: DuckDB reads only what the data browser asks.
+# Delta Lake tables with DuckDB's delta extension, by URL only: locally, and
+# on the storages DuckDB reads itself (``url_schemes``; in the code, those its
+# extensions reach). DuckDB installs and loads the extension at the first
+# query, unless its settings forbid it.
 
-        Returns
-        -------
-        QueryView
-        """
-        query = self._query(ctx, options)
-        return self._query_view(self._connect(options), lambda con: con.sql(query))
 
-    relation_template = cleandoc("""
-        import duckdb
+def _delta_viewed(
+    fmt: DeltaLake, ctx: ItemContext, options: DeltaLakeByDuckDBOptions
+) -> bool:
+    """Whether DuckDB reads the table's storage itself: ``delta_scan`` reads
+    no registered filesystem."""
+    return reads_by_url(ctx, options)
 
-        con = duckdb.connect({connect})
-        rel = con.sql({query})
-        """)
 
-    def recipe(
-        self, fmt: DeltaLake, ctx: ItemContext, options: DeltaLakeByDuckDBOptions
-    ) -> dict[str, str]:
-        """The code reading the table into a relation.
+def _delta_coded(
+    fmt: DeltaLake, ctx: ItemContext, options: DeltaLakeByDuckDBOptions
+) -> bool:
+    """Whether the code reaches the table: also where DuckDB's extensions
+    read the storage."""
+    return _code_reads_url(ctx, options)
 
-        Parameters
-        ----------
-        fmt : DeltaLake
-            The format.
-        ctx : ItemContext
-            The table's folder.
-        options : DeltaLakeByDuckDBOptions
-            The connection's options and ``delta_scan``'s parameters.
 
-        Returns
-        -------
-        dict of str to str
-        """
-        code = self.relation_template.format(
-            connect=options.connect_code().removeprefix(", "),
-            query=repr(self._query(ctx, options)),
-        )
-        return {AS_RELATION: code}
+def _delta_query(ctx: ItemContext, options: DeltaLakeByDuckDBOptions) -> str:
+    parameters = "".join(
+        f", {name} := {_sql_literal(value)}"
+        for name, value in options.arguments().items()
+    )
+    return f"select * from delta_scan({_sql_literal(_duckdb_url(ctx))}{parameters})"
+
+
+@code(
+    format=DeltaLake,
+    engine=DuckDBEngine,
+    name=AS_RELATION,
+    requires=_REQUIRES,
+    check=_delta_coded,
+)
+def delta_as_relation(
+    fmt: DeltaLake, ctx: ItemContext, options: DeltaLakeByDuckDBOptions
+) -> str:
+    """The code reading the table into a relation, by ``delta_scan``."""
+    return f"""\
+import duckdb
+
+con = duckdb.connect({options.connect_code().removeprefix(", ")})
+rel = con.sql({_delta_query(ctx, options)!r})"""
+
+
+@view(
+    format=DeltaLake,
+    engine=DuckDBEngine,
+    requires=_REQUIRES,
+    check=_delta_viewed,
+    code=delta_as_relation,
+)
+def delta_view(
+    fmt: DeltaLake,
+    ctx: ItemContext,
+    options: DeltaLakeByDuckDBOptions,
+    limits: ViewLimits,
+) -> View:
+    """A relation of the table, by ``delta_scan``. ``limits`` are not used:
+    DuckDB reads only what the data browser asks."""
+    query = _delta_query(ctx, options)
+    return _query_view(_connect(options), lambda con: con.sql(query))
+
+
+# DuckDB's database files: their tables and views in the data browser, and
+# code opening them. DuckDB opens only local files, also with a filesystem
+# registered: other storages' are copied to the kernel's disk first, after
+# asking for a large one.
 
 
 def _table_nodes(tables: Sequence[tuple[str, str]]) -> list[Node]:
@@ -856,149 +724,110 @@ def _table_nodes(tables: Sequence[tuple[str, str]]) -> list[Node]:
     ]
 
 
-class DuckDBDatabaseByDuckDB(_DuckDBSupport):
-    """DuckDB's database files: their tables and views in the data browser,
-    and code opening them.
+@code(
+    format=DuckDBDatabase, engine=DuckDBEngine, name=OPEN_DATABASE, requires=_REQUIRES
+)
+def database_code(fmt: DuckDBDatabase, ctx: ItemContext, options: DuckDBOptions) -> str:
+    """The code opening the database read only, and listing its tables; a
+    remote file is downloaded once by fsspec, with
+    ``fsspec_storage_options``."""
+    if isinstance(ctx.location, LocalLocation):
+        return f"""\
+import duckdb
 
-    DuckDB opens only local files, also with a filesystem registered: other
-    storages' are copied to the kernel's disk first, after asking for a large
-    one.
-    """
+con = duckdb.connect({ctx.library_url!r}, read_only=True{options.connect_code()})
+con.sql('show all tables')"""
+    scheme = _scheme(ctx)
+    storage = options.code_value("fsspec_storage_options")
+    # fsspec's options of a chained URL's storage go by its protocol.
+    fsspec_kwargs = (
+        format_kwargs(**{scheme: storage}) if storage and scheme.isidentifier() else ""
+    )
+    url = f"simplecache::{ctx.location.url}"
+    return f"""\
+import duckdb
+import fsspec
 
-    format = DuckDBDatabase
+path = fsspec.open_local({url!r}{fsspec_kwargs})
+con = duckdb.connect(path, read_only=True{options.connect_code()})
+con.sql('show all tables')"""
 
-    def view(
-        self,
-        fmt: DuckDBDatabase,
-        ctx: ItemContext,
-        options: DuckDBOptions,
-        limits: ViewLimits,
-    ) -> View:
-        """The database's tables and views, opened read only, each queried
-        when chosen.
 
-        Parameters
-        ----------
-        fmt : DuckDBDatabase
-            The format.
-        ctx : ItemContext
-            The database file.
-        options : DuckDBOptions
-            The connection's options.
-        limits : ViewLimits
-            ``max_whole_file_bytes``: the largest file copied without asking.
+@view(
+    format=DuckDBDatabase, engine=DuckDBEngine, requires=_REQUIRES, code=database_code
+)
+def database_view(
+    fmt: DuckDBDatabase, ctx: ItemContext, options: DuckDBOptions, limits: ViewLimits
+) -> View:
+    """The database's tables and views, opened read only, each queried when
+    chosen; a ``TextView`` if it has none. A remote file larger than
+    ``limits.max_whole_file_bytes``, and not copied yet, is downloaded once
+    the user confirms."""
+    cache = local_file_cache()
 
-        Returns
-        -------
-        TableSetView, TextView or ViewWithConfirmation
-            A ``TextView`` if the database has no table.
-        """
-        cache = local_file_cache()
+    def release(view: View | None = None) -> None:
+        cache.release(ctx.location, delay=_COPY_KEPT)
 
-        def release(view: View | None = None) -> None:
-            cache.release(ctx.location, delay=_COPY_KEPT)
-
-        def open_database() -> View:
-            path = cache.get(ctx)
-            try:
-                con = self._connect(options, str(path), read_only=True)
-            except BaseException:
-                release()
-                raise
-            try:
-                tables = con.sql(
-                    "select table_schema, table_name from information_schema.tables"
-                    " where table_catalog = current_database()"
-                    " order by table_schema, table_name"
-                ).fetchall()
-            except BaseException:
-                con.close()
-                release()
-                raise
-            if not tables:
-                con.close()
-                release()
-                return TextView(text=f"{ctx.name} has no tables.")
-            # A query rather than con.table, which parses no quotes in names
-            # and finds no view by a qualified name.
-            view = TableSetView(
-                nodes=_table_nodes(tables),
-                loader=lambda name: con.sql(f"select * from {name}"),
-            )
-            view.on_close(lambda view: con.close())
-            view.on_close(release)
-            return view
-
-        remote = not isinstance(ctx.location, LocalLocation)
-        size = ctx.size
-        if (
-            remote
-            and cache.status(ctx) != "cached"
-            and (size is None or size > limits.max_whole_file_bytes)
-        ):
-            size_text = f" ({_size_text(size)})" if size else ""
-            return ViewWithConfirmation(
-                message=(
-                    f"DuckDB opens only local databases: {ctx.name}{size_text} "
-                    "is downloaded to the kernel's disk first."
-                ),
-                factory=open_database,
-                button="Download",
-            )
-        return open_database()
-
-    local_template = cleandoc("""
-        import duckdb
-
-        con = duckdb.connect({path}, read_only=True{connect})
-        con.sql('show all tables')
-        """)
-
-    # fsspec downloads the file once: DuckDB opens only local databases.
-    download_template = cleandoc("""
-        import duckdb
-        import fsspec
-
-        path = fsspec.open_local({url}{fsspec_kwargs})
-        con = duckdb.connect(path, read_only=True{connect})
-        con.sql('show all tables')
-        """)
-
-    def recipe(
-        self, fmt: DuckDBDatabase, ctx: ItemContext, options: DuckDBOptions
-    ) -> dict[str, str]:
-        """The code opening the database read only, and listing its tables.
-
-        Parameters
-        ----------
-        fmt : DuckDBDatabase
-            The format.
-        ctx : ItemContext
-            The database file.
-        options : DuckDBOptions
-            The connection's options; ``fsspec_storage_options`` for a remote
-            file's download.
-
-        Returns
-        -------
-        dict of str to str
-        """
-        if isinstance(ctx.location, LocalLocation):
-            code = self.local_template.format(
-                path=repr(ctx.library_url), connect=options.connect_code()
-            )
-            return {OPEN_DATABASE: code}
-        scheme = _scheme(ctx)
-        storage = options.code_value("fsspec_storage_options")
-        # fsspec's options of a chained URL's storage go by its protocol.
-        fsspec_kwargs = (
-            format_kwargs(**{scheme: storage})
-            if storage and scheme.isidentifier()
-            else ""
+    def open_database() -> View:
+        path = cache.get(ctx)
+        try:
+            con = _connect(options, str(path), read_only=True)
+        except BaseException:
+            release()
+            raise
+        try:
+            tables = con.sql(
+                "select table_schema, table_name from information_schema.tables"
+                " where table_catalog = current_database()"
+                " order by table_schema, table_name"
+            ).fetchall()
+        except BaseException:
+            con.close()
+            release()
+            raise
+        if not tables:
+            con.close()
+            release()
+            return TextView(text=f"{ctx.name} has no tables.")
+        # A query rather than con.table, which parses no quotes in names
+        # and finds no view by a qualified name.
+        view = TableSetView(
+            nodes=_table_nodes(tables),
+            loader=lambda name: con.sql(f"select * from {name}"),
         )
-        code = self.download_template.format(
-            url=repr(f"simplecache::{ctx.location.url}"),
-            fsspec_kwargs=fsspec_kwargs,
-            connect=options.connect_code(),
+        view.on_close(lambda view: con.close())
+        view.on_close(release)
+        return view
+
+    remote = not isinstance(ctx.location, LocalLocation)
+    size = ctx.size
+    if (
+        remote
+        and cache.status(ctx) != "cached"
+        and (size is None or size > limits.max_whole_file_bytes)
+    ):
+        size_text = f" ({_size_text(size)})" if size else ""
+        return ViewWithConfirmation(
+            message=(
+                f"DuckDB opens only local databases: {ctx.name}{size_text} "
+                "is downloaded to the kernel's disk first."
+            ),
+            factory=open_database,
+            button="Download",
         )
-        return {OPEN_DATABASE: code}
+    return open_database()
+
+
+# In the order tried.
+DUCKDB_ACTIONS = register_actions(
+    delta_view,
+    delta_as_relation,
+    parquet_view,
+    parquet_as_relation,
+    csv_view,
+    csv_as_relation,
+    json_lines_view,
+    json_lines_as_relation,
+    database_view,
+    database_code,
+)

@@ -1,5 +1,9 @@
-"""Formats handled with Dask (``dask.dataframe``): the data browser and load
-code.
+"""Formats handled with Dask (``dask.dataframe``), as actions: the data
+browser and load code.
+
+Each format has a view and its code, registered in order in
+``DASK_ACTIONS``. Dask is imported inside the functions, so that the plugin
+loads without it.
 
 How Dask reaches an item, as measured with Dask 2026.8 through a filesystem
 counting the bytes read (the plugin's README says it for users):
@@ -33,14 +37,15 @@ counting the bytes read (the plugin's README says it for users):
 from __future__ import annotations
 
 from dataclasses import dataclass
-from inspect import cleandoc
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any
 
 import fsspec
 from fsspec.core import split_protocol
 from fsspec.implementations.dirfs import DirFileSystem
 
 from jupyter_storage_explorer.filesystems.locations import LocalLocation
+from jupyter_storage_explorer.formats.actions import code, register_actions, view
+from jupyter_storage_explorer.formats.base import ItemContext
 from jupyter_storage_explorer.formats.engine import Engine
 from jupyter_storage_explorer.formats.local_files import local_file_cache
 from jupyter_storage_explorer.formats.package import PythonPackage
@@ -48,7 +53,6 @@ from jupyter_storage_explorer.formats.packages import PyArrow
 from jupyter_storage_explorer.formats.parquet import Parquet
 from jupyter_storage_explorer.formats.support import (
     LIBRARY_DEFAULT,
-    FormatSupport,
     LibraryDefault,
     SupportOptions,
     format_arguments,
@@ -56,15 +60,17 @@ from jupyter_storage_explorer.formats.support import (
     secret_dict_field,
 )
 from jupyter_storage_explorer.formats.text import Csv, JsonLines
-from jupyter_storage_explorer.formats.view import QueryView, ViewWithConfirmation
+from jupyter_storage_explorer.formats.view import (
+    QueryView,
+    View,
+    ViewLimits,
+    ViewWithConfirmation,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
     from fsspec.spec import AbstractFileSystem
-
-    from jupyter_storage_explorer.formats.base import DataFormat, ItemContext
-    from jupyter_storage_explorer.formats.view import View, ViewLimits
 
 AS_DATA_FRAME = "Load as DataFrame"
 
@@ -96,14 +102,9 @@ class DaskEngine(Engine):
     requirements = (Dask(), Pandas(), PyArrow())
 
 
-def _dd() -> Any:
-    """``dask.dataframe``."""
-    return Dask().load("dataframe")
-
-
 @dataclass(frozen=True, kw_only=True)
 class DaskOptions(SupportOptions):
-    """The options of every Dask support.
+    """The options of every Dask action.
 
     Attributes
     ----------
@@ -275,7 +276,7 @@ def _size_text(size: int) -> str:
 
 
 def _code_kwargs(options: DaskOptions, defaults: Mapping[str, Any]) -> str:
-    """The code's keyword arguments: the support's ``defaults``, then the
+    """The code's keyword arguments: the action's ``defaults``, then the
     options' arguments given, then ``storage_options``."""
     arguments = {**defaults, **options.code_arguments()}
     return format_arguments(arguments) + format_kwargs(
@@ -283,257 +284,169 @@ def _code_kwargs(options: DaskOptions, defaults: Mapping[str, Any]) -> str:
     )
 
 
-class _DaskSupport(FormatSupport):
-    """A format read with Dask: lazy data, which the data browser reads a
-    partition at a time (the core's ``fetch_rows``)."""
+def _dask_code(reader: str, url: str, kwargs: str) -> str:
+    """The code reading ``url`` into a Dask DataFrame with ``reader``'s call,
+    e.g. "read_parquet({url}"; ``kwargs`` and the closing parenthesis
+    follow."""
+    return f"""\
+import dask.dataframe as dd
 
-    engine = DaskEngine
-    options_model = DaskOptions
-
-    @staticmethod
-    def _query_view(data: Any) -> QueryView:
-        return QueryView(data=data)
+df = dd.{reader.format(url=repr(url))}{kwargs})"""
 
 
-class ParquetByDask(_DaskSupport):
-    """Parquet files and folders with Dask, through the explorer's
-    filesystem on every storage: a file's row groups are its partitions, a
-    folder's files, with a partitioned folder's columns."""
-
-    format = Parquet
-    options_model = ParquetByDaskOptions
-
-    @staticmethod
-    def _hive_files(fmt: Parquet, ctx: ItemContext) -> bool:
-        """Whether the folder's data files are named without an extension, as
-        Hive's, which Dask skips by default."""
-        return ctx.is_dir and fmt.layout(ctx).files == "*"
-
-    def view(
-        self,
-        fmt: Parquet,
-        ctx: ItemContext,
-        options: ParquetByDaskOptions,
-        limits: ViewLimits,
-    ) -> View:
-        """A DataFrame of the Parquet file, or of the folder's data files.
-
-        Parameters
-        ----------
-        fmt : Parquet
-            The format, with the folder's layout.
-        ctx : ItemContext
-            The file or folder.
-        options : ParquetByDaskOptions
-            ``read_parquet``'s arguments.
-        limits : ViewLimits
-            Not used: Dask reads only the partitions the data browser needs.
-
-        Returns
-        -------
-        QueryView
-        """
-        defaults: dict[str, Any] = {}
-        if not ctx.is_dir:
-            defaults["split_row_groups"] = True
-        elif self._hive_files(fmt, ctx):
-            defaults["parquet_file_extension"] = None
-        fs, path = _unwrapped(ctx.fs, ctx.path)
-        data = _dd().read_parquet(
-            path, filesystem=fs, **{**defaults, **options.arguments()}
-        )
-        return self._query_view(data)
-
-    data_frame_template = cleandoc("""
-        import dask.dataframe as dd
-
-        df = dd.read_parquet({url}{kwargs})
-        """)
-
-    def recipe(
-        self, fmt: Parquet, ctx: ItemContext, options: ParquetByDaskOptions
-    ) -> dict[str, str]:
-        """The code reading the file or folder into a Dask DataFrame.
-
-        Parameters
-        ----------
-        fmt : Parquet
-            The format, with the folder's layout.
-        ctx : ItemContext
-            The file or folder.
-        options : ParquetByDaskOptions
-            ``read_parquet``'s arguments and ``storage_options``.
-
-        Returns
-        -------
-        dict of str to str
-        """
-        defaults = (
-            {"parquet_file_extension": None} if self._hive_files(fmt, ctx) else {}
-        )
-        code = self.data_frame_template.format(
-            url=repr(ctx.library_url), kwargs=_code_kwargs(options, defaults)
-        )
-        return {AS_DATA_FRAME: code}
+# Parquet files and folders, through the explorer's filesystem on every
+# storage: a file's row groups are its partitions, a folder's files, with a
+# partitioned folder's columns.
 
 
-class _TextByDask(_DaskSupport):
-    """A text format of files (CSV, JSON Lines), read in blocks: by URL with
-    the explorer's ``storage_options`` where fsspec gives back the explorer's
-    filesystem so, else from a copy on the kernel's disk."""
-
-    # The reader of dask.dataframe.
-    reader: ClassVar[str] = ""
-
-    def _defaults(
-        self, fmt: DataFormat, ctx: ItemContext, options: SupportOptions
-    ) -> dict[str, Any]:
-        """The support's own arguments of the data browser's reader, before
-        the options'."""
-        return {}
-
-    def view(
-        self,
-        fmt: DataFormat,
-        ctx: ItemContext,
-        options: DaskOptions,
-        limits: ViewLimits,
-    ) -> View:
-        """A DataFrame of the file, in blocks of at most
-        ``limits.max_whole_file_bytes`` bytes, unless ``blocksize`` says
-        otherwise.
-
-        Where fsspec cannot give back the explorer's filesystem by URL, the
-        file is copied to the kernel's disk first: at once up to
-        ``limits.max_whole_file_bytes``, after asking for a larger one.
-
-        Parameters
-        ----------
-        fmt : DataFormat
-            The format.
-        ctx : ItemContext
-            The file.
-        options : DaskOptions
-            The reader's arguments.
-        limits : ViewLimits
-            ``max_whole_file_bytes``: the largest block, and the largest file
-            copied without asking.
-
-        Returns
-        -------
-        QueryView or ViewWithConfirmation
-        """
-        arguments = {
-            # Dask's blocks are one to two times the size asked for.
-            "blocksize": max(1, limits.max_whole_file_bytes // 2),
-            **self._defaults(fmt, ctx, options),
-            **options.arguments(),
-        }
-        reader = getattr(_dd(), self.reader)
-        if isinstance(ctx.location, LocalLocation):
-            return self._query_view(reader(ctx.library_url, **arguments))
-        if (rebuilt := _rebuilt_url(ctx)) is not None:
-            url, storage_options = rebuilt
-            return self._query_view(
-                reader(url, storage_options=storage_options, **arguments)
-            )
-        cache = local_file_cache()
-
-        def copied() -> View:
-            path = cache.get(ctx).as_posix()
-            try:
-                view = self._query_view(reader(path, **arguments))
-            except BaseException:
-                cache.release(ctx.location, delay=_COPY_KEPT)
-                raise
-            view.on_close(lambda view: cache.release(ctx.location, delay=_COPY_KEPT))
-            return view
-
-        size = ctx.size
-        if cache.status(ctx) == "cached" or (
-            size is not None and size <= limits.max_whole_file_bytes
-        ):
-            return copied()
-        size_text = f" ({_size_text(size)})" if size else ""
-        return ViewWithConfirmation(
-            message=(
-                f"Dask cannot reach this storage by URL: {ctx.name}{size_text} is "
-                "copied to the kernel's disk first."
-            ),
-            factory=copied,
-            button="Copy",
-        )
-
-    data_frame_template: ClassVar[str] = ""
-
-    def _code_defaults(self, fmt: DataFormat, ctx: ItemContext) -> dict[str, Any]:
-        """The support's own arguments of the code's reader, before the
-        options'."""
-        return {}
-
-    def recipe(
-        self, fmt: DataFormat, ctx: ItemContext, options: DaskOptions
-    ) -> dict[str, str]:
-        """The code reading the file into a Dask DataFrame.
-
-        Parameters
-        ----------
-        fmt : DataFormat
-            The format.
-        ctx : ItemContext
-            The file.
-        options : DaskOptions
-            The reader's arguments and ``storage_options``.
-
-        Returns
-        -------
-        dict of str to str
-        """
-        kwargs = _code_kwargs(options, self._code_defaults(fmt, ctx))
-        code = self.data_frame_template.format(url=repr(ctx.library_url), kwargs=kwargs)
-        return {AS_DATA_FRAME: code}
+def _hive_files(fmt: Parquet, ctx: ItemContext) -> bool:
+    """Whether the folder's data files are named without an extension, as
+    Hive's, which Dask skips by default."""
+    return ctx.is_dir and fmt.layout(ctx).files == "*"
 
 
-class CsvByDask(_TextByDask):
-    """CSV files with Dask, the separator detected: the data browser, and
-    code."""
-
-    format = Csv
-    options_model = CsvByDaskOptions
-    reader = "read_csv"
-
-    def _defaults(
-        self, fmt: Csv, ctx: ItemContext, options: CsvByDaskOptions
-    ) -> dict[str, Any]:
-        if options.sep is not LIBRARY_DEFAULT:
-            return {}
-        return {"sep": fmt.separator(ctx.name, ctx.head_text(64 * 1024)[0])}
-
-    data_frame_template = cleandoc("""
-        import dask.dataframe as dd
-
-        df = dd.read_csv({url}{kwargs})
-        """)
-
-    def _code_defaults(self, fmt: Csv, ctx: ItemContext) -> dict[str, Any]:
-        sep = fmt.code_separator(ctx)
-        return {"sep": sep} if sep is not None else {}
+@code(format=Parquet, engine=DaskEngine, name=AS_DATA_FRAME)
+def parquet_as_data_frame(
+    fmt: Parquet, ctx: ItemContext, options: ParquetByDaskOptions
+) -> str:
+    """The code reading the file or folder into a Dask DataFrame."""
+    defaults = {"parquet_file_extension": None} if _hive_files(fmt, ctx) else {}
+    return _dask_code(
+        "read_parquet({url}", ctx.library_url, _code_kwargs(options, defaults)
+    )
 
 
-class JsonLinesByDask(_TextByDask):
-    """JSON Lines files with Dask: the data browser, and code."""
+@view(format=Parquet, engine=DaskEngine, code=parquet_as_data_frame)
+def parquet_view(
+    fmt: Parquet, ctx: ItemContext, options: ParquetByDaskOptions, limits: ViewLimits
+) -> View:
+    """A DataFrame of the Parquet file, or of the folder's data files, which
+    the data browser reads a partition at a time (the core's
+    ``fetch_rows``). ``limits`` are not used: Dask reads only the partitions
+    the data browser needs."""
+    import dask.dataframe as dd
 
-    format = JsonLines
-    options_model = JsonLinesByDaskOptions
-    reader = "read_json"
+    defaults: dict[str, Any] = {}
+    if not ctx.is_dir:
+        defaults["split_row_groups"] = True
+    elif _hive_files(fmt, ctx):
+        defaults["parquet_file_extension"] = None
+    fs, path = _unwrapped(ctx.fs, ctx.path)
+    data = dd.read_parquet(path, filesystem=fs, **{**defaults, **options.arguments()})
+    return QueryView(data=data)
 
-    def _defaults(
-        self, fmt: JsonLines, ctx: ItemContext, options: JsonLinesByDaskOptions
-    ) -> dict[str, Any]:
-        return {"lines": True}
 
-    data_frame_template = cleandoc("""
-        import dask.dataframe as dd
+# Text formats of files (CSV, JSON Lines), read in blocks: by URL with the
+# explorer's storage_options where fsspec gives back the explorer's
+# filesystem so, else from a copy on the kernel's disk.
 
-        df = dd.read_json({url}, lines=True{kwargs})
-        """)
+
+def _text_view(
+    reader: str,
+    ctx: ItemContext,
+    defaults: Mapping[str, Any],
+    options: DaskOptions,
+    limits: ViewLimits,
+) -> View:
+    """A DataFrame of the file read with ``dask.dataframe``'s ``reader``, in
+    blocks of at most ``limits.max_whole_file_bytes`` bytes, unless
+    ``blocksize`` says otherwise: ``defaults`` then the options are its
+    arguments.
+
+    Where fsspec cannot give back the explorer's filesystem by URL, the file
+    is copied to the kernel's disk first: at once up to
+    ``limits.max_whole_file_bytes``, after asking for a larger one."""
+    import dask.dataframe as dd
+
+    arguments = {
+        # Dask's blocks are one to two times the size asked for.
+        "blocksize": max(1, limits.max_whole_file_bytes // 2),
+        **defaults,
+        **options.arguments(),
+    }
+    read = getattr(dd, reader)
+    if isinstance(ctx.location, LocalLocation):
+        return QueryView(data=read(ctx.library_url, **arguments))
+    if (rebuilt := _rebuilt_url(ctx)) is not None:
+        url, storage_options = rebuilt
+        return QueryView(data=read(url, storage_options=storage_options, **arguments))
+    cache = local_file_cache()
+
+    def copied() -> View:
+        path = cache.get(ctx).as_posix()
+        try:
+            view = QueryView(data=read(path, **arguments))
+        except BaseException:
+            cache.release(ctx.location, delay=_COPY_KEPT)
+            raise
+        view.on_close(lambda view: cache.release(ctx.location, delay=_COPY_KEPT))
+        return view
+
+    size = ctx.size
+    if cache.status(ctx) == "cached" or (
+        size is not None and size <= limits.max_whole_file_bytes
+    ):
+        return copied()
+    size_text = f" ({_size_text(size)})" if size else ""
+    return ViewWithConfirmation(
+        message=(
+            f"Dask cannot reach this storage by URL: {ctx.name}{size_text} is "
+            "copied to the kernel's disk first."
+        ),
+        factory=copied,
+        button="Copy",
+    )
+
+
+@code(format=Csv, engine=DaskEngine, name=AS_DATA_FRAME)
+def csv_as_data_frame(fmt: Csv, ctx: ItemContext, options: CsvByDaskOptions) -> str:
+    """The code reading the file into a Dask DataFrame, with the separator
+    detected."""
+    sep = fmt.code_separator(ctx)
+    defaults = {"sep": sep} if sep is not None else {}
+    return _dask_code(
+        "read_csv({url}", ctx.library_url, _code_kwargs(options, defaults)
+    )
+
+
+@view(format=Csv, engine=DaskEngine, code=csv_as_data_frame)
+def csv_view(
+    fmt: Csv, ctx: ItemContext, options: CsvByDaskOptions, limits: ViewLimits
+) -> View:
+    """CSV in the data browser, the separator detected unless one is given."""
+    defaults: dict[str, Any] = {}
+    if options.sep is LIBRARY_DEFAULT:
+        defaults["sep"] = fmt.separator(ctx.name, ctx.head_text(64 * 1024)[0])
+    return _text_view("read_csv", ctx, defaults, options, limits)
+
+
+@code(format=JsonLines, engine=DaskEngine, name=AS_DATA_FRAME)
+def json_lines_as_data_frame(
+    fmt: JsonLines, ctx: ItemContext, options: JsonLinesByDaskOptions
+) -> str:
+    """The code reading the file into a Dask DataFrame."""
+    return _dask_code(
+        "read_json({url}, lines=True", ctx.library_url, _code_kwargs(options, {})
+    )
+
+
+@view(format=JsonLines, engine=DaskEngine, code=json_lines_as_data_frame)
+def json_lines_view(
+    fmt: JsonLines,
+    ctx: ItemContext,
+    options: JsonLinesByDaskOptions,
+    limits: ViewLimits,
+) -> View:
+    """JSON Lines in the data browser."""
+    return _text_view("read_json", ctx, {"lines": True}, options, limits)
+
+
+# In the order tried; within a format, its view, then its code.
+DASK_ACTIONS = register_actions(
+    parquet_view,
+    parquet_as_data_frame,
+    csv_view,
+    csv_as_data_frame,
+    json_lines_view,
+    json_lines_as_data_frame,
+)
