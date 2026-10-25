@@ -27,7 +27,7 @@ from jupyter_storage_explorer._explorer.jobs import JobsMixin
 from jupyter_storage_explorer._explorer.jupyterlab import JupyterLabFilesMixin
 from jupyter_storage_explorer._explorer.listing import Listing
 from jupyter_storage_explorer._explorer.mapper_css import mapper_key, mapper_styles
-from jupyter_storage_explorer._explorer.previews import PreviewsMixin
+from jupyter_storage_explorer._explorer.previews import PreviewsMixin, action_id
 from jupyter_storage_explorer._explorer.requests import FileRequestsMixin
 from jupyter_storage_explorer._explorer.states import ExplorerStates, explorer_states
 from jupyter_storage_explorer._jobs.incoming import IncomingFiles
@@ -1140,7 +1140,7 @@ class StorageExplorer(
                 content["path"],
                 content.get("format"),
                 content.get("engine", ...),
-                content.get("action") or None,
+                action_id(content.get("action")),
             )
 
     # --- The folder shown and the selection, set by the frontend (here, as

@@ -161,7 +161,7 @@ class DeltaLakeByDatabricksConnectOptions(DeltaLakeByPySparkOptions):
 @code(
     format=DeltaLake,
     engine=DatabricksConnectEngine,
-    name=AS_DATA_FRAME,
+    label=AS_DATA_FRAME,
     check=spark_can_read,
 )
 def delta_as_data_frame(
@@ -190,7 +190,7 @@ def delta_view(
 @code(
     format=Parquet,
     engine=DatabricksConnectEngine,
-    name=AS_DATA_FRAME,
+    label=AS_DATA_FRAME,
     check=spark_can_read,
 )
 def parquet_as_data_frame(
@@ -217,7 +217,10 @@ def parquet_view(
 
 
 @code(
-    format=Csv, engine=DatabricksConnectEngine, name=AS_DATA_FRAME, check=spark_can_read
+    format=Csv,
+    engine=DatabricksConnectEngine,
+    label=AS_DATA_FRAME,
+    check=spark_can_read,
 )
 def csv_as_data_frame(
     fmt: Csv, ctx: ItemContext, options: CsvByDatabricksConnectOptions
@@ -245,7 +248,7 @@ def csv_view(
 @code(
     format=JsonLines,
     engine=DatabricksConnectEngine,
-    name=AS_DATA_FRAME,
+    label=AS_DATA_FRAME,
     check=spark_can_read,
 )
 def json_lines_as_data_frame(

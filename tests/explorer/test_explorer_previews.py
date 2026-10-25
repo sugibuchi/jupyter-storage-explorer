@@ -180,12 +180,12 @@ def test_menu_info(mem_explorer, monkeypatch):
     assert folder["formats"] == ["delta"]
 
 
-@code(format=SQLite, engine=PythonEngine, name="Connect")
+@code(format=SQLite, engine=PythonEngine, label="Connect")
 def sqlite_code(fmt, ctx, options):
     return "import sqlite3"
 
 
-@code(format=DuckDB, engine=PythonEngine, name="Connect")
+@code(format=DuckDB, engine=PythonEngine, label="Connect")
 def duckdb_code(fmt, ctx, options):
     return "import duckdb"
 
@@ -198,7 +198,7 @@ class HeldText:
     error: Exception | None = None
 
 
-@view(format=Text, engine=PythonEngine, name="Held")
+@view(format=Text, engine=PythonEngine, label="Held")
 def held_text(fmt, ctx, options, limits):
     """Views text files once ``HeldText.release`` is set, as a Spark session
     starting holds a view up; before the built-in views, as it is given
@@ -739,7 +739,7 @@ def test_the_views_own_reads(memfs):
         reads.append((offset, length))
         return lf.to_native().slice(offset, length).collect().pipe(nw.from_native)
 
-    @view(format=Text, engine=PythonEngine, name="Fetch")
+    @view(format=Text, engine=PythonEngine, label="Fetch")
     def fetching(fmt, ctx, options, limits):
         data = pl.LazyFrame({"n": list(range(30))})
         return QueryView(data=data, fetch=fetch)

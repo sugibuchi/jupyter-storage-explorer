@@ -118,11 +118,13 @@ the code. The traps:
   ruff's `runtime-evaluated-decorators` keeps it out of `TYPE_CHECKING`.
 - The explorer calls an action only for items its `check` accepts, and then tries no other action. Its errors are the
   item's. A check never reads the storage: it runs on the main thread for each item clicked.
-- Two actions of one kind, format, engine and name are an error, wherever they come from.
+- Two actions of one kind, format, engine and label are an error, wherever they come from. The page names an action
+  by its `id`, never by its label.
 - A view reading much, such as a whole large file, asks first: it returns a `ViewWithPrompt`.
 - Actions never check their packages: the chain calls only installed ones.
 - Options are data: what actions do with them goes in functions taking them. Methods only give views of them.
-- A code action's name never names the library. Multi-line code comes from `inspect.cleandoc` templates.
+- A code action's label never names the library: "Python code" shows the engine. Multi-line code comes from
+  `inspect.cleandoc` templates.
 - Generated code gets options only through `ActionOptions.code_value`, which leaves out secrets.
 - Plugins never depend on their libraries: their `full` extra installs them. A new dependency of a plugin goes in its
   `hatch_build.py`.

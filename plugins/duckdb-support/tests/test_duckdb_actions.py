@@ -118,16 +118,16 @@ def test_one_options_class_per_format():
 
 
 def test_names():
-    assert [(a.format, a.name) for a in DUCKDB_ACTIONS] == [
-        (DeltaLake, "View Delta Lake table"),
+    assert [(a.format, a.label) for a in DUCKDB_ACTIONS] == [
+        (DeltaLake, "View as Delta Lake table (DuckDB)"),
         (DeltaLake, "Load as relation"),
-        (Parquet, "View Parquet"),
+        (Parquet, "View as Parquet (DuckDB)"),
         (Parquet, "Load as relation"),
-        (Csv, "View CSV"),
+        (Csv, "View as CSV (DuckDB)"),
         (Csv, "Load as relation"),
-        (JsonLines, "View JSON Lines"),
+        (JsonLines, "View as JSON Lines (DuckDB)"),
         (JsonLines, "Load as relation"),
-        (DuckDBDatabase, "View DuckDB database"),
+        (DuckDBDatabase, "View as DuckDB database (DuckDB)"),
         (DuckDBDatabase, "Open the database"),
     ]
 

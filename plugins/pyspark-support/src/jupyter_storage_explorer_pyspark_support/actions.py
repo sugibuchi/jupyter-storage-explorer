@@ -645,7 +645,7 @@ AS_DATA_FRAME = "Load as DataFrame"
 @code(
     format=DeltaLake,
     engine=PySparkEngine,
-    name=AS_DATA_FRAME,
+    label=AS_DATA_FRAME,
     requires=(DeltaSpark(),),
     check=spark_can_read,
 )
@@ -673,7 +673,7 @@ def delta_view(
     return spark_delta_view(PYSPARK_SESSIONS, ctx, options)
 
 
-@code(format=Parquet, engine=PySparkEngine, name=AS_DATA_FRAME, check=spark_can_read)
+@code(format=Parquet, engine=PySparkEngine, label=AS_DATA_FRAME, check=spark_can_read)
 def parquet_as_data_frame(
     fmt: Parquet, ctx: ItemContext, options: ParquetByPySparkOptions
 ) -> str:
@@ -697,7 +697,7 @@ def parquet_view(
     return spark_parquet_view(PYSPARK_SESSIONS, ctx, options)
 
 
-@code(format=Csv, engine=PySparkEngine, name=AS_DATA_FRAME, check=spark_can_read)
+@code(format=Csv, engine=PySparkEngine, label=AS_DATA_FRAME, check=spark_can_read)
 def csv_as_data_frame(fmt: Csv, ctx: ItemContext, options: CsvByPySparkOptions) -> str:
     """CSV into a DataFrame."""
     return spark_csv_code(PYSPARK_SESSIONS, fmt, ctx, options)
@@ -711,7 +711,7 @@ def csv_view(
     return spark_csv_view(PYSPARK_SESSIONS, fmt, ctx, options, limits)
 
 
-@code(format=JsonLines, engine=PySparkEngine, name=AS_DATA_FRAME, check=spark_can_read)
+@code(format=JsonLines, engine=PySparkEngine, label=AS_DATA_FRAME, check=spark_can_read)
 def json_lines_as_data_frame(
     fmt: JsonLines, ctx: ItemContext, options: JsonLinesByPySparkOptions
 ) -> str:

@@ -285,7 +285,7 @@ def _pandas_code(reader: str, url: str, kwargs: str) -> str:
 # CSV
 
 
-@code(format=Csv, engine=PandasEngine, name=AS_DATA_FRAME)
+@code(format=Csv, engine=PandasEngine, label=AS_DATA_FRAME)
 def csv_as_data_frame(fmt: Csv, ctx: ItemContext, options: CsvByPandasOptions) -> str:
     """A DataFrame, with the separator detected unless one is given."""
     kwargs = _code_kwargs(options, {"sep": fmt.code_separator(ctx)})
@@ -314,7 +314,7 @@ def csv_view(
 # JSON Lines
 
 
-@code(format=JsonLines, engine=PandasEngine, name=AS_DATA_FRAME)
+@code(format=JsonLines, engine=PandasEngine, label=AS_DATA_FRAME)
 def json_lines_as_data_frame(
     fmt: JsonLines, ctx: ItemContext, options: JsonLinesByPandasOptions
 ) -> str:
@@ -341,7 +341,7 @@ def json_lines_view(
 # JSON: code only, as JSON is viewed as a tree (the built-in ``json_view``).
 
 
-@code(format=Json, engine=PandasEngine, name=AS_DATA_FRAME)
+@code(format=Json, engine=PandasEngine, label=AS_DATA_FRAME)
 def json_as_data_frame(
     fmt: Json, ctx: ItemContext, options: JsonByPandasOptions
 ) -> str:
@@ -364,7 +364,7 @@ def _sheets(
     )
 
 
-@code(format=Excel, engine=PandasEngine, name=AS_DATA_FRAME, requires=(Openpyxl(),))
+@code(format=Excel, engine=PandasEngine, label=AS_DATA_FRAME, requires=(Openpyxl(),))
 def excel_as_data_frame(
     fmt: Excel, ctx: ItemContext, options: ExcelByPandasOptions
 ) -> str:
@@ -417,7 +417,7 @@ def excel_view(
 # Parquet: pyarrow is pandas' Parquet engine.
 
 
-@code(format=Parquet, engine=PandasEngine, name=AS_DATA_FRAME, requires=(PyArrow(),))
+@code(format=Parquet, engine=PandasEngine, label=AS_DATA_FRAME, requires=(PyArrow(),))
 def parquet_as_data_frame(
     fmt: Parquet, ctx: ItemContext, options: ParquetByPandasOptions
 ) -> str:

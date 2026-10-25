@@ -16,6 +16,7 @@ import contextlib
 import dataclasses
 import functools
 import inspect
+import itertools
 import typing
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -173,6 +174,9 @@ Check = Callable[[DataFormat, "ItemContext", ActionOptions], bool]
 
 F = TypeVar("F", bound=Callable[..., Any])
 
+# The actions' ids, in the order they are made (see Action.id).
+_ids = itertools.count(1)
+
 # The parameters of each kind of function, in order: checked by name count
 # only, as the names are the author's.
 _VIEW_PARAMETERS = ("fmt", "ctx", "options", "limits")
@@ -194,8 +198,10 @@ class Action(Generic[F]):
         The library it uses, ``PythonEngine`` for Python alone. With
         ``format``, the pair whose options it gets:
         ``engine_options[engine.key][format.name]``.
-    name : str
-        What the menu shows, ``{format}`` replaced by the format's label.
+    label : str
+        What users see: a view's entry in the menus, a code action's title in
+        "Python code". ``{format}`` and ``{engine}`` are replaced by the
+        labels of its format and engine.
     requires : tuple of PythonPackage
         Packages it needs besides its engine's.
     check : callable or None
@@ -203,15 +209,22 @@ class Action(Generic[F]):
     options_model : type of ActionOptions
         The class of its options, from the annotation of the function's
         ``options`` parameter.
+    id : int
+        What the page names it by, e.g. the view chosen in "Preview as":
+        a number of its own, given when the action is made, the same for the
+        kernel's life.
     """
 
     function: F
     format: type[DataFormat]
     engine: type[Engine]
-    name: str
+    label: str
     requires: tuple[PythonPackage, ...]
     check: Check | None
     options_model: type[ActionOptions]
+    id: int = dataclasses.field(
+        init=False, default_factory=lambda: next(_ids), compare=False
+    )
 
     def __post_init__(self) -> None:
         # Its function's name, docstring and signature, as functools.wraps
@@ -262,7 +275,7 @@ def view(
     *,
     format: type[DataFormat],
     engine: type[Engine],
-    name: str = "View {format}",
+    label: str = "View as {format} ({engine})",
     requires: tuple[PythonPackage, ...] = (),
     check: Check | None = None,
     code: CodeAction | None = None,
@@ -303,9 +316,11 @@ def view(
     engine : type of Engine
         The library used, e.g. polars-support's ``PolarsEngine``;
         ``PythonEngine`` for Python alone.
-    name : str, default "View {format}"
-        What the menu shows, ``{format}`` replaced by the format's label.
-        It never names the library: the menu shows the engine already.
+    label : str, default "View as {format} ({engine})"
+        What the menus show for the view when its engine has several views
+        of an item, e.g. "Parquet in a widget ({engine})". ``{format}`` and
+        ``{engine}`` are replaced by the labels of ``format`` and
+        ``engine``. Unique among the views of one format and engine.
     requires : tuple of PythonPackage, default ()
         Packages needed besides the engine's, as instances. The action is
         offered only when they are installed.
@@ -348,7 +363,7 @@ def view(
             _VIEW_PARAMETERS,
             format=format,
             engine=engine,
-            name=name,
+            label=label,
             requires=requires,
             check=check,
         )
@@ -364,7 +379,7 @@ def code(
     *,
     format: type[DataFormat],
     engine: type[Engine],
-    name: str,
+    label: str,
     requires: tuple[PythonPackage, ...] = (),
     check: Check | None = None,
 ) -> Callable[[Callable[..., str]], CodeAction]:
@@ -393,10 +408,11 @@ def code(
         The format loaded; its subclasses too.
     engine : type of Engine
         The library used; ``PythonEngine`` for Python alone.
-    name : str
-        What the code does, shown as its title, e.g. "Load as LazyFrame".
-        ``{format}`` is replaced by the format's label. It never names the
-        library.
+    label : str
+        What the code does, shown as its title under its engine in "Python
+        code", e.g. "Load as LazyFrame". ``{format}`` and ``{engine}`` are
+        replaced by the labels of ``format`` and ``engine``. Unique among
+        the code actions of one format and engine.
     requires : tuple of PythonPackage, default ()
         Packages needed besides the engine's.
     check : callable, optional
@@ -414,7 +430,7 @@ def code(
 
     Examples
     --------
-    >>> @code(format=Parquet, engine=PolarsEngine, name="Load as LazyFrame")
+    >>> @code(format=Parquet, engine=PolarsEngine, label="Load as LazyFrame")
     ... def parquet_as_lazy_frame(fmt, ctx, options: ParquetByPolarsOptions):
     ...     kwargs = format_arguments(options.code_arguments())
     ...     return f"import polars as pl\\n\\ndf = pl.scan_parquet({ctx.url_or_local_path!r}{kwargs})"
@@ -426,7 +442,7 @@ def code(
             _CODE_PARAMETERS,
             format=format,
             engine=engine,
-            name=name,
+            label=label,
             requires=requires,
             check=check,
         )
@@ -456,7 +472,7 @@ def register_actions(*actions: Action[Any]) -> tuple[Action[Any], ...]:
     TypeError
         For an argument that is no action.
     ValueError
-        For two actions of one kind, format and engine with one name, a
+        For two actions of one kind, format and engine with one label, a
         view's ``code`` missing from ``actions``, or options classes of one
         format and engine whose fields of one name differ in type or in
         what is secret.
@@ -488,18 +504,19 @@ def register_actions(*actions: Action[Any]) -> tuple[Action[Any], ...]:
 
 def check_actions(actions: tuple[Action[Any], ...] | list[Action[Any]]) -> None:
     """ValueError for actions that cannot be used together: two of one kind,
-    format and engine with one name, or options classes of one format and
-    engine whose fields of one name differ (see ``register_actions``).
-    Explorers check all their actions so, whatever they come from."""
-    names: dict[tuple[type, type[DataFormat], str, str], Action[Any]] = {}
+    format and engine with one label, which users could not tell apart, or
+    options classes of one format and engine whose fields of one name differ
+    (see ``register_actions``). Explorers check all their actions so,
+    whatever they come from."""
+    labels: dict[tuple[type, type[DataFormat], str, str], Action[Any]] = {}
     for action in actions:
-        key = (type(action), action.format, action.engine.key, action.name)
-        known = names.setdefault(key, action)
+        key = (type(action), action.format, action.engine.key, action.label)
+        known = labels.setdefault(key, action)
         if known is not action:
             raise ValueError(
-                f"two actions named {action.name!r} for {action.format.label} "
+                f"two actions labelled {action.label!r} for {action.format.label} "
                 f"with {action.engine.key}: {_where(known)} and {_where(action)}; "
-                "rename one"
+                "give one another label"
             )
     fields: dict[tuple[type[DataFormat], str, str], tuple[Any, Action[Any]]] = {}
     for action in actions:
@@ -522,7 +539,7 @@ def _fields(
     *,
     format: type[DataFormat],
     engine: type[Engine],
-    name: str,
+    label: str,
     requires: tuple[PythonPackage, ...],
     check: Check | None,
 ) -> dict[str, Any]:
@@ -543,10 +560,14 @@ def _fields(
         raise TypeError(f"{where}: check must be callable, not {check!r}")
     if not callable(function):
         raise TypeError(f"{where}: not a function")
+    if not isinstance(label, str):
+        raise TypeError(f"{where}: label must be a str, not {label!r}")
     try:
-        label = name.format(format=format.label)
+        shown = label.format(format=format.label, engine=engine.label)
     except (KeyError, IndexError, ValueError) as exc:
-        raise TypeError(f"{where}: name may hold only {{format}}: {name!r}") from exc
+        raise TypeError(
+            f"{where}: label may hold only {{format}} and {{engine}}: {label!r}"
+        ) from exc
     every = list(inspect.signature(function).parameters.values())
     positional = [
         p for p in every if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
@@ -567,7 +588,7 @@ def _fields(
         "function": function,
         "format": format,
         "engine": engine,
-        "name": label,
+        "label": shown,
         "requires": requires,
         "check": check,
         "options_model": _options_model(function, positional[2].name, format, where),

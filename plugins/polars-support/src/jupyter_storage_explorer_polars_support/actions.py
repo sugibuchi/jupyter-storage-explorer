@@ -449,7 +449,7 @@ def _code_kwargs(
 # CSV
 
 
-@code(format=Csv, engine=PolarsEngine, name=AS_DATA_FRAME, check=_can_offer_recipe)
+@code(format=Csv, engine=PolarsEngine, label=AS_DATA_FRAME, check=_can_offer_recipe)
 def csv_as_data_frame(fmt: Csv, ctx: ItemContext, options: CsvByPolarsOptions) -> str:
     """A DataFrame, with the separator detected unless one is given."""
     defaults = {"separator": fmt.code_separator(ctx)}
@@ -495,7 +495,7 @@ def csv_view(
 # JSON Lines
 
 
-@code(format=JsonLines, engine=PolarsEngine, name=AS_LAZY_FRAME, check=_read_by_polars)
+@code(format=JsonLines, engine=PolarsEngine, label=AS_LAZY_FRAME, check=_read_by_polars)
 def json_lines_as_lazy_frame(
     fmt: JsonLines, ctx: ItemContext, options: JsonLinesByPolarsOptions
 ) -> str:
@@ -504,7 +504,7 @@ def json_lines_as_lazy_frame(
 
 
 @code(
-    format=JsonLines, engine=PolarsEngine, name=AS_DATA_FRAME, check=_can_offer_recipe
+    format=JsonLines, engine=PolarsEngine, label=AS_DATA_FRAME, check=_can_offer_recipe
 )
 def json_lines_as_data_frame(
     fmt: JsonLines, ctx: ItemContext, options: JsonLinesByPolarsOptions
@@ -539,7 +539,7 @@ def json_lines_view(
 # JSON: code only, as JSON is viewed as a tree (the built-in ``json_view``).
 
 
-@code(format=Json, engine=PolarsEngine, name=AS_DATA_FRAME, check=_can_offer_recipe)
+@code(format=Json, engine=PolarsEngine, label=AS_DATA_FRAME, check=_can_offer_recipe)
 def json_as_data_frame(
     fmt: Json, ctx: ItemContext, options: JsonByPolarsOptions
 ) -> str:
@@ -568,7 +568,7 @@ def _sheets(names: list[str], loader: Callable[[str], Any]) -> TableSetView:
 @code(
     format=Excel,
     engine=PolarsEngine,
-    name=AS_DATA_FRAME,
+    label=AS_DATA_FRAME,
     requires=(Fastexcel(), Fsspec()),
 )
 def excel_as_data_frame(
@@ -664,7 +664,7 @@ def _parquet_code_kwargs(
     return _code_kwargs(options, defaults), scanned
 
 
-@code(format=Parquet, engine=PolarsEngine, name=AS_LAZY_FRAME, check=_read_by_polars)
+@code(format=Parquet, engine=PolarsEngine, label=AS_LAZY_FRAME, check=_read_by_polars)
 def parquet_as_lazy_frame(
     fmt: Parquet, ctx: ItemContext, options: ParquetByPolarsOptions
 ) -> str:
@@ -673,7 +673,7 @@ def parquet_as_lazy_frame(
     return _polars_code("scan_parquet", fmt.data_url(ctx), kwargs)
 
 
-@code(format=Parquet, engine=PolarsEngine, name=AS_DATA_FRAME, check=_can_offer_recipe)
+@code(format=Parquet, engine=PolarsEngine, label=AS_DATA_FRAME, check=_can_offer_recipe)
 def parquet_as_data_frame(
     fmt: Parquet, ctx: ItemContext, options: ParquetByPolarsOptions
 ) -> str:
@@ -735,7 +735,7 @@ def parquet_view(
 @code(
     format=DeltaLake,
     engine=PolarsEngine,
-    name=AS_LAZY_FRAME,
+    label=AS_LAZY_FRAME,
     requires=(DeltaLakePackage(),),
     check=_read_by_polars,
 )
@@ -749,7 +749,7 @@ def delta_as_lazy_frame(
 @code(
     format=DeltaLake,
     engine=PolarsEngine,
-    name=AS_DATA_FRAME,
+    label=AS_DATA_FRAME,
     requires=(DeltaLakePackage(),),
     check=_read_by_polars,
 )

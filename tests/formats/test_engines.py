@@ -62,7 +62,7 @@ def viewer(fmt, engine_, check=None):
 def coder(fmt, engine_):
     """A code action of ``fmt`` and ``engine_``."""
 
-    @code(format=fmt, engine=engine_, name="Load")
+    @code(format=fmt, engine=engine_, label="Load")
     def coding(fmt, ctx, options):
         return ""
 

@@ -309,7 +309,7 @@ def _hive_files(fmt: Parquet, ctx: ItemContext) -> bool:
     return ctx.is_dir and fmt.layout(ctx).files == "*"
 
 
-@code(format=Parquet, engine=DaskEngine, name=AS_DATA_FRAME)
+@code(format=Parquet, engine=DaskEngine, label=AS_DATA_FRAME)
 def parquet_as_data_frame(
     fmt: Parquet, ctx: ItemContext, options: ParquetByDaskOptions
 ) -> str:
@@ -402,7 +402,7 @@ def _text_view(
     )
 
 
-@code(format=Csv, engine=DaskEngine, name=AS_DATA_FRAME)
+@code(format=Csv, engine=DaskEngine, label=AS_DATA_FRAME)
 def csv_as_data_frame(fmt: Csv, ctx: ItemContext, options: CsvByDaskOptions) -> str:
     """The code reading the file into a Dask DataFrame, with the separator
     detected."""
@@ -424,7 +424,7 @@ def csv_view(
     return _text_view("read_csv", ctx, defaults, options, limits)
 
 
-@code(format=JsonLines, engine=DaskEngine, name=AS_DATA_FRAME)
+@code(format=JsonLines, engine=DaskEngine, label=AS_DATA_FRAME)
 def json_lines_as_data_frame(
     fmt: JsonLines, ctx: ItemContext, options: JsonLinesByDaskOptions
 ) -> str:

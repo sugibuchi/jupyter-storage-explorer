@@ -24,7 +24,7 @@ from jupyter_storage_explorer.formats.python import PythonEngine
 EVENTS: list[str] = []
 
 
-@view(format=Text, engine=PythonEngine, name="Ask")
+@view(format=Text, engine=PythonEngine, label="Ask")
 def asking(fmt, ctx, options, limits):
     """Asks how to show a text file's name; before the built-in views."""
 
@@ -44,7 +44,7 @@ def asking(fmt, ctx, options, limits):
     return prompt
 
 
-@view(format=Text, engine=PythonEngine, name="Confirm")
+@view(format=Text, engine=PythonEngine, label="Confirm")
 def confirming(fmt, ctx, options, limits):
     """Data, once confirmed."""
 

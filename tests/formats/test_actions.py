@@ -62,7 +62,7 @@ class WidgetOptions(DuckOptions):
     rows: int = 10
 
 
-@code(format=Csv, engine=Duck, name="Load as a duck")
+@code(format=Csv, engine=Duck, label="Load as a duck")
 def csv_code(fmt, ctx, options: DuckOptions):
     return f"duck.read({ctx.path!r}, threads={options.threads})"
 
@@ -72,7 +72,7 @@ def csv_view(fmt, ctx, options: DuckOptions, limits):
     return TextView(text=f"threads={options.threads}")
 
 
-@view(format=Csv, engine=Duck, name="Widget for {format}")
+@view(format=Csv, engine=Duck, label="Widget for {format}")
 def csv_widget(fmt, ctx, options: WidgetOptions, limits):
     return TextView(text=f"rows={options.rows}")
 
@@ -85,11 +85,24 @@ class TestDecorators:
     def test_fields(self):
         assert isinstance(csv_view, ViewAction)
         assert isinstance(csv_code, CodeAction)
-        assert csv_view.name == "View CSV"
-        assert csv_widget.name == "Widget for CSV"
+        assert csv_view.label == "View as CSV (Duck)"  # the default
+        assert csv_widget.label == "Widget for CSV"
         assert csv_view.options_model is DuckOptions
         assert csv_view.code is csv_code
         assert csv_view.engine.key == "duck"
+
+    def test_ids(self):
+        # Each action's own number, also after dataclasses.replace.
+        assert len({csv_view.id, csv_code.id, csv_widget.id}) == 3
+        copy = dataclasses.replace(csv_view)
+        assert copy.id not in (csv_view.id, csv_code.id, csv_widget.id)
+
+    def test_label_with_the_engine(self):
+        @view(format=Csv, engine=Duck, label="{format} in a widget ({engine})")
+        def widget(fmt, ctx, options, limits):
+            return TextView(text="")
+
+        assert widget.label == "CSV in a widget (Duck)"
 
     def test_reads_as_the_function(self):
         # Its name, docstring and signature, for help(), IDEs and errors.
@@ -135,7 +148,7 @@ class TestDecorators:
         def fine(fmt, ctx, options, limits, *, debug=False):
             return TextView(text="")
 
-        assert fine.name == "View CSV"
+        assert fine.label == "View as CSV (Duck)"
 
     @pytest.mark.parametrize(
         ("arguments", "message"),
@@ -144,7 +157,11 @@ class TestDecorators:
             ({"engine": "duck"}, "engine must be an Engine class"),
             ({"requires": [MissingPackage()]}, "requires must be a tuple"),
             ({"check": True}, "check must be callable"),
-            ({"name": "View {library}"}, r"name may hold only \{format\}"),
+            (
+                {"label": "View {library}"},
+                r"label may hold only \{format\} and \{engine\}",
+            ),
+            ({"label": None}, "label must be a str"),
         ],
     )
     def test_arguments_checked(self, arguments, message):
@@ -174,18 +191,18 @@ class TestDecorators:
             )
 
     def test_code_taking_options_the_view_has_not(self):
-        @code(format=Csv, engine=Duck, name="Widget code")
+        @code(format=Csv, engine=Duck, label="Widget code")
         def widget_code(fmt, ctx, options: WidgetOptions):
             return ""
 
         with pytest.raises(TypeError, match="neither DuckOptions nor one of its bases"):
 
-            @view(format=Csv, engine=Duck, name="Other", code=widget_code)
+            @view(format=Csv, engine=Duck, label="Other", code=widget_code)
             def other(fmt, ctx, options: DuckOptions, limits):
                 return TextView(text="")
 
     def test_code_taking_a_base_of_the_views_options(self):
-        @view(format=Csv, engine=Duck, name="Wide", code=csv_code)
+        @view(format=Csv, engine=Duck, label="Wide", code=csv_code)
         def wide(fmt, ctx, options: WidgetOptions, limits):
             return TextView(text="")
 
@@ -204,22 +221,24 @@ class TestRegister:
         with pytest.raises(TypeError, match="decorate it with @view or @code"):
             register_actions(lambda fmt, ctx, options, limits: None)
 
-    def test_two_actions_of_one_name(self):
+    def test_two_actions_of_one_label(self):
         @view(format=Csv, engine=Duck)
         def again(fmt, ctx, options, limits):
             return TextView(text="")
 
-        with pytest.raises(ValueError, match="two actions named 'View CSV'"):
+        with pytest.raises(
+            ValueError, match=r"two actions labelled 'View as CSV \(Duck\)'"
+        ):
             register_actions(csv_view, csv_code, again)
 
-    def test_one_name_for_a_view_and_a_code(self):
-        @code(format=Csv, engine=Duck, name="View CSV")
-        def named_as_the_view(fmt, ctx, options):
+    def test_one_label_for_a_view_and_a_code(self):
+        @code(format=Csv, engine=Duck, label="View as CSV (Duck)")
+        def labelled_as_the_view(fmt, ctx, options):
             return ""
 
-        assert register_actions(csv_view, csv_code, named_as_the_view)
+        assert register_actions(csv_view, csv_code, labelled_as_the_view)
 
-    def test_one_name_of_other_pairs(self):
+    def test_one_label_of_other_pairs(self):
         @view(format=Parquet, engine=Duck)
         def parquet(fmt, ctx, options, limits):
             return TextView(text="")
@@ -254,7 +273,7 @@ class TestRegister:
             kw_only=True,
         )
 
-        @view(format=Csv, engine=Duck, name="Clashing")
+        @view(format=Csv, engine=Duck, label="Clashing")
         def clashing(fmt, ctx, options, limits):
             return TextView(text="")
 
@@ -272,7 +291,7 @@ class TestRegister:
             )
 
         # A class of a function's own: annotations resolve in the module only.
-        @view(format=Csv, engine=Duck, name="Other secrets")
+        @view(format=Csv, engine=Duck, label="Other secrets")
         def other(fmt, ctx, options, limits):
             return TextView(text="")
 
@@ -288,7 +307,7 @@ class TestChain:
         assert text_of(view_) == "rows=10"
 
     def test_a_check_refusing_leaves_it_to_the_next(self, make_item):
-        @view(format=Csv, engine=Duck, name="Refusing", check=lambda *args: False)
+        @view(format=Csv, engine=Duck, label="Refusing", check=lambda *args: False)
         def refusing(fmt, ctx, options, limits):
             raise AssertionError("not called")
 
@@ -303,7 +322,7 @@ class TestChain:
         @view(
             format=Csv,
             engine=Duck,
-            name="Checking",
+            label="Checking",
             check=lambda fmt, ctx, options: seen.append(options) or True,
         )
         def checking(fmt, ctx, options: DuckOptions, limits):
@@ -314,7 +333,7 @@ class TestChain:
         assert seen == [DuckOptions(threads=3)]
 
     def test_not_installed(self, make_item):
-        @view(format=Csv, engine=Duck, name="Missing", requires=(MissingPackage(),))
+        @view(format=Csv, engine=Duck, label="Missing", requires=(MissingPackage(),))
         def missing(fmt, ctx, options, limits):
             raise AssertionError("not called")
 
@@ -336,7 +355,7 @@ class TestChain:
             ActionChain([csv_view, csv_code], {"duck": {"csv": {"rows": 5}}})
 
     def test_recipes_of_every_code_action(self, make_item):
-        @code(format=Csv, engine=Duck, name="Load eagerly")
+        @code(format=Csv, engine=Duck, label="Load eagerly")
         def eager(fmt, ctx, options):
             return "eager"
 
@@ -348,7 +367,7 @@ class TestChain:
         ]
 
     def test_a_code_action_failing(self, make_item):
-        @code(format=Csv, engine=Duck, name="Failing")
+        @code(format=Csv, engine=Duck, label="Failing")
         def failing(fmt, ctx, options):
             raise ValueError("no code")
 
@@ -359,12 +378,14 @@ class TestChain:
             ("Load as a duck", "duck.read('/a.csv', threads=1)", ""),
         ]
 
-    def test_two_sources_of_one_name(self):
+    def test_two_sources_of_one_label(self):
         @view(format=Csv, engine=Duck)
         def mine(fmt, ctx, options, limits):
             return TextView(text="")
 
-        with pytest.raises(ValueError, match="two actions named 'View CSV'"):
+        with pytest.raises(
+            ValueError, match=r"two actions labelled 'View as CSV \(Duck\)'"
+        ):
             ActionChain([mine, csv_view, csv_code])
 
 
@@ -383,14 +404,15 @@ class TestExplorer:
         info = explorer._menu_info(item.formats, [], item.ctx, "duck")
         return [(v["engine"], v.get("action"), v["label"]) for v in info["views"]]
 
-    def test_views_by_name_in_the_menu(self, memfs):
+    def test_views_by_label_in_the_menu(self, memfs):
         memfs.pipe_file("/a.csv", b"a\n1\n")
         explorer = StorageExplorer(fs=memfs, actions=[csv_widget, csv_view, csv_code])
         duck = [v for v in self.menu_views(explorer, "/a.csv") if v[0] == "duck"]
-        # An entry per view of an engine with several, the first its default.
+        # An entry per view of an engine with several, by its id, labelled
+        # with its label; the first is the default.
         assert duck == [
-            ("duck", "Widget for CSV", "CSV (Duck): Widget for CSV"),
-            ("duck", "View CSV", "CSV (Duck): View CSV"),
+            ("duck", csv_widget.id, "Widget for CSV"),
+            ("duck", csv_view.id, "View as CSV (Duck)"),
         ]
 
     def test_one_view_in_the_menu(self, memfs):
@@ -399,21 +421,40 @@ class TestExplorer:
         duck = [v for v in self.menu_views(explorer, "/a.csv") if v[0] == "duck"]
         assert duck == [("duck", None, "CSV (Duck)")]
 
-    def test_preview_by_name(self, memfs):
+    def test_preview_by_id(self, memfs):
         memfs.pipe_file("/a.csv", b"a\n1\n")
         explorer = StorageExplorer(
             fs=memfs, preview_panel="open", actions=[csv_widget, csv_view, csv_code]
         )
-        explorer._open_preview("/a.csv", "csv", "duck", "View CSV")
-        assert explorer._preview["action"] == "View CSV"
+        explorer._open_preview("/a.csv", "csv", "duck", csv_view.id)
+        assert explorer._preview["action"] == csv_view.id
         assert explorer._preview["sections"][0]["text"] == "threads=1"
         explorer._open_preview("/a.csv", "csv", "duck")
         assert explorer._preview["sections"][0]["text"] == "rows=10"
 
-    def test_preview_by_a_name_not_viewing_it(self, memfs):
+    def test_preview_by_an_id_not_viewing_it(self, memfs):
         memfs.pipe_file("/a.csv", b"a\n1\n")
         explorer = StorageExplorer(
             fs=memfs, preview_panel="open", actions=[csv_widget, csv_view, csv_code]
         )
-        explorer._open_preview("/a.csv", "csv", "duck", "Gone")
-        assert explorer._preview["error"] == "a.csv cannot be viewed by 'Gone'"
+        explorer._open_preview("/a.csv", "csv", "duck", csv_code.id)  # not a view
+        assert explorer._preview["error"] == (
+            f"a.csv cannot be viewed by action {csv_code.id}"
+        )
+
+    def test_the_pages_id_taken_only_as_an_integer(self, memfs):
+        # The default view for anything else the page sends.
+        memfs.pipe_file("/a.csv", b"a\n1\n")
+        explorer = StorageExplorer(
+            fs=memfs, preview_panel="open", actions=[csv_widget, csv_view, csv_code]
+        )
+        for sent in (str(csv_view.id), True, None, [csv_view.id]):
+            content = {
+                "type": "preview",
+                "path": "/a.csv",
+                "format": "csv",
+                "engine": "duck",
+                "action": sent,
+            }
+            explorer._on_custom_msg(explorer, content, None)
+            assert explorer._preview["sections"][0]["text"] == "rows=10"

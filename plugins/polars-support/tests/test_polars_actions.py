@@ -290,8 +290,8 @@ class TestCode:
         assert last_line(code) == "df = pl.read_json('s3://b/a.json')"
 
     def test_names(self):
-        assert [a.name for a in POLARS_ACTIONS if a.format is Parquet] == [
-            "View Parquet",
+        assert [a.label for a in POLARS_ACTIONS if a.format is Parquet] == [
+            "View as Parquet (Polars)",
             "Load as LazyFrame",
             "Load as DataFrame",
         ]
@@ -487,7 +487,7 @@ class TestStoragesPolarsCannotRead:
         lazy = [
             a
             for a in POLARS_ACTIONS
-            if a.format is fmt and a.name == "Load as LazyFrame"
+            if a.format is fmt and a.label == "Load as LazyFrame"
         ]
         assert not any(a.does(fmt(), item, a.options_model()) for a in lazy)
         options = action.options_model(fsspec_storage_options={"anon": True})

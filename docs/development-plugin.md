@@ -215,7 +215,7 @@ decorator of `jupyter_storage_explorer.formats.actions`:
 
 A format and an engine may have any number of actions, e.g. Parquet with DuckDB viewed in the data browser and in a
 widget. A plugin registers its actions in order with `register_actions`. Explorers try them in that order: the first
-view doing an item is its default, and **Preview as** lists the others of its engine by name.
+view doing an item is its default, and **Preview as** lists the others of its engine by their labels.
 
 ```python
 from inspect import cleandoc
@@ -249,7 +249,7 @@ _RELATION = cleandoc("""
     """)
 
 
-@code(format=Parquet, engine=DuckDBEngine, name="Load as relation", requires=(PyArrow(),), check=_read_by_duckdb)
+@code(format=Parquet, engine=DuckDBEngine, label="Load as relation", requires=(PyArrow(),), check=_read_by_duckdb)
 def parquet_as_relation(fmt: Parquet, ctx: ItemContext, options: DuckDBOptions) -> str:
     """A Parquet file or folder, as a DuckDB relation."""
     kwargs = format_kwargs(hive_partitioning=True if ctx.is_dir else None)
@@ -279,7 +279,7 @@ The decorators' arguments:
 |------------|---------------|---------------------------------------------------------------------------------------------------|
 | `format`   | both          | The format, matched with `isinstance`: its subclasses too.                                        |
 | `engine`   | both          | The engine; `PythonEngine` for Python alone.                                                      |
-| `name`     | both          | What the menu shows; `{format}` is replaced by the format's label. A view's default is `"View {format}"`. |
+| `label`    | both          | What users see; `{format}` and `{engine}` are replaced by their labels. A view's default is `"View as {format} ({engine})"`; code has none. |
 | `requires` | both          | Packages needed besides the engine's, as instances. The action is offered only when they are installed. |
 | `check`    | both          | `check(fmt, ctx, options) -> bool`: whether the action does an item. By default, every item of `format`. |
 | `code`     | `@view` only  | The code action reproducing what the view shows, of the same format and engine.                    |
@@ -290,8 +290,12 @@ The rules for the functions:
   `(fmt, ctx, options)` for code. The decorator checks it.
 - The class of `options` comes from the parameter's annotation, read when the function is decorated. Import that class
   at run time, not only for type checkers, and define it at the module's top level.
-- A name is unique for its kind, format and engine, whatever plugin it comes from: two actions of one name are an
-  error. Name a view by what it shows, e.g. "Sheets in a tree", never by the library: the menu shows the engine.
+- A label is unique for its kind, format and engine, whatever plugin it comes from: two actions of one label are an
+  error, as users could not tell them apart. Label a view by what it shows, e.g. "Sheets in a tree ({engine})".
+- **Preview as** shows a view's label only when its engine has several views of an item; otherwise it shows the
+  format and the engine, e.g. "CSV (Polars)".
+- Explorers tell actions apart by their `id`, a number each action gets when it is made. The page sends it back to
+  choose a view, so the label is free to change.
 - `requires` lists what the data browser needs too. It collects each page of lazy data, in either mode, into the
   library narwhals collects it into, e.g. PyArrow for a DuckDB relation or a Spark DataFrame.
 - An action reads as its function: `help()`, IDEs and errors show its name, docstring and signature.
@@ -399,8 +403,8 @@ A view action runs in a worker thread, so that a slow view leaves the kernel fre
 
 ### `@code`: `code(fmt, ctx, options)`
 
-Returns one snippet of Python, shown in the right-click menu's **Python code** under the engine's label. Its `name` is
-its title, e.g. "Load as LazyFrame": it says what the code does, never the library. Give several snippets as several
+Returns one snippet of Python, shown in the right-click menu's **Python code** under the engine's label. Its `label` is
+its title, e.g. "Load as LazyFrame": it says what the code does, as the engine is shown already. Give several snippets as several
 code actions, e.g. a LazyFrame and a DataFrame.
 
 - The code runs as it is in a new notebook: its imports first, then what else it needs, e.g. a Spark session.
@@ -1106,9 +1110,9 @@ can do it does it. So the component tried handles what it can, and leaves the re
 - an action, the items its `check` refuses;
 - an operation, what it raises `NotSupported` for.
 
-The first view an item matches is its default. **Preview as** lists the others of its engine by name.
+The first view an item matches is its default. **Preview as** lists the others of its engine by their labels.
 
-An action of the same kind, format, engine and name as a plugin's is an error. Give yours another name, or disable
+An action of the same kind, format, engine and label as a plugin's is an error. Give yours another label, or disable
 that plugin with `plugin_options` to replace its actions.
 
 Restart the kernel after changing the component's module: Python imports a module only once.

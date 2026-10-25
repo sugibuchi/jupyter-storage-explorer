@@ -977,10 +977,11 @@ An action is a function decorated with `view` or `code`, from `formats/actions.p
 - `function`, called when the action is;
 - `format`, matched with `isinstance`, so subclasses too;
 - `engine`, an `Engine` class, `PythonEngine` for the built-in ones;
-- `name`, what the menu shows, unique for its kind, format and engine;
+- `label`, what users see, unique for its kind, format and engine, with `{format}` and `{engine}` replaced;
 - `requires`, packages besides the engine's;
 - `check`, whether it does an item, or None for every item;
-- `options_model`, the class of its options, read from the annotation of the function's `options` parameter.
+- `options_model`, the class of its options, read from the annotation of the function's `options` parameter;
+- `id`, a number of its own given when it is made, which the page sends back to choose a view.
 
 A view action may name its `code`, the code action reproducing it. An action takes its function's name, docstring and
 signature, so it reads as the function.
@@ -998,7 +999,7 @@ Actions never check their packages: the chain calls only installed ones.
 `register_actions(...)` returns a plugin's actions in order, checked together. `check_actions`, which the chain also
 runs on all its actions, refuses two cases:
 
-- two actions of one kind, format and engine with one name;
+- two actions of one kind, format and engine with one label;
 - options classes of one format and engine whose fields of one name differ in type or in what is secret.
 
 #### The action chain
@@ -1018,9 +1019,9 @@ The chain answers:
 - `of(fmt, ctx, kind)`: the installed actions of a kind for a format that do the item;
 - `engines`: the installed engines with a view action, the preferred first, never `PythonEngine`;
 - `viewers(fmt, ctx)`: the engines that can view the item, then None for the built-in views;
-- `views_by_engine(fmt, ctx)`: the names of the views doing the item, by engine, for "Preview as";
+- `views_by_engine(fmt, ctx)`: the views doing the item, by engine, for "Preview as";
 - `engine_for(fmt, ctx, engine)`: the engine chosen if it handles the format, else the built-in views;
-- `view(..., action=None)`: the view of an engine's action of that name, by default its first;
+- `view(..., action=None)`: the view of an engine's action of that id, by default its first;
 - `recipes(...)`: the code of every code action doing the item, ranked by engine.
 
 `engine_for` never falls back to another engine. It raises `LookupError` in two cases:
@@ -1149,7 +1150,7 @@ only its own `fetch_rows`.
 
 #### Recipes
 
-A code action returns one snippet of "Python code", titled by its name, such as "Load as LazyFrame". The chain makes a
+A code action returns one snippet of "Python code", titled by its label, such as "Load as LazyFrame". The chain makes a
 `Recipe` of each. The code runs as it is in a new notebook, with its imports and, for Spark, its session.
 
 - Titles never name the library. The chain adds the action's requirements, and the frontend groups the code by library.

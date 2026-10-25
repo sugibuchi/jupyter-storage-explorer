@@ -311,7 +311,7 @@ def test_one_engine_class_per_key():
     copy = type("SampleEngine", (Engine,), {"key": "sample", "label": "Copy"})
 
     def csv_code(engine):
-        @code(format=Csv, engine=engine, name="Load CSV")
+        @code(format=Csv, engine=engine, label="Load CSV")
         def loading(fmt, ctx, options):
             return ""
 

@@ -21,7 +21,7 @@ class SampleEngine(Engine):
     label = "Sample"
 
 
-@code(format=AvroFormat, engine=SampleEngine, name="Load")
+@code(format=AvroFormat, engine=SampleEngine, label="Load")
 def avro_code(fmt, ctx, options):
     return "sample"
 

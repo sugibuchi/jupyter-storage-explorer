@@ -460,7 +460,7 @@ def _parquet_data_url(fmt: Parquet, ctx: ItemContext, url: str) -> str:
     return url
 
 
-@code(format=Parquet, engine=DuckDBEngine, name=AS_RELATION, requires=_REQUIRES)
+@code(format=Parquet, engine=DuckDBEngine, label=AS_RELATION, requires=_REQUIRES)
 def parquet_as_relation(
     fmt: Parquet, ctx: ItemContext, options: ParquetByDuckDBOptions
 ) -> str:
@@ -601,7 +601,7 @@ def _text_code(
     )
 
 
-@code(format=Csv, engine=DuckDBEngine, name=AS_RELATION, requires=_REQUIRES)
+@code(format=Csv, engine=DuckDBEngine, label=AS_RELATION, requires=_REQUIRES)
 def csv_as_relation(fmt: Csv, ctx: ItemContext, options: CsvByDuckDBOptions) -> str:
     """The code reading the CSV file into a relation."""
     return _text_code("read_csv", {}, fmt, ctx, options)
@@ -615,7 +615,7 @@ def csv_view(
     return _text_view("read_csv", {}, fmt, ctx, options, limits=limits)
 
 
-@code(format=JsonLines, engine=DuckDBEngine, name=AS_RELATION, requires=_REQUIRES)
+@code(format=JsonLines, engine=DuckDBEngine, label=AS_RELATION, requires=_REQUIRES)
 def json_lines_as_relation(
     fmt: JsonLines, ctx: ItemContext, options: JsonLinesByDuckDBOptions
 ) -> str:
@@ -665,7 +665,7 @@ def _delta_query(ctx: ItemContext, options: DeltaLakeByDuckDBOptions) -> str:
 @code(
     format=DeltaLake,
     engine=DuckDBEngine,
-    name=AS_RELATION,
+    label=AS_RELATION,
     requires=_REQUIRES,
     check=_code_read_by_duckdb,
 )
@@ -743,7 +743,7 @@ _REMOTE_DATABASE_CODE = cleandoc("""
 
 
 @code(
-    format=DuckDBDatabase, engine=DuckDBEngine, name=OPEN_DATABASE, requires=_REQUIRES
+    format=DuckDBDatabase, engine=DuckDBEngine, label=OPEN_DATABASE, requires=_REQUIRES
 )
 def database_code(fmt: DuckDBDatabase, ctx: ItemContext, options: DuckDBOptions) -> str:
     """The code opening the database read only, and listing its tables; a

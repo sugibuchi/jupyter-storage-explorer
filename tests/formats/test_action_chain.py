@@ -84,7 +84,7 @@ class ThreadsOptions(ActionOptions):
 def viewer(result, *, name, fmt=Csv, engine=PythonEngine, check=None):
     """A view action returning ``result`` as it is."""
 
-    @view(format=fmt, engine=engine, name=name, check=check)
+    @view(format=fmt, engine=engine, label=name, check=check)
     def viewing(fmt, ctx, options, limits):
         return result
 
@@ -94,7 +94,7 @@ def viewer(result, *, name, fmt=Csv, engine=PythonEngine, check=None):
 def coder(result, *, name, fmt=Csv, engine=PythonEngine):
     """A code action returning ``result`` as it is."""
 
-    @code(format=fmt, engine=engine, name=name)
+    @code(format=fmt, engine=engine, label=name)
     def coding(fmt, ctx, options):
         return result
 
@@ -221,7 +221,7 @@ class TestOptions:
     def test_options_reach_the_actions(self, make_item):
         seen = []
 
-        @code(format=Csv, engine=Duck, name="Record")
+        @code(format=Csv, engine=Duck, label="Record")
         def recording(fmt, ctx, options: ThreadsOptions):
             seen.append(options)
             return ""
@@ -283,7 +283,7 @@ class TestOptionsByLocation:
     def test_the_items_location(self, make_item):
         seen = []
 
-        @code(format=Csv, engine=Duck, name="Record")
+        @code(format=Csv, engine=Duck, label="Record")
         def recording(fmt, ctx, options: FsspecOptions):
             seen.append(options)
             return ""
@@ -356,7 +356,7 @@ class TestChain:
 
     def test_errors_are_the_items(self, make_item):
         # Once an action does the item, no other is tried.
-        @view(format=Csv, engine=PythonEngine, name="Failing")
+        @view(format=Csv, engine=PythonEngine, label="Failing")
         def failing(fmt, ctx, options, limits):
             raise ValueError("broken file")
 
@@ -386,7 +386,7 @@ class TestChain:
 
     def test_a_recipe_failing(self, make_item):
         def failing(engine):
-            @code(format=Csv, engine=engine, name="Fail")
+            @code(format=Csv, engine=engine, label="Fail")
             def fail(fmt, ctx, options):
                 raise ValueError("no code")
 

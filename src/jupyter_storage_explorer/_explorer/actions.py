@@ -209,16 +209,16 @@ class ActionChain:
 
     def views_by_engine(
         self, fmt: DataFormat, ctx: ItemContext
-    ) -> dict[str | None, list[str]]:
-        """The names of the view actions doing the item as ``fmt``, by engine
-        (see ``viewers``), each engine's in order: the first is its default.
-        One pass over the actions, as the right-click menu needs all of
-        them."""
-        names: dict[str | None, list[str]] = {}
+    ) -> dict[str | None, list[ViewAction]]:
+        """The view actions doing the item as ``fmt``, by engine (see
+        ``viewers``), each engine's in order: the first is its default. One
+        pass over the actions, as the right-click menu needs all of them."""
+        views: dict[str | None, list[ViewAction]] = {}
         for action in self.of(fmt, ctx):
-            names.setdefault(engine_key(action), []).append(action.name)
+            assert isinstance(action, ViewAction)
+            views.setdefault(engine_key(action), []).append(action)
         order = [e.key for e in self.engines] + [None]
-        return {key: names[key] for key in order if key in names}
+        return {key: views[key] for key in order if key in views}
 
     def engine_for(
         self, fmt: DataFormat, ctx: ItemContext, engine: str | None
@@ -237,12 +237,12 @@ class ActionChain:
             return None
         raise LookupError(engine)
 
-    def view_names(
+    def views_of(
         self, fmt: DataFormat, ctx: ItemContext, engine: str | None
-    ) -> list[str]:
-        """The names of the view actions of ``engine`` (a key; None for the
-        built-in views) that do the item as ``fmt``, in order: the first is
-        its default (see ``views_by_engine``)."""
+    ) -> list[ViewAction]:
+        """The view actions of ``engine`` (a key; None for the built-in
+        views) that do the item as ``fmt``, in order: the first is its
+        default (see ``views_by_engine``)."""
         return self.views_by_engine(fmt, ctx).get(engine, [])
 
     def view(
@@ -251,10 +251,10 @@ class ActionChain:
         ctx: ItemContext,
         limits: ViewLimits,
         engine: str | None,
-        action: str | None = None,
+        action: int | None = None,
     ) -> View:
         """The view of the view action of ``engine`` (a key; None for the
-        built-in views) named ``action``, by default the first, installed for
+        built-in views) of id ``action``, by default the first, installed for
         ``fmt`` that does the item: what it raises is the item's error, no
         other action is tried. RuntimeError if there is none: callers check
         ``viewers`` or ``engine_for`` first. ValueError for an ``action``
@@ -266,9 +266,9 @@ class ActionChain:
                 f"{ctx.name} as {fmt.label}; check viewers() first"
             )
         if action is not None:
-            actions = [a for a in actions if a.name == action]
+            actions = [a for a in actions if a.id == action]
             if not actions:
-                raise ValueError(f"{ctx.name} cannot be viewed by {action!r}")
+                raise ValueError(f"{ctx.name} cannot be viewed by action {action}")
         chosen = actions[0]
         return chosen(fmt, ctx, self.options_of(chosen, ctx.location), limits)
 
@@ -298,7 +298,7 @@ class ActionChain:
     ) -> Recipe:
         """The recipe of one code action, holding the error if it fails."""
         common = {
-            "title": action.name,
+            "title": action.label,
             "engine": action.engine if engine_key(action) else None,
             "requirements": action.requirements(),
         }

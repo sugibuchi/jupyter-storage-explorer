@@ -1295,14 +1295,14 @@ from jupyter_storage_explorer.formats.actions import view
 from jupyter_storage_explorer.formats.python import PythonEngine
 from jupyter_storage_explorer_polars_support import PolarsEngine
 
-@view(format=Text, engine=PythonEngine, name="Slow text")
+@view(format=Text, engine=PythonEngine, label="Slow text")
 def slow_text(fmt, ctx, options, limits):
     if ctx.name == "broken.txt":
         raise ValueError("cannot read broken.txt")
     time.sleep(4)
     return TextView(text=ctx.fs.cat_file(ctx.path).decode())
 
-@view(format=Csv, engine=PolarsEngine, name="CSV in memory")
+@view(format=Csv, engine=PolarsEngine, label="CSV in memory")
 def csv_in_memory(fmt, ctx, options, limits):
     return QueryView(data=pl.read_csv(io.BytesIO(ctx.fs.cat_file(ctx.path))).lazy())
 
@@ -1416,7 +1416,7 @@ from jupyter_storage_explorer.formats.python import PythonEngine
 class Py4JJavaError(Exception):
     pass
 
-@view(format=Text, engine=PythonEngine, name="Spark-like")
+@view(format=Text, engine=PythonEngine, label="Spark-like")
 def spark_like(fmt, ctx, options, limits):
     raise Py4JJavaError(
         "An error occurred while calling o57.parquet.\\n"
@@ -1474,7 +1474,7 @@ from jupyter_storage_explorer.formats import Text, TextView
 from jupyter_storage_explorer.formats.actions import view
 from jupyter_storage_explorer.formats.python import PythonEngine
 
-@view(format=Text, engine=PythonEngine, name="Shout")
+@view(format=Text, engine=PythonEngine, label="Shout")
 def shout(fmt, ctx, options, limits):
     return TextView(text=ctx.head_text(100)[0].upper())
 
@@ -1486,7 +1486,7 @@ StorageExplorer("/named", fs=memory, actions=[shout], preview_panel="open")"""
 @lab_check
 def views_by_name(lab: Lab, page: Page) -> None:
     # The first view is the default; "Preview as" lists each view of an
-    # engine with several by name.
+    # engine with several by its label.
     x = Explorer(lab, page, VIEWS_BY_NAME)
     text = x.preview.locator(".jse-text")
     x.row("a.txt").click()
@@ -1494,7 +1494,7 @@ def views_by_name(lab: Lab, page: Page) -> None:
     x.row("a.txt").click(button="right")
     x.menu_item("Preview as").hover()
     views = x.el.locator(".jse-submenu .jse-menu-item:visible")
-    expect(views).to_have_text(["Text: Shout", "Text: View Text"])
+    expect(views).to_have_text(["Shout", "View as Text (Python)"])
     views.last.click()
     expect(text).to_have_text("quiet")
     x.preview.press("Escape")
@@ -1577,7 +1577,7 @@ from jupyter_storage_explorer.formats import Excel, Leaf, Node, TableSetView
 from jupyter_storage_explorer.formats.actions import view
 from jupyter_storage_explorer_polars_support import PolarsEngine
 
-@view(format=Excel, engine=PolarsEngine, name="Sheets in a tree")
+@view(format=Excel, engine=PolarsEngine, label="Sheets in a tree")
 def sheets_in_a_tree(fmt, ctx, options, limits):
     sheets = pl.read_excel(ctx.fs.cat_file(ctx.path), sheet_id=0)
     tables = [Leaf(label=name, id=name) for name in sheets]

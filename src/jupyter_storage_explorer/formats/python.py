@@ -173,7 +173,7 @@ def _fsspec_code(template: str, ctx: ItemContext, options: FsspecOptions) -> str
     )
 
 
-@code(format=Text, engine=PythonEngine, name=READ_TEXT, requires=(Fsspec(),))
+@code(format=Text, engine=PythonEngine, label=READ_TEXT, requires=(Fsspec(),))
 def text_code(fmt: Text, ctx: ItemContext, options: FsspecOptions) -> str:
     """Text read with fsspec."""
     return _fsspec_code(TEXT_TEMPLATE, ctx, options)
@@ -201,7 +201,7 @@ def markdown_view(
     return MarkdownView(text=text, note=note)
 
 
-@code(format=Json, engine=PythonEngine, name=LOAD_VALUE, requires=(Fsspec(),))
+@code(format=Json, engine=PythonEngine, label=LOAD_VALUE, requires=(Fsspec(),))
 def json_code(fmt: Json, ctx: ItemContext, options: FsspecOptions) -> str:
     """The JSON value, loaded with fsspec and Python's json."""
     return _fsspec_code(JSON_TEMPLATE, ctx, options)
@@ -249,7 +249,7 @@ def _not_svg(fmt: Image, ctx: ItemContext, options: ActionOptions) -> bool:
 @code(
     format=Image,
     engine=PythonEngine,
-    name=OPEN_IMAGE,
+    label=OPEN_IMAGE,
     requires=(Fsspec(), Pillow()),
     check=_not_svg,
 )
