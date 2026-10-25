@@ -301,7 +301,7 @@ Cloud storages answer each call in tens of milliseconds, and folders hold tens o
 ### Written for AI to extend
 
 Users are expected to generate formats, actions and plugins with AI. So the rules are written where AI reads them:
-in docstrings and in docs/development-plugin.md.
+in docstrings and in docs/plugin-development-guide.md.
 
 - The decorators check what they can when a function is decorated: its parameters and its options class.
 - The explorer does not check at run time that an action keeps the other rules, by design.
@@ -921,7 +921,7 @@ never show unfiltered.
 
 A format only detects files. An action does one thing with one format's data and one library: a view, or code loading
 it. So a library is added to a format, e.g. DuckDB for Parquet, without touching the format.
-[development-plugin.md](docs/development-plugin.md) says how to write each, with their rules.
+[plugin-development-guide.md](docs/plugin-development-guide.md) says how to write each, with their rules.
 
 `formats/` is laid out as `filesystems/`:
 
@@ -1403,7 +1403,7 @@ uv run --group docs docs/scripts/make_all.py
 ## Customizing
 
 Icons are changed with CSS (below). Formats, engines, file operations and storages are added in Python, as plugins
-that every explorer uses once installed. See [development-plugin.md](docs/development-plugin.md), which also covers
+that every explorer uses once installed. See [plugin-development-guide.md](docs/plugin-development-guide.md), which also covers
 this repository's plugins (`plugins/`).
 
 ### Icons
@@ -1418,7 +1418,7 @@ The icons of files and plain folders are JupyterLab's file browser's, as SVG ima
   - Databricks' catalogs, schemas, volumes and workspace folders.
 
   The filesystem's mapper tells which they are, and its CSS gives their icons: `FileSystemMapper.level` and
-  `FileSystemMapper.css`, see [development-plugin.md](docs/development-plugin.md#how-its-storages-look). The icon
+  `FileSystemMapper.css`, see [plugin-development-guide.md](docs/plugin-development-guide.md#how-its-storages-look). The icon
   hides the folder's image, and is drawn in its `.jse-icon::before`, as a mask.
 - **Azure, S3, GCS and Databricks** icons are in their cloud's colour, the variable `--jse-storage-color`. For example,
   `.jse-browser[data-fs-protocol="s3"] { --jse-storage-color: green; }`, or `initial` for JupyterLab's grey.

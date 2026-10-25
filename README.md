@@ -36,15 +36,17 @@ Storage Explorer. See
 - **Previews**: look before you load.
   [Delta Lake, Parquet, CSV, JSON, Excel, DuckDB databases, text and images](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#supported-formats)
   open at a click, with ready-to-run code that loads them into your notebook.
-- **Plugins**: data professionals, start your engines.
+- **Multi-engine support**: data professionals, start your engines.
   Plug in your favourite data library, such as
   [Polars, pandas, DuckDB, PySpark or Dask](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/plugins/README.md),
-  and browse data with it on the fly. Not supported yet? You, or your AI assistant, can
-  [write a plugin for it](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/development-plugin.md).
-- **Your own views**: make the explorer yours.
-  Drop a few functions in
-  [a file of your own](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#actions-of-your-own),
-  and every explorer offers your views and code beside its own.
+  and browse data with it on the fly. Switch engines at any time, and get code for each of them.
+- **Actions and plugins**: your explorer, your way.
+  - Want another data library, or code snippets of your own? Write a few functions in
+    [your actions file](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/actions.md),
+    and every explorer offers your views and code beside its own.
+  - Need a complete extension, for another storage or data framework? Develop a plugin, with your AI assistant: the
+    [Plugin development guide](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/plugin-development-guide.md)
+    is written for both of you.
 - **Safe file operations**: keep calm and copy on.
   - Copy, move and delete large folders
     [in the background](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#background-operations),
@@ -124,7 +126,9 @@ The `notebooks` folder has a demo of each widget on sample data.
   its tab with `launcher.py` files.
 - **[Development](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/DEVELOPMENT.md)**: building,
   releasing, and custom icons.
-- **[Developing plugins](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/development-plugin.md)**:
+- **[Writing actions](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/actions.md)**: views and code
+  snippets of your own, in a file every explorer reads.
+- **[Plugin development guide](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/plugin-development-guide.md)**:
   formats, actions, engines, file operations and storages of your own, packaged as plugins.
 
 ## Requirements

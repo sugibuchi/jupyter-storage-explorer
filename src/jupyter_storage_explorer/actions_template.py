@@ -6,8 +6,8 @@
 # again (run its cell again, or open a new tab) to apply the changes; a file
 # with an error is left out, with a warning.
 #
-# See https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#actions-of-your-own
-# and, for the rules, https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/development-plugin.md#actions
+# See "Writing actions":
+# https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/actions.md
 
 # from jupyter_storage_explorer.formats import Text, TextView
 # from jupyter_storage_explorer.formats.actions import view
