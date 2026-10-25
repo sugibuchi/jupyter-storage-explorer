@@ -129,10 +129,10 @@ The function takes the parameters it names, in any order, of these:
 - `size`: its size in bytes, if known;
 - `is_dir`: whether it is a folder;
 - `fs`: the explorer's fsspec filesystem the item is on, with its credentials;
-- `ctx`: the item, with all of the above and methods reading it, see [The item and its limits](#the-item-and-its-limits);
+- `ctx`: the item, with all of the above and methods reading it, see [The item](#the-item);
 - `fmt`: the format it was detected as;
 - `options`: its options, see [Engines and options](#engines-and-options);
-- `limits`: for views only, how much to read and show, see [The item and its limits](#the-item-and-its-limits).
+- `limits`: for views only, how much to read and show, see [View limits](#view-limits).
 
 Any other parameter needs a default, which it keeps.
 
@@ -180,6 +180,8 @@ A view object shows more than plain data, e.g. highlighted text. The view classe
 
 Each also takes a `title`, shown above the view, and a `note`, shown under it.
 
+#### Views with inputs
+
 A view reading much, e.g. a whole large file, should ask the user first. It returns a question, which shows a message
 and a button where the view would be:
 
@@ -220,6 +222,21 @@ def head(fs, path):
 - `ViewWithChoice`'s `style` is `"radio"`, `"dropdown"` or `"button"`, a button for each choice.
 - `with_cancel=True` adds a **Cancel** button to a choice, which shows nothing.
 - The answers are kept: when the data browser reads the data again, it asks no more.
+
+#### View limits
+
+A view's `limits` parameter says how much to read and show:
+
+- `max_bytes`: the bytes of a file to show as text, 64 KiB by default;
+- `max_display_rows`: the rows of a table to show, 100 by default;
+- `max_whole_file_bytes`: the largest file to read whole, 10 MiB by default.
+
+```python
+@view(format=Text, label="Upper case")
+def upper_case(fs, path, limits):
+    with fs.open(path, "rb") as f:
+        return f.read(limits.max_bytes).decode(errors="replace").upper()
+```
 
 ### Labels
 
@@ -290,13 +307,14 @@ StorageExplorer("s3://bucket/notes", engine_options={"python": {"text": {"charac
 - Mark a credential with `secret_field()` or `secret_dict_field()`, from `jupyter_storage_explorer.util`.
 - Code shows options only through `options.code_value(name)`, which leaves secrets out.
 
-### The item and its limits
+### The item
 
 The `ctx` parameter is the item, an `ItemContext`. It has what the other parameters give, and more:
 
 | `ctx.`               | What                                                                               |
 |----------------------|------------------------------------------------------------------------------------|
 | `url`, `name`, `path`, `size`, `is_dir`, `fs` | As the parameters of the same names.                      |
+| `location`           | Where the item is, independently of fsspec; `location.url` is its URL, also of a local file. |
 | `info`               | fsspec's info of the item, e.g. its modification time.                             |
 | `children`           | A folder's listing, as fsspec's entries; `None` for a file.                        |
 | `child_names`        | The names of a folder's items.                                                     |
@@ -306,12 +324,6 @@ The `ctx` parameter is the item, an `ItemContext`. It has what the other paramet
 
 `ctx.head` reads the file once for the item: detection and other actions often read the same beginning. On cloud
 storages, each read is a round trip.
-
-A view's `limits` say how much to read and show:
-
-- `max_bytes`: the bytes of a file to show as text, 64 KiB by default;
-- `max_display_rows`: the rows of a table to show, 100 by default;
-- `max_whole_file_bytes`: the largest file to read whole, 10 MiB by default.
 
 This view shows a folder's items, and the beginning of a file:
 
