@@ -209,9 +209,9 @@ class PySparkOptions(SupportOptions):
     reader_options: Mapping[str, Any] | None = None
     supported_protocols: Sequence[str] | None = SPARK_PROTOCOLS
 
-    def spark_options(self, *, in_code: bool = False) -> dict[str, Any]:
-        """The reader options the fields set, by Spark's names: the fields of
-        each format's subclass, those not None.
+    def format_options(self, *, in_code: bool = False) -> dict[str, Any]:
+        """The format's reader options the fields set, by Spark's names: the
+        fields of each format's subclass, those not None.
 
         Parameters
         ----------
@@ -259,7 +259,7 @@ def spark_reader(
     """
     reader = spark.read
     settings = _merged(
-        defaults or {}, options.spark_options(), options.reader_options or {}
+        defaults or {}, options.format_options(), options.reader_options or {}
     )
     for key, value in settings.items():
         reader = reader.option(key, value)
@@ -309,7 +309,7 @@ def spark_reader_code(
         reader option; only those fit to show.
     """
     overridden = {key.lower() for key in options.reader_options or {}}
-    shown = options.spark_options(in_code=True)
+    shown = options.format_options(in_code=True)
     settings = {
         key: value
         for key, value in _merged(defaults or {}, shown).items()
