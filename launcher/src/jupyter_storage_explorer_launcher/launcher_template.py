@@ -68,11 +68,12 @@ def filesystems():
 #     }
 
 
-# --- For development: extending the explorer in Python, tried before the
-# defaults (see the project's docs/plugin-development-guide.md). ---
+# --- For development: extending the explorer in Python (see the project's
+# docs/plugin-development-guide.md). ---
 
 # What the explorer does with formats' data: views and code, functions
-# decorated with @view or @code.
+# decorated with @view or @code, offered after the plugins' and the
+# explorer's own.
 #
 # def actions():
 #     from my_actions import parquet_in_my_widget
@@ -81,7 +82,7 @@ def filesystems():
 
 
 # File operations (FileSystemOperations subclasses), e.g. server-side copies
-# for a storage of your own.
+# for a storage of your own, tried before the plugins' and the defaults.
 #
 # def operations():
 #     from my_operations import MyStorageOperations
@@ -90,7 +91,7 @@ def filesystems():
 
 
 # How filesystems the defaults do not know are told apart, and their URLs
-# (FileSystemMapper subclasses).
+# (FileSystemMapper subclasses), tried before the plugins' and the defaults.
 #
 # def filesystem_mappers():
 #     from my_mappers import MyStorageMapper

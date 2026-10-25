@@ -256,11 +256,13 @@ know, the explorer may also open one with the user's credentials. It never opens
 
 ### Extended by chains, users first
 
-Formats, actions, file operations and mappers are each a chain, tried in order:
+Formats, file operations and mappers are each a chain, tried in order:
 
 1. what the explorer's arguments give;
 2. what the plugins give;
 3. the defaults.
+
+Actions are a chain too, in another order: see [The action chain](#the-action-chain).
 
 The first that takes an item handles it:
 
@@ -418,7 +420,7 @@ The storage explorer's parts are in `static/storage_explorer/`, one feature each
 - `operations.js`, with the clipboard;
 - `transfers.js`: drag and drop, uploads and downloads;
 - `jupyterlab.js`, `properties.js` and `jobs.js`;
-- `toolbar.js`, with unsafe mode and bookmarks;
+- `toolbar.js`, with unsafe mode, bookmarks and the settings menu;
 - `engine.js`, the engine chosen, and `about.js`, the settings menu's About;
 - `overlays.js`, for the busy screen, dialogs and menus, and `util.js`.
 
@@ -1219,7 +1221,8 @@ Plugin options only include or leave out actions. Actions get their own options 
 - A plugin that fails is left out with a `RuntimeWarning`: it fails to import or be created, is no plugin class, or
   clashes with another's name or key.
 
-The explorer uses each kind of component as given in its arguments, then the plugins', then its defaults.
+The explorer uses formats, operations and mappers as given in its arguments, then the plugins', then its defaults.
+Actions come in the order of [The action chain](#the-action-chain).
 
 A plugin's name, description, version, authors, license and URLs are its package's metadata. About shows them, also for
 plugins not loaded. Plugins never depend on their libraries: their `full` extra installs them.
@@ -1405,8 +1408,13 @@ Build from a clean checkout of the tag: uncommitted changes give a version like 
 The root `README.md` is the quick start and highlights. PyPI shows it too and cannot resolve relative paths, so its
 links and images are absolute GitHub URLs.
 
-The details are in `docs/` (`storage-explorer.md`, `data-explorer.md`). They are read on GitHub only, so they link to
-each other and to the repository's files with relative paths.
+The details are in `docs/`:
+
+- `storage-explorer.md` and `data-explorer.md`, for users;
+- `action-development-guide.md`, for users' own actions;
+- `plugin-development-guide.md`, for extending the explorer and packaging plugins.
+
+They are read on GitHub only, so they link to each other and to the repository's files with relative paths.
 
 The screenshots (`docs/figs/`, `launcher/figs/`) and the demo GIFs are made by the scripts in
 [`docs/scripts/`](docs/scripts/README.md). They use Playwright and the installed Microsoft Edge, on a made-up data lake

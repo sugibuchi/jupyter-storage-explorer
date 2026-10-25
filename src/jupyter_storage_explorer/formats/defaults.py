@@ -34,5 +34,6 @@ DEFAULT_FORMATS: tuple[type[DataFormat], ...] = (
     Image,
 )
 
-# The actions explorers use after those they are given and their plugins'.
+# The actions explorers use after their plugins', before those they are given
+# and the user's.
 DEFAULT_ACTIONS: tuple[Action[Any], ...] = BUILT_IN_ACTIONS

@@ -14,8 +14,8 @@ def filesystems():
     return demo_data.filesystems()
 
 
-def supports():
-    return demo_data.supports()
+def actions():
+    return demo_data.actions()
 EOF
 
 # No prompt about Jupyter news over the demo.

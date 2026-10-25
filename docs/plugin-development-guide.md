@@ -515,7 +515,7 @@ A library reads the item in one of five ways. Choose per storage in the check an
 
 | Way | When | Examples |
 |---|---|---|
-| By URL, `ctx.url_or_local_path` | The library reads the storage itself, with its own credentials: the environment, or options | polars on S3 (object_store), Spark |
+| By URL, `ctx.url_or_local_path` | The library reads the storage itself, with its own credentials: the environment, or options | polars on S3 (object_store) |
 | The explorer's filesystem, `ctx.fs` | The library takes an fsspec filesystem and reads lazily through it | PyArrow's `FSSpecHandler` (polars-support's Parquet), DuckDB's `register_filesystem` |
 | The explorer's filesystem by URL, `ctx.fs.unstrip_protocol(ctx.path)` with `storage_options=ctx.fs.storage_options` | The library takes only a URL and fsspec's `storage_options`: fsspec gives back the explorer's own instance, from its cache | Dask's `read_csv` |
 | Bytes, `ctx.head(n)`, `ctx.read_whole(limits)` | The library reads only a file object or bytes, so the file is read whole | pandas, polars' CSV elsewhere, images |
@@ -1133,7 +1133,7 @@ Restart the kernel after changing the component's module: Python imports a modul
 Actions can also go in `storage-explorer/actions.py`, or a file of `storage-explorer/actions/`, in a Jupyter
 configuration directory. Every explorer reads them when it is created: see the
 [Action development guide](action-development-guide.md). A changed file applies to the next explorer, without a
-restart.
+restart. **Reload actions**, in the ⚙ menu, applies it to an explorer already open.
 
 The launcher's tab and side panel take the same components from functions of the same names in `launcher.py`:
 

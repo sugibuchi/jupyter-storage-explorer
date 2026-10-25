@@ -67,7 +67,7 @@ Then see [Using the explorer](https://github.com/sugibuchi/jupyter-storage-explo
 
 Click the ⚙ button at the right of the tab's toolbar, then **Edit configuration**.
 
-<img src="https://raw.githubusercontent.com/sugibuchi/jupyter-storage-explorer/main/launcher/figs/settings-button.png" width="164" alt="The settings menu (a gear) after Unsafe mode in the tab's toolbar: Edit configuration and About">
+<img src="https://raw.githubusercontent.com/sugibuchi/jupyter-storage-explorer/main/launcher/figs/settings-button.png" width="164" alt="The settings menu (a gear) after Unsafe mode in the tab's toolbar: Columns, Edit configuration, Edit actions, Reload actions and About">
 
 It opens your settings, a Python file (`launcher.py`), in JupyterLab's editor; if you have none, it offers to create
 one from a template with an example of each setting.

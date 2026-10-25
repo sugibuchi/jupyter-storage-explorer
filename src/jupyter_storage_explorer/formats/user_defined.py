@@ -5,7 +5,8 @@ They rank below every other format (``UserDefinedFormat.priority``): an item
 the explorer or a plugin already recognises keeps its format, and a user
 format matching it too is offered as another one, in "Preview as". The same
 arguments give the same format, so that actions in several files can share
-it, and so that files read again (by each explorer created) define it once
+it, and so that files read again (by each explorer created, or by "Reload
+actions") define it once
 for the kernel's life."""
 
 from __future__ import annotations

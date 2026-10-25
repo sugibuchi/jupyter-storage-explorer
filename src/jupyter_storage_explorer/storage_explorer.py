@@ -271,7 +271,7 @@ class StorageExplorer(
         cannot be used, e.g. with an error or an action of the same label as
         another, is left out with a warning. Enabled, the settings menu
         offers to edit the user's ``actions.py``, created from a template if
-        it is missing.
+        it is missing, and to reload the files' actions.
     actions : sequence of Action, optional
         Actions of your own, functions decorated with
         ``formats.actions.view`` or ``code``. They are tried in order after
@@ -759,8 +759,8 @@ class StorageExplorer(
 
     @staticmethod
     def default_actions() -> list[Action[Any]]:
-        """The actions tried after those given and the plugins'; override it
-        in a subclass to change them.
+        """The actions tried after the plugins', before those given and the
+        user's; override it in a subclass to change them.
 
         Returns
         -------

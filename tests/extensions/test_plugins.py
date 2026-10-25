@@ -1,4 +1,4 @@
-"""Plugins (plugin.py, _plugins.py): which are loaded, with which options,
+"""Plugins (plugin.py, _extensions/plugins.py): which are loaded, with which options,
 what they give the explorer, and in which order."""
 
 from __future__ import annotations

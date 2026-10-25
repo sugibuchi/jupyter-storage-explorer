@@ -7,7 +7,7 @@ Actions are what the explorer does with a file or a folder of a format:
 
 You can add your own actions to the explorer.
 
-This guide covers actions for your own use. To package actions, engines or storages for others, see the
+This guide covers actions for your own use. To package them for others, see the
 [Plugin development guide](plugin-development-guide.md).
 
 ## Your actions file
@@ -50,8 +50,8 @@ def pretty_print_json(url):
     return PRETTY_PRINT.format(url=url)
 ```
 
-Save it in your actions file, and choose **Reload actions** in the explorer's ⚙ menu. Right-click a file named `*.json`: **Python code** now
-offers "Pretty print json".
+Save it in your actions file, and choose **Reload actions** in the explorer's ⚙ menu. Right-click a file named
+`*.json`: **Python code** now offers "Pretty print json".
 
 The template is a multi-line string, with `{url!r}` where the file's URL goes, in quotes. `.strip()` removes the
 blank lines around it.
@@ -171,7 +171,7 @@ A view object shows more than plain data, e.g. highlighted text. The view classe
 
 | View                                  | Shows                                                       |
 |---------------------------------------|-------------------------------------------------------------|
-| `TextView(text=...)`                  | Text; with `language`, e.g. `"sql"`, highlighted.           |
+| `TextView(text=...)`                  | Text; with `html`, Pygments' HTML of it, highlighted.       |
 | `MarkdownView(text=...)`              | Markdown, rendered.                                         |
 | `TreeView(value=...)`                 | A JSON-like value, as a collapsible tree.                   |
 | `QueryView(data=...)`                 | A dataframe, in the data browser.                           |
@@ -199,11 +199,11 @@ from jupyter_storage_explorer.formats.actions import view
 
 
 @view(format=Csv, label="Whole file")
-def whole_file(fs, path, size):
+def whole_file(fs, path):
     def read():
         return TextView(text=fs.cat_file(path).decode())
 
-    return ViewWithConfirmation(message=f"This reads the whole file ({size:,} bytes).", factory=read)
+    return ViewWithConfirmation(message="This reads the whole file.", factory=read)
 
 
 @view(format=Csv, label="Head")
@@ -220,7 +220,10 @@ def head(fs, path):
 ```
 
 - `button` is the button's label, "View" by default.
-- `ViewWithChoice`'s `style` is `"radio"`, `"dropdown"` or `"button"`, a button for each choice.
+- `ViewWithChoice`'s `style` shows the choices:
+  - `"radio"`, the default, as radio buttons;
+  - `"dropdown"`, as a dropdown menu;
+  - `"button"`, as a button for each choice.
 - `with_cancel=True` adds a **Cancel** button to a choice, which shows nothing.
 - The answers are kept: when the data browser reads the data again, it asks no more.
 
@@ -249,8 +252,8 @@ The label is what you see in the menus:
 Give one with `label=...`, or keep the default. `{format}` and `{engine}` in a label are replaced by the labels of the
 format and the engine.
 
-Two actions of one kind, format, engine and label are an error: you could not tell them apart in the menus. Give
-yours a label of its own.
+Two views, or two code actions, with the same format, engine and label are an error: you could not tell them apart in
+the menus. Give yours a label of its own.
 
 ### Engines and options
 
@@ -303,8 +306,8 @@ StorageExplorer("s3://bucket/notes", engine_options={"python": {"text": {"charac
 - Each option has a default, as users may set none.
 - Define the class at the top level of your file, not inside a function.
 - `PythonEngine`'s key is `"python"`. A format of yours is named by its `name`.
-- An engine's options also reach the plugin's actions of that format. A field of the same name must have the same type
-  there.
+- An engine's options also reach its other actions of that format, the explorer's or the plugins'. A field of the same
+  name must have the same type there.
 - Mark a credential with `secret_field()` or `secret_dict_field()`, from `jupyter_storage_explorer.util`.
 - Code shows options only through `options.code_value(name)`, which leaves secrets out.
 
@@ -359,8 +362,12 @@ def upper_case(fs, path):
         return f.read().upper()
 ```
 
-`check` always takes `(fmt, ctx, options)`. It runs for each item you click, so it decides from what is known: the
-format, the name, the path, the size and the options. It never reads the file.
+`check` always takes `(fmt, ctx, options)`. It runs for each item you click, so it never reads the file. It decides
+from what is known:
+
+- the format;
+- the item's name, path and size, from `ctx`;
+- the options.
 
 ## When something goes wrong
 
@@ -373,7 +380,7 @@ format, the name, the path, the size and the options. It never reads the file.
 
 ## How the files are read
 
-- Every explorer reads the files when it is created, in notebooks, the launcher's tabs and the side panel.
+- Every explorer reads the files when it is created, wherever it is.
 - **Reload actions** reads them again, and lists the folder shown again. The preview open keeps its view until you open
   another.
 - It reads `actions.py` first, then the folder's files by name.
