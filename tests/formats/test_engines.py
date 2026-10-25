@@ -233,6 +233,7 @@ class TestExplorer:
         assert {(r["title"], r["engine"]) for r in reply["recipes"]} >= {
             ("Load as LazyFrame", "Polars"),
             ("Load as DataFrame", "pandas"),
+            ("Load as DataFrame", "Dask"),
             ("Load as relation", "DuckDB"),
         }
         text = local.request(

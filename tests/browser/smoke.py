@@ -1823,25 +1823,29 @@ def duckdb_engine(lab: Lab, page: Page) -> None:
     dialog.press("Escape")
 
 
-# dask-support's engine on a memory filesystem fsspec cannot rebuild from its
-# options (skip_instance_cache): Parquet read through it, a small CSV file
-# copied to the kernel's disk at once, and a large one copied once asked.
+# dask-support's engine on a zip file opened by position, which fsspec cannot
+# make again from a URL: Parquet read through it, a small CSV file copied to
+# the kernel's disk at once, and a large one copied once asked.
 DASK = """\
 import io
+import pathlib
+import tempfile
+import zipfile
 import pandas as pd
-from fsspec.implementations.memory import MemoryFileSystem
+from fsspec.implementations.zip import ZipFileSystem
 from jupyter_storage_explorer import StorageExplorer
 from jupyter_storage_explorer.formats import ViewLimits
 
-memory = MemoryFileSystem(skip_instance_cache=True)
 parquet = io.BytesIO()
 pd.DataFrame({"id": range(300)}).to_parquet(parquet, row_group_size=50)
-memory.pipe_file("/dask/orders.parquet", parquet.getvalue())
-memory.pipe_file("/dask/small.csv", b"a;b\\n" + b"1;2\\n" * 250)
-memory.pipe_file("/dask/large.csv", b"a\\n" + b"1\\n" * 3000)
+path = pathlib.Path(tempfile.mkdtemp()) / "lake.zip"
+with zipfile.ZipFile(path, "w") as z:
+    z.writestr("dask/orders.parquet", parquet.getvalue())
+    z.writestr("dask/small.csv", b"a;b\\n" + b"1;2\\n" * 250)
+    z.writestr("dask/large.csv", b"a\\n" + b"1\\n" * 3000)
 StorageExplorer(
-    "/dask",
-    fs=memory,
+    "dask",
+    fs=ZipFileSystem(str(path)),
     engine_preference=["dask"],
     preview_panel="open",
     view_limits=ViewLimits(max_whole_file_bytes=1024),
@@ -1877,7 +1881,7 @@ def dask_engine(lab: Lab, page: Page) -> None:
         ".jse-submenu .jse-menu-item:visible", has_text="Load as DataFrame (Dask)"
     ).click()
     dialog = x.el.locator(".jse-dialog:visible")
-    expect(dialog).to_contain_text("dd.read_parquet('memory:///dask/orders.parquet')")
+    expect(dialog).to_contain_text("dd.read_parquet('zip://dask/orders.parquet')")
     dialog.press("Escape")
 
 

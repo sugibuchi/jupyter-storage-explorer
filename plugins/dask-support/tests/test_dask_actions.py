@@ -6,6 +6,7 @@ counting the bytes read (see the actions' module docstring)."""
 
 from __future__ import annotations
 
+import gzip
 import inspect
 import io
 import threading
@@ -191,7 +192,24 @@ def test_parquet_hive_folder_of_files_without_extension(memfs, make_item):
     assert len(df) == 2 * ROWS
     assert sorted(df["year"].astype(int).unique()) == [2024, 2025]
     code = parquet_as_data_frame(fmt, item, ParquetByDaskOptions())
-    assert "parquet_file_extension=None" in code
+    assert "'memory:///t/year=*/[!_.]*'" in code
+
+
+def test_parquet_folder_beside_sparks_temporary(memfs, make_item):
+    # Spark's _temporary, left by a failed job, is not read.
+    for year in (2024, 2025):
+        memfs.pipe_file(f"/s/year={year}/part-0.parquet", parquet_bytes())
+    memfs.pipe_file("/s/_temporary/0/part-9.parquet", b"not parquet")
+    item = make_item("/s")
+    view = parquet_view(Parquet(), item, ParquetByDaskOptions(), ViewLimits())
+    assert len(rows(view, 0, 3 * ROWS)) == 2 * ROWS
+
+
+def test_parquet_blocksize_given_leaves_row_groups_to_dask(make_item):
+    item = make_item("/a.parquet", parquet_bytes())
+    options = ParquetByDaskOptions(blocksize="64MiB")
+    view = parquet_view(Parquet(), item, options, ViewLimits())
+    assert view.data.npartitions == 1
 
 
 def test_parquet_through_a_dir_filesystem(memfs):
@@ -265,10 +283,46 @@ def test_json_lines_in_blocks(make_item):
     assert rows(view)["id"].tolist() == FRAME["id"]
 
 
+def test_compressed_text_is_not_cut_into_blocks(make_item):
+    item = make_item("/a.csv", gzip.compress(csv_bytes()))
+    options = CsvByDaskOptions(compression="gzip")
+    limits = ViewLimits(max_whole_file_bytes=2000)
+    view = csv_view(Csv(), item, options, limits)
+    assert view.data.npartitions == 1
+    assert rows(view)["id"].tolist() == FRAME["id"]
+
+
+def test_read_by_url_from_a_worker_thread(make_item, monkeypatch):
+    # As explorers make views: in a worker thread, where fsspec's cache has
+    # no instance of the explorer's (synchronous) filesystem. The view still
+    # reads by URL, without copying, and makes no filesystem itself.
+    item = make_item("/a.csv", csv_bytes())
+    made = []
+    filesystem = fsspec.filesystem
+    monkeypatch.setattr(
+        fsspec, "filesystem", lambda *a, **k: made.append(a) or filesystem(*a, **k)
+    )
+    limits = ViewLimits(max_whole_file_bytes=100)  # a copy would be asked for
+    out = {}
+    thread = threading.Thread(
+        target=lambda: out.update(
+            view=csv_view(Csv(), item, CsvByDaskOptions(), limits)
+        )
+    )
+    thread.start()
+    thread.join()
+    assert isinstance(out["view"], QueryView)
+    assert made == []
+    assert rows(out["view"])["id"].tolist() == FRAME["id"]
+
+
+class UnregisteredMemory(MemoryFileSystem):
+    """A filesystem class fsspec has not registered: from a URL, it would
+    make a MemoryFileSystem instead."""
+
+
 def test_a_filesystem_fsspec_cannot_rebuild_is_copied_first(memfs):
-    # skip_instance_cache: fsspec makes another instance from its options.
-    fs = MemoryFileSystem(skip_instance_cache=True)
-    assert fsspec.filesystem("memory", **fs.storage_options) is not fs
+    fs = UnregisteredMemory()
     fs.pipe_file("/copied.csv", csv_bytes())
     item = item_of(fs, "/copied.csv")
     cache = local_file_cache()
