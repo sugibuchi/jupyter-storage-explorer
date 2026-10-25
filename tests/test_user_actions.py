@@ -155,9 +155,9 @@ class TestTemplate:
         assert load_user_actions() == ([], [])
 
     def test_its_example_uncommented(self, user):
-        # The commented lines after the header, uncommented, give its actions.
+        # The commented lines after the imports, uncommented, give its actions.
         lines = self.source().splitlines()
-        start = next(i for i, line in enumerate(lines) if line.startswith("# from "))
+        start = next(i for i, line in enumerate(lines) if line.startswith("from "))
         code = "\n".join(line.removeprefix("# ") for line in lines[start:])
         (user.parent / "actions.py").write_text(code + "\n", encoding="utf-8")
         actions, problems = load_user_actions()
