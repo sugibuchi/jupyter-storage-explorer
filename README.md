@@ -150,6 +150,8 @@ The `notebooks` folder has a demo of each widget on sample data.
 
 ## Technologies
 
+Storage Explorer is made possible by these open-source projects. Our thanks to their authors and contributors.
+
 - **[fsspec](https://filesystem-spec.readthedocs.io/)**: filesystem interfaces for Python. Used for all storage access.
 - **[narwhals](https://narwhals-dev.github.io/narwhals/)**: a compatibility layer between dataframe libraries. Used for
   the data browser's queries.
