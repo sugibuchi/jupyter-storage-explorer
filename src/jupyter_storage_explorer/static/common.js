@@ -63,14 +63,28 @@ function createRequester(model) {
   };
 }
 
+// A layer of the page's own for the dialog `el`, shown over the whole browser
+// window, as JupyterLab's dialogs are, rather than over the widget: for the
+// side panel, too narrow for dialogs. It has the widget's class for its
+// colours and font. Add it to `document.body` while the dialog is open.
+function dialogLayer(el) {
+  const layer = h("div", { className: "jse-widget jse-dialog-layer" }, el);
+  // As the widget: JupyterLab's shortcuts do not fire on keys pressed in it.
+  layer.dataset.lmSuppressShortcuts = "true";
+  return layer;
+}
+
 // Small modal dialog, e.g. "Upload sales.csv? [Cancel] [Upload]". Add `el` to
 // the widget. ask(lines, buttons) resolves with the clicked button's value, or
 // null for Cancel/Esc/backdrop; buttons: [{label, value, primary}], shown left
-// to right. answer(value) closes it as if a button was clicked.
-function createConfirm() {
+// to right. answer(value) closes it as if a button was clicked. With `onPage`
+// (the side panel), it is shown over the whole window (dialogLayer), and `el`
+// is null: nothing to add to the widget.
+function createConfirm(onPage = false) {
   const body = h("div", { className: "jse-dialog-body" });
   const buttons = h("div", { className: "jse-dialog-foot" });
   const el = h("div", { className: "jse-dialog", tabIndex: -1, hidden: true }, h("div", { className: "jse-modal jse-confirm" }, body, buttons));
+  const layer = onPage ? dialogLayer(el) : null;
   let pending = null;
 
   function ask(lines, choices) {
@@ -86,6 +100,7 @@ function createConfirm() {
           return btn;
         }),
       );
+      if (layer) document.body.append(layer);
       el.hidden = false;
       el.focus({ preventScroll: true });
     });
@@ -93,6 +108,7 @@ function createConfirm() {
 
   function answer(value) {
     el.hidden = true;
+    layer?.remove();
     const resolve = pending;
     pending = null;
     resolve?.(value);
@@ -104,7 +120,7 @@ function createConfirm() {
     ev.stopPropagation();
     answer(null);
   });
-  return { el, ask, answer };
+  return { el: layer ? null : el, ask, answer };
 }
 
 // The buttons of a confirmation: Cancel, and `label`, answering true.
