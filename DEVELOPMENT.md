@@ -408,7 +408,7 @@ share is in `_explorer/common.py`.
 | `JobsMixin`            | `jobs.py`       | Running file operations as jobs, and showing what they change.           |
 | `FileRequestsMixin`    | `requests.py`   | The requests for file operations.                                        |
 | `AboutMixin`           | `about.py`      | The settings menu's About: the versions of the explorer and the plugins. |
-| `UserActionsMixin`     | `user_actions.py` | The action chain, and the settings menu's Reload actions.              |
+| `UserActionsMixin`     | `user_actions.py` | The action chain, and the settings menu's Actions > Reload.           |
 
 ### Frontend
 
@@ -1061,7 +1061,7 @@ it.
 - A file that cannot be imported, or whose actions `check_actions` refuses with the explorer's others, is left out
   with a warning.
 - The files are read again for each explorer, so a change applies to the next one.
-- "Reload actions", in the settings menu, reads them again in an explorer (`_reload_actions`, in
+- "Actions > Reload", in the settings menu, reads them again in an explorer (`_reload_actions`, in
   `_explorer/user_actions.py`). It makes the chain again with the other actions, kept by `__init__`, and sends the
   formats' traits again. The folder is then listed again, as a refresh does. The preview open and the tabs keep the
   actions they were made with.

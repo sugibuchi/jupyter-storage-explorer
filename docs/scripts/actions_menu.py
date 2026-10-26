@@ -1,7 +1,7 @@
 """In the action development guide: docs/figs/actions-notebook.png, the
 notebook developing the guide's first action, its explorer showing the action
 in a JSON file's "Python code" submenu; and docs/figs/actions-menu.png, an
-explorer's settings menu (⚙), open, with "Edit actions" and "Reload actions".
+explorer's settings menu (⚙), open, with "Actions" and its "Edit" and "Reload".
 
 uv run --group docs docs/scripts/actions_menu.py
 """
@@ -102,18 +102,23 @@ def settings_menu(lab: Lab) -> None:
         page.wait_for_timeout(1500)
         _lab.calm(page)
 
-        # The settings menu, "Edit actions" pointed at.
+        # The settings menu, "Actions" open, its "Edit" pointed at.
         settings = page.locator(".jse-settings-btn").first
         settings.click()
         menu = page.locator(".jse-menu:not(.jse-submenu)").first
         menu.wait_for(state="visible")
-        menu.locator(".jse-menu-item", has_text="Edit actions").hover()
+        menu.locator(".jse-menu-item", has_text="Actions").hover()
+        sub = page.locator(".jse-submenu:visible").first
+        sub.locator(".jse-menu-item", has_text="Edit").hover()
         page.wait_for_timeout(500)
-        # From the menu's left, the toolbar down to the menu's bottom.
+        # From the menus' left, the toolbar down to the menus' bottom.
         y0 = box(page.locator(".jse-toolbar").first)[1]
         mx0, _, mx1, my1 = box(menu)
-        right = max(box(settings)[2], mx1)
-        shot(page, FIGS / "actions-menu.png", (mx0 - 6, y0, right + 6, my1 + 6), pad=0)
+        sx0, _, sx1, sy1 = box(sub)
+        left = min(mx0, sx0)
+        right = max(box(settings)[2], mx1, sx1)
+        area = (left - 6, y0, right + 6, max(my1, sy1) + 6)
+        shot(page, FIGS / "actions-menu.png", area, pad=0)
         page.keyboard.press("Escape")
 
 

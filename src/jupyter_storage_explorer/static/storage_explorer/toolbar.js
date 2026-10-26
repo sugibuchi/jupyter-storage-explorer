@@ -78,9 +78,10 @@ function createToolbar(x) {
   });
   refreshBtn.addEventListener("click", () => model.send({ type: "refresh" }));
   // "Edit configuration" opens the launcher's settings file in JupyterLab's
-  // editor, only in its tabs; "Edit actions" the user's actions file, unless
-  // user_actions is disabled. Both need the launcher's extension, and come
-  // from the kernel's _config_paths.
+  // editor, only in its tabs; "Actions", "Edit" the user's actions file. Both
+  // need the launcher's extension, and come from the kernel's _config_paths.
+  // "Actions" is there only if user_actions is enabled: the kernel then
+  // offers the actions file.
   function showSettingsMenu() {
     const items = [];
     if (sidebar && x.unsafe.switchable()) {
@@ -121,38 +122,42 @@ function createToolbar(x) {
         ),
     });
     const paths = model.get("_config_paths");
-    if (x.jupyterlab.canOpenSettings()) {
-      if (paths.launcher) {
-        items.push({
-          label: "Edit configuration",
+    if (x.jupyterlab.canOpenSettings() && paths.launcher) {
+      items.push({
+        label: "Edit configuration",
+        icon: "edit",
+        title: `${visible(paths.launcher)}\nOpen a new Storage Explorer tab, or reload the page, to apply the changes.`,
+        action: () => void x.jupyterlab.openSettings("launcher"),
+      });
+    }
+    if (paths.actions) {
+      const actions = [];
+      if (x.jupyterlab.canOpenSettings()) {
+        actions.push({
+          label: "Edit",
           icon: "edit",
-          title: `${visible(paths.launcher)}\nOpen a new Storage Explorer tab, or reload the page, to apply the changes.`,
-          action: () => void x.jupyterlab.openSettings("launcher"),
-        });
-      }
-      if (paths.actions) {
-        items.push({
-          label: "Edit actions",
-          icon: "edit",
-          title: `${visible(paths.actions)}\nReload actions, in this menu, to apply the changes.`,
+          title: `${visible(paths.actions)}\nReload, in this menu, to apply the changes.`,
           action: () => void x.jupyterlab.openSettings("actions"),
         });
       }
-    }
-    // Without the extension too: the kernel reads the files itself.
-    if (paths.actions) {
-      items.push({
-        label: "Reload actions",
+      // Without the extension too: the kernel reads the files itself.
+      actions.push({
+        label: "Reload",
         icon: "refresh",
         title: `Read ${visible(paths.actions)} and the other actions files again.`,
         action: () => void reloadActions(),
+      });
+      items.push({
+        label: "Actions",
+        icon: "bolt",
+        submenu: (sub) => sub.replaceChildren(...x.menu.rows(actions)),
       });
     }
     items.push({ label: "About", icon: "info", action: () => void x.about.show() });
     x.menu.showBelow(settingsBtn, items);
   }
 
-  // "Reload actions": the kernel reads the user's actions files again and
+  // "Actions", "Reload": the kernel reads the user's actions files again and
   // lists the folder again ("reload_actions"). A file left out, e.g. with a
   // syntax error, is flashed as an error; the others' actions are used.
   async function reloadActions() {

@@ -1619,19 +1619,42 @@ def user_actions(lab: Lab, page: Page) -> None:
     reversed_view(x)
 
 
+def choose_action_item(page: Page, label: str) -> None:
+    """In the settings menu open, "Actions", then its item ``label``."""
+    page.locator(
+        ".jse-menu:not(.jse-submenu) > .jse-menu-item:visible", has_text="Actions"
+    ).hover()
+    page.locator(".jse-submenu .jse-menu-item:visible", has_text=label).click()
+
+
 @lab_check
 def reload_actions(lab: Lab, page: Page) -> None:
-    # An explorer created before the user's file: "Reload actions", in the
+    # An explorer created before the user's file: "Actions", "Reload", in the
     # settings menu, reads it and lists the folder again with its format.
     x = Explorer(lab, page, USER_ACTIONS)
     expect(x.row("b.abc")).to_be_visible()
     with lab.user_actions("reversed.py", USER_ACTIONS_FILE):
         x.el.locator(".jse-settings-btn").click()
-        x.menu_item("Reload actions").click()
+        choose_action_item(page, "Reload")
         expect(x.status).to_contain_text("Actions reloaded: 2 of yours")
     x.row("b.abc").click()
     expect(x.preview.locator(".jse-text")).to_have_text("QUIET")
     reversed_view(x)
+
+
+@lab_check
+def no_actions_menu(lab: Lab, page: Page) -> None:
+    # An explorer reading no actions files, as in a notebook by default: no
+    # "Actions" in the settings menu.
+    x = Explorer(lab, page, USER_ACTIONS.replace(', user_actions="enabled"', ""))
+    x.el.locator(".jse-settings-btn").click()
+    expect(x.menu_item("About")).to_be_visible()
+    expect(
+        page.locator(
+            ".jse-menu:not(.jse-submenu) > .jse-menu-item:visible", has_text="Actions"
+        )
+    ).to_have_count(0)
+    page.keyboard.press("Escape")
 
 
 def reversed_view(x: Explorer) -> None:
@@ -2075,7 +2098,7 @@ def launcher_settings_with_an_error(lab: Lab, page: Page) -> None:
 
 @lab_check
 def edit_actions(lab: Lab, page: Page) -> None:
-    # The settings menu's "Edit actions" opens the user's actions.py in
+    # The settings menu's "Actions", "Edit" opens the user's actions.py in
     # JupyterLab's editor, created from the template once the user agrees;
     # an action added there is used by the next explorer.
     path = lab.folder / "config" / "storage-explorer" / "actions.py"
@@ -2083,10 +2106,7 @@ def edit_actions(lab: Lab, page: Page) -> None:
         tab = open_launcher_tab(lab, page)
         assert not path.exists()
         tab.locator(".jse-settings-btn").click()
-        page.locator(
-            ".jse-menu:not(.jse-submenu) > .jse-menu-item:visible",
-            has_text="Edit actions",
-        ).click()
+        choose_action_item(page, "Edit")
         dialog = tab.locator(".jse-dialog:visible")
         expect(dialog).to_contain_text("Create your actions file")
         dialog.get_by_role("button", name="Create").click()
@@ -2273,7 +2293,7 @@ def side_panel(lab: Lab, page: Page) -> None:
     expect(dialog).to_have_count(0)
     # So does a confirmation, e.g. creating the user's actions file.
     settings.click()
-    menu.filter(has_text="Edit actions").click()
+    choose_action_item(page, "Edit")
     question = page.locator(".jse-dialog-layer .jse-confirm")
     expect(question).to_contain_text("Create your actions file")
     question_box = question.bounding_box()

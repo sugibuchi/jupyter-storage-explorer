@@ -150,7 +150,7 @@ class TestFiles:
 
 
 class TestTemplate:
-    """actions_template.py, which "Edit actions" creates actions.py from."""
+    """actions_template.py, which "Actions > Edit" creates actions.py from."""
 
     def source(self):
         template = importlib.resources.files("jupyter_storage_explorer._extensions")

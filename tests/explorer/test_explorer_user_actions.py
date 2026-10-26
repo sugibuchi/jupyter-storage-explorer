@@ -1,4 +1,4 @@
-"""StorageExplorer's "Reload actions": the user's action files read again,
+"""StorageExplorer's "Actions > Reload":the user's action files read again,
 without creating the explorer again."""
 
 from __future__ import annotations
