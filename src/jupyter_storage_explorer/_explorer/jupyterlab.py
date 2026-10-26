@@ -19,10 +19,15 @@ if TYPE_CHECKING:
 
     from fsspec import AbstractFileSystem
 
+    # A configuration file's path, or a function giving it when opened.
+    _Path = str | os.PathLike[str] | Callable[[], str | os.PathLike[str]]
+
 
 # The configuration files an explorer may offer in its settings menu, by key:
-# the launcher's settings (its tabs only) and the user's actions.
-CONFIG_FILES = ("launcher", "actions")
+# the launcher's settings (its tabs only), the user's actions, and the day's
+# log file (with the Logging menu), which is only read.
+CONFIG_FILES = ("launcher", "actions", "log")
+_READ_ONLY = frozenset({"log"})
 
 
 class JupyterLabFilesMixin:
@@ -34,44 +39,54 @@ class JupyterLabFilesMixin:
     JupyterLab's file browser serves (``~/.jupyter`` is hidden).
     """
 
-    _config_files: dict[str, tuple[str, Callable[[], Any]]]
+    _config_files: dict[str, tuple[_Path, Callable[[], Any] | None]]
     _config_paths: dict[str, str]
 
     def _offer_config_file(
-        self, key: str, path: str | os.PathLike[str], create: Callable[[], Any]
+        self,
+        key: str,
+        path: _Path,
+        create: Callable[[], Any] | None,
+        shown: str | os.PathLike[str] | None = None,
     ) -> None:
         """Offer the configuration file ``key`` (of ``CONFIG_FILES``) in the
         settings menu, which opens the file ``path`` in JupyterLab, calling
-        ``create()`` first (it creates the file if it is missing)."""
+        ``create()`` first (it creates the file if it is missing; None: a
+        missing file is not created). ``path`` may be a function giving it
+        when opened, e.g. the day's log file; ``shown`` is then what the menu
+        shows of it, e.g. its folder."""
         if key not in CONFIG_FILES:
             raise ValueError(f"unknown configuration file {key!r}")
-        self._config_files = {**self._config_files, key: (os.fspath(path), create)}
-        self._config_paths = {**self._config_paths, key: os.fspath(path)}
+        self._config_files = {**self._config_files, key: (path, create)}
+        shown = path if shown is None else shown
+        self._config_paths = {**self._config_paths, key: os.fspath(shown)}  # type: ignore[arg-type]
 
-    def _config_file(self, key: Any) -> tuple[str, Callable[[], Any]]:
+    def _config_file(self, key: Any) -> tuple[str, Callable[[], Any] | None]:
         """The path and the function creating the configuration file ``key``,
         a key the page sent; ValueError if the explorer offers none of it."""
         if not isinstance(key, str) or key not in self._config_files:
             raise ValueError("this explorer has no such configuration file")
-        return self._config_files[key]
+        path, create = self._config_files[key]
+        return os.fspath(path() if callable(path) else path), create
 
     def _settings_open(self, content: dict[str, Any]) -> dict[str, Any]:
         """Answer "settings_open": the configuration file of "file" exists, so
-        it can be opened in JupyterLab; {}, or {"missing": True} if it does
-        not and "create" is not set (the user is asked first), or {"error"}.
-        With "create", a missing file is created."""
+        it can be opened in JupyterLab; {"name": its name}, or {"missing": True} if it does
+        not and "create" is not set (the user is asked first, unless it is
+        never created), or {"error"}. With "create", a missing file is
+        created."""
         try:
             path, create = self._config_file(content.get("file"))
         except ValueError as exc:
             return {"error": str(exc)}
         try:
             if not os.path.exists(path):
-                if not content.get("create"):
+                if not content.get("create") or create is None:
                     return {"missing": True}
                 create()
         except Exception as exc:
             return {"error": error_text(exc)}
-        return {}
+        return {"name": os.path.basename(path)}
 
     def _jupyterlab_file(
         self, content: dict[str, Any]
@@ -114,6 +129,7 @@ class JupyterLabFilesMixin:
                 type_=content.get("contentType"),
                 format_=content.get("format"),
                 content=content.get("content", True),
+                writable=content.get("settings") not in _READ_ONLY,
             )
         except Exception as exc:
             return {"error": error_text(exc)}
@@ -127,6 +143,8 @@ class JupyterLabFilesMixin:
         changed elsewhere since it was opened, before saving.
         """
         try:
+            if content.get("settings") in _READ_ONLY:
+                raise ValueError("this file is only read: it cannot be saved")
             fs, path = self._jupyterlab_file(content)
             current = self._read_bytes(path, fs) if self._exists(path, fs) else None
             data = jupyterlab_files.saved_bytes(

@@ -6,6 +6,8 @@ import polars as pl
 import pytest
 from explorers import Explorer, make
 
+from jupyter_storage_explorer import _logs
+
 # memfs and make_item, as plugins test with.
 pytest_plugins = ["jupyter_storage_explorer.testing"]
 
@@ -37,7 +39,19 @@ def jupyter_config_dirs(tmp_path_factory, monkeypatch):
         "jupyter_storage_explorer._extensions.user_actions.jupyter_config_dir",
         lambda: str(user),
     )
+    # Log files too, in the same folder (see _logs.py).
+    monkeypatch.setattr(
+        "jupyter_storage_explorer._logs.jupyter_config_dir", lambda: str(user)
+    )
     return folders
+
+
+@pytest.fixture(autouse=True)
+def logs_reset():
+    """The package's logger as Python makes it after each test: explorers
+    configure it for the kernel (see _logs.py)."""
+    yield
+    _logs.reset()
 
 
 @pytest.fixture

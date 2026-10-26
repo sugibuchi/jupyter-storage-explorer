@@ -67,7 +67,7 @@ Then see [Using the explorer](https://github.com/sugibuchi/jupyter-storage-explo
 
 Click the ⚙ button at the right of the tab's toolbar, then **Edit configuration**.
 
-<img src="https://raw.githubusercontent.com/sugibuchi/jupyter-storage-explorer/main/launcher/figs/settings-button.png" width="195" alt="The settings menu (a gear) after Unsafe mode in the tab's toolbar: Columns, Edit configuration, Actions and About">
+<img src="https://raw.githubusercontent.com/sugibuchi/jupyter-storage-explorer/main/launcher/figs/settings-button.png" width="195" alt="The settings menu (a gear) after Unsafe mode in the tab's toolbar: Columns, Actions, Logging, Edit configuration and About">
 
 It opens your settings, a Python file (`launcher.py`), in JupyterLab's editor; if you have none, it offers to create
 one from a template with an example of each setting.
@@ -106,6 +106,18 @@ The side panel runs in a kernel of its own. If the panel stops responding, resta
 The side panel then starts a new kernel and shows the explorer again.
 
 Reloading the page is not enough when the kernel is stuck: the panel reconnects to the same kernel.
+
+### See the logs
+
+The tabs and the side panel log nothing by default. To see what goes wrong in their kernels:
+
+1. Click the ⚙ button at the right of the tab's toolbar, then **Logging**, and choose a level, e.g. **INFO**. The next
+   tabs keep it.
+2. Do what went wrong again.
+3. Choose **Open log file** in the same menu. The day's file opens in JupyterLab's editor, read-only.
+
+The files are in the `storage-explorer/logs` folder of Jupyter's configuration directory: see
+[Logs](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#logs).
 
 ## Configuration details
 
@@ -180,3 +192,5 @@ launcher's tabs and to explorers in notebooks alike.
 The tabs share bookmarks, the data browser's query settings, the engine chosen and the list's columns. They keep them
 in `storage-explorer/states.json` in the same directory, unless `parameters()` sets `states` (another file's path, or
 `None`: in each tab's memory).
+
+The logging level chosen in the **Logging** menu is kept there too.

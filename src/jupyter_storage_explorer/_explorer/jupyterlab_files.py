@@ -53,11 +53,13 @@ def contents_model(
     type_: str | None = None,
     format_: str | None = None,
     content: bool = True,
+    writable: bool = True,
 ) -> dict[str, Any]:
     """The contents model of the file at ``path``, ``data`` its bytes and
     ``info`` its fsspec info, as JupyterLab asked for it: ``type_`` ("file",
     "notebook" or None), ``format_`` ("text", "base64", "json" or None: as
-    the file allows) and with ``content`` or without.
+    the file allows) and with ``content`` or without. ``writable`` False
+    tells JupyterLab the file is only read.
 
     The hash lets JupyterLab tell, before saving, whether the file has been
     changed elsewhere since it was opened (it then asks what to do).
@@ -71,7 +73,7 @@ def contents_model(
         "name": name,
         "path": path,
         "type": "notebook" if notebook else "file",
-        "writable": True,
+        "writable": writable,
         "created": modified if created is None else _iso(created),
         "last_modified": modified,
         "size": len(data),

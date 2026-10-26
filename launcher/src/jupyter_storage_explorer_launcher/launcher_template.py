@@ -65,6 +65,8 @@ def filesystems():
 #         "unsafe_mode": "on_demand",  # or "always", or "blocked": no folder operations
 #         "code_snippet": "enabled",  # or "disabled", or engines: ["polars"]
 #         "max_upload_bytes": 100 * 1024 * 1024,
+#         "logging_level": "disabled",  # until chosen in the Logging menu: or "INFO", ...
+#         "log_file_backup": 14,  # days' log files kept before today's
 #     }
 
 

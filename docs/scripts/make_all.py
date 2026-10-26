@@ -15,6 +15,7 @@ import hero
 import launcher_item
 import launcher_settings
 import launcher_side_panel
+import logging_menu
 import storage_explorer_gif
 import unsafe
 import using
@@ -24,6 +25,7 @@ SCRIPTS = (
     using,
     unsafe,
     actions_menu,
+    logging_menu,
     browser,
     data_explorer,
     launcher_item,

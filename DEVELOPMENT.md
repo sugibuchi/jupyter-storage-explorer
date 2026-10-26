@@ -878,7 +878,8 @@ An `ExplorerStates`, in `_explorer/states.py`, keeps what explorers remember:
 
 - bookmarks: the storage name, the folder, and its location when bookmarked;
 - the data browser's queries, by location: settings, and the mode chosen;
-- the engine chosen, and the list's columns by layout.
+- the engine chosen, and the list's columns by layout;
+- the logging level chosen in the Logging menu.
 
 Queries are kept most recent first, at most `max_queries`. `DataQuery` remembers through the states, and
 `DataExplorer` has a private one.
@@ -895,6 +896,30 @@ Kernels sharing a file must not undo each other's changes:
 
 Older entries have a URL only, without a location. They still match a location of that URL or plain path, and are
 rewritten with the location at their next change.
+
+### Logs
+
+`_logs.py` sends the records of the `jupyter_storage_explorer` loggers to the console or to files. Logging is the
+kernel's, not an explorer's: each explorer created sets it up again (`configure`), and the last one decides.
+
+- In a notebook, records go to the kernel's stderr, which JupyterLab shows under the cell. The handler writes to
+  `sys.stderr` as it is at each record, as the kernel replaces it.
+- With `logging_menu="enabled"`, as in the launcher's explorers, records go to files in
+  `<jupyter_config_dir>/storage-explorer/logs`, and the settings menu offers Logging.
+- The level chosen there is remembered in the states, so the next tab starts with it.
+- `"disabled"` sets the logger's level above `CRITICAL`, so that not even Python's last-resort handler writes.
+- Records still propagate to the root logger, as libraries' do.
+
+The tabs and the side panel are kernels of their own, which write to the same files:
+
+- Each day has its file, `storage-explorer.<date>.log`, opened for appending and flushed after each record.
+- At local midnight, a kernel moves to the next day's file at its next record.
+- No file is renamed: Windows cannot rename a file another kernel has open, which breaks `TimedRotatingFileHandler`.
+- The files of the days before beyond `log_file_backup` are deleted when a kernel opens a day's file. One still open
+  elsewhere is deleted another time.
+
+The settings menu opens the day's file as a configuration file (`_offer_config_file`), read-only: the kernel refuses
+to save it.
 
 ### Lists
 

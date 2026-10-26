@@ -122,14 +122,6 @@ function createToolbar(x) {
         ),
     });
     const paths = model.get("_config_paths");
-    if (x.jupyterlab.canOpenSettings() && paths.launcher) {
-      items.push({
-        label: "Edit configuration",
-        icon: "edit",
-        title: `${visible(paths.launcher)}\nOpen a new Storage Explorer tab, or reload the page, to apply the changes.`,
-        action: () => void x.jupyterlab.openSettings("launcher"),
-      });
-    }
     if (paths.actions) {
       const actions = [];
       if (x.jupyterlab.canOpenSettings()) {
@@ -153,8 +145,43 @@ function createToolbar(x) {
         submenu: (sub) => sub.replaceChildren(...x.menu.rows(actions)),
       });
     }
+    if (model.get("_logging_menu")) items.push(loggingMenu(paths));
+    // After the submenus, before About.
+    if (x.jupyterlab.canOpenSettings() && paths.launcher) {
+      items.push({
+        label: "Edit configuration",
+        icon: "edit",
+        title: `${visible(paths.launcher)}\nOpen a new Storage Explorer tab, or reload the page, to apply the changes.`,
+        action: () => void x.jupyterlab.openSettings("launcher"),
+      });
+    }
     items.push({ label: "About", icon: "info", action: () => void x.about.show() });
     x.menu.showBelow(settingsBtn, items);
+  }
+
+  // "Logging" (logging_menu): the level the kernel logs at, which it
+  // remembers for the launcher's explorers (_logging_level), and the day's
+  // log file, opened read-only in JupyterLab's editor.
+  function loggingMenu(paths) {
+    const level = model.get("_logging_level");
+    const choose = (value) => {
+      model.set("_logging_level", value);
+      model.save_changes();
+    };
+    const rows = ["disabled", "DEBUG", "INFO", "WARNING", "ERROR"].map((value) => ({
+      label: value === "disabled" ? "Disabled" : value,
+      icon: value === level ? "check" : null,
+      action: () => choose(value),
+    }));
+    if (x.jupyterlab.canOpenSettings() && paths.log) {
+      rows.push("-", {
+        label: "Open log file",
+        icon: "open-in-new",
+        title: `Today's file, in ${visible(paths.log)}`,
+        action: () => void x.jupyterlab.openSettings("log"),
+      });
+    }
+    return { label: "Logging", icon: "subject", submenu: (sub) => sub.replaceChildren(...x.menu.rows(rows)) };
   }
 
   // "Actions", "Reload": the kernel reads the user's actions files again and

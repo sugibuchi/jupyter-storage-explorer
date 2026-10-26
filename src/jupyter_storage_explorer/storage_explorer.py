@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import itertools
 import os
 import uuid
@@ -11,7 +12,7 @@ from typing import TYPE_CHECKING, Any, Literal
 import anywidget
 import traitlets
 
-from jupyter_storage_explorer import _paths, _static
+from jupyter_storage_explorer import _logs, _paths, _static
 from jupyter_storage_explorer._callbacks import Callbacks
 from jupyter_storage_explorer._explorer.about import AboutMixin
 from jupyter_storage_explorer._explorer.bookmarks import BookmarksMixin
@@ -98,6 +99,10 @@ _UNSAFE_MODES = ("on_demand", "always", "blocked")
 
 # The values of user_actions: the actions of the user's files used, or not.
 _USER_ACTIONS = ("enabled", "disabled")
+
+# The values of logging_menu: the settings menu's Logging, and log files, or
+# neither.
+_LOGGING_MENUS = ("enabled", "disabled")
 
 
 def _code_engines(
@@ -268,6 +273,24 @@ class StorageExplorer(
         it is missing, and to reload the files' actions. Disabled by default,
         so that an explorer in a notebook has only what the notebook gives
         it: the launcher's tabs and side panel enable it.
+    logging_menu : {"enabled", "disabled"}, default "disabled"
+        Where the explorer's logs go. Disabled, to the console: the
+        kernel's stderr, which JupyterLab shows under the cell. Enabled, to
+        files of one day each, ``storage-explorer/logs/storage-explorer.<date>.log``
+        in the user's Jupyter configuration directory, and the settings menu
+        offers Logging: the level, remembered in ``states``, and the day's
+        file, opened read-only in JupyterLab with the launcher's extension.
+        The launcher's tabs and side panel enable it.
+    logging_level : str, default "WARNING"
+        The records logged: "DEBUG", "INFO", "WARNING", "ERROR" or
+        "CRITICAL" and above, or "disabled" for none. With the Logging menu,
+        the level the user chose there instead, once chosen; the launcher's
+        explorers log nothing until then. Logging is the kernel's: the
+        explorers of one kernel share it, and the last one created or set
+        decides.
+    log_file_backup : int, default 14
+        With the Logging menu, how many days' files are kept before the
+        day's: older ones are deleted.
     actions : sequence of Action, optional
         Actions of your own, functions decorated with
         ``actions.view`` or ``code``. They are tried in order after
@@ -365,7 +388,9 @@ class StorageExplorer(
     ValueError
         If ``filesystems`` is empty, ``transfer_policy`` has a rule that is not
         of that form, ``tree_view``, ``preview_panel``, ``layout``,
-        ``unsafe_mode`` or ``code_snippet`` is none of its values.
+        ``unsafe_mode``, ``code_snippet``, ``logging_menu`` or
+        ``logging_level`` is none of its values, or ``log_file_backup`` is
+        negative.
 
     See Also
     --------
@@ -497,6 +522,11 @@ class StorageExplorer(
     # which previews use. The frontend sets _engine when the user chooses.
     _engines = traitlets.List().tag(sync=True)
     _engine = traitlets.Unicode().tag(sync=True)
+    # Whether the settings menu has Logging (logging_menu), and the level
+    # logged: "disabled" or a level's name. The frontend sets the level when
+    # the user chooses one there.
+    _logging_menu = traitlets.Bool(False).tag(sync=True)
+    _logging_level = traitlets.Unicode(_logs.DISABLED).tag(sync=True)
 
     def __init__(
         self,
@@ -513,6 +543,9 @@ class StorageExplorer(
         code_snippet: str | Sequence[str] = "enabled",
         plugin_options: Mapping[str, Mapping[str, Any]] | None = None,
         user_actions: Literal["enabled", "disabled"] = "disabled",
+        logging_menu: Literal["enabled", "disabled"] = "disabled",
+        logging_level: str = "WARNING",
+        log_file_backup: int = 14,
         actions: Sequence[Action[Any]] | None = None,
         engine_options: EngineOptions | None = None,
         engine_preference: Sequence[str] | None = None,
@@ -563,6 +596,12 @@ class StorageExplorer(
         except (OSError, ValueError) as exc:
             states_error = f"Bookmarks and queries not read again: {exc}"
         self._max_browser_items = max_browser_items
+        # The configuration files the settings menu opens, by key, with the
+        # functions creating them (see _offer_config_file).
+        self._config_files: dict[str, tuple[Any, Callable[[], Any] | None]] = {}
+        logging_level = self._set_up_logging(
+            logging_menu, logging_level, log_file_backup
+        )
         # The plugins' components come after those given and before the
         # defaults (see plugin.py); a plugin that cannot be loaded is left out.
         self._plugins, problems = load_plugins(plugin_options)
@@ -628,9 +667,6 @@ class StorageExplorer(
         # Their loads still running, by "load_id": cancelled if the tab closes.
         self._view_tab_loads: dict[str, Load[Any]] = {}
         self._view_tab_ids = itertools.count(1)
-        # The configuration files the settings menu opens, by key, with the
-        # functions creating them (see _offer_config_file).
-        self._config_files: dict[str, tuple[str, Callable[[], Any]]] = {}
         # What is done with the formats' data: the actions in order, the first
         # installed that does an item its default, with their options (see
         # _explorer/actions.py); the formats files are detected as are the
@@ -684,6 +720,8 @@ class StorageExplorer(
             _layout=layout,
             _unsafe_policy=unsafe_mode,
             _code_snippet=self._code_engines != frozenset(),
+            _logging_menu=self._log_backups is not None,
+            _logging_level=logging_level,
             # The user's last choice for this layout (the validator keeps the
             # columns the list has), else its default.
             _columns=_DEFAULT_COLUMNS[layout]
@@ -734,6 +772,29 @@ class StorageExplorer(
             can always do them.
         """
         return _default_operations()
+
+    def _set_up_logging(self, menu: str, level: str, backups: int) -> str:
+        """Set up the kernel's logging (see _logs.py), as each explorer
+        created does: to the console, or with the Logging menu to the day's
+        file, kept with ``backups`` days' before (``_log_backups``; None: the
+        console). The level logged: the user's last choice in the menu, if
+        any, else ``level``."""
+        _check_choice("logging_menu", menu, _LOGGING_MENUS)
+        level = _logs.level_name(level)
+        if isinstance(backups, bool) or not isinstance(backups, int) or backups < 0:
+            raise ValueError(
+                f"log_file_backup must be an int of 0 or more, not {backups!r}"
+            )
+        self._log_backups = backups if menu == "enabled" else None
+        if self._log_backups is not None:
+            with contextlib.suppress(ValueError):  # a file edited by hand
+                if (chosen := self._states.logging_level) is not None:
+                    level = _logs.level_name(chosen)
+            self._offer_config_file(
+                "log", _logs.log_file, None, shown=_logs.log_folder()
+            )
+        _logs.configure(level, self._log_backups)
+        return level
 
     def _users_actions(
         self, setting: str, others: Sequence[Action[Any]]
@@ -1258,6 +1319,22 @@ class StorageExplorer(
         for explorers of this layout."""
         if getattr(self, "_engine_ready", False):
             self._states.remember_columns(self._layout, change["new"])
+
+    @traitlets.validate("_logging_level")
+    def _validate_logging_level(self, proposal: dict[str, Any]) -> str:
+        try:
+            return _logs.level_name(proposal["value"])
+        except ValueError as exc:
+            raise traitlets.TraitError(str(exc)) from None
+
+    @traitlets.observe("_logging_level")
+    def _on_logging_level(self, change: dict[str, Any]) -> None:
+        """The user chose a level (the Logging menu): log at it, and
+        remember it for the explorers with the menu. Not without the menu,
+        whose explorers log as they were created."""
+        if getattr(self, "_engine_ready", False) and self._log_backups is not None:
+            _logs.configure(change["new"], self._log_backups)
+            self._states.remember_logging_level(change["new"])
 
     @traitlets.observe("_engine")
     def _on_engine(self, change: dict[str, Any]) -> None:

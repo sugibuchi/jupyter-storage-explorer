@@ -206,6 +206,11 @@ class Settings:
             # The user's actions files configure JupyterLab's explorers, the
             # launcher's: explorers in notebooks read none by default.
             "user_actions": "enabled",
+            # The launcher's explorers log to files, once the user chooses a
+            # level in their Logging menu; explorers in notebooks, to the
+            # console.
+            "logging_menu": "enabled",
+            "logging_level": "disabled",
             **self.parameters,
             **(SIDEBAR if sidebar else {}),
         }
