@@ -980,7 +980,7 @@ An action is a function decorated with `view` or `code`, from `formats/actions.p
 `ViewAction` or a `CodeAction`, a frozen dataclass holding:
 
 - `function`, called when the action is;
-- `format`, matched with `isinstance`, so subclasses too;
+- `format`, matched with `isinstance`, so subclasses too, unless they have actions of their own (see below);
 - `engine`, an `Engine` class, `PythonEngine` for the built-in ones;
 - `label`, what users see, unique for its kind, format and engine, with `{format}` and `{engine}` replaced;
 - `requires`, packages besides the engine's;
@@ -1028,6 +1028,11 @@ The explorer's `ActionChain`, in `_explorer/actions.py`, holds its actions in or
 Plugins are installed to enrich or change the explorer, so a plugin's view of a format is its default. Actions given
 and the user's add to the explorer's: they are offered in "Preview as" and "Python code", and are the default only for
 formats nothing before them views. So the operations' order, given first, does not apply to actions.
+
+The actions of a format are those of the most specific of its classes having actions of that kind (`_registered`).
+A CSV file has CSV's views and code, never Text's; a Python script, with none of its own, has Text's. The explorer
+adds the base classes of an item's formats to them (`_with_bases`, in `_explorer/previews.py`), so that "Preview as"
+offers Text's views of a CSV file, under Text.
 
 `load_user_actions`, in `_extensions/user_actions.py`, reads the user's action files in Jupyter's configuration directories, the
 user's first. In each, `storage-explorer/actions.py` comes first, then `storage-explorer/actions/*.py` by name, without

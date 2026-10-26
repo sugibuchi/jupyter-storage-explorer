@@ -131,6 +131,9 @@ Give a format of your own an icon with `file_icon`: users tell files apart by it
 Two format classes of one name are an error: explorers choose formats by name, in `engine_options`, previews and
 menus. A subclass of a format, e.g. a TSV of `Csv`, takes a name of its own.
 
+A format of text files subclasses `Text`, e.g. `class GeoJson(Text)`. Its files can then always be viewed as plain
+text, in **Preview as**, and opened in JupyterLab's text editor. Its priority is 0 by default, not the fallback's -10.
+
 The default `matches(ctx)` checks `extensions`. A folder format (a table of files) overrides it and looks at the
 folder's listing (`ctx.children`, `ctx.child_names`).
 
@@ -286,7 +289,7 @@ The decorators' arguments:
 
 | Argument   | Of            | What                                                                                              |
 |------------|---------------|---------------------------------------------------------------------------------------------------|
-| `format`   | both          | The format, matched with `isinstance`: its subclasses too. Also positional, e.g. `@view(Parquet, DuckDBEngine)`. |
+| `format`   | both          | The format, matched with `isinstance`: its subclasses too, unless they have actions of that kind of their own. Also positional, e.g. `@view(Parquet, DuckDBEngine)`. |
 | `engine`   | both          | The engine; by default `PythonEngine`, Python alone. Also positional.                            |
 | `label`    | both          | What users see; `{format}` and `{engine}` are replaced by their labels. A view's default is `"View as {format} ({engine})"`; a code action's, its function's name. |
 | `requires` | both          | Packages needed besides the engine's, as instances. The action is offered only when they are installed. |

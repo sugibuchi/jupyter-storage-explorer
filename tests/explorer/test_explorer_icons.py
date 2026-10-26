@@ -45,6 +45,14 @@ class TestFileIcons:
                 "json-lines": "json",
                 "markdown": "markdown",
                 "image": "image",
+                "svg": "image",
+                "png": "image",
+                "jpeg": "image",
+                "gif": "image",
+                "webp": "image",
+                "bmp": "image",
+                "ico": "image",
+                "avif": "image",
             },  # not Text (Python, YAML, ... by extension), nor Delta (folders)
             {},
         )

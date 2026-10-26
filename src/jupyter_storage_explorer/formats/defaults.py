@@ -9,10 +9,17 @@ from typing import TYPE_CHECKING, Any
 
 from jupyter_storage_explorer.formats.delta import DeltaLake
 from jupyter_storage_explorer.formats.excel import Excel
-from jupyter_storage_explorer.formats.images import Image
+from jupyter_storage_explorer.formats.images import IMAGE_FORMATS, Image
 from jupyter_storage_explorer.formats.parquet import Parquet
 from jupyter_storage_explorer.formats.python import BUILT_IN_ACTIONS
-from jupyter_storage_explorer.formats.text import Csv, Json, JsonLines, Markdown, Text
+from jupyter_storage_explorer.formats.text import (
+    TEXT_FORMATS,
+    Csv,
+    Json,
+    JsonLines,
+    Markdown,
+    Text,
+)
 
 if TYPE_CHECKING:
     from jupyter_storage_explorer.formats.actions import Action
@@ -30,7 +37,9 @@ DEFAULT_FORMATS: tuple[type[DataFormat], ...] = (
     Json,
     JsonLines,
     Markdown,
+    *TEXT_FORMATS,
     Text,
+    *IMAGE_FORMATS,
     Image,
 )
 

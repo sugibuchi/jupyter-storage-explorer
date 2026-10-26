@@ -294,7 +294,7 @@ class TestFileFormat:
         found = matching_formats(
             make_item("/a.json", b"{}"), formats=[mine(), Json(), Text()]
         )
-        assert [type(f) for f in found] == [Json, Text, mine]
+        assert [type(f) for f in found] == [Json, mine]
 
     def test_needs_extensions_or_names(self):
         with pytest.raises(TypeError, match="needs extensions or names"):
