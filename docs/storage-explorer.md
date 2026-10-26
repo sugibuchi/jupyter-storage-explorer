@@ -53,17 +53,6 @@ Then read [Storages](#storages) to set up access to your storages.
 
 ## Storages
 
-Give the address of the folder to open; options after it go to the storage package, e.g. credentials:
-
-```python
-from jupyter_storage_explorer import StorageExplorer
-
-StorageExplorer()  # the current folder
-StorageExplorer("abfs://lake@myaccount.dfs.core.windows.net/raw")  # Azure Data Lake
-StorageExplorer("s3://my-bucket/data", profile="analytics")  # Amazon S3, with options
-StorageExplorer("gs://my-bucket", token="google_default")  # Google Cloud
-```
-
 ### Set up fsspec
 
 The explorer reaches storages through [fsspec](https://github.com/fsspec/filesystem_spec). Install the fsspec package
@@ -84,6 +73,19 @@ lists their packages.
 Rather than give each storage's options in every notebook, keep them in the environment: see fsspec's
 [Configuration](https://filesystem-spec.readthedocs.io/en/latest/features.html#configuration). fsspec then gives them
 to each filesystem it opens, so `StorageExplorer("s3://my-bucket/data")` needs none. The launcher's tabs use them too.
+
+### Open a storage
+
+Give the address of the folder to open; options after it go to the storage package, e.g. credentials:
+
+```python
+from jupyter_storage_explorer import StorageExplorer
+
+StorageExplorer()  # the current folder
+StorageExplorer("abfs://lake@myaccount.dfs.core.windows.net/raw")  # Azure Data Lake
+StorageExplorer("s3://my-bucket/data", profile="analytics")  # Amazon S3, with options
+StorageExplorer("gs://my-bucket", token="google_default")  # Google Cloud
+```
 
 ### Several storages in one explorer
 
