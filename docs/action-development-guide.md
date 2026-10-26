@@ -55,7 +55,7 @@ StorageExplorer("s3://my-bucket/data", actions=[pretty_print_json])
 Run the three cells, and right-click a file named `*.json` in the explorer. **Python code** now offers "Pretty print
 json".
 
-<img src="figs/actions-notebook.png" width="662" alt="The notebook's three cells, and its explorer below them: a JSON file's right-click menu, with Python code open on Pretty print json (Python)">
+<img src="figs/actions-notebook.png" width="662" alt="The cell creating the explorer with the action, and the explorer below it: a JSON file's right-click menu, with Python code open on Pretty print json (Python)">
 
 The template is a multi-line string, with `{url!r}` where the file's URL goes, in quotes. `.strip()` removes the
 blank lines around it.
