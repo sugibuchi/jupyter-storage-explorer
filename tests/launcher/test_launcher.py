@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 import textwrap
 from typing import TYPE_CHECKING
@@ -648,6 +649,18 @@ class TestUserErrors:
         launcher.launch()
         assert len(shown) == 1
         assert "Your launcher settings were left out" in capsys.readouterr().err
+
+    def test_launch_logged(self, config_dir, monkeypatch, caplog, shown):
+        # At the level the user's settings give, as no level was chosen in
+        # the Logging menu yet.
+        user = user_layer(
+            config_dir, "def parameters():\n    return {'logging_level': 'INFO'}"
+        )
+        monkeypatch.setattr(launcher, "find_launcher_files", lambda: [user])
+        caplog.set_level(logging.INFO)
+        launcher.launch()
+        messages = [r.getMessage() for r in caplog.records]
+        assert f"The tab opened with the settings of {user}" in messages
 
     def test_launch_stops_plainly(self, tmp_path, monkeypatch, capsys, shown):
         system = layer(tmp_path, "system", "def parameters():\n    return {'x': 1}")

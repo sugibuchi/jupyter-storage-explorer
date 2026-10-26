@@ -319,8 +319,10 @@ class PreviewsMixin:
     def _detect_now(self, path: str, fs: AbstractFileSystem) -> _Detected | None:
         """The item at ``path`` of ``fs`` and its formats, read now: safe in
         a worker thread, as it touches no trait."""
+        started = time.monotonic()
         location = self._mappers.location_of(fs, path)
         if location is None:
+            log.debug("Detected %s: no location, so no formats", path)
             return None
         info = self._info(path, fs)
         children = self._ls(path, fs) if info.get("type") == "directory" else None
@@ -328,7 +330,14 @@ class PreviewsMixin:
             location=location, fs=fs, path=path, info=info, children=children
         )
         found = matching_formats(ctx, formats=self._formats)
-        return _Detected(ctx, _with_bases(found, self._formats))
+        detected = _Detected(ctx, _with_bases(found, self._formats))
+        log.debug(
+            "Detected %s in %.3f s: %s",
+            path,
+            time.monotonic() - started,
+            ", ".join(f.name for f in detected.formats) or "no format",
+        )
+        return detected
 
     def _engine_label(self, key: str | None) -> str:
         """The label of the engine of ``key``, e.g. "Polars"; "" for the
@@ -409,8 +418,19 @@ class PreviewsMixin:
         limits = self._view_limits
 
         def view(again: bool) -> View:
+            started = time.monotonic()
             ctx = self._refreshed(fmt, item.ctx) if again else item.ctx
-            return self._actions.view(fmt, ctx, limits, engine, action)
+            made = self._actions.view(fmt, ctx, limits, engine, action)
+            log.info(
+                "%s %s as %s with %s: %s in %.2f s",
+                "Viewed again" if again else "Viewed",
+                ctx.path,
+                fmt.name,
+                engine or "the built-in views",
+                type(made).__name__,
+                time.monotonic() - started,
+            )
+            return made
 
         return _Viewer(view)
 
@@ -547,6 +567,12 @@ class PreviewsMixin:
             shown = self._show(view, asking.viewer, asking.item, preview)
         except Exception as exc:
             preview["error"] = error_text(exc)
+            log.warning(
+                "%s cannot be viewed with the answer given: %s",
+                preview["path"],
+                preview["error"],
+                exc_info=log.isEnabledFor(logging.DEBUG),
+            )
             if shown is not None:
                 shown.close()
             shown = None
@@ -591,6 +617,14 @@ class PreviewsMixin:
                 shown = self._show(shown, viewer, item, preview)
         except Exception as exc:
             preview["error"] = error_text(exc)
+            # The user sees the error; its traceback is for DEBUG.
+            log.warning(
+                "%s cannot be %s: %s",
+                path,
+                verb,
+                preview["error"],
+                exc_info=log.isEnabledFor(logging.DEBUG),
+            )
             # Nothing shows it: released at once.
             if shown is not None:
                 shown.close()

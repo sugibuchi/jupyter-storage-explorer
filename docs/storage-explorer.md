@@ -334,7 +334,16 @@ StorageExplorer("s3://my-bucket/data", states=ExplorerStates("states.json", max_
 
 ## Logs
 
-The explorer logs what goes wrong in its kernel, e.g. a view's failure, besides showing errors in the widget.
+The explorer logs what happens in its kernel, besides showing errors in the widget. Each level adds to those above it:
+
+- **ERROR**: failures of the explorer itself, with their tracebacks.
+- **WARNING**: what goes wrong for you, e.g. a file that cannot be viewed, a transfer the policy refuses, or an actions
+  file left out.
+- **INFO**: what you do, with its time: the explorer's start, its plugins and actions, views, the data browser's
+  queries, and file operations with their counts and bytes.
+- **DEBUG**: the details, e.g. each folder listed, each file's formats detected, and each message from the page.
+
+The logs never hold credentials, storage options or the contents of files.
 
 In a notebook, its logs show under the cell, from warnings up by default. `logging_level` sets the level, or turns
 logging off:
