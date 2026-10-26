@@ -8,7 +8,7 @@ import copy
 import dataclasses
 import pickle
 
-from jupyter_storage_explorer.formats import ActionOptions
+from jupyter_storage_explorer.actions import ActionOptions
 from jupyter_storage_explorer.util import (
     LIBRARY_DEFAULT,
     LibraryDefault,

@@ -1,4 +1,4 @@
-"""The predefined locations (see ``jupyter_storage_explorer.location``): Azure
+"""The predefined locations (see ``jupyter_storage_explorer.base``): Azure
 Blob Storage and Data Lake Storage Gen2, Amazon S3 and S3-compatible stores,
 Google Cloud Storage, SFTP servers, the local disk, fsspec's memory
 filesystem, and fsspec's URLs for the filesystems no mapper knows. The
@@ -10,7 +10,17 @@ import dataclasses
 import os
 import urllib.parse
 
-from jupyter_storage_explorer.location import Location
+from jupyter_storage_explorer.base import Location
+
+__all__ = [
+    "AbfsLocation",
+    "FsspecLocation",
+    "GcsLocation",
+    "LocalLocation",
+    "MemoryLocation",
+    "S3Location",
+    "SftpLocation",
+]
 
 
 def _set(location: Location, **values: object) -> None:

@@ -40,23 +40,15 @@ from jupyter_storage_explorer._jobs.loader import Loader
 from jupyter_storage_explorer._jobs.operation_chain import OperationChain
 from jupyter_storage_explorer._jobs.runner import JobRunner
 from jupyter_storage_explorer._jobs.transfer_policy import TransferPolicy
-from jupyter_storage_explorer.filesystems import (
-    LocalLocation,
-    MapperChain,
-    default_mappers,
-)
+from jupyter_storage_explorer.actions.defaults import DEFAULT_ACTIONS
+from jupyter_storage_explorer.filesystems import MapperChain, default_mappers
 from jupyter_storage_explorer.filesystems import (
     default_operations as _default_operations,
 )
+from jupyter_storage_explorer.filesystems.locations import LocalLocation
 from jupyter_storage_explorer.filesystems.mapper import protocols
-from jupyter_storage_explorer.formats import (
-    DataFormat,
-    ViewLimits,
-)
-from jupyter_storage_explorer.formats.defaults import (
-    DEFAULT_ACTIONS,
-    DEFAULT_FORMATS,
-)
+from jupyter_storage_explorer.formats.defaults import DEFAULT_FORMATS
+from jupyter_storage_explorer.views import ViewLimits
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
@@ -72,12 +64,14 @@ if TYPE_CHECKING:
     from jupyter_storage_explorer._jobs.loader import Load
     from jupyter_storage_explorer._query.data_query import DataQuery
     from jupyter_storage_explorer._query.table_set import TableSet
+    from jupyter_storage_explorer.actions import Action
+    from jupyter_storage_explorer.base import ItemContext, Location
     from jupyter_storage_explorer.data_explorer import DataExplorer
+    from jupyter_storage_explorer.engine import EngineOptions
     from jupyter_storage_explorer.filesystems.mapper import FileSystemMapper
     from jupyter_storage_explorer.filesystems.operation import FileSystemOperations
-    from jupyter_storage_explorer.formats import EngineOptions, ItemContext, View
-    from jupyter_storage_explorer.formats.actions import Action
-    from jupyter_storage_explorer.location import Location
+    from jupyter_storage_explorer.formats import DataFormat
+    from jupyter_storage_explorer.views import View
 
     # A request's handler: the reply to its content (see _requests).
     _Handler = Callable[[dict[str, Any]], dict[str, Any]]
@@ -274,7 +268,7 @@ class StorageExplorer(
         it is missing, and to reload the files' actions.
     actions : sequence of Action, optional
         Actions of your own, functions decorated with
-        ``formats.actions.view`` or ``code``. They are tried in order after
+        ``actions.view`` or ``code``. They are tried in order after
         the plugins' and ``default_actions()``, and before the user's
         files': for an item, the first view of the engine chosen that does
         it is its default, and "Preview as" offers the others. An action of
@@ -300,7 +294,7 @@ class StorageExplorer(
     view_limits : ViewLimits, optional
         How much views read and show, in the preview panel and in tabs:
         bytes and rows of a file's beginning, the data browser's page size and
-        rows in memory (see `formats.ViewLimits`).
+        rows in memory (see `views.ViewLimits`).
     max_upload_bytes : int or None, default 10 MB
         Largest file uploaded from the user's computer; None for no limit.
         Files dragged from JupyterLab's file browser are not limited.
@@ -324,8 +318,8 @@ class StorageExplorer(
         offset, length)``: the first rows when it opens, and each page of a
         live query's result, e.g. to skip rows in a library the default reads
         them all for; None to leave them to the view's ``fetch`` (an
-        action's, see ``QueryView``), else the default,
-        ``jupyter_storage_explorer.fetch_rows``, which has an example.
+        action's, see ``QueryView``), else the default, which skips rows
+        where the library can and else drops them.
     operations : sequence of FileSystemOperations, optional
         File operations of your own, tried before the plugins' and
         ``default_operations()``,
@@ -765,7 +759,7 @@ class StorageExplorer(
         Returns
         -------
         list of Action
-            By default ``jupyter_storage_explorer.formats.python.BUILT_IN_ACTIONS``:
+            By default ``jupyter_storage_explorer.actions.python.BUILT_IN_ACTIONS``:
             those needing no engine (views of text, Markdown, JSON and
             images, and code reading them); the engines' come with their
             plugins. Each gets its options from ``engine_options``.

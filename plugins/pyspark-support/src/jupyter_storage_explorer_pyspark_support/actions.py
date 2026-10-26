@@ -17,24 +17,21 @@ from typing import TYPE_CHECKING, Any
 
 import narwhals as nw
 
-from jupyter_storage_explorer.formats.actions import (
-    ActionOptions,
-    code,
-    register_actions,
-    view,
-)
-from jupyter_storage_explorer.formats.base import DataFormat, ItemContext
+from jupyter_storage_explorer.actions import ActionOptions, code, register_actions, view
+from jupyter_storage_explorer.base import ItemContext
+from jupyter_storage_explorer.engine import Engine
 from jupyter_storage_explorer.formats.delta import DeltaLake
-from jupyter_storage_explorer.formats.engine import Engine
-from jupyter_storage_explorer.formats.packages import PyArrow, PythonPackage
 from jupyter_storage_explorer.formats.parquet import Parquet
 from jupyter_storage_explorer.formats.text import Csv, JsonLines
-from jupyter_storage_explorer.formats.views import QueryView, View, ViewLimits
+from jupyter_storage_explorer.packages import PyArrow, PythonPackage
 from jupyter_storage_explorer.util import format_kwargs
+from jupyter_storage_explorer.views import QueryView, View, ViewLimits
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
     from dataclasses import Field
+
+    from jupyter_storage_explorer.formats.base import DataFormat
 
 # Spark (Hadoop) names for storage URLs: TLS "abfss" for Azure, as Spark
 # expects it (storage accounts usually require secure transfer); "s3a", the
@@ -43,7 +40,7 @@ _SPARK_SCHEMES = {"abfs": "abfss", "az": "abfss", "s3": "s3a"}
 
 
 # The engine's libraries, and those only Spark uses (the support libraries
-# several engines use are the core's: jupyter_storage_explorer.formats.packages).
+# several engines use are the core's: jupyter_storage_explorer.packages).
 
 
 class PySpark(PythonPackage):

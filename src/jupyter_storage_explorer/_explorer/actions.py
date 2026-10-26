@@ -9,23 +9,19 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from jupyter_storage_explorer._explorer.common import error_text
-from jupyter_storage_explorer.formats.actions import (
-    Action,
-    CodeAction,
-    ViewAction,
-    check_actions,
-)
-from jupyter_storage_explorer.formats.python import PythonEngine
+from jupyter_storage_explorer.actions import Action, CodeAction, ViewAction
+from jupyter_storage_explorer.actions.base import check_actions
+from jupyter_storage_explorer.actions.python import PythonEngine
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
 
-    from jupyter_storage_explorer.formats import ItemContext, View, ViewLimits
-    from jupyter_storage_explorer.formats.actions import ActionOptions
+    from jupyter_storage_explorer.actions import ActionOptions
+    from jupyter_storage_explorer.base import ItemContext, Location
+    from jupyter_storage_explorer.engine import Engine, EngineOptions
     from jupyter_storage_explorer.formats.base import DataFormat
-    from jupyter_storage_explorer.formats.engine import Engine, EngineOptions
-    from jupyter_storage_explorer.formats.packages import PythonPackage
-    from jupyter_storage_explorer.location import Location
+    from jupyter_storage_explorer.packages import PythonPackage
+    from jupyter_storage_explorer.views import View, ViewLimits
 
 # In engine_options, the options of an engine for all formats.
 ALL_FORMATS = "*"
@@ -97,7 +93,7 @@ class ActionChain:
     defined once, e.g. by its plugin, and imported by others), two format
     classes of one name, a format of no action, an option no action of the
     engine (for that format) takes: a typo would otherwise be ignored; and
-    actions that cannot be used together (``formats.actions.check_actions``).
+    actions that cannot be used together (``actions.base.check_actions``).
     A function's options are checked when it is called. TypeError for an
     item that is no action.
     """

@@ -417,10 +417,12 @@ def actions() -> list[Any]:
     ``PLUGIN_OPTIONS``."""
 
     from jupyter_storage_explorer.filesystems import (  # noqa: PLC0415
-        LocalLocation,
         MapperChain,
-        MemoryLocation,
         default_mappers,
+    )
+    from jupyter_storage_explorer.filesystems.locations import (  # noqa: PLC0415
+        LocalLocation,
+        MemoryLocation,
     )
 
     local_fs = fsspec.filesystem("file")
@@ -449,7 +451,7 @@ def actions() -> list[Any]:
     # so that files saved from JupyterLab show as saved. Whether an action
     # does an item is decided by the copy's location, and views read the
     # copy; code still reads the demo's own location.
-    from jupyter_storage_explorer.formats.actions import ViewAction  # noqa: PLC0415
+    from jupyter_storage_explorer.actions import ViewAction  # noqa: PLC0415
 
     def on_copy(check):
         if check is None:

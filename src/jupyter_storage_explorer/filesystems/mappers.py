@@ -39,7 +39,19 @@ if sys.platform == "win32":
 if TYPE_CHECKING:
     from fsspec import AbstractFileSystem
 
-    from jupyter_storage_explorer.location import Location
+    from jupyter_storage_explorer.base import Location
+
+__all__ = [
+    "AzureBlobMapper",
+    "DatabricksMapper",
+    "FsspecMapper",
+    "GCSMapper",
+    "LocalMapper",
+    "MemoryMapper",
+    "S3Mapper",
+    "SFTPMapper",
+    "SSHFSMapper",
+]
 
 
 class AzureBlobMapper(FileSystemMapper):

@@ -10,8 +10,8 @@ import pytest
 from jupyter_storage_explorer_launcher import launcher
 from jupyter_storage_explorer_launcher.launcher import LauncherError, load_settings
 
-from jupyter_storage_explorer.filesystems import FsspecOperations
 from jupyter_storage_explorer.filesystems.operation import FileSystemOperations
+from jupyter_storage_explorer.filesystems.operations import FsspecOperations
 
 if TYPE_CHECKING:
     import pathlib
@@ -149,7 +149,7 @@ class TestMerging:
             tmp_path,
             "system",
             """
-            from jupyter_storage_explorer.filesystems import FsspecOperations
+            from jupyter_storage_explorer.filesystems.operations import FsspecOperations
             from jupyter_storage_explorer_pandas_support import csv_view
 
             def actions():
@@ -159,7 +159,7 @@ class TestMerging:
                 return [FsspecOperations()]
 
             def filesystem_mappers():
-                from jupyter_storage_explorer.filesystems import S3Mapper
+                from jupyter_storage_explorer.filesystems.mappers import S3Mapper
                 return [S3Mapper()]
             """,
         )
@@ -177,7 +177,7 @@ class TestMerging:
                 return [FileSystemOperations()]
 
             def filesystem_mappers():
-                from jupyter_storage_explorer.filesystems import GCSMapper
+                from jupyter_storage_explorer.filesystems.mappers import GCSMapper
                 return [GCSMapper()]
             """,
         )

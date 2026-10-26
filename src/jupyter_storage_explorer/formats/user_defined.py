@@ -20,7 +20,7 @@ from jupyter_storage_explorer.formats.base import DataFormat
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
-    from jupyter_storage_explorer.formats.base import ItemContext
+    from jupyter_storage_explorer.base import ItemContext
 
 __all__ = ["UserDefinedFormat", "file_format"]
 

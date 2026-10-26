@@ -28,16 +28,8 @@ from jupyter_storage_explorer_pandas_support import (
     parquet_view,
 )
 
-from jupyter_storage_explorer.formats import (
-    Csv,
-    Excel,
-    Json,
-    JsonLines,
-    Parquet,
-    QueryView,
-    TableSetView,
-    ViewLimits,
-)
+from jupyter_storage_explorer.formats import Csv, Excel, Json, JsonLines, Parquet
+from jupyter_storage_explorer.views import QueryView, TableSetView, ViewLimits
 
 LIMITS = ViewLimits(max_display_rows=2)
 # pandas reads at most max_memory_rows rows.

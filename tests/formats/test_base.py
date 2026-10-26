@@ -1,4 +1,4 @@
-"""What formats share (formats/base.py, packages.py): reading files
+"""What formats share (formats/base.py, base.py, packages.py): reading files
 (ItemContext), generated-code helpers, requirements and detection, with
 signatures (the actions: test_action_chain.py; the formats' file icons:
 explorer/test_explorer_icons.py)."""
@@ -11,20 +11,14 @@ import pytest
 from format_samples import DUCKDB_BYTES, SQLITE_BYTES, DuckDB, SQLite
 from items import local_item
 
-from jupyter_storage_explorer.filesystems import S3Location
-from jupyter_storage_explorer.formats import (
-    ActionOptions,
-    Csv,
-    DeltaLake,
-    ItemContext,
-    Parquet,
-    PythonPackage,
-    Text,
-    ViewLimits,
-)
+from jupyter_storage_explorer.actions import ActionOptions
+from jupyter_storage_explorer.base import ItemContext
+from jupyter_storage_explorer.filesystems.locations import S3Location
+from jupyter_storage_explorer.formats import Csv, DeltaLake, Parquet, Text
 from jupyter_storage_explorer.formats.base import detect, matching_formats
-from jupyter_storage_explorer.formats.packages import Fsspec
+from jupyter_storage_explorer.packages import Fsspec, PythonPackage
 from jupyter_storage_explorer.util import format_kwargs
+from jupyter_storage_explorer.views import ViewLimits
 
 
 class TestReading:

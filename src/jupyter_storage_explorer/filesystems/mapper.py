@@ -5,7 +5,7 @@ server's tree for one user) is not always what one fsspec instance reaches:
 an adlfs instance reaches all the containers of an account, an s3fs one all
 the buckets of an endpoint. So a ``FileSystemMapper`` describes instances,
 one fsspec implementation each: ``to_location``, the location of a path
-(``jupyter_storage_explorer.location``), and ``path_of``, the reverse, which
+(``jupyter_storage_explorer.base``), and ``path_of``, the reverse, which
 also tells whether the instance reaches a location at all, as only the
 implementation knows what one instance reaches.
 
@@ -37,7 +37,7 @@ if TYPE_CHECKING:
 
     from fsspec import AbstractFileSystem
 
-    from jupyter_storage_explorer.location import Location
+    from jupyter_storage_explorer.base import Location
 
 
 class FileSystemMapper:

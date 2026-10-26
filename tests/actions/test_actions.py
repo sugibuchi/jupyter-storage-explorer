@@ -1,4 +1,4 @@
-"""Actions (formats/actions.py): the decorators, ``register_actions``, and
+"""Actions (actions/base.py): the decorators, ``register_actions``, and
 how explorers use actions (``ActionChain``)."""
 
 from __future__ import annotations
@@ -13,32 +13,28 @@ import pytest
 
 from jupyter_storage_explorer import StorageExplorer
 from jupyter_storage_explorer._explorer.actions import ActionChain
-from jupyter_storage_explorer.formats import (
+from jupyter_storage_explorer.actions import (
     ActionOptions,
-    Csv,
-    Engine,
-    Json,
-    JupyterWidgetView,
-    Parquet,
-    PythonPackage,
-    QueryView,
-    Text,
-    TextView,
-    TreeView,
-    ViewLimits,
-    file_format,
-)
-from jupyter_storage_explorer.formats.actions import (
     CodeAction,
     ViewAction,
     code,
     register_actions,
     view,
 )
+from jupyter_storage_explorer.actions.python import PythonEngine
+from jupyter_storage_explorer.engine import Engine
+from jupyter_storage_explorer.formats import Csv, Json, Parquet, Text, file_format
 from jupyter_storage_explorer.formats.base import matching_formats
-from jupyter_storage_explorer.formats.python import PythonEngine
+from jupyter_storage_explorer.packages import PythonPackage
 from jupyter_storage_explorer.testing import local_item
 from jupyter_storage_explorer.util import secret_dict_field, secret_field
+from jupyter_storage_explorer.views import (
+    JupyterWidgetView,
+    QueryView,
+    TextView,
+    TreeView,
+    ViewLimits,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Mapping

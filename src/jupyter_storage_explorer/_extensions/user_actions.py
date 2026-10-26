@@ -27,7 +27,8 @@ from typing import TYPE_CHECKING, Any
 
 from jupyter_core.paths import jupyter_config_dir, jupyter_config_path
 
-from jupyter_storage_explorer.formats.actions import Action, check_actions
+from jupyter_storage_explorer.actions import Action
+from jupyter_storage_explorer.actions.base import check_actions
 
 if TYPE_CHECKING:
     from collections.abc import Sequence

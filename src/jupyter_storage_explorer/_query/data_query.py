@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from jupyter_storage_explorer._explorer.states import ExplorerStates
-    from jupyter_storage_explorer.location import Location
+    from jupyter_storage_explorer.base import Location
 
 MODES = ("auto", "live", "memory")
 

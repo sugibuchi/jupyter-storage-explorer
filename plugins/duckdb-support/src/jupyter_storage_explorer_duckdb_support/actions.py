@@ -38,21 +38,30 @@ from typing import TYPE_CHECKING, Any
 from fsspec.implementations.dirfs import DirFileSystem
 from fsspec.spec import AbstractFileSystem
 
-from jupyter_storage_explorer.filesystems.locations import LocalLocation
-from jupyter_storage_explorer.formats.actions import (
+from jupyter_storage_explorer.actions import (
     ActionOptions,
     code,
+    local_file_cache,
     register_actions,
     view,
 )
-from jupyter_storage_explorer.formats.base import DataFormat, ItemContext
+from jupyter_storage_explorer.base import ItemContext
+from jupyter_storage_explorer.engine import Engine
+from jupyter_storage_explorer.filesystems.locations import LocalLocation
+from jupyter_storage_explorer.formats.base import DataFormat
 from jupyter_storage_explorer.formats.delta import DeltaLake
-from jupyter_storage_explorer.formats.engine import Engine
-from jupyter_storage_explorer.formats.local_files import local_file_cache
-from jupyter_storage_explorer.formats.packages import PyArrow, PythonPackage
 from jupyter_storage_explorer.formats.parquet import Parquet
 from jupyter_storage_explorer.formats.text import Csv, JsonLines
-from jupyter_storage_explorer.formats.views import (
+from jupyter_storage_explorer.packages import PyArrow, PythonPackage
+from jupyter_storage_explorer.util import (
+    LIBRARY_DEFAULT,
+    LibraryDefault,
+    format_arguments,
+    format_kwargs,
+    format_size,
+    secret_dict_field,
+)
+from jupyter_storage_explorer.views import (
     Leaf,
     Node,
     QueryView,
@@ -62,14 +71,6 @@ from jupyter_storage_explorer.formats.views import (
     ViewLimits,
     ViewWithChoice,
     ViewWithConfirmation,
-)
-from jupyter_storage_explorer.util import (
-    LIBRARY_DEFAULT,
-    LibraryDefault,
-    format_arguments,
-    format_kwargs,
-    format_size,
-    secret_dict_field,
 )
 
 if TYPE_CHECKING:
@@ -84,7 +85,7 @@ _COPY_KEPT = 600
 
 
 # The engine's library. PyArrow, which the data browser collects DuckDB's
-# results into, is the core's (jupyter_storage_explorer.formats.packages).
+# results into, is the core's (jupyter_storage_explorer.packages).
 
 
 class DuckDB(PythonPackage):

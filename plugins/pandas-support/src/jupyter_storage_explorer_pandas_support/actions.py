@@ -12,31 +12,26 @@ from dataclasses import dataclass
 from inspect import cleandoc
 from typing import TYPE_CHECKING, Any
 
-from jupyter_storage_explorer.formats.actions import (
-    ActionOptions,
-    code,
-    register_actions,
-    view,
-)
-from jupyter_storage_explorer.formats.base import ItemContext
-from jupyter_storage_explorer.formats.engine import Engine
+from jupyter_storage_explorer.actions import ActionOptions, code, register_actions, view
+from jupyter_storage_explorer.base import ItemContext
+from jupyter_storage_explorer.engine import Engine
 from jupyter_storage_explorer.formats.excel import Excel
-from jupyter_storage_explorer.formats.packages import Openpyxl, PyArrow, PythonPackage
 from jupyter_storage_explorer.formats.parquet import Parquet
 from jupyter_storage_explorer.formats.text import Csv, Json, JsonLines
-from jupyter_storage_explorer.formats.views import (
-    Leaf,
-    QueryView,
-    TableSetView,
-    View,
-    ViewLimits,
-)
+from jupyter_storage_explorer.packages import Openpyxl, PyArrow, PythonPackage
 from jupyter_storage_explorer.util import (
     LIBRARY_DEFAULT,
     LibraryDefault,
     format_arguments,
     format_kwargs,
     secret_dict_field,
+)
+from jupyter_storage_explorer.views import (
+    Leaf,
+    QueryView,
+    TableSetView,
+    View,
+    ViewLimits,
 )
 
 if TYPE_CHECKING:
@@ -59,7 +54,7 @@ def _query_view(df: Any, limits: ViewLimits) -> QueryView:
 
 
 # The engine's library (the support libraries several engines use are the
-# core's: jupyter_storage_explorer.formats.packages).
+# core's: jupyter_storage_explorer.packages).
 
 
 class Pandas(PythonPackage):

@@ -63,9 +63,12 @@ writing tests. The traps:
   for each new feature. Drag and drop works only in a browser, not in IntelliJ's notebook view.
 - The launcher and the plugins pin the explorer of their exact version in their `hatch_build.py`. Add their new
   dependencies there.
-- Users import only from the top level, `filesystems`, `formats`, `formats.actions`, `formats.python`, `util` and
-  the plugins' packages. Keep
-  the explorer's machinery out of their `__all__`.
+- Users import only from these modules and the plugins' packages:
+  - the top level;
+  - `filesystems`, `filesystems.locations`, `filesystems.mappers` and `filesystems.operations`;
+  - `formats`, `actions`, `actions.python` and `views`;
+  - `engine`, `packages` and `util`.
+- Keep the explorer's machinery out of those modules' `__all__`.
 - `static/storage-explorer.svg` is a copy of the launcher's icon: change both.
 
 ## Architecture
@@ -113,8 +116,9 @@ the code. The traps:
   sorting and filters in `_explorer/listing.py` must follow the browser's.
 - `open_preview` is deprecated, with a `DeprecationWarning`.
 - A format's `matches` reads nothing: it runs for every file listed. A signature check goes in `sniff`.
-- `formats` never imports `_explorer`. Actions import their libraries only inside their functions, e.g.
-  `import polars as pl`, so that plugins load without them.
+- `formats` imports none of `actions`, `views` and `_explorer`, and `actions` never imports `_explorer`.
+- Actions import their libraries only inside their functions, e.g. `import polars as pl`, so that plugins load
+  without them.
 - An action's options class comes from its `options` annotation: import it at run time, at the module's top level.
   ruff's `runtime-evaluated-decorators` keeps it out of `TYPE_CHECKING`.
 - The explorer calls an action only for items its `check` accepts, and then tries no other action. Its errors are the
@@ -147,7 +151,7 @@ the code. The traps:
 Docstrings of the public API are in numpy style: `Parameters`, `Returns`, `Raises`, `Attributes`, `See Also`,
 `Examples`. The public API is what users construct, call, subclass or override:
 
-- `StorageExplorer`, `DataExplorer`, `fetch_rows` and `QuerySettings`;
+- `StorageExplorer`, `DataExplorer` and `QuerySettings`;
 - `ExplorerStates`, with `Bookmark` and `QueryState`;
 - `FileSystemOperations` and its subclasses, with `_copy_file` and `_move_file`, and `Measurement` and `Progress`;
 - `DataFormat`, `View` and `LocalFileCache`;

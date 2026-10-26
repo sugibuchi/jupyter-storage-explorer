@@ -27,7 +27,7 @@ final. Each file may have these functions, all optional:
     disabled.
 ``actions()``
     ``[action, ...]``: what explorers do with formats' data, functions of
-    your own decorated with ``formats.actions.view`` or ``code``, tried
+    your own decorated with ``actions.view`` or ``code``, tried
     after the plugins' and the explorer's own, as additions offered in its
     menus; a later layer's come first. Their formats are detected with the
     defaults'. Two actions of one kind, format, engine and label stop the

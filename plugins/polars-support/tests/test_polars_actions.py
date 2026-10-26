@@ -35,7 +35,7 @@ from jupyter_storage_explorer_polars_support import (
 )
 from jupyter_storage_explorer_polars_support.actions import _read_by_polars
 
-from jupyter_storage_explorer.filesystems import S3Location
+from jupyter_storage_explorer.filesystems.locations import S3Location
 from jupyter_storage_explorer.formats import (
     Csv,
     DeltaLake,
@@ -43,13 +43,15 @@ from jupyter_storage_explorer.formats import (
     Json,
     JsonLines,
     Parquet,
+)
+from jupyter_storage_explorer.packages import PyArrow
+from jupyter_storage_explorer.testing import local_item
+from jupyter_storage_explorer.views import (
     QueryView,
     TableSetView,
     ViewLimits,
     ViewWithChoice,
 )
-from jupyter_storage_explorer.formats.packages import PyArrow
-from jupyter_storage_explorer.testing import local_item
 
 LIMITS = ViewLimits(max_display_rows=2)
 

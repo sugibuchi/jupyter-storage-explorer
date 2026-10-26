@@ -24,10 +24,16 @@ from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 import narwhals as nw
 
+from jupyter_storage_explorer.engine import Engine
 from jupyter_storage_explorer.formats.base import DataFormat
-from jupyter_storage_explorer.formats.engine import Engine
-from jupyter_storage_explorer.formats.packages import PythonPackage
-from jupyter_storage_explorer.formats.views import (
+from jupyter_storage_explorer.packages import PythonPackage
+from jupyter_storage_explorer.util import (
+    IS_SECRET,
+    LIBRARY_DEFAULT,
+    SECRET_KEYS,
+    _shown_options,
+)
+from jupyter_storage_explorer.views import (
     JupyterWidgetView,
     QueryView,
     TextView,
@@ -35,15 +41,9 @@ from jupyter_storage_explorer.formats.views import (
     View,
     is_jupyter_widget,
 )
-from jupyter_storage_explorer.util import (
-    IS_SECRET,
-    LIBRARY_DEFAULT,
-    SECRET_KEYS,
-    _shown_options,
-)
 
 if TYPE_CHECKING:
-    from jupyter_storage_explorer.formats.base import ItemContext
+    from jupyter_storage_explorer.base import ItemContext
 
 __all__ = [
     "Action",
@@ -718,8 +718,8 @@ def _format_and_engine(
     if format is None:
         raise TypeError("no format given: e.g. @view(Parquet) or file_format(...)")
     if engine is None:
-        # Here, as formats.python's actions import this module.
-        from jupyter_storage_explorer.formats.python import (  # noqa: PLC0415
+        # Here, as actions.python's actions import this module.
+        from jupyter_storage_explorer.actions.python import (  # noqa: PLC0415
             PythonEngine,
         )
 

@@ -1190,9 +1190,9 @@ def local_paths_copied(lab: Lab, page: Page) -> None:
 STORAGE_LEVELS = """\
 from fsspec.implementations.memory import MemoryFileSystem
 from jupyter_storage_explorer import StorageExplorer
-from jupyter_storage_explorer.filesystems import (
-    AbfsLocation, AzureBlobMapper, FileSystemMapper, S3Location,
-)
+from jupyter_storage_explorer.filesystems.locations import AbfsLocation, S3Location
+from jupyter_storage_explorer.filesystems.mappers import AzureBlobMapper
+from jupyter_storage_explorer.filesystems import FileSystemMapper
 
 class Account(MemoryFileSystem):
     store, pseudo_dirs = {}, [""]
@@ -1292,9 +1292,10 @@ import time
 import fsspec
 import polars as pl
 from jupyter_storage_explorer import StorageExplorer
-from jupyter_storage_explorer.formats import Csv, QueryView, Text, TextView, ViewLimits
-from jupyter_storage_explorer.formats.actions import view
-from jupyter_storage_explorer.formats.python import PythonEngine
+from jupyter_storage_explorer.formats import Csv, Text
+from jupyter_storage_explorer.views import QueryView, TextView, ViewLimits
+from jupyter_storage_explorer.actions import view
+from jupyter_storage_explorer.actions.python import PythonEngine
 from jupyter_storage_explorer_polars_support import PolarsEngine
 
 @view(format=Text, engine=PythonEngine, label="Slow text")
@@ -1373,7 +1374,7 @@ def slow_preview(lab: Lab, page: Page) -> None:
 PROMPTS = """\
 import fsspec
 from jupyter_storage_explorer import StorageExplorer
-from jupyter_storage_explorer.formats import ViewLimits
+from jupyter_storage_explorer.views import ViewLimits
 
 memory = fsspec.filesystem("memory")
 memory.pipe_file("/prompts/small.csv", b"a\\n1\\n2\\n")
@@ -1421,8 +1422,8 @@ ERRORS = """\
 from fsspec.implementations.memory import MemoryFileSystem
 from jupyter_storage_explorer import StorageExplorer
 from jupyter_storage_explorer.formats import Text
-from jupyter_storage_explorer.formats.actions import view
-from jupyter_storage_explorer.formats.python import PythonEngine
+from jupyter_storage_explorer.actions import view
+from jupyter_storage_explorer.actions.python import PythonEngine
 
 class Py4JJavaError(Exception):
     pass
@@ -1489,9 +1490,10 @@ def readable_errors(lab: Lab, page: Page) -> None:
 VIEWS_BY_NAME = """\
 import fsspec
 from jupyter_storage_explorer import StorageExplorer
-from jupyter_storage_explorer.formats import Text, TextView
-from jupyter_storage_explorer.formats.actions import view
-from jupyter_storage_explorer.formats.python import PythonEngine
+from jupyter_storage_explorer.formats import Text
+from jupyter_storage_explorer.views import TextView
+from jupyter_storage_explorer.actions import view
+from jupyter_storage_explorer.actions.python import PythonEngine
 
 @view(format=Text, engine=PythonEngine, label="Shout")
 def shout(fmt, ctx, options, limits):
@@ -1525,7 +1527,7 @@ import fsspec
 import ipywidgets
 from jupyter_storage_explorer import StorageExplorer
 from jupyter_storage_explorer.formats import file_format
-from jupyter_storage_explorer.formats.actions import view
+from jupyter_storage_explorer.actions import view
 
 @view(file_format(".wdg"), label="Slider")
 def slider(name):
@@ -1573,9 +1575,10 @@ def widget_view(lab: Lab, page: Page) -> None:
 # A user's actions file, in the Jupyter configuration folder: an explorer
 # created in a notebook uses it, after the built-in view.
 USER_ACTIONS_FILE = """\
-from jupyter_storage_explorer.formats import Text, TextView
-from jupyter_storage_explorer.formats.actions import view
-from jupyter_storage_explorer.formats.python import PythonEngine
+from jupyter_storage_explorer.formats import Text
+from jupyter_storage_explorer.views import TextView
+from jupyter_storage_explorer.actions import view
+from jupyter_storage_explorer.actions.python import PythonEngine
 
 
 @view(format=Text, engine=PythonEngine, label="Reversed")
@@ -1719,8 +1722,9 @@ TABLE_SET_TREE = """\
 import demo_data
 import polars as pl
 from jupyter_storage_explorer import StorageExplorer
-from jupyter_storage_explorer.formats import Excel, Leaf, Node, TableSetView
-from jupyter_storage_explorer.formats.actions import view
+from jupyter_storage_explorer.formats import Excel
+from jupyter_storage_explorer.views import Leaf, Node, TableSetView
+from jupyter_storage_explorer.actions import view
 from jupyter_storage_explorer_polars_support import PolarsEngine
 
 @view(format=Excel, engine=PolarsEngine, label="Sheets in a tree")
@@ -1837,7 +1841,7 @@ import zipfile
 import pandas as pd
 from fsspec.implementations.zip import ZipFileSystem
 from jupyter_storage_explorer import StorageExplorer
-from jupyter_storage_explorer.formats import ViewLimits
+from jupyter_storage_explorer.views import ViewLimits
 
 parquet = io.BytesIO()
 pd.DataFrame({"id": range(300)}).to_parquet(parquet, row_group_size=50)

@@ -36,6 +36,12 @@ if TYPE_CHECKING:
 
     from jupyter_storage_explorer.filesystems.operation import Measurement, Progress
 
+__all__ = [
+    "AsyncFsspecOperations",
+    "AtomicMoveOperation",
+    "FsspecOperations",
+]
+
 
 class FsspecOperations(FileSystemOperations):
     """Every operation, with fsspec's API: works on any filesystem.

@@ -29,9 +29,9 @@ rules are stated explicitly, and the templates are complete. When generating a p
 | Component                | Defined with (import from)                                       | What it does                                                                   |
 |--------------------------|------------------------------------------------------------------|--------------------------------------------------------------------------------|
 | Format                   | `DataFormat` (`jupyter_storage_explorer.formats`)                | Recognizes a kind of file or folder (e.g. Avro files, a DuckDB database).      |
-| Engine                   | `Engine` (`jupyter_storage_explorer.formats`)                    | A library users choose to view data with (e.g. DuckDB), shown in the status bar. |
-| View action              | `@view` (`jupyter_storage_explorer.formats.actions`)             | A function viewing a format's data with an engine: the preview panel, a tab.   |
-| Code action              | `@code` (`jupyter_storage_explorer.formats.actions`)             | A function giving code loading a format's data with an engine: "Python code".  |
+| Engine                   | `Engine` (`jupyter_storage_explorer`)                            | A library users choose to view data with (e.g. DuckDB), shown in the status bar. |
+| View action              | `@view` (`jupyter_storage_explorer.actions`)                     | A function viewing a format's data with an engine: the preview panel, a tab.   |
+| Code action              | `@code` (`jupyter_storage_explorer.actions`)                     | A function giving code loading a format's data with an engine: "Python code".  |
 | File operations          | `FileSystemOperations` (`jupyter_storage_explorer.filesystems`)  | Moves, copies, deletes, uploads, downloads files for a storage, its own way.   |
 | Filesystem mapper        | `FileSystemMapper` (`jupyter_storage_explorer.filesystems`)      | Gives a storage's paths their locations (URLs), and tells storages apart.       |
 | Plugin                   | `StorageExplorerPlugin` (`jupyter_storage_explorer`)             | Packages the above, so that every explorer uses them.                         |
@@ -171,7 +171,7 @@ A `PythonPackage` names a package a component needs, without importing it. An `E
 made of packages:
 
 ```python
-from jupyter_storage_explorer.formats import Engine, PythonPackage
+from jupyter_storage_explorer import Engine, PythonPackage
 
 
 class DuckDB(PythonPackage):
@@ -202,13 +202,13 @@ an error. The predefined engines come from their plugins' packages, e.g. `jupyte
 - `PolarsEngine`, `PandasEngine`, `DuckDBEngine` and `DaskEngine`;
 - `PySparkEngine` and `DatabricksConnectEngine`.
 
-`PythonEngine`, in `jupyter_storage_explorer.formats.python`, is the engine of the built-in actions: Python alone, with
+`PythonEngine`, in `jupyter_storage_explorer.actions.python`, is the engine of the built-in actions: Python alone, with
 the explorer's own packages. The explorer offers the engines installed that view something, never `PythonEngine`.
 
 Packages are defined where they belong: an engine's own (`Polars`, `Pandas`, `PySpark`, `DatabricksConnect`) and
 the libraries only that engine uses (`Fastexcel` for polars, `DeltaSpark` for Spark) by the engine's plugin, beside
 its `Engine`; the libraries several engines may use (`Fsspec`, `PyArrow`, `DeltaLake`, `Openpyxl`, and the
-core's `Pillow`) by the core, in `jupyter_storage_explorer.formats.packages`. A new plugin imports those, and defines
+core's `Pillow`) by the core, in `jupyter_storage_explorer.packages`. A new plugin imports those, and defines
 its own engine's and its engine-only libraries.
 
 A package another engine's plugin defines, e.g. pandas-support's `Pandas`, may be defined again in yours: packages,
@@ -220,7 +220,7 @@ never change them from an action. Use what is active, and say in the README how 
 ## Actions
 
 An action is a function doing one thing with one format's data and one engine. There are two kinds, each made by a
-decorator of `jupyter_storage_explorer.formats.actions`:
+decorator of `jupyter_storage_explorer.actions`:
 
 - `@view` makes a view, shown in the preview panel or a tab of its own;
 - `@code` gives one snippet of Python loading the data, shown in the right-click menu's **Python code**.
@@ -232,11 +232,13 @@ view doing an item is its default, and **Preview as** lists the others of its en
 ```python
 from inspect import cleandoc
 
-from jupyter_storage_explorer.filesystems import LocalLocation
-from jupyter_storage_explorer.formats import DataFormat, ItemContext, Parquet, QueryView, View
-from jupyter_storage_explorer.formats.actions import code, register_actions, view
-from jupyter_storage_explorer.formats.packages import PyArrow
+from jupyter_storage_explorer import ItemContext
+from jupyter_storage_explorer.actions import code, register_actions, view
+from jupyter_storage_explorer.filesystems.locations import LocalLocation
+from jupyter_storage_explorer.formats import DataFormat, Parquet
+from jupyter_storage_explorer.packages import PyArrow
 from jupyter_storage_explorer.util import format_kwargs
+from jupyter_storage_explorer.views import QueryView, View
 
 
 def _read_by_duckdb(fmt: DataFormat, ctx: ItemContext, options: DuckDBOptions) -> bool:
@@ -462,7 +464,7 @@ Options are data. What an action does with them goes in functions taking them; m
 from dataclasses import dataclass
 from typing import Any
 
-from jupyter_storage_explorer.formats import ActionOptions
+from jupyter_storage_explorer.actions import ActionOptions
 from jupyter_storage_explorer.util import secret_dict_field, secret_field
 
 
@@ -578,7 +580,7 @@ A library reads the item in one of five ways. Choose per storage in the check an
   can read a cut file, offer its first part too, as polars-support's `ViewWithChoice` above does. The data browser then
   says the data is partial, from `more=True`.
 
-`local_file_cache()`, from `jupyter_storage_explorer.formats`, is the kernel's `LocalFileCache`. Views of one file share
+`local_file_cache()`, from `jupyter_storage_explorer.actions`, is the kernel's `LocalFileCache`. Views of one file share
 its copy:
 
 - `get(ctx)` downloads the file on demand, in a view's worker thread, and returns its local path. A local file is its
@@ -1080,8 +1082,9 @@ synchronous filesystems, differs there from the main thread.
 The tests' libraries go in the `dev` group, so that `uv run pytest` runs them with the plugin's dependencies only:
 
 ```python
-from jupyter_storage_explorer.formats import Parquet, QueryView, ViewLimits
+from jupyter_storage_explorer.formats import Parquet
 from jupyter_storage_explorer.testing import local_item
+from jupyter_storage_explorer.views import QueryView, ViewLimits
 
 
 def test_view(tmp_path):
@@ -1140,8 +1143,16 @@ below it, such as **Python code**.
 Checks opening view tabs need the launcher's JupyterLab extension built: `uv run jlpm install` and `uv run jlpm build`
 in `launcher/labextension`, then `uv sync`.
 
-Plugins outside this repository use only the public API: the top level, `filesystems`, `formats`, `formats.actions`,
-`formats.python`, `util` and `testing`. This repository's plugins may also use the explorer's internals, as they are released with it.
+Plugins outside this repository use only the public API, in these modules:
+
+- the top level;
+- `filesystems`, `filesystems.locations`, `filesystems.mappers` and `filesystems.operations`;
+- `formats`;
+- `actions` and `actions.python`;
+- `views`, `engine` and `packages`;
+- `util` and `testing`.
+
+This repository's plugins may also use the explorer's internals, as they are released with it.
 
 ### Trying components in an explorer
 

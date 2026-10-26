@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from jupyter_storage_explorer.formats.base import DataFormat
 
 if TYPE_CHECKING:
-    from jupyter_storage_explorer.formats.base import ItemContext
+    from jupyter_storage_explorer.base import ItemContext
 
 
 class DeltaLake(DataFormat):

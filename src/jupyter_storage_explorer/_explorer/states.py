@@ -42,8 +42,8 @@ from jupyter_storage_explorer._query.settings import (
     QuerySettings,
     QueryState,
 )
+from jupyter_storage_explorer.base import Location
 from jupyter_storage_explorer.filesystems.locations import LocalLocation
-from jupyter_storage_explorer.location import Location
 
 if TYPE_CHECKING:
     from collections.abc import Iterator

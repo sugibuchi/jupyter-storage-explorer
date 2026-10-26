@@ -36,8 +36,8 @@ In addition, you can store actions in Python files under `~/.jupyter/storage-exp
 This action gives code pretty-printing a JSON file:
 
 ```python
+from jupyter_storage_explorer.actions import code
 from jupyter_storage_explorer.formats import Json
-from jupyter_storage_explorer.formats.actions import code
 
 PRETTY_PRINT = """
 import json
@@ -71,7 +71,7 @@ An action is a function decorated with one of these:
 - `@view` makes a view, offered in **Preview as** and **View in new tab as**;
 - `@code` makes a code snippet, offered in **Python code**.
 
-Both are in `jupyter_storage_explorer.formats.actions`.
+Both are in `jupyter_storage_explorer.actions`.
 
 ### Formats
 
@@ -107,8 +107,8 @@ An action is also offered for the subclasses of its format, unless they have act
 For files no format covers, make a format of your own with `file_format`, from `jupyter_storage_explorer.formats`:
 
 ```python
+from jupyter_storage_explorer.actions import code
 from jupyter_storage_explorer.formats import file_format
-from jupyter_storage_explorer.formats.actions import code
 
 READ_AVRO = """
 import fastavro
@@ -170,8 +170,8 @@ A view returns what to show:
 For example, this view shows text files in upper case:
 
 ```python
+from jupyter_storage_explorer.actions import view
 from jupyter_storage_explorer.formats import Text
-from jupyter_storage_explorer.formats.actions import view
 
 
 @view(format=Text, label="Upper case")
@@ -185,7 +185,7 @@ def upper_case(fs, path):
 ### Views
 
 A view object shows more than plain data, e.g. highlighted text. The view classes are in
-`jupyter_storage_explorer.formats`:
+`jupyter_storage_explorer.views`:
 
 | View                                  | Shows                                                    |
 |---------------------------------------|----------------------------------------------------------|
@@ -205,8 +205,8 @@ A Jupyter widget is any `ipywidgets.DOMWidget`, anywidgets included. Returning o
 ```python
 import ipywidgets
 
+from jupyter_storage_explorer.actions import view
 from jupyter_storage_explorer.formats import Csv
-from jupyter_storage_explorer.formats.actions import view
 
 
 @view(format=Csv, label="Size")
@@ -231,8 +231,9 @@ Each takes a `message` and a `factory`, the function making the view of the answ
 object, not plain data. Its options are listed after the example.
 
 ```python
-from jupyter_storage_explorer.formats import Csv, TextView, ViewWithChoice, ViewWithConfirmation
-from jupyter_storage_explorer.formats.actions import view
+from jupyter_storage_explorer.actions import view
+from jupyter_storage_explorer.formats import Csv
+from jupyter_storage_explorer.views import TextView, ViewWithChoice, ViewWithConfirmation
 
 
 @view(format=Csv, label="Whole file")
@@ -321,8 +322,8 @@ shows it. Each engine plugin has its own, e.g. `PolarsEngine` from polars-suppor
 Python alone.
 
 ```python
+from jupyter_storage_explorer.actions import view
 from jupyter_storage_explorer.formats import Parquet
-from jupyter_storage_explorer.formats.actions import view
 from jupyter_storage_explorer_polars_support import PolarsEngine
 
 
@@ -343,8 +344,8 @@ dataclass subclassing `ActionOptions`, and annotate the `options` parameter with
 ```python
 from dataclasses import dataclass
 
-from jupyter_storage_explorer.formats import ActionOptions, Text
-from jupyter_storage_explorer.formats.actions import view
+from jupyter_storage_explorer.actions import ActionOptions, view
+from jupyter_storage_explorer.formats import Text
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -391,8 +392,8 @@ storages, each read is a round trip.
 This view shows a folder's items, and the beginning of a file:
 
 ```python
+from jupyter_storage_explorer.actions import view
 from jupyter_storage_explorer.formats import Text, file_format
-from jupyter_storage_explorer.formats.actions import view
 
 
 @view(format=file_format(names="*.zarr", is_dir=True), label="Arrays")

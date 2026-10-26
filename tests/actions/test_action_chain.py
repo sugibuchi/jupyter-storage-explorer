@@ -26,33 +26,32 @@ from jupyter_storage_explorer_polars_support import (
 
 from jupyter_storage_explorer import StorageExplorer
 from jupyter_storage_explorer._explorer.actions import ActionChain
-from jupyter_storage_explorer.filesystems import AbfsLocation, S3Location
+from jupyter_storage_explorer.actions import ActionOptions, code, view
+from jupyter_storage_explorer.actions.defaults import DEFAULT_ACTIONS
+from jupyter_storage_explorer.actions.python import (
+    FsspecOptions,
+    PythonEngine,
+    text_code,
+    text_view,
+)
+from jupyter_storage_explorer.engine import Engine
+from jupyter_storage_explorer.filesystems.locations import AbfsLocation, S3Location
 from jupyter_storage_explorer.formats import (
-    ActionOptions,
     Csv,
     DeltaLake,
-    Engine,
     Excel,
     Image,
     Json,
     JsonLines,
     Markdown,
     Parquet,
-    PythonPackage,
-    QueryView,
     Text,
-    ViewLimits,
 )
-from jupyter_storage_explorer.formats.actions import code, view
-from jupyter_storage_explorer.formats.defaults import DEFAULT_ACTIONS, DEFAULT_FORMATS
+from jupyter_storage_explorer.formats.defaults import DEFAULT_FORMATS
 from jupyter_storage_explorer.formats.images import IMAGE_FORMATS
-from jupyter_storage_explorer.formats.python import (
-    FsspecOptions,
-    PythonEngine,
-    text_code,
-    text_view,
-)
 from jupyter_storage_explorer.formats.text import TEXT_FORMATS
+from jupyter_storage_explorer.packages import PythonPackage
+from jupyter_storage_explorer.views import QueryView, ViewLimits
 
 LIMITS = ViewLimits(max_display_rows=2)
 

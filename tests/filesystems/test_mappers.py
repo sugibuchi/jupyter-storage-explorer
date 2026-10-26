@@ -15,21 +15,25 @@ from fsspec.implementations.dirfs import DirFileSystem
 
 from jupyter_storage_explorer import Location
 from jupyter_storage_explorer.filesystems import (
-    AbfsLocation,
-    AzureBlobMapper,
-    DatabricksMapper,
     FileSystemMapper,
-    FsspecLocation,
-    GcsLocation,
-    LocalLocation,
     MapperChain,
-    MemoryLocation,
-    MemoryMapper,
-    S3Location,
-    SftpLocation,
     default_mappers,
     level_icon_css,
     same_filesystem,
+)
+from jupyter_storage_explorer.filesystems.locations import (
+    AbfsLocation,
+    FsspecLocation,
+    GcsLocation,
+    LocalLocation,
+    MemoryLocation,
+    S3Location,
+    SftpLocation,
+)
+from jupyter_storage_explorer.filesystems.mappers import (
+    AzureBlobMapper,
+    DatabricksMapper,
+    MemoryMapper,
 )
 
 chain = MapperChain(default_mappers())

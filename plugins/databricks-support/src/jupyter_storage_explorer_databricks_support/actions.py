@@ -35,14 +35,14 @@ from jupyter_storage_explorer_pyspark_support import (
 )
 from jupyter_storage_explorer_pyspark_support.actions import AS_DATA_FRAME
 
-from jupyter_storage_explorer.formats.actions import code, register_actions, view
-from jupyter_storage_explorer.formats.base import ItemContext
+from jupyter_storage_explorer.actions import code, register_actions, view
+from jupyter_storage_explorer.base import ItemContext
+from jupyter_storage_explorer.engine import Engine
 from jupyter_storage_explorer.formats.delta import DeltaLake
-from jupyter_storage_explorer.formats.engine import Engine
-from jupyter_storage_explorer.formats.packages import PythonPackage
 from jupyter_storage_explorer.formats.parquet import Parquet
 from jupyter_storage_explorer.formats.text import Csv, JsonLines
-from jupyter_storage_explorer.formats.views import View, ViewLimits
+from jupyter_storage_explorer.packages import PythonPackage
+from jupyter_storage_explorer.views import View, ViewLimits
 from jupyter_storage_explorer_databricks_support.mapper import (
     DatabricksWorkspaceMapper,
 )

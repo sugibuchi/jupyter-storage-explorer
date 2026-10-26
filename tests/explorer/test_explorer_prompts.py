@@ -8,17 +8,17 @@ import pytest
 from explorers import make
 
 from jupyter_storage_explorer._explorer.view_tab import ViewTab
-from jupyter_storage_explorer.formats import (
+from jupyter_storage_explorer.actions import view
+from jupyter_storage_explorer.actions.python import PythonEngine
+from jupyter_storage_explorer.formats import Text
+from jupyter_storage_explorer.views import (
     QueryView,
-    Text,
     TextView,
     ViewLimits,
     ViewWithChoice,
     ViewWithConfirmation,
     ViewWithInput,
 )
-from jupyter_storage_explorer.formats.actions import view
-from jupyter_storage_explorer.formats.python import PythonEngine
 
 # What the prompts did: "closed", and the answers' views made.
 EVENTS: list[str] = []

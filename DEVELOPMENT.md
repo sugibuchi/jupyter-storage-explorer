@@ -22,6 +22,7 @@ explorer exactly, so an extra always installs the plugin of the explorer's versi
 | `src/jupyter_storage_explorer/`                                | The widgets: `storage_explorer.py`, `data_explorer.py`.                                              |
 | `src/jupyter_storage_explorer/filesystems/`                    | Filesystems' locations (mappers) and file operations: interfaces users extend, and the default ones. |
 | `src/jupyter_storage_explorer/formats/`                        | The formats files are previewed, queried and loaded as.                                              |
+| `src/jupyter_storage_explorer/actions/`                        | Actions, what explorers do with a format's data, and the built-in ones.                              |
 | `src/jupyter_storage_explorer/_explorer/`                      | `StorageExplorer`'s features, as mixins of the class.                                                |
 | `src/jupyter_storage_explorer/_extensions/`                    | What extends the explorer from outside: plugins installed and the user's action files.               |
 | `src/jupyter_storage_explorer/_jobs/`                          | File operations planned and run as jobs, without the widget.                                         |
@@ -46,10 +47,17 @@ the plugins.
 Users import only from these modules and the plugins' packages. Their `__all__` is the public API: what users
 construct, subclass, call or annotate with.
 
-- `jupyter_storage_explorer`, the top level: the widgets, `Location` and `StorageExplorerPlugin`;
-- `jupyter_storage_explorer.filesystems`: locations, mappers and operations;
-- `jupyter_storage_explorer.formats`, `formats.actions` and `formats.python`: formats, actions, views and the built-in
-  actions with their engine, `PythonEngine`;
+- `jupyter_storage_explorer`, the top level: the widgets, `StorageExplorerPlugin`, and the bases users subclass or
+  annotate with, such as `Location`, `ItemContext`, `Engine` and `PythonPackage`;
+- `jupyter_storage_explorer.filesystems`: the bases of mappers and operations, and their helpers;
+- `filesystems.locations`, `filesystems.mappers` and `filesystems.operations`: the predefined locations, mappers and
+  operations;
+- `jupyter_storage_explorer.formats`: the formats;
+- `jupyter_storage_explorer.actions`: the decorators of actions, their options and the cache of local files;
+- `jupyter_storage_explorer.actions.python`: the built-in actions, with their engine, `PythonEngine`;
+- `jupyter_storage_explorer.views`: the views actions return;
+- `jupyter_storage_explorer.engine`: `Engine` and `EngineOptions`, the type of `engine_options`;
+- `jupyter_storage_explorer.packages`: `PythonPackage` and the predefined packages, such as `PyArrow`;
 - `jupyter_storage_explorer.util`: helpers such as `format_size`.
 
 The explorer's machinery stays out of them, such as `ActionChain`, `OperationChain` and `detect`. The package and the
@@ -567,7 +575,7 @@ Storage Explorer handles this with two classes:
 
 #### Locations
 
-A `Location`, in `location.py`, says where an item is, independently of fsspec's implementations. So it can travel to
+A `Location`, in `base.py`, says where an item is, independently of fsspec's implementations. So it can travel to
 other kernels, and to libraries that do their own I/O.
 
 - It is a frozen, keyword-only dataclass.
@@ -928,23 +936,28 @@ A format only detects files. An action does one thing with one format's data and
 it. So a library is added to a format, e.g. DuckDB for Parquet, without touching the format.
 [plugin-development-guide.md](docs/plugin-development-guide.md) says how to write each, with their rules.
 
-`formats/` is laid out as `filesystems/`:
+Formats, actions and what actions return are in separate modules and packages:
 
-| Module                          | Contents                                                                         |
-|---------------------------------|----------------------------------------------------------------------------------|
-| `base.py`                       | `DataFormat`, `ItemContext`, the file icons, and the explorer's `detect`.        |
-| `actions.py`                    | The decorators `view` and `code`, `register_actions`, `check_actions`, and `ActionOptions`. |
-| `engine.py`                     | `Engine`: a library users choose, such as polars.                                |
-| `packages.py`                   | `PythonPackage`: what an action needs, and the packages several engines share.   |
-| `views.py`                      | The views actions return, and `ViewLimits`.                                      |
-| `delta.py`, `parquet.py`, ...   | A module per predefined format.                                                  |
-| `python.py`                     | `PythonEngine` and the built-in actions: text, JSON, Markdown, images.           |
-| `defaults.py`                   | `DEFAULT_FORMATS` and `DEFAULT_ACTIONS`.                                         |
+| Module                                  | Contents                                                                           |
+|-----------------------------------------|------------------------------------------------------------------------------------|
+| `base.py`                               | `Location` and `ItemContext`, the item formats and actions are given.              |
+| `formats/base.py`                       | `DataFormat`, the file icons, and the explorer's `detect`.                         |
+| `formats/delta.py`, `parquet.py`, ...   | A module per predefined format.                                                    |
+| `formats/defaults.py`                   | `DEFAULT_FORMATS`.                                                                 |
+| `actions/base.py`                       | The decorators `view` and `code`, `register_actions`, `check_actions`, and `ActionOptions`. |
+| `actions/python.py`                     | `PythonEngine` and the built-in actions: text, JSON, Markdown, images.             |
+| `actions/local_files.py`                | `LocalFileCache`: local copies of remote files.                                    |
+| `actions/defaults.py`                   | `DEFAULT_ACTIONS`.                                                                 |
+| `engine.py`                             | `Engine`: a library users choose, such as polars.                                  |
+| `packages.py`                           | `PythonPackage`: what an action needs, and the packages several engines share.     |
+| `views.py`                              | The views actions return, and `ViewLimits`.                                        |
 
 The engines' actions are in their plugins, in `plugins/<engine>-support/src/.../actions.py`. They import their
 libraries only inside their functions.
 
-`formats` never imports `_explorer`. Presentation, such as the wording of a table's row counts, stays in the explorer.
+`formats` imports none of `actions`, `views` and `_explorer`: a format only detects files.
+
+`actions` never imports `_explorer`. Presentation, such as the wording of a table's row counts, stays in the explorer.
 
 #### Detection
 
@@ -976,7 +989,7 @@ a format without an icon get their extension's.
 
 #### Actions
 
-An action is a function decorated with `view` or `code`, from `formats/actions.py`. The decorator makes it a
+An action is a function decorated with `view` or `code`, from `actions/base.py`. The decorator makes it a
 `ViewAction` or a `CodeAction`, a frozen dataclass holding:
 
 - `function`, called when the action is;
@@ -1121,7 +1134,7 @@ A `QueryView`'s `DataQuery` owns it. A reload's view replaces it, and the previo
 #### Local copies
 
 Libraries that open only local files, such as DuckDB for its databases, view a local copy. `LocalFileCache`, in
-`formats/local_files.py`, keeps them, and `local_file_cache()` is the kernel's:
+`actions/local_files.py`, keeps them, and `local_file_cache()` is the kernel's:
 
 - A copy is keyed by the item's location, and downloaded whole by `get` with the explorer's filesystem.
 - It stays valid while the remote file's modification time and size, from the item's info, are the same.

@@ -22,9 +22,10 @@ from plugin_samples import (
 from jupyter_storage_explorer._explorer.actions import ActionChain
 from jupyter_storage_explorer._extensions import plugins as _plugins
 from jupyter_storage_explorer._extensions.plugins import load_plugins
-from jupyter_storage_explorer.filesystems import FsspecOperations
-from jupyter_storage_explorer.formats import Csv, Engine
-from jupyter_storage_explorer.formats.actions import code
+from jupyter_storage_explorer.actions import code
+from jupyter_storage_explorer.engine import Engine
+from jupyter_storage_explorer.filesystems.operations import FsspecOperations
+from jupyter_storage_explorer.formats import Csv
 from jupyter_storage_explorer.plugin import (
     ENTRY_POINT_GROUP,
     LOWEST_PRIORITY,

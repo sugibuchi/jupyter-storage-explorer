@@ -6,13 +6,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from jupyter_storage_explorer._extensions.plugins import PluginComponents, load_plugins
-from jupyter_storage_explorer.formats.defaults import DEFAULT_ACTIONS
-from jupyter_storage_explorer.formats.packages import PythonPackage
+from jupyter_storage_explorer.actions.defaults import DEFAULT_ACTIONS
+from jupyter_storage_explorer.packages import PythonPackage
 
 if TYPE_CHECKING:
     import pytest
 
-    from jupyter_storage_explorer.formats.actions import Action
+    from jupyter_storage_explorer.actions import Action
 
 PLUGINS, _problems = load_plugins()
 assert not _problems, _problems
