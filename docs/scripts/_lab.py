@@ -151,18 +151,6 @@ class Lab:
             path.write_text(LAUNCHER_PY, encoding="utf-8")
 
     @contextlib.contextmanager
-    def user_actions(self, name: str, source: str) -> Iterator[None]:
-        """Explorers created meanwhile read ``source`` as the user's actions
-        file ``storage-explorer/actions/<name>``, removed after."""
-        path = self.folder / "config" / "storage-explorer" / "actions" / name
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(source, encoding="utf-8")
-        try:
-            yield
-        finally:
-            path.unlink()
-
-    @contextlib.contextmanager
     def kernel_startup(self, source: str) -> Iterator[None]:
         """Kernels started meanwhile run ``source`` first, as an IPython
         startup file: what a picture's notebook needs without showing it."""
