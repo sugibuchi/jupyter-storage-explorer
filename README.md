@@ -104,12 +104,11 @@ pip install "jupyter-storage-explorer-launcher[polars]"
 pip install "jupyter-storage-explorer[polars]"
 ```
 
-`[polars]` adds the Polars plugin with Polars itself. Other engines and storages are extras too:
+This installs only the widgets, for notebooks. The integration with JupyterLab's UI, e.g. drag and drop with its file
+browser, comes with the launcher package above.
 
-- `[polars-support]` installs the plugin alone, using the libraries you have, as carefully set up kernels prefer.
-- [Plugins](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/plugins/README.md) lists all of them.
-- [Installation](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#installation)
-  lists the storage packages.
+`[polars]` adds the Polars plugin with Polars itself. Other engines and storages are extras too:
+[Plugins](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/plugins/README.md) lists all of them.
 
 ```python
 from jupyter_storage_explorer import StorageExplorer
@@ -117,26 +116,13 @@ from jupyter_storage_explorer import StorageExplorer
 StorageExplorer("s3://my-bucket/data")
 ```
 
-Keyword arguments after the address go to fsspec, e.g. `profile="analytics"` for S3. Double-click a file to preview it,
-and right-click for everything else. With the launcher installed, files that JupyterLab can show open in its editors
-instead.
-
-Browse a dataframe and get the rows you filtered back:
-
-```python
-import polars as pl
-from jupyter_storage_explorer import DataExplorer
-
-explorer = DataExplorer(pl.scan_parquet("s3://my-bucket/lake/sales/*.parquet"))
-explorer
-```
-
-```python
-explorer.result().collect()  # after filtering and sorting in the widget
-```
+Keyword arguments after the address go to fsspec, e.g. `profile="analytics"` for S3.
 
 The [`notebooks`](https://github.com/sugibuchi/jupyter-storage-explorer/tree/main/notebooks) folder has a demo of each
 widget on sample data.
+
+See [Installation](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#installation)
+for the storage packages and the other options.
 
 ## Documentation
 
