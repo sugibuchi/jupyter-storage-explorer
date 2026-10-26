@@ -638,7 +638,7 @@ class StorageExplorer(
         # Plugins, installed to enrich or change the explorer, come first;
         # then its own; then actions given and the user's files', additions
         # to them rather than replacements.
-        # The user's are read again by "Reload actions" (see
+        # The user's are read again by "Actions > Reload" (see
         # _explorer/user_actions.py), so the rest is kept.
         given = list(actions or ())
         self._other_actions = [*components.actions, *self.default_actions(), *given]

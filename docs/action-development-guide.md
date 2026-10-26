@@ -66,12 +66,12 @@ After changing the action, run the second and third cells again. The new explore
 
 Once the action works, move it to your actions file, so that the launcher's explorers offer it:
 
-<img src="figs/actions-menu.png" width="164" alt="The explorer's settings menu, open: Columns, Edit actions, Reload actions and About">
+<img src="figs/actions-menu.png" width="315" alt="The explorer's settings menu, open: Columns, Actions and About, with Actions' submenu: Edit and Reload">
 
-1. Choose **Edit actions** in the ⚙ menu of an explorer opened by the launcher. Your actions file opens in
+1. Choose **Actions > Edit** in the ⚙ menu of an explorer opened by the launcher. Your actions file opens in
    JupyterLab's editor: see [Your actions files](#your-actions-files).
 2. Paste the second cell into it, and save it.
-3. Choose **Reload actions** in the same menu. Right-click a JSON file to check that **Python code** offers "Pretty
+3. Choose **Actions > Reload** in the same menu. Right-click a JSON file to check that **Python code** offers "Pretty
    print json".
 
 ## Action basics
@@ -502,7 +502,7 @@ that file's actions, so the others keep working.
 
 - A file that cannot be read, e.g. with a syntax error, is left out with a warning, under the explorer. The explorer
   still opens, with the other files' actions.
-- On **Reload actions**, the explorer shows such a file's error instead, and keeps the other files' actions.
+- On **Actions > Reload**, the explorer shows such a file's error instead, and keeps the other files' actions.
 - A file with an action of the same label as another one is left out too: give it another label.
 - What a view raises is shown in the preview panel as the item's error.
 - What a code action raises is shown in **Python code** in place of its snippet.
@@ -512,7 +512,7 @@ that file's actions, so the others keep working.
 - The launcher's tabs and side panel read the files when they are created.
 - An explorer in a notebook reads none, so it has only what the notebook gives it. `user_actions="enabled"` makes it
   read them.
-- **Reload actions** reads them again, and lists the folder shown again. The preview open keeps its view until you open
+- **Actions > Reload** reads them again, and lists the folder shown again. The preview open keeps its view until you open
   another.
 - It reads `actions.py` first, then the folder's files by name.
 - Files whose names start with `_` are not read, so they can hold code the others share.
@@ -522,7 +522,7 @@ that file's actions, so the others keep working.
 
 ## Turning them off
 
-An explorer reading no actions files has neither **Edit actions** nor **Reload actions** in its menu.
+An explorer reading no actions files has no **Actions** in its ⚙ menu.
 
 In the launcher's tabs, an administrator can turn them off for everyone in a system `launcher.py`:
 

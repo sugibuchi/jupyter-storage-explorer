@@ -1193,7 +1193,7 @@ Restart the kernel after changing the component's module: Python imports a modul
 Actions can also go in `storage-explorer/actions.py`, or a file of `storage-explorer/actions/`, in a Jupyter
 configuration directory. Every explorer reads them when it is created: see the
 [Action development guide](action-development-guide.md). A changed file applies to the next explorer, without a
-restart. **Reload actions**, in the ⚙ menu, applies it to an explorer already open.
+restart. **Actions > Reload**, in the ⚙ menu, applies it to an explorer already open.
 
 The launcher's tab and side panel take the same components from functions of the same names in `launcher.py`:
 

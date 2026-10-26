@@ -1,5 +1,5 @@
 """StorageExplorer's actions, and the user's read again (a mixin of the
-class): "Reload actions" in the settings menu applies a change to the user's
+class): "Actions > Reload" in the settings menu applies a change to the user's
 action files without creating the explorer again."""
 
 from __future__ import annotations
