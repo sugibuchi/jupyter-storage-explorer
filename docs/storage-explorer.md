@@ -348,6 +348,8 @@ The launcher's explorers have a **Logging** menu, in their ⚙ menu, instead:
 - **Disabled**, **DEBUG**, **INFO**, **WARNING** and **ERROR** choose the level. It is remembered for the next tabs.
 - **Open log file** opens the day's file in JupyterLab's editor, read-only.
 
+<img src="figs/logging-menu.png" width="315" alt="A Storage Explorer tab's settings menu, Logging open: Disabled, DEBUG, INFO, WARNING checked, ERROR, then Open log file">
+
 They log nothing until you choose a level. Their files are in the `storage-explorer/logs` folder of Jupyter's
 configuration directory, one a day, e.g. `storage-explorer.2026-10-26.log`. Every tab, and the side panel, writes to
 the same file. The files of the 14 days before are kept, and `log_file_backup` changes how many.
