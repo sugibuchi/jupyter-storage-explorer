@@ -1,7 +1,9 @@
-"""In the action development guide: docs/figs/actions-menu.png, an explorer's
-settings menu (⚙), open, with "Edit actions" and "Reload actions"; and
-docs/figs/actions-first.png, the guide's first action in a JSON file's
-"Python code" submenu.
+"""In the action development guide: docs/figs/actions-notebook.png, the
+notebook developing the guide's first action, its explorer showing the action
+in a JSON file's "Python code" submenu; docs/figs/actions-menu.png, an
+explorer's settings menu (⚙), open, with "Edit actions" and "Reload
+actions"; and docs/figs/actions-first.png, the first action, from the user's
+actions file, in the "Python code" submenu.
 
 uv run --group docs docs/scripts/actions_menu.py
 """
@@ -15,11 +17,13 @@ from _lab import FIGS, box, shot
 
 if TYPE_CHECKING:
     from _lab import Lab
+    from playwright.sync_api import Locator, Page
 
-# The guide's first action, as the user's actions file.
+# The guide's first action: its notebook's second cell, then the user's
+# actions file.
 FIRST_ACTION = '''\
-from jupyter_storage_explorer.formats import Json
 from jupyter_storage_explorer.actions import code
+from jupyter_storage_explorer.formats import Json
 
 PRETTY_PRINT = """
 import json
@@ -36,14 +40,77 @@ def pretty_print_json(url):
     return PRETTY_PRINT.format(url=url)
 '''
 
+# The notebook's other cells. The guide's explorer opens "s3://my-bucket/data",
+# the picture's the demo lake, which DEMO_LAKE fills unseen.
+INSTALL = """\
+# If the jupyter-storage-explorer package is not installed
+%pip install jupyter-storage-explorer"""
+EXPLORER = """\
+from jupyter_storage_explorer import StorageExplorer
+
+StorageExplorer("memory:///sales-lake", actions=[pretty_print_json])"""
+DEMO_LAKE = "import demo_data\n\ndemo_data.filesystems()\n"
+
 
 def make(lab: Lab) -> None:
+    notebook(lab)
+    menus(lab)
+
+
+def python_code(page: Page) -> Locator:
+    """catalog.json right-clicked, "Python code" open: the first action's item,
+    hovered."""
+    _, row, menu_item = _lab.explorer_helpers(page)
+    row("catalog.json").click()
+    row("catalog.json").click(button="right", position={"x": 120, "y": 10})
+    # The menu grows when the item's views arrive: hover after them.
+    menu_item("Preview as").wait_for(state="visible")
+    page.wait_for_timeout(800)
+    menu_item("Python code").hover()
+    mine = page.locator(
+        ".jse-submenu .jse-menu-item:visible", has_text="Pretty print json"
+    )
+    mine.hover()  # kept: moving the mouse away would close the submenu
+    page.wait_for_timeout(800)
+    return mine
+
+
+def notebook(lab: Lab) -> None:
+    """The three cells, run from the action's: the package is installed, and
+    the docs' environment has no pip."""
+    with lab.kernel_startup(DEMO_LAKE), lab.page(1000, 1300) as page:
+        lab.open_notebook(page, INSTALL, FIRST_ACTION.rstrip(), EXPLORER, first=1)
+        page.wait_for_selector(".jse-tree .jse-node", timeout=60000)
+        page.wait_for_timeout(1500)
+        # Without the active cell's bar and toolbar, which are not the point.
+        page.add_style_tag(
+            content=".jp-Collapser, jp-toolbar.jp-cell-toolbar { visibility: hidden; }"
+        )
+        _lab.calm(page)
+        mine = python_code(page)
+        # The cells, from the first's top to the explorer's bottom, and the
+        # menus wherever they reach out of them.
+        cells = page.locator(".jp-Notebook .jp-Cell")
+        x0, y0, x1, _ = box(cells.first)
+        y1 = box(cells.nth(2))[3]
+        sx0, _, sx1, sy1 = box(mine.locator("xpath=.."))
+        menu = page.locator(".jse-menu:not(.jse-submenu)").first
+        _, _, mx1, my1 = box(menu)
+        area = (min(x0, sx0), y0, max(x1, sx1, mx1), max(y1, sy1, my1))
+        shot(page, FIGS / "actions-notebook.png", area)
+        page.keyboard.press("Escape")
+
+
+def menus(lab: Lab) -> None:
     with lab.user_actions("first.py", FIRST_ACTION), lab.page(1100, 900) as page:
-        lab.open_notebook(page, _lab.explorer_source(height="320px"))
+        # As the launcher's explorers: with the user's actions files.
+        lab.open_notebook(
+            page, _lab.explorer_source(height="320px", user_actions="enabled")
+        )
         page.wait_for_selector(".jse-tree .jse-node", timeout=60000)
         page.wait_for_timeout(1500)
         _lab.calm(page)
-        _, row, menu_item = _lab.explorer_helpers(page)
+        _, _, menu_item = _lab.explorer_helpers(page)
 
         # The settings menu, "Edit actions" pointed at.
         settings = page.locator(".jse-settings-btn").first
@@ -61,17 +128,7 @@ def make(lab: Lab) -> None:
         page.wait_for_timeout(300)
 
         # catalog.json right-clicked: "Python code", with the user's snippet.
-        row("catalog.json").click()
-        row("catalog.json").click(button="right", position={"x": 120, "y": 10})
-        # The menu grows when the item's views arrive: hover after them.
-        menu_item("Preview as").wait_for(state="visible")
-        page.wait_for_timeout(800)
-        menu_item("Python code").hover()
-        mine = page.locator(
-            ".jse-submenu .jse-menu-item:visible", has_text="Pretty print json"
-        )
-        mine.hover()  # kept: moving the mouse away would close the submenu
-        page.wait_for_timeout(800)
+        mine = python_code(page)
         # The whole menu, and the submenu beside its "Python code".
         sx0, sy0, _, sy1 = box(mine.locator("xpath=.."))
         _, my0, mx1, my1 = box(menu_item("Python code").locator("xpath=.."))

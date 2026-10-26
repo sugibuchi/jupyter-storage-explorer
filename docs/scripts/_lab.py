@@ -100,6 +100,8 @@ class Lab:
             "JUPYTER_CONFIG_DIR": str(config),
             # Notebook signatures (trust) and runtime files: not the user's.
             "JUPYTER_DATA_DIR": str(self.folder / "data"),
+            # The kernels' IPython profile, for kernel_startup.
+            "IPYTHONDIR": str(self.folder / "ipython"),
             "PYTHONPATH": os.pathsep.join(filter(None, [str(SCRIPTS), os.environ.get("PYTHONPATH")])),
             demo_data.DATA_ENV: str(self.root),
         }  # fmt: skip
@@ -160,6 +162,18 @@ class Lab:
         finally:
             path.unlink()
 
+    @contextlib.contextmanager
+    def kernel_startup(self, source: str) -> Iterator[None]:
+        """Kernels started meanwhile run ``source`` first, as an IPython
+        startup file: what a picture's notebook needs without showing it."""
+        path = self.folder / "ipython" / "profile_default" / "startup" / "50-docs.py"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(source, encoding="utf-8")
+        try:
+            yield
+        finally:
+            path.unlink()
+
     def url(self, path: str = "") -> str:
         """``/lab/<path>`` in a new, empty workspace, so that no tab or panel
         of an earlier page is restored."""
@@ -188,15 +202,21 @@ class Lab:
         (self.root / name).write_text(json.dumps(doc), encoding="utf-8")
         return name
 
-    def open_notebook(self, page: Page, *sources: str) -> None:
-        """Open a new notebook of these cells and run them all."""
+    def open_notebook(self, page: Page, *sources: str, first: int = 0) -> None:
+        """Open a new notebook of these cells and run them, from the cell of
+        index ``first``: those before it are shown, not run."""
         page.goto(self.url(f"tree/{self.notebook(*sources)}"))
         page.wait_for_selector(".jp-Notebook", timeout=60000)
         page.wait_for_timeout(3000)  # the kernel starting
+        if first:
+            page.locator(".jp-Notebook .jp-Cell").nth(first).locator(
+                ".jp-InputPrompt"
+            ).click()
         page.click("text=Run", timeout=10000)
         # The menu's item: the command palette has hidden items of the same
         # text, which JupyterLab 4.0 puts first in the page.
-        page.locator(".lm-Menu-itemLabel:visible", has_text="Run All Cells").filter(
+        label = "Run Selected Cell and All Below" if first else "Run All Cells"
+        page.locator(".lm-Menu-itemLabel:visible", has_text=label).filter(
             has_not_text="Restart"
         ).first.click()
 
