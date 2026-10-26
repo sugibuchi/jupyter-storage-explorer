@@ -1,9 +1,7 @@
 """In the action development guide: docs/figs/actions-notebook.png, the
 notebook developing the guide's first action, its explorer showing the action
-in a JSON file's "Python code" submenu; docs/figs/actions-menu.png, an
-explorer's settings menu (⚙), open, with "Edit actions" and "Reload
-actions"; and docs/figs/actions-first.png, the first action, from the user's
-actions file, in the "Python code" submenu.
+in a JSON file's "Python code" submenu; and docs/figs/actions-menu.png, an
+explorer's settings menu (⚙), open, with "Edit actions" and "Reload actions".
 
 uv run --group docs docs/scripts/actions_menu.py
 """
@@ -17,10 +15,8 @@ from _lab import FIGS, box, shot
 
 if TYPE_CHECKING:
     from _lab import Lab
-    from playwright.sync_api import Locator, Page
 
-# The guide's first action: its notebook's second cell, then the user's
-# actions file.
+# The guide's first action: its notebook's second cell.
 FIRST_ACTION = '''\
 from jupyter_storage_explorer.actions import code
 from jupyter_storage_explorer.formats import Json
@@ -37,8 +33,7 @@ with fsspec.open({url!r}) as f:
 
 @code(format=Json)
 def pretty_print_json(url):
-    return PRETTY_PRINT.format(url=url)
-'''
+    return PRETTY_PRINT.format(url=url)'''
 
 # The notebook's other cells. The guide's explorer opens "s3://my-bucket/data",
 # the picture's the demo lake, which DEMO_LAKE fills unseen.
@@ -54,32 +49,14 @@ DEMO_LAKE = "import demo_data\n\ndemo_data.filesystems()\n"
 
 def make(lab: Lab) -> None:
     notebook(lab)
-    menus(lab)
-
-
-def python_code(page: Page) -> Locator:
-    """catalog.json right-clicked, "Python code" open: the first action's item,
-    hovered."""
-    _, row, menu_item = _lab.explorer_helpers(page)
-    row("catalog.json").click()
-    row("catalog.json").click(button="right", position={"x": 120, "y": 10})
-    # The menu grows when the item's views arrive: hover after them.
-    menu_item("Preview as").wait_for(state="visible")
-    page.wait_for_timeout(800)
-    menu_item("Python code").hover()
-    mine = page.locator(
-        ".jse-submenu .jse-menu-item:visible", has_text="Pretty print json"
-    )
-    mine.hover()  # kept: moving the mouse away would close the submenu
-    page.wait_for_timeout(800)
-    return mine
+    settings_menu(lab)
 
 
 def notebook(lab: Lab) -> None:
     """The three cells, run from the action's: the package is installed, and
     the docs' environment has no pip."""
     with lab.kernel_startup(DEMO_LAKE), lab.page(1000, 1300) as page:
-        lab.open_notebook(page, INSTALL, FIRST_ACTION.rstrip(), EXPLORER, first=1)
+        lab.open_notebook(page, INSTALL, FIRST_ACTION, EXPLORER, first=1)
         page.wait_for_selector(".jse-tree .jse-node", timeout=60000)
         page.wait_for_timeout(1500)
         # Without the active cell's bar and toolbar, which are not the point.
@@ -87,7 +64,21 @@ def notebook(lab: Lab) -> None:
             content=".jp-Collapser, jp-toolbar.jp-cell-toolbar { visibility: hidden; }"
         )
         _lab.calm(page)
-        mine = python_code(page)
+        _, row, menu_item = _lab.explorer_helpers(page)
+
+        # catalog.json right-clicked, "Python code" open: the action, hovered.
+        row("catalog.json").click()
+        row("catalog.json").click(button="right", position={"x": 120, "y": 10})
+        # The menu grows when the item's views arrive: hover after them.
+        menu_item("Preview as").wait_for(state="visible")
+        page.wait_for_timeout(800)
+        menu_item("Python code").hover()
+        mine = page.locator(
+            ".jse-submenu .jse-menu-item:visible", has_text="Pretty print json"
+        )
+        mine.hover()  # kept: moving the mouse away would close the submenu
+        page.wait_for_timeout(800)
+
         # The cells, from the first's top to the explorer's bottom, and the
         # menus wherever they reach out of them.
         cells = page.locator(".jp-Notebook .jp-Cell")
@@ -101,8 +92,8 @@ def notebook(lab: Lab) -> None:
         page.keyboard.press("Escape")
 
 
-def menus(lab: Lab) -> None:
-    with lab.user_actions("first.py", FIRST_ACTION), lab.page(1100, 900) as page:
+def settings_menu(lab: Lab) -> None:
+    with lab.page(1100, 900) as page:
         # As the launcher's explorers: with the user's actions files.
         lab.open_notebook(
             page, _lab.explorer_source(height="320px", user_actions="enabled")
@@ -110,7 +101,6 @@ def menus(lab: Lab) -> None:
         page.wait_for_selector(".jse-tree .jse-node", timeout=60000)
         page.wait_for_timeout(1500)
         _lab.calm(page)
-        _, _, menu_item = _lab.explorer_helpers(page)
 
         # The settings menu, "Edit actions" pointed at.
         settings = page.locator(".jse-settings-btn").first
@@ -124,16 +114,6 @@ def menus(lab: Lab) -> None:
         mx0, _, mx1, my1 = box(menu)
         right = max(box(settings)[2], mx1)
         shot(page, FIGS / "actions-menu.png", (mx0 - 6, y0, right + 6, my1 + 6), pad=0)
-        page.keyboard.press("Escape")
-        page.wait_for_timeout(300)
-
-        # catalog.json right-clicked: "Python code", with the user's snippet.
-        mine = python_code(page)
-        # The whole menu, and the submenu beside its "Python code".
-        sx0, sy0, _, sy1 = box(mine.locator("xpath=.."))
-        _, my0, mx1, my1 = box(menu_item("Python code").locator("xpath=.."))
-        area = (sx0 - 6, min(sy0, my0) - 6, mx1 + 6, max(sy1, my1) + 6)
-        shot(page, FIGS / "actions-first.png", area, pad=0)
         page.keyboard.press("Escape")
 
 
