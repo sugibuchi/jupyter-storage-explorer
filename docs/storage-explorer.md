@@ -355,8 +355,6 @@ configuration directory. Each tab, and the side panel, writes a file a day of it
 process id, e.g. `storage-explorer.2026-10-26.12345.log`. The files of the 14 days before are kept, and
 `log_file_backup` changes how many.
 
-Logging is the kernel's: explorers in one kernel share it, and the last one created or set decides.
-
 ## Supported formats
 
 | Format                                                       | Name         | Preview                         | Data browser | Load with                                                                              |
