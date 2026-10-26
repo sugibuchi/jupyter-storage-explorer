@@ -55,20 +55,27 @@ function createJupyterLab(x) {
   }
 
   // The configuration files of the settings menu, by key (the kernel's
-  // _config_paths): the launcher's settings, in its tabs, and the user's
-  // actions. Each is created by the kernel from its template if missing,
-  // once the user agrees ("settings_open"), then opened as a file of its own
-  // storage: get and save name no path, the kernel reads and writes that
-  // file only ("settings": its key).
+  // _config_paths): the launcher's settings, in its tabs, the user's
+  // actions, and the day's log file, with the Logging menu. Each is created
+  // by the kernel from its template if missing, once the user agrees
+  // ("settings_open"), then opened as a file of its own storage: get and
+  // save name no path, the kernel reads and writes that file only
+  // ("settings": its key). The log file is never created, and the kernel
+  // refuses to save it.
   const CONFIG_FILES = {
     launcher: { storage: "Launcher settings", name: "launcher.py", create: "Create your launcher settings from a template?" },
     actions: { storage: "Your actions", name: "actions.py", create: "Create your actions file from a template?" },
+    log: { storage: "Storage Explorer logs", name: "storage-explorer.log", missing: "No log file today yet: nothing was logged." },
   };
   const canOpenSettings = () => Boolean(globalThis[JUPYTERLAB]?.open);
 
   async function openSettings(key) {
     const file = CONFIG_FILES[key];
     let reply = await request({ type: "settings_open", file: key });
+    if (reply.missing && file.missing) {
+      x.flash(file.missing);
+      return;
+    }
     if (reply.missing) {
       const lines = question(file.create, model.get("_config_paths")[key]);
       if (!(await x.ask(lines, confirmButtons("Create")))) return;
@@ -82,7 +89,8 @@ function createJupyterLab(x) {
     globalThis[JUPYTERLAB].open({
       explorer: model.get("_explorer_id"),
       storage: file.storage,
-      path: file.name,
+      // The file's own name, e.g. the day's log file's.
+      path: reply.name ?? file.name,
       get: (options) => ask("jupyterlab_get", options),
       save: (options) => ask("jupyterlab_save", options),
     }).catch((err) => x.flash(`Cannot open ${file.name}: ${err.message ?? err}`, { error: true }));

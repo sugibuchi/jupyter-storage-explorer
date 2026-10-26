@@ -1619,10 +1619,11 @@ def user_actions(lab: Lab, page: Page) -> None:
     reversed_view(x)
 
 
-def choose_action_item(page: Page, label: str) -> None:
-    """In the settings menu open, "Actions", then its item ``label``."""
+def choose_in_submenu(page: Page, item: str, label: str) -> None:
+    """In the menu open, ``item``, e.g. "Actions", then its submenu's item
+    ``label``."""
     page.locator(
-        ".jse-menu:not(.jse-submenu) > .jse-menu-item:visible", has_text="Actions"
+        ".jse-menu:not(.jse-submenu) > .jse-menu-item:visible", has_text=item
     ).hover()
     page.locator(".jse-submenu .jse-menu-item:visible", has_text=label).click()
 
@@ -1635,7 +1636,7 @@ def reload_actions(lab: Lab, page: Page) -> None:
     expect(x.row("b.abc")).to_be_visible()
     with lab.user_actions("reversed.py", USER_ACTIONS_FILE):
         x.el.locator(".jse-settings-btn").click()
-        choose_action_item(page, "Reload")
+        choose_in_submenu(page, "Actions", "Reload")
         expect(x.status).to_contain_text("Actions reloaded: 2 of yours")
     x.row("b.abc").click()
     expect(x.preview.locator(".jse-text")).to_have_text("QUIET")
@@ -1643,17 +1644,18 @@ def reload_actions(lab: Lab, page: Page) -> None:
 
 
 @lab_check
-def no_actions_menu(lab: Lab, page: Page) -> None:
-    # An explorer reading no actions files, as in a notebook by default: no
-    # "Actions" in the settings menu.
+def notebook_settings_menu(lab: Lab, page: Page) -> None:
+    # An explorer in a notebook, by default: no "Actions", as it reads no
+    # actions files, and no "Logging", as it logs to the console.
     x = Explorer(lab, page, USER_ACTIONS.replace(', user_actions="enabled"', ""))
     x.el.locator(".jse-settings-btn").click()
     expect(x.menu_item("About")).to_be_visible()
-    expect(
-        page.locator(
-            ".jse-menu:not(.jse-submenu) > .jse-menu-item:visible", has_text="Actions"
-        )
-    ).to_have_count(0)
+    for item in ("Actions", "Logging"):
+        expect(
+            page.locator(
+                ".jse-menu:not(.jse-submenu) > .jse-menu-item:visible", has_text=item
+            )
+        ).to_have_count(0)
     page.keyboard.press("Escape")
 
 
@@ -2106,7 +2108,7 @@ def edit_actions(lab: Lab, page: Page) -> None:
         tab = open_launcher_tab(lab, page)
         assert not path.exists()
         tab.locator(".jse-settings-btn").click()
-        choose_action_item(page, "Edit")
+        choose_in_submenu(page, "Actions", "Edit")
         dialog = tab.locator(".jse-dialog:visible")
         expect(dialog).to_contain_text("Create your actions file")
         dialog.get_by_role("button", name="Create").click()
@@ -2123,6 +2125,60 @@ def edit_actions(lab: Lab, page: Page) -> None:
         reversed_view(Explorer(lab, page, USER_ACTIONS))
     finally:
         path.unlink(missing_ok=True)
+
+
+@lab_check
+def logging_menu(lab: Lab, page: Page) -> None:
+    # The launcher's tab: "Logging" chooses the level, remembered in the
+    # states file; "Open log file" opens the day's file in JupyterLab's
+    # editor, once there is one.
+    config = lab.folder / "config" / "storage-explorer"
+    states = config / "states.json"
+    logs = config / "logs"
+    try:
+        tab = open_launcher_tab(lab, page)
+        tab.locator(".jse-settings-btn").click()
+        choose_in_submenu(page, "Logging", "INFO")
+        wait_for(
+            lambda: (
+                states.exists()
+                and json.loads(states.read_text(encoding="utf-8")).get("logging_level")
+                == "INFO"
+            ),
+            "the level remembered",
+        )
+        # The level chosen is checked.
+        tab.locator(".jse-settings-btn").click()
+        page.locator(
+            ".jse-menu:not(.jse-submenu) > .jse-menu-item:visible", has_text="Logging"
+        ).hover()
+        chosen = page.locator(".jse-submenu .jse-menu-item:visible", has_text="INFO")
+        expect(chosen.locator(".jse-svg-check")).to_have_count(1)
+        # Nothing logged yet today: no file.
+        page.locator(
+            ".jse-submenu .jse-menu-item:visible", has_text="Open log file"
+        ).click()
+        expect(tab.locator(".jse-status")).to_contain_text("No log file today yet")
+        # A line in the day's file (local time, as the kernel's).
+        day = time.strftime("%Y-%m-%d")
+        logs.mkdir(parents=True, exist_ok=True)
+        (logs / f"storage-explorer.{day}.log").write_text(
+            "a line of the log\n", encoding="utf-8"
+        )
+        tab.locator(".jse-settings-btn").click()
+        choose_in_submenu(page, "Logging", "Open log file")
+        editor = page.locator(".jp-FileEditor .cm-content").first
+        expect(editor).to_contain_text("a line of the log")
+        expect(page.locator(".lm-TabBar-tab.jp-mod-current")).to_contain_text(
+            f"storage-explorer.{day}.log"
+        )
+    finally:
+        if states.exists():
+            data = json.loads(states.read_text(encoding="utf-8"))
+            data.pop("logging_level", None)
+            states.write_text(json.dumps(data), encoding="utf-8")
+        for path in logs.glob("*.log"):
+            path.unlink(missing_ok=True)
 
 
 @lab_check
@@ -2293,7 +2349,7 @@ def side_panel(lab: Lab, page: Page) -> None:
     expect(dialog).to_have_count(0)
     # So does a confirmation, e.g. creating the user's actions file.
     settings.click()
-    choose_action_item(page, "Edit")
+    choose_in_submenu(page, "Actions", "Edit")
     question = page.locator(".jse-dialog-layer .jse-confirm")
     expect(question).to_contain_text("Create your actions file")
     question_box = question.bounding_box()

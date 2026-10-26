@@ -46,6 +46,8 @@ def defaults() -> tuple:
         "height": "fill",
         "states": launcher.states_file(),
         "user_actions": "enabled",
+        "logging_menu": "enabled",
+        "logging_level": "disabled",
     }
 
 
@@ -276,6 +278,8 @@ class TestMerging:
         assert kwargs == {
             "states": launcher.states_file(),
             "user_actions": "enabled",
+            "logging_menu": "enabled",
+            "logging_level": "disabled",
             "max_upload_bytes": 5,
             **launcher.SIDEBAR,
         }

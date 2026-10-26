@@ -1,5 +1,5 @@
 """What explorers remember: bookmarks, the data browser's recent queries, the
-engine chosen and the columns of the file list.
+engine chosen, the columns of the file list and the logging level chosen.
 
 One ``ExplorerStates`` is shared by the explorers in the kernel unless they are
 given their own (``StorageExplorer(states=...)``). With a path, it is kept in a
@@ -16,7 +16,8 @@ same file::
              "settings": {...}, "mode": "live"}
         ],
         "engine": "polars",  # the key of the engine chosen, if any
-        "columns": {"standard": ["size", "mtime"]}  # the list's, by layout
+        "columns": {"standard": ["size", "mtime"]},  # the list's, by layout
+        "logging_level": "INFO"  # chosen in the Logging menu, if any
     }
 
 where "location" is ``Location.to_json()`` and "settings" are in the form of
@@ -49,7 +50,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
 
 # The keys this version reads and writes; others are kept as they are.
-_KNOWN_KEYS = ("bookmarks", "queries", "engine", "columns")
+_KNOWN_KEYS = ("bookmarks", "queries", "engine", "columns", "logging_level")
 
 
 @dataclass(frozen=True)
@@ -84,10 +85,11 @@ class Bookmark:
 
 class ExplorerStates:
     """What explorers remember: bookmarks, how data was last queried, the
-    engine chosen and the file list's columns.
+    engine chosen, the file list's columns and the logging level chosen.
 
     ``StorageExplorer`` reads its bookmarks here, the engine its user chose
-    last (``engine``) and the columns its list shows (``columns``); the data browser restores the filters, sort
+    last (``engine``), the columns its list shows (``columns``) and, with a
+    Logging menu, the level chosen there (``logging_level``); the data browser restores the filters, sort
     order, hidden columns, widths and mode a dataset was last shown with. Only the ``max_queries`` datasets
     queried last are remembered.
 
@@ -134,6 +136,8 @@ class ExplorerStates:
         self._engine: str | None = None
         # The file list's columns chosen, by layout ("standard", "sidebar").
         self._columns: dict[str, list[str]] = {}
+        # The level chosen last in the Logging menu, if any.
+        self._logging_level: str | None = None
         # Keys of the file this version does not know, written back as they are.
         self._others: dict[str, Any] = {}
         self.reload()
@@ -175,6 +179,7 @@ class ExplorerStates:
             for layout, names in (columns.items() if isinstance(columns, dict) else ())
             if isinstance(layout, str) and isinstance(names, list)
         }
+        self._logging_level = _text(data.get("logging_level"))
         self._others = {k: v for k, v in data.items() if k not in _KNOWN_KEYS}
 
     @contextlib.contextmanager
@@ -203,6 +208,11 @@ class ExplorerStates:
             "queries": self._queries,
             **({"engine": self._engine} if self._engine is not None else {}),
             **({"columns": self._columns} if self._columns else {}),
+            **(
+                {"logging_level": self._logging_level}
+                if self._logging_level is not None
+                else {}
+            ),
         }
         self.path.parent.mkdir(parents=True, exist_ok=True)
         fd, temp = tempfile.mkstemp(
@@ -331,6 +341,26 @@ class ExplorerStates:
         """
         with self._changing():
             self._columns[layout] = list(columns)
+
+    # --- The logging level chosen ---
+
+    @property
+    def logging_level(self) -> str | None:
+        """The logging level the user chose last in the Logging menu, e.g.
+        "INFO" or "disabled"; None if none was chosen. Explorers with that
+        menu start with it, else with their ``logging_level``."""
+        return self._logging_level
+
+    def remember_logging_level(self, level: str) -> None:
+        """Remember the logging level chosen (and write the file, if any).
+
+        Parameters
+        ----------
+        level : str
+            "disabled", or a level's name, e.g. "INFO".
+        """
+        with self._changing():
+            self._logging_level = level
 
     # --- Queries ---
 

@@ -46,6 +46,17 @@ class TestFile:
         assert again.columns("standard") == ["size"]
         assert again.columns("x") is None
 
+    def test_logging_level(self, tmp_path):
+        path = tmp_path / "states.json"
+        states = ExplorerStates(path)
+        assert states.logging_level is None
+        states.remember_logging_level("INFO")
+        assert ExplorerStates(path).logging_level == "INFO"
+        assert json.loads(path.read_text())["logging_level"] == "INFO"
+        path.write_text(json.dumps({"logging_level": 3}))
+        states.reload()
+        assert states.logging_level is None
+
     def test_reload_reads_changes_made_elsewhere(self, tmp_path):
         path = tmp_path / "states.json"
         mine, other = ExplorerStates(path), ExplorerStates(path)

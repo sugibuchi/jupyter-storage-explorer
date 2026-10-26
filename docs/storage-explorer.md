@@ -332,6 +332,28 @@ StorageExplorer("s3://my-bucket/data", states="~/.jupyter/storage-explorer/state
 StorageExplorer("s3://my-bucket/data", states=ExplorerStates("states.json", max_queries=50))
 ```
 
+## Logs
+
+The explorer logs what goes wrong in its kernel, e.g. a view's failure, besides showing errors in the widget.
+
+In a notebook, its logs show under the cell, from warnings up by default. `logging_level` sets the level, or turns
+logging off:
+
+```python
+StorageExplorer("s3://my-bucket/data", logging_level="DEBUG")  # or "INFO", "WARNING", "ERROR", "CRITICAL", "disabled"
+```
+
+The launcher's explorers have a **Logging** menu, in their ⚙ menu, instead:
+
+- **Disabled**, **DEBUG**, **INFO**, **WARNING** and **ERROR** choose the level. It is remembered for the next tabs.
+- **Open log file** opens the day's file in JupyterLab's editor, read-only.
+
+They log nothing until you choose a level. Their files are in the `storage-explorer/logs` folder of Jupyter's
+configuration directory, one a day, e.g. `storage-explorer.2026-10-26.log`. Every tab, and the side panel, writes to
+the same file. The files of the 14 days before are kept, and `log_file_backup` changes how many.
+
+Logging is the kernel's: explorers in one kernel share it, and the last one created or set decides.
+
 ## Supported formats
 
 | Format                                                       | Name         | Preview                         | Data browser | Load with                                                                              |
@@ -577,6 +599,14 @@ Operations and transfers:
 | `unsafe_mode="on_demand"`   | Folder operations: with the Unsafe mode slider, `"always"` or `"blocked"`; see [Unsafe operations](#unsafe-operations). |
 | `code_snippet="enabled"`    | **Python code**: the code of every engine installed, `"disabled"` (no such item), or the engines named, e.g. `["polars", "pyspark"]` (`"python"` for JSON, text and images). |
 | `transfer_policy=[...]`     | Where files may be copied or moved; see [Transfer policy](#transfer-policy).                                |
+
+Logs, see [Logs](#logs):
+
+| Option                     | Meaning                                                                                              |
+|----------------------------|------------------------------------------------------------------------------------------------------|
+| `logging_level="WARNING"`  | The records logged: `"DEBUG"`, `"INFO"`, `"WARNING"`, `"ERROR"`, `"CRITICAL"`, or `"disabled"`.      |
+| `logging_menu="disabled"`  | `"enabled"`: logs to files, with the **Logging** menu, as in the launcher's explorers.               |
+| `log_file_backup=14`       | With the **Logging** menu, how many days' files are kept before the day's.                           |
 
 For extending the explorer, tried before the defaults:
 
