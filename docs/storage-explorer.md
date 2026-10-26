@@ -571,20 +571,23 @@ chart = ipywidgets.Output()
 
 
 def draw(explorer):
-    with chart:
-        chart.clear_output(wait=True)
-        result = explorer.query_result()
-        if result is None:
-            return  # no table in the preview panel
-        daily = result.group_by("date").agg(pl.col("amount").sum()).sort("date").collect()
-        plt.figure(figsize=(8, 3))
-        plt.plot(daily["date"], daily["amount"])
-        plt.show()
+    chart.outputs = ()
+    result = explorer.query_result()
+    if result is None:
+        return  # no table in the preview panel
+    daily = result.group_by("date").agg(pl.col("amount").sum()).sort("date").collect()
+    fig, ax = plt.subplots(figsize=(8, 3))
+    ax.plot(daily["date"], daily["amount"])
+    plt.close(fig)  # shown in chart, not by the cell
+    chart.append_display_data(fig)
 
 
 explorer.on_query_change(draw)
 chart
 ```
+
+The function sets the chart's content, rather than display into it with `with chart:`. It runs once the data browser
+has its rows, when what a `with` block displays reaches no output. Its errors are logged: see [Logs](#logs).
 
 Filter by channel in the data browser, and the chart shows that channel's sales. Without the data browser,
 `on_change` and `selected_urls` give the files themselves, e.g. `pl.read_csv(url)` for each one selected.

@@ -88,8 +88,16 @@ explorer.result().group_by("region").agg(pl.col("amount").sum()).collect()
 ## Following the widget: on_change
 
 `explorer.on_change(function)` calls `function(explorer)` whenever `result()` changes in the widget, e.g. to redraw a
-chart; `on_change(function, remove=True)` stops it. Draw into an `ipywidgets.Output` shown in a cell, and keep it
-quick: the widget waits for it.
+chart; `on_change(function, remove=True)` stops it. Keep it quick: the widget waits for it.
+
+What the function prints or displays goes to no cell. Show it in an `ipywidgets.Output` shown in a cell, by setting its
+content:
+
+- `chart.outputs = ()` clears it.
+- `chart.append_display_data(obj)` shows `obj`, e.g. a figure or a dataframe.
+- `chart.append_stdout(text)` shows text.
+
+`with chart:` would not work: the function runs once the widget has its rows, when what it displays reaches no output.
 
 ```python
 import ipywidgets
@@ -100,16 +108,19 @@ chart = ipywidgets.Output()
 
 def draw(explorer):
     df = explorer.result(all_columns=True).group_by("region").agg(pl.col("amount").sum()).collect()
-    with chart:
-        chart.clear_output(wait=True)
-        plt.bar(df["region"], df["amount"])
-        plt.show()
+    fig, ax = plt.subplots()
+    ax.bar(df["region"], df["amount"])
+    plt.close(fig)  # shown in chart, not by the cell
+    chart.outputs = ()
+    chart.append_display_data(fig)
 
 
 explorer.on_change(draw)
 draw(explorer)
 chart  # in another cell
 ```
+
+The function's errors are logged: see [Logs](storage-explorer.md#logs).
 
 ## Settings in code: QuerySettings
 

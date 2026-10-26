@@ -1008,9 +1008,12 @@ class StorageExplorer(
         callback : callable
             Called with the explorer, as ``callback(explorer)``. What it prints
             or displays goes to no cell (the kernel answers the widget, not a
-            cell): display into an ``ipywidgets.Output`` shown in a cell, as in
-            the example. Errors are shown as tracebacks in the same place and
-            do not stop the other functions.
+            cell): set the content of an ``ipywidgets.Output`` shown in a
+            cell, with ``outputs = ()`` and ``append_display_data``, as in the
+            example. A ``with`` block of the ``Output`` may show nothing: the
+            function can run once the widget's message is answered, e.g. after
+            a folder's listing. Errors are logged and do not stop the other
+            functions.
         remove : bool, default False
             Stop calling ``callback`` instead.
 
@@ -1024,11 +1027,10 @@ class StorageExplorer(
         >>> import polars as pl
         >>> schema = ipywidgets.Output()
         >>> def show_schema(explorer):
-        ...     with schema:
-        ...         schema.clear_output(wait=True)
-        ...         for url in explorer.selected_urls:
-        ...             if url.endswith(".parquet"):
-        ...                 display(pl.read_parquet_schema(url))
+        ...     schema.outputs = ()
+        ...     for url in explorer.selected_urls:
+        ...         if url.endswith(".parquet"):
+        ...             schema.append_display_data(pl.read_parquet_schema(url))
         >>> explorer = StorageExplorer("s3://my-bucket/data")
         >>> explorer.on_change(show_schema)
         >>> display(explorer, schema)
@@ -1126,10 +1128,12 @@ class StorageExplorer(
         ----------
         callback : callable
             Called with the explorer, as ``callback(explorer)``. What it prints
-            or displays goes to no cell: display into an
-            ``ipywidgets.Output`` shown in a cell, as in the example. Errors
-            are shown as tracebacks in the same place and do not stop the
-            other functions.
+            or displays goes to no cell: set the content of an
+            ``ipywidgets.Output`` shown in a cell, with ``outputs = ()`` and
+            ``append_display_data``, as in the example. A ``with`` block of
+            the ``Output`` shows nothing: the function runs once the data
+            browser has its rows, after the widget's message is answered.
+            Errors are logged and do not stop the other functions.
         remove : bool, default False
             Stop calling ``callback`` instead.
 
@@ -1144,12 +1148,13 @@ class StorageExplorer(
         >>> import matplotlib.pyplot as plt
         >>> chart = ipywidgets.Output()
         >>> def redraw(explorer):
-        ...     with chart:
-        ...         chart.clear_output(wait=True)
-        ...         if (lf := explorer.query_result()) is not None:
-        ...             df = lf.collect()
-        ...             plt.plot(df["date"], df["amount"])
-        ...             plt.show()
+        ...     chart.outputs = ()
+        ...     if (lf := explorer.query_result()) is not None:
+        ...         df = lf.collect()
+        ...         fig, ax = plt.subplots()
+        ...         ax.plot(df["date"], df["amount"])
+        ...         plt.close(fig)  # shown in chart, not by the cell
+        ...         chart.append_display_data(fig)
         >>> explorer = StorageExplorer("s3://my-bucket/sales", preview_panel="open")
         >>> explorer.on_query_change(redraw)
         >>> display(explorer, chart)

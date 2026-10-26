@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+log = logging.getLogger(__name__)
 
 
 class Callbacks:
@@ -26,10 +29,11 @@ class Callbacks:
     def __call__(self, widget: Any) -> None:
         """Call each function with ``widget``, each one even if another fails.
 
-        They run while the kernel handles the widget's messages, so what they
-        print goes to no cell: errors are shown as tracebacks by IPython, in
-        the output the functions display into, if any. Without IPython (e.g.
-        in tests), they are raised.
+        They run as the kernel answers the widget's messages, often once a
+        load has ended, so what they print or display goes to no cell, nor to
+        an ``Output``'s ``with`` block. Their errors are logged, with their
+        tracebacks (see _logs.py), which the launcher's log files keep.
+        Without IPython (e.g. in tests), they are raised.
         """
         for callback in list(self._functions):
             try:
@@ -37,7 +41,6 @@ class Callbacks:
             except Exception:
                 from IPython import get_ipython  # noqa: PLC0415
 
-                shell = get_ipython()
-                if shell is None:
+                if get_ipython() is None:
                     raise
-                shell.showtraceback()
+                log.exception("The function %r given to the widget failed", callback)

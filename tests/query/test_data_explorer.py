@@ -275,7 +275,7 @@ class TestOnChange:
         explorer.request({"type": "query_rows", "settings": {}})
         assert calls == [[3, 1, 2]]
 
-    def test_error_after_the_reply(self, monkeypatch):
+    def test_error_after_the_reply(self, monkeypatch, caplog):
         """A failing function: the widget has its rows, and the other functions
         are called; outside IPython, the error is raised."""
         explorer, calls = self.explorer()
@@ -288,11 +288,13 @@ class TestOnChange:
             explorer.request({"type": "query_rows", "settings": {"hidden": ["b"]}})
         assert explorer.sent[-1]["rows"] == [[3], [1], [2]]
 
-        shown = []
-        shell = type("Shell", (), {"showtraceback": lambda self: shown.append(1)})()
-        monkeypatch.setattr("IPython.get_ipython", lambda: shell)
+        # In IPython, logged with its traceback: the other functions still run.
+        monkeypatch.setattr("IPython.get_ipython", object)  # a shell of any kind
+        caplog.clear()
         explorer.request({"type": "query_rows", "settings": {}})
-        assert shown == [1]
+        [record] = [r for r in caplog.records if r.levelname == "ERROR"]
+        assert "given to the widget failed" in record.getMessage()
+        assert record.exc_info is not None
         assert calls == [[3, 1, 2]]
 
 

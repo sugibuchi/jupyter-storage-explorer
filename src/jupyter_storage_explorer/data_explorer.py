@@ -279,9 +279,12 @@ class DataExplorer(anywidget.AnyWidget):
         callback : callable
             Called with the explorer, as ``callback(explorer)``. What it prints
             or displays goes to no cell (the kernel answers the widget, not a
-            cell): display into an ``ipywidgets.Output`` shown in a cell, as in
-            the example. Errors are shown as tracebacks in the same place and
-            do not stop the other functions.
+            cell): set the content of an ``ipywidgets.Output`` shown in a
+            cell, with ``outputs = ()`` and ``append_display_data``, as in the
+            example. A ``with`` block of the ``Output`` shows nothing: the
+            function runs once the widget has its rows, after the widget's
+            message is answered. Errors are logged and do not stop the other
+            functions.
         remove : bool, default False
             Stop calling ``callback`` instead.
 
@@ -296,10 +299,11 @@ class DataExplorer(anywidget.AnyWidget):
         >>> chart = ipywidgets.Output()
         >>> def redraw(explorer):
         ...     df = explorer.result().group_by("region").agg(pl.len()).collect()
-        ...     with chart:
-        ...         chart.clear_output(wait=True)
-        ...         plt.bar(df["region"], df["len"])
-        ...         plt.show()
+        ...     fig, ax = plt.subplots()
+        ...     ax.bar(df["region"], df["len"])
+        ...     plt.close(fig)  # shown in chart, not by the cell
+        ...     chart.outputs = ()
+        ...     chart.append_display_data(fig)
         >>> explorer = DataExplorer(pl.scan_parquet("sales/*.parquet"))
         >>> explorer.on_change(redraw)
         >>> redraw(explorer)  # the first chart, before any change

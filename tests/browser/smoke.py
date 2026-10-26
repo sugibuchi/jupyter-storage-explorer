@@ -1987,6 +1987,43 @@ def python_callbacks(lab: Lab, page: Page) -> None:
     expect(selected).to_have_text("-")
 
 
+# A DataExplorer, and an Output its on_change function sets, as the docs show:
+# the function runs once the rows are read, when a with block reaches no output.
+DATA_CALLBACKS = """\
+import ipywidgets
+import polars as pl
+from jupyter_storage_explorer import DataExplorer
+
+explorer = DataExplorer(pl.DataFrame({"channel": ["online", "retail", "wholesale"] * 4}))
+shown = ipywidgets.Output().add_class("smoke-output")
+
+
+def show(e):
+    shown.outputs = ()
+    shown.append_stdout(f"{len(e.result())} rows\\n")
+
+
+explorer.on_change(show)
+show(explorer)
+display(explorer, shown)"""
+
+
+@lab_check
+def data_explorer_callbacks(lab: Lab, page: Page) -> None:
+    lab.open_notebook(page, DATA_CALLBACKS)
+    shown = page.locator(".smoke-output")
+    expect(shown).to_contain_text("12 rows", timeout=60_000)
+    header = page.locator(
+        "th", has=page.locator(".jse-query-name", has_text="channel")
+    ).first
+    header.locator(".jse-query-filter").click()
+    dialog = page.locator(".jse-confirm:visible")
+    dialog.locator("select").first.select_option(label="Contains")
+    dialog.locator("input[type=text], input:not([type])").first.fill("wholesale")
+    dialog.get_by_role("button", name="Apply").click()
+    expect(shown).to_contain_text("4 rows")
+
+
 def open_launcher_tab(lab: Lab, page: Page) -> Locator:
     """A new launcher tab, once its explorer shows the lake: its explorer."""
     page.goto(lab.url())
