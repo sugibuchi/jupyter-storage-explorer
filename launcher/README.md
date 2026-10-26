@@ -28,6 +28,10 @@ It also integrates every Storage Explorer, in its tab or in a notebook, with Jup
 
 ## Installation
 
+Install `jupyter-storage-explorer-launcher` from a terminal, e.g. one in JupyterLab. Install it in the environment of
+JupyterLab and of the default kernel (on JupyterHub, usually the single-user image), then restart JupyterLab. Requires
+JupyterLab 4.0 or later.
+
 ```bash
 pip install "jupyter-storage-explorer-launcher[polars]"
 ```
@@ -49,17 +53,6 @@ there and never change it.
 ```bash
 pip install "jupyter-storage-explorer-launcher[all-supports]"  # every plugin, with the libraries you have
 ```
-
-Install it in the environment of JupyterLab and of the default kernel (on JupyterHub, usually the single-user image),
-then restart JupyterLab. Requires JupyterLab 4.0 or later.
-
-Or from JupyterLab itself, without a terminal: run this in a notebook, then reload the page (no restart needed):
-
-```python
-%pip install "jupyter-storage-explorer-launcher[polars]"
-```
-
-This works when the notebook's kernel runs in JupyterLab's own environment, as the default kernel usually does.
 
 Then see [Using the explorer](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#using-the-explorer).
 
