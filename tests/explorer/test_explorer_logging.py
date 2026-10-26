@@ -85,7 +85,9 @@ class TestWithTheMenu:
         )
         explorer._logging_level = "INFO"  # chosen in the menu
         log.info("to the file")
-        assert "to the file" in _logs.log_file().read_text("utf-8")
+        text = _logs.log_file().read_text("utf-8")
+        assert "Logging at INFO" in text  # the file, created at once
+        assert "to the file" in text
         assert stderr.getvalue() == ""
         # Remembered: the next explorer starts with it.
         assert states.logging_level == "INFO"
@@ -146,7 +148,7 @@ class TestWithTheMenu:
         folder = _logs.log_folder()
         folder.mkdir(parents=True)
         for day in range(1, 5):
-            _logs.log_file(dt.date(2020, 1, day)).write_text("old\n", "utf-8")
+            _logs.log_file(dt.date(2020, 1, day), pid=1).write_text("old\n", "utf-8")
         make(
             "/",
             fs=memfs,
@@ -156,8 +158,8 @@ class TestWithTheMenu:
         )
         log.info("today")
         assert sorted(p.name for p in folder.iterdir()) == [
-            "storage-explorer.2020-01-03.log",
-            "storage-explorer.2020-01-04.log",
+            "storage-explorer.2020-01-03.1.log",
+            "storage-explorer.2020-01-04.1.log",
             _logs.log_file().name,
         ]
 

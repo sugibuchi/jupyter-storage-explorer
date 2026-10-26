@@ -910,16 +910,17 @@ kernel's, not an explorer's: each explorer created sets it up again (`configure`
 - `"disabled"` sets the logger's level above `CRITICAL`, so that not even Python's last-resort handler writes.
 - Records still propagate to the root logger, as libraries' do.
 
-The tabs and the side panel are kernels of their own, which write to the same files:
+The tabs and the side panel are kernels of their own, each writing to files of its own:
 
-- Each day has its file, `storage-explorer.<date>.log`, opened for appending and flushed after each record.
+- Each kernel has a file a day, `storage-explorer.<date>.<pid>.log`, so no two processes write to one file.
+- A file is opened for appending, as a process id can come back, and flushed after each record.
 - At local midnight, a kernel moves to the next day's file at its next record.
 - No file is renamed: Windows cannot rename a file another kernel has open, which breaks `TimedRotatingFileHandler`.
-- The files of the days before beyond `log_file_backup` are deleted when a kernel opens a day's file. One still open
-  elsewhere is deleted another time.
+- When a kernel opens a day's file, every kernel's files of the days before beyond `log_file_backup` are deleted. One
+  still open elsewhere is deleted another time.
 
-The settings menu opens the day's file as a configuration file (`_offer_config_file`), read-only: the kernel refuses
-to save it.
+The settings menu opens the kernel's file of the day as a configuration file (`_offer_config_file`), read-only: the
+kernel refuses to save it.
 
 ### Lists
 

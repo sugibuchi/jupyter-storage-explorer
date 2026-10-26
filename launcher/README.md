@@ -114,7 +114,8 @@ The tabs and the side panel log nothing by default. To see what goes wrong in th
 1. Click the ⚙ button at the right of the tab's toolbar, then **Logging**, and choose a level, e.g. **INFO**. The next
    tabs keep it.
 2. Do what went wrong again.
-3. Choose **Open log file** in the same menu. The day's file opens in JupyterLab's editor, read-only.
+3. Choose **Open log file** in the same menu, in the tab where it went wrong. The tab's file of the day opens in
+   JupyterLab's editor, read-only.
 
 The files are in the `storage-explorer/logs` folder of Jupyter's configuration directory: see
 [Logs](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#logs).

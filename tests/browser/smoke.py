@@ -22,6 +22,7 @@ notebook, so one failure does not fail the rest.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import pathlib
 import re
@@ -2130,13 +2131,17 @@ def edit_actions(lab: Lab, page: Page) -> None:
 @lab_check
 def logging_menu(lab: Lab, page: Page) -> None:
     # The launcher's tab: "Logging" chooses the level, remembered in the
-    # states file; "Open log file" opens the day's file in JupyterLab's
-    # editor, once there is one.
+    # states file; "Open log file" opens the kernel's file of the day in
+    # JupyterLab's editor, once there is one.
     config = lab.folder / "config" / "storage-explorer"
     states = config / "states.json"
     logs = config / "logs"
     try:
         tab = open_launcher_tab(lab, page)
+        # Nothing logged yet: no file.
+        tab.locator(".jse-settings-btn").click()
+        choose_in_submenu(page, "Logging", "Open log file")
+        expect(tab.locator(".jse-status")).to_contain_text("No log file today yet")
         tab.locator(".jse-settings-btn").click()
         choose_in_submenu(page, "Logging", "INFO")
         wait_for(
@@ -2154,23 +2159,29 @@ def logging_menu(lab: Lab, page: Page) -> None:
         ).hover()
         chosen = page.locator(".jse-submenu .jse-menu-item:visible", has_text="INFO")
         expect(chosen.locator(".jse-svg-check")).to_have_count(1)
-        # Nothing logged yet today: no file.
-        page.locator(
-            ".jse-submenu .jse-menu-item:visible", has_text="Open log file"
-        ).click()
-        expect(tab.locator(".jse-status")).to_contain_text("No log file today yet")
-        # A line in the day's file (local time, as the kernel's).
+        page.keyboard.press("Escape")
+        # The level chosen is logged, in the kernel's file of the day (local
+        # time, as the kernel's), named with its process id.
         day = time.strftime("%Y-%m-%d")
-        logs.mkdir(parents=True, exist_ok=True)
-        (logs / f"storage-explorer.{day}.log").write_text(
-            "a line of the log\n", encoding="utf-8"
+        wait_for(
+            lambda: list(logs.glob(f"storage-explorer.{day}.*.log")), "the log file"
         )
+        (path,) = logs.glob(f"storage-explorer.{day}.*.log")
         tab.locator(".jse-settings-btn").click()
         choose_in_submenu(page, "Logging", "Open log file")
         editor = page.locator(".jp-FileEditor .cm-content").first
-        expect(editor).to_contain_text("a line of the log")
-        expect(page.locator(".lm-TabBar-tab.jp-mod-current")).to_contain_text(
-            f"storage-explorer.{day}.log"
+        expect(editor).to_contain_text("Logging at INFO")
+        expect(page.locator(".lm-TabBar-tab.jp-mod-current")).to_contain_text(path.name)
+        # Disabled again: the kernel closes its file, which can then be deleted.
+        page.locator(".lm-TabBar-tab", has_text="Storage Explorer").last.click()
+        tab.locator(".jse-settings-btn").click()
+        choose_in_submenu(page, "Logging", "Disabled")
+        wait_for(
+            lambda: (
+                json.loads(states.read_text(encoding="utf-8")).get("logging_level")
+                == "disabled"
+            ),
+            "the level disabled",
         )
     finally:
         if states.exists():
@@ -2178,7 +2189,10 @@ def logging_menu(lab: Lab, page: Page) -> None:
             data.pop("logging_level", None)
             states.write_text(json.dumps(data), encoding="utf-8")
         for path in logs.glob("*.log"):
-            path.unlink(missing_ok=True)
+            # Still open by a kernel if the check failed (Windows): left for the
+            # temporary folder's removal.
+            with contextlib.suppress(PermissionError):
+                path.unlink(missing_ok=True)
 
 
 @lab_check
