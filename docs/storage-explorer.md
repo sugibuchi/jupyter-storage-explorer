@@ -25,6 +25,10 @@ edit files.
 pip install "jupyter-storage-explorer[polars]"
 ```
 
+This installs only the widgets, for notebooks. The integration with JupyterLab's UI, e.g. drag and drop with its file
+browser, comes with [`jupyter-storage-explorer-launcher`](../launcher/README.md#installation), which has the same
+extras.
+
 Engines and storages come as plugins, installed with extras of two kinds:
 
 - **Full extras**, e.g. `[polars]`: the plugin and the libraries it uses (Polars, deltalake, fastexcel, PyArrow).
@@ -43,11 +47,34 @@ pip install "jupyter-storage-explorer[all-supports]"  # every plugin, with the l
 
 Each plugin's README has its options: `plugin_options`, and `engine_options` for its engine.
 
-Install the package for your storage too, e.g. `s3fs` for Amazon S3 (see [Storages](#storages)). Without an engine
-plugin, the explorer still browses, moves and previews text, Markdown, JSON and images. For the JupyterLab launcher
-item, install [`jupyter-storage-explorer-launcher`](../launcher/README.md#installation), which has the same extras.
+Without an engine plugin, the explorer still browses, moves and previews text, Markdown, JSON and images.
+
+Then read [Storages](#storages) to set up access to your storages.
 
 ## Storages
+
+### Set up fsspec
+
+The explorer reaches storages through [fsspec](https://github.com/fsspec/filesystem_spec). Install the fsspec package
+of each storage in the kernel's environment:
+
+| Storage                        | Package                                                    | Address                                              |
+|--------------------------------|------------------------------------------------------------|------------------------------------------------------|
+| Amazon S3                      | [`s3fs`](https://github.com/fsspec/s3fs)                   | `s3://bucket/path`                                   |
+| Azure Data Lake / Blob Storage | [`adlfs`](https://github.com/fsspec/adlfs)                 | `abfs://container@account.dfs.core.windows.net/path` |
+| Google Cloud Storage           | [`gcsfs`](https://github.com/fsspec/gcsfs)                 | `gs://bucket/path`                                   |
+| Databricks (experimental)      | [`fsspec-databricks`](https://github.com/sugibuchi/fsspec-databricks), with [databricks-support](../plugins/databricks-support/README.md) | `dbfs://Volumes/catalog/schema/volume/path` |
+| Local disk, in-memory          | (included)                                                 | `/path`, `memory://`                                 |
+
+Other storages work too: fsspec's
+[Other known implementations](https://filesystem-spec.readthedocs.io/en/latest/api.html#other-known-implementations)
+lists their packages.
+
+Rather than give each storage's options in every notebook, keep them in the environment: see fsspec's
+[Configuration](https://filesystem-spec.readthedocs.io/en/latest/features.html#configuration). fsspec then gives them
+to each filesystem it opens, so `StorageExplorer("s3://my-bucket/data")` needs none. The launcher's tabs use them too.
+
+### Open a storage
 
 Give the address of the folder to open; options after it go to the storage package, e.g. credentials:
 
@@ -59,14 +86,6 @@ StorageExplorer("abfs://lake@myaccount.dfs.core.windows.net/raw")  # Azure Data 
 StorageExplorer("s3://my-bucket/data", profile="analytics")  # Amazon S3, with options
 StorageExplorer("gs://my-bucket", token="google_default")  # Google Cloud
 ```
-
-| Storage                        | Package    | Address                                              |
-|--------------------------------|------------|------------------------------------------------------|
-| Amazon S3                      | `s3fs`     | `s3://bucket/path`                                   |
-| Azure Data Lake / Blob Storage | `adlfs`    | `abfs://container@account.dfs.core.windows.net/path` |
-| Google Cloud Storage           | `gcsfs`    | `gs://bucket/path`                                   |
-| Databricks (experimental)      | `fsspec-databricks`, with [databricks-support](../plugins/databricks-support/README.md) | `dbfs://Volumes/catalog/schema/volume/path` |
-| Local disk, in-memory          | (included) | `/path`, `memory://`                                 |
 
 ### Several storages in one explorer
 

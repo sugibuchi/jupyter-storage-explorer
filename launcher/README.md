@@ -32,6 +32,22 @@ It also integrates every Storage Explorer, in its tab or in a notebook, with Jup
 pip install "jupyter-storage-explorer-launcher[polars]"
 ```
 
+Run it in the Python environment of the default kernel, which is usually JupyterLab's own. Where depends on how
+JupyterLab runs:
+
+- **JupyterLab in a virtual environment**, e.g. a venv or a conda environment: activate it, then run it there.
+- **A [Jupyter Docker Stacks](https://jupyter-docker-stacks.readthedocs.io/) image**, e.g. `quay.io/jupyter/scipy-notebook`:
+  - To try it, run it from a terminal in the running JupyterLab. The package is gone once the container is removed.
+  - To keep it, install it into the image's Python environment, in `/opt/conda`: `RUN pip install ...` in a
+    Dockerfile starting `FROM` the image.
+- **JupyterHub**: administrators install it in the single-user environment, often a Docker Stacks image as above.
+  Users can try it from a terminal in their server.
+- **The default kernel in another environment than JupyterLab's**: run it in both. JupyterLab loads the extension,
+  and the kernel imports the Python package.
+
+Then reload the page in your web browser, and open an explorer: it starts with a new kernel. Requires JupyterLab 4.0 or
+later.
+
 The launcher has the same extras as `jupyter-storage-explorer`
 ([Installation](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#installation)), of two kinds:
 
@@ -50,18 +66,9 @@ there and never change it.
 pip install "jupyter-storage-explorer-launcher[all-supports]"  # every plugin, with the libraries you have
 ```
 
-Install it in the environment of JupyterLab and of the default kernel (on JupyterHub, usually the single-user image),
-then restart JupyterLab. Requires JupyterLab 4.0 or later.
-
-Or from JupyterLab itself, without a terminal: run this in a notebook, then reload the page (no restart needed):
-
-```python
-%pip install "jupyter-storage-explorer-launcher[polars]"
-```
-
-This works when the notebook's kernel runs in JupyterLab's own environment, as the default kernel usually does.
-
-Then see [Using the explorer](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#using-the-explorer).
+Then read [Storages](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#storages)
+to set up access to your storages, and
+[Using the explorer](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#using-the-explorer).
 
 ## Configuration
 
