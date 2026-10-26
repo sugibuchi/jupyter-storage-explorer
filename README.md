@@ -98,6 +98,9 @@ pip install "jupyter-storage-explorer-launcher[polars]"
 
 ![The Storage Explorer item in JupyterLab's launcher](https://raw.githubusercontent.com/sugibuchi/jupyter-storage-explorer/main/launcher/figs/launcher.png)
 
+See the launcher's [Installation](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/launcher/README.md#installation)
+for its extras, and installing it from a notebook.
+
 ### From Python code
 
 ```bash
