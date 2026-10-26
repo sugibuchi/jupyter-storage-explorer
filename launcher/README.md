@@ -29,8 +29,8 @@ It also integrates every Storage Explorer, in its tab or in a notebook, with Jup
 ## Installation
 
 Install `jupyter-storage-explorer-launcher` from a terminal, e.g. one in JupyterLab. Install it in the environment of
-JupyterLab and of the default kernel (on JupyterHub, usually the single-user image), then restart JupyterLab. Requires
-JupyterLab 4.0 or later.
+JupyterLab and of the default kernel (on JupyterHub, usually the single-user image). Then reload the page in your web
+browser, and open an explorer: it starts with a new kernel. Requires JupyterLab 4.0 or later.
 
 ```bash
 pip install "jupyter-storage-explorer-launcher[polars]"
