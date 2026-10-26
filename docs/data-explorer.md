@@ -6,6 +6,7 @@
 ![DataExplorer showing a Delta Lake table in a notebook](figs/data-explorer.png)
 
 - [Opening data](#opening-data)
+    - [Live and in memory](#live-and-in-memory)
 - [Using the data browser](#using-the-data-browser)
 - [The result in code](#the-result-in-code)
 - [Following the widget: on_change](#following-the-widget-on_change)
@@ -25,6 +26,25 @@ DataExplorer(orders_df, settings=QuerySettings(sort="date", descending=True))
 ```
 
 Pass a function (`lambda: pl.scan_parquet(url)`) for **⟳** to read the data again.
+
+### Live and in memory
+
+The data browser runs queries in one of two modes:
+
+- **Live**: each page is a query on the data itself. Only the rows shown are read, so a table of terabytes opens as
+  quickly as a small one.
+- **In memory**: the first 100,000 rows are read into the kernel once. Filters and sorting then apply to those rows
+  only.
+
+Lazy dataframes open in live mode, e.g. Spark DataFrames, polars LazyFrames and DuckDB relations. Eager ones, such as
+pandas', are always in memory.
+
+We highly recommend live mode, whatever the data's size: pass `spark.table("sales")`, not
+`spark.table("sales").toPandas()`.
+
+Switch modes at the top right of the browser, or start in one with `mode=`.
+
+<img src="figs/browser-mode.png" width="226" alt="Live and In memory, with In memory on">
 
 ## Using the data browser
 
@@ -52,13 +72,6 @@ the hidden columns again.
 widths).
 
 <img src="figs/browser-columns.png" width="462" alt="The Select columns dialog">
-
-### Live / In memory
-
-At the top right: query the data itself, or its first 100,000 rows read into memory (faster, but filters and sorting
-apply to those rows only). Eager data, such as pandas', is always in memory.
-
-<img src="figs/browser-mode.png" width="226" alt="Live and In memory, with In memory on">
 
 ## The result in code
 

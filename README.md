@@ -31,6 +31,9 @@ does: S3, Azure, Google Cloud Storage, SFTP, Hugging Face and many more. See
     in one explorer.
 - **`DataExplorer`**: a table widget for your dataframes, more than meets the eye.
   - Page, sort and filter large tables in your data lake.
+  - [Live mode](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/data-explorer.md#live-and-in-memory):
+    browse terabytes of data in Jupyter. Each page is a query run where the data is, so only the rows shown come back,
+    never the whole table.
   - [Get the result back in code](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/data-explorer.md#the-result-in-code).
 - **[Launcher](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/launcher/README.md)**: right at home in
   your Jupyter.
