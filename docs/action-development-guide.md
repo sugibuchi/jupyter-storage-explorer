@@ -66,7 +66,7 @@ After changing the action, run the second and third cells again. The new explore
 
 Once the action works, move it to your actions file, so that the launcher's explorers offer it:
 
-1. Choose **Edit actions** in the ⚙ menu of an explorer opened by the launcher. Your actions file opens in
+1. Choose **Edit actions** in the âš™ menu of an explorer opened by the launcher. Your actions file opens in
    JupyterLab's editor: see [Your actions files](#your-actions-files).
 2. Paste the second cell into it, and save it.
 3. Choose **Reload actions** in the same menu. Right-click a JSON file to check that **Python code** offers "Pretty
@@ -93,7 +93,7 @@ are in `jupyter_storage_explorer.formats`:
 | Format                           | Files                                                       |
 |----------------------------------|-------------------------------------------------------------|
 | `Text`                           | Plain text, `.txt`, and the base of every text format below |
-| `PythonScript`, `Sql`, `Yaml`, … | Code and configuration, e.g. `.py`, `.sql`, `.yaml`, `.log` |
+| `PythonScript`, `Sql`, `Yaml`, â€¦ | Code and configuration, e.g. `.py`, `.sql`, `.yaml`, `.log` |
 | `Markdown`                       | `.md`, `.markdown`                                          |
 | `Json`                           | `.json`                                                     |
 | `JsonLines`                      | `.jsonl`, `.ndjson`                                         |
@@ -102,7 +102,7 @@ are in `jupyter_storage_explorer.formats`:
 | `DeltaLake`                      | Folders of Delta Lake tables                                |
 | `Excel`                          | `.xlsx`, `.xlsm`                                            |
 | `Image`                          | No file itself: the base of every image format below        |
-| `Png`, `Jpeg`, `Gif`, …          | Images, e.g. `.png`, `.jpg`, `.gif`, `.webp`                |
+| `Png`, `Jpeg`, `Gif`, â€¦          | Images, e.g. `.png`, `.jpg`, `.gif`, `.webp`                |
 | `Svg`                            | `.svg`: an `Image` and a `Text` format                      |
 
 [Supported formats](storage-explorer.md#supported-formats) lists the code, configuration and image formats.
@@ -440,6 +440,46 @@ from what is known:
 - the format;
 - the item's name, path and size, from `ctx`;
 - the options.
+
+### Local copies of files
+
+Some libraries open only local files, e.g. Python's `sqlite3`. For them, a view reads a local copy of the file from
+the kernel's cache, `local_file_cache()`, in `jupyter_storage_explorer.actions`:
+
+```python
+import sqlite3
+
+from jupyter_storage_explorer.actions import local_file_cache, view
+from jupyter_storage_explorer.formats import file_format
+
+
+@view(format=file_format([".sqlite", ".db"]), label="Tables")
+def sqlite_tables(ctx):
+    cache = local_file_cache()
+    path = cache.get(ctx)
+    try:
+        con = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+        try:
+            rows = con.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
+        finally:
+            con.close()
+    finally:
+        cache.release(ctx.location, delay=600)
+    return [name for (name,) in rows]
+```
+
+- `get(ctx)` downloads the file, and returns the path of its copy. A local file is its own copy.
+- The copy stays valid while the file is unchanged. Views of the same file share it, without downloading it again.
+- `release(ctx.location, delay=...)` says the view no longer uses the copy. The copy is deleted after the delay, in
+  seconds, unless a view uses it again meanwhile.
+- Release the copy also when reading it fails, as the `finally` above does.
+- Close what reads the copy before releasing it: on Windows, a file still open cannot be deleted.
+- `status(ctx)` says whether a valid copy is there: `"cached"`, `"invalid"` or `"not_cached"`. Before a large download,
+  ask first with a `ViewWithConfirmation`, see [Views with inputs](#views-with-inputs).
+- The copies are deleted when the kernel exits.
+
+A view keeping the copy open, e.g. a database's connection, releases it when closed: see
+[Reading the item](plugin-development-guide.md#reading-the-item).
 
 ### Your actions files
 
