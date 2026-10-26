@@ -89,6 +89,11 @@ def databricks_session(
     builder = DatabricksSession.builder
     if (config := _workspace_config(fs)) is not None:
         builder = builder.sdkConfig(config)
+    # Before as well as after: a cluster starting can take minutes.
+    log.debug(
+        "Calling DatabricksSession.builder.getOrCreate(), on %s",
+        getattr(config, "host", None) or "Databricks Connect's configuration",
+    )
     started = time.monotonic()
     session = builder.getOrCreate()
     # The workspace's host only: the configuration holds its credentials.

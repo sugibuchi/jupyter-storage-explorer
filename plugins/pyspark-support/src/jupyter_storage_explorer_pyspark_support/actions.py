@@ -105,6 +105,11 @@ def spark_session(session_options: Mapping[str, Any] | None = None) -> Any:
     builder = SparkSession.builder
     for key, value in (session_options or {}).items():
         builder = builder.config(key, value)
+    # Before as well as after: a session starting can take minutes, or hang.
+    log.debug(
+        "Calling SparkSession.builder.getOrCreate(), with %d session options",
+        len(session_options or {}),
+    )
     started = time.monotonic()
     session = builder.getOrCreate()
     # Their count only: their values may be credentials, e.g. an account key.
