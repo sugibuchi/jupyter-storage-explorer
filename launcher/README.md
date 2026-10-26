@@ -66,7 +66,9 @@ there and never change it.
 pip install "jupyter-storage-explorer-launcher[all-supports]"  # every plugin, with the libraries you have
 ```
 
-Then see [Using the explorer](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#using-the-explorer).
+Then read [Storages](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#storages)
+to set up access to your storages, and
+[Using the explorer](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#using-the-explorer).
 
 ## Configuration
 
