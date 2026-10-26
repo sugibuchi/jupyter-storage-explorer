@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import contextlib
 import itertools
+import logging
 import os
+import time
 import uuid
 import warnings
 from typing import TYPE_CHECKING, Any, Literal
@@ -14,7 +16,7 @@ import traitlets
 
 from jupyter_storage_explorer import _logs, _paths, _static
 from jupyter_storage_explorer._callbacks import Callbacks
-from jupyter_storage_explorer._explorer.about import AboutMixin
+from jupyter_storage_explorer._explorer.about import AboutMixin, _explorer_version
 from jupyter_storage_explorer._explorer.bookmarks import BookmarksMixin
 from jupyter_storage_explorer._explorer.common import (
     explorers,
@@ -76,6 +78,8 @@ if TYPE_CHECKING:
 
     # A request's handler: the reply to its content (see _requests).
     _Handler = Callable[[dict[str, Any]], dict[str, Any]]
+
+log = logging.getLogger(__name__)
 
 # The data browser's requests (see DataQuery.handle), and a table set's to
 # choose a table (see TableSet), after which query_result() may have changed.
@@ -566,6 +570,7 @@ class StorageExplorer(
         format_options: EngineOptions | None = None,
         **storage_options: Any,
     ) -> None:
+        started = time.monotonic()
         engine_options = _engine_options(engine_options, format_options)
         if open_preview is not None:
             warnings.warn(
@@ -759,6 +764,21 @@ class StorageExplorer(
             self._preview = {"empty": True}
         if states_error:
             self._error = states_error
+            log.warning("%s", states_error)
+        # The storages by name and protocol only: their options may hold
+        # credentials.
+        log.info(
+            "Storage Explorer %s created in %.1f s (%s layout): storages %s; "
+            "engines %s; %d actions",
+            _explorer_version(),
+            time.monotonic() - started,
+            layout,
+            ", ".join(
+                f"{n} ({protocols(s.fs)[0]})" for n, s in self._filesystems.items()
+            ),
+            ", ".join(keys) or "none",
+            len(self._actions.actions),
+        )
 
     @staticmethod
     def default_operations() -> list[FileSystemOperations]:
@@ -1165,8 +1185,21 @@ class StorageExplorer(
     ) -> None:
         """Handle a message from the frontend, by its "type": a request, which
         is answered with a "reply" of the same "rid", or a notice, which is
-        not (its effects show in the traits, or in messages of their own)."""
+        not (its effects show in the traits, or in messages of their own).
+        Logged at DEBUG with the time taken here, not by the loads it
+        starts: those log their own."""
         kind = content.get("type")
+        started = time.monotonic()
+        try:
+            self._handle_message(kind, content, buffers)
+        finally:
+            log.debug(
+                "Message %s from the page handled in %.3f s",
+                kind,
+                time.monotonic() - started,
+            )
+
+    def _handle_message(self, kind: Any, content: dict[str, Any], buffers: Any) -> None:
         if kind in _QUERY_REQUESTS:
             # In a worker thread, as they may read the data (see _answer_query).
             self._answer_query(content)

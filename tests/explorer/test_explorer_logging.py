@@ -118,7 +118,7 @@ class TestWithTheMenu:
             explorer._logging_level = "loud"
 
     def test_the_log_file_opened_read_only(self, memfs):
-        explorer = make("/", fs=memfs, logging_menu="enabled", logging_level="INFO")
+        explorer = make("/", fs=memfs, logging_menu="enabled", logging_level="ERROR")
         assert explorer._config_paths["log"] == str(_logs.log_folder())
         open_ = {"type": "settings_open", "rid": 1, "file": "log"}
         # Not created: nothing was logged yet.
@@ -127,7 +127,7 @@ class TestWithTheMenu:
             "rid": 1,
             "missing": True,
         }
-        log.info("a line")
+        log.error("a line")
         reply = explorer.request(open_)
         assert reply["name"] == _logs.log_file().name
         get = {"type": "jupyterlab_get", "rid": 2, "settings": "log", "format": "text"}
@@ -162,6 +162,71 @@ class TestWithTheMenu:
             "storage-explorer.2020-01-04.1.log",
             _logs.log_file().name,
         ]
+
+
+@pytest.fixture
+def records(caplog):
+    """The package's records of DEBUG and above, from now on: the level set
+    after the explorer is created, which sets its own."""
+
+    def messages(level=logging.DEBUG):
+        return [r.getMessage() for r in caplog.records if r.levelno >= level]
+
+    caplog.set_level(logging.DEBUG, logger=_logs.LOGGER_NAME)
+    return messages
+
+
+class TestRecords:
+    """What the explorer logs, by level: INFO what the user does, WARNING
+    what goes wrong, DEBUG the details."""
+
+    def test_created(self, memfs, caplog):
+        caplog.set_level(logging.INFO)
+        make("/", fs=memfs, logging_level="INFO")
+        messages = [r.getMessage() for r in caplog.records]
+        assert any(m.startswith("Plugins loaded: ") for m in messages)
+        created = next(m for m in messages if "created in" in m)
+        assert "storages default (memory)" in created
+
+    def test_messages_and_listings(self, mem_explorer, records):
+        mem_explorer._current_dir = "/data"
+        mem_explorer.message({"type": "refresh"})
+        assert any(m.startswith("Listed /data: 3 items") for m in records())
+        assert any(m.startswith("Message refresh from the page") for m in records())
+
+    def test_a_job(self, mem_explorer, records):
+        mem_explorer.message(
+            {"type": "move", "rid": 1, "paths": ["/data/a.csv"], "dest": "/other"}
+        )
+        info = records(logging.INFO)
+        assert any(m.endswith("started: Moving a.csv to other") for m in info)
+        done = next(m for m in info if " done in " in m)
+        assert "1 moved, 1 files" in done
+
+    def test_a_job_with_errors(self, mem_explorer, records):
+        mem_explorer.message(
+            {"type": "delete", "rid": 1, "paths": ["/data/a.csv", "/data/gone.csv"]}
+        )
+        warnings = records(logging.WARNING)
+        assert any(": 1 errors, the first: gone.csv" in m for m in warnings)
+
+    def test_a_view(self, mem_explorer, records):
+        mem_explorer._open_preview("/data/notes.md")
+        info = records(logging.INFO)
+        assert any(m.startswith("Viewed /data/notes.md as markdown with") for m in info)
+        assert any(m.startswith("Detected /data/notes.md in") for m in records())
+
+    def test_a_view_failing(self, mem_explorer, records):
+        mem_explorer._open_preview("/data/a.csv", "image")
+        warnings = records(logging.WARNING)
+        assert any(m.startswith("/data/a.csv cannot be previewed:") for m in warnings)
+
+    def test_a_transfer_refused(self, memfs, records):
+        memfs.pipe_file("/d/a.txt", b"a")
+        explorer = make("/", fs=memfs, transfer_policy=[{"rule": "deny"}])
+        explorer.request({"type": "move", "rid": 1, "paths": ["/d/a.txt"], "dest": "/"})
+        warnings = records(logging.WARNING)
+        assert any(m.endswith("refused by transfer_policy rule 0") for m in warnings)
 
 
 class TestArguments:

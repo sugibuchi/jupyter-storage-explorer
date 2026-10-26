@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -16,6 +18,8 @@ if TYPE_CHECKING:
     from jupyter_storage_explorer._jobs.loader import Load
     from jupyter_storage_explorer.base import Location
     from jupyter_storage_explorer.formats import DataFormat
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -110,7 +114,9 @@ class FoldersMixin:
     ) -> _Listed:
         """In a listing's load: folder ``path`` of ``fs`` listed, or
         ``fallback`` if ``path`` is no folder, with the subfolders of its
-        ``unlisted`` ancestors."""
+        ``unlisted`` ancestors. Logged with its count of items only: a
+        folder may hold tens of thousands."""
+        started = time.monotonic()
         if fallback is not None and path != fallback:
             try:
                 gone = not self._isdir(path, fs)
@@ -127,11 +133,19 @@ class FoldersMixin:
         try:
             infos = self._ls(path, fs)
         except Exception as exc:
+            log.warning("Cannot list %s: %s", path, exc)
             columns = self._make_listing(path, [], fs)
             return _Listed(fs, path, columns, f"Cannot list {path}: {exc}", tree, None)
         tree[path] = self._subfolders(infos, fs)
         columns = self._make_listing(path, infos, fs)
         dir_format = self._directory_format(path, infos, fs)
+        log.debug(
+            "Listed %s: %d items in %.3f s%s",
+            path,
+            len(infos),
+            time.monotonic() - started,
+            f", a {dir_format[0].name} folder" if dir_format else "",
+        )
         return _Listed(fs, path, columns, "", tree, dir_format)
 
     def _show_folder(self, listed: _Listed, follow: bool) -> None:
@@ -183,9 +197,12 @@ class FoldersMixin:
 
         def work() -> tuple[list[dict[str, Any]], str]:
             try:
-                return self._subfolders(self._ls(path, fs), fs), ""
+                dirs = self._subfolders(self._ls(path, fs), fs)
             except Exception as exc:
+                log.warning("Cannot list %s for the tree: %s", path, exc)
                 return [], f"Cannot list {path}: {exc}"
+            log.debug("Listed %s for the tree: %d folders", path, len(dirs))
+            return dirs, ""
 
         def done(result: tuple[list[dict[str, Any]], str]) -> None:
             # None while submitting: without a loop, the load ends before.

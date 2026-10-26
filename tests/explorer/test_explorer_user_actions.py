@@ -3,6 +3,7 @@ without creating the explorer again."""
 
 from __future__ import annotations
 
+import logging
 import textwrap
 
 import pytest
@@ -60,6 +61,26 @@ class TestReload:
         reply = reload(explorer)
         assert (reply["actions"], reply["problems"]) == (1, [])
         assert "Upper case" in labels(explorer)
+
+    def test_logged(self, memfs, actions_file, caplog):
+        caplog.set_level(logging.INFO)
+        write(actions_file, UPPER_CASE)
+        explorer = make("/", fs=memfs, user_actions="enabled", logging_level="INFO")
+        write(actions_file, "import nonexistent_module")
+        reload(explorer)
+        messages = [(r.levelname, r.getMessage()) for r in caplog.records]
+        assert ("INFO", f"User actions loaded from {actions_file}: upper_case") in (
+            messages
+        )
+        assert ("INFO", "Reloading the user's actions") in messages
+        assert any(
+            level == "WARNING" and m.startswith(f"user actions {actions_file} not")
+            for level, m in messages
+        )
+        assert (
+            "INFO",
+            "The user's actions reloaded: 0 actions, 1 files left out",
+        ) in messages
 
     def test_an_action_removed(self, memfs, actions_file):
         write(actions_file, UPPER_CASE)

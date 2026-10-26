@@ -105,6 +105,7 @@ import importlib.resources
 import importlib.util
 import inspect
 import json
+import logging
 import pathlib
 import sys
 from typing import TYPE_CHECKING, Any
@@ -113,6 +114,9 @@ from jupyter_core.paths import jupyter_config_dir, jupyter_config_path
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+
+# Under the explorer's logger, whose level and files the Logging menu sets.
+log = logging.getLogger("jupyter_storage_explorer.launcher")
 
 # Looked for in each Jupyter configuration directory.
 LAUNCHER_FILE = pathlib.Path("storage-explorer", "launcher.py")
@@ -615,7 +619,12 @@ def launch(view: str | None = None, sidebar: bool = False) -> None:
                 print(warning, file=sys.stderr)
             display(previous.explorer)
             _launched[sidebar] = previous
+            log.info("The %s's explorer shown again", _place(sidebar))
             return
+        log.info(
+            "The launcher.py files changed: the %s's explorer made again",
+            _place(sidebar),
+        )
         previous.explorer.close()
     try:
         settings = load_settings(files)
@@ -630,8 +639,23 @@ def launch(view: str | None = None, sidebar: bool = False) -> None:
         warnings.append(_left_out(settings.user_error))
     for warning in warnings:
         print(warning, file=sys.stderr)
+    # Logged once the explorer is made, which sets up the kernel's logging:
+    # before, records would go to stderr, shown in the tab a second time.
+    # Not the failures above, for that reason.
+    log.info(
+        "The %s opened with the settings of %s",
+        _place(sidebar),
+        ", ".join(str(path) for path in settings.files) or "no launcher.py",
+    )
+    for warning in warnings:
+        log.warning("%s", warning)
     display(explorer)
     _launched[sidebar] = _Launched(explorer, fingerprint, warnings)
+
+
+def _place(sidebar: bool) -> str:
+    """Where the explorer shows, for the logs."""
+    return "side panel" if sidebar else "tab"
 
 
 def _fingerprint(files: Sequence[pathlib.Path]) -> str:

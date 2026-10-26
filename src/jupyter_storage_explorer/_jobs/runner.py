@@ -144,6 +144,7 @@ class JobRunner:
 
         job.progress = JobProgress(on_change=report)
         self.jobs[job.id] = job
+        log.debug("Job %s queued: %s", job.id, job.title)
         self._notify(job)
         self._executor.submit(self._run, job, work, finish, context)
         return job
@@ -153,6 +154,7 @@ class JobRunner:
         job = self.jobs.get(job_id)
         if job is None:
             return False
+        log.info("Job %s cancelled by the user", job.id)
         job.progress.cancel()
         self._notify(job)
         return True
@@ -181,10 +183,12 @@ class JobRunner:
         context: contextvars.Context,
     ) -> None:
         """In the job's thread: do the work, then finish on the main thread."""
+        started = time.monotonic()
         if job.progress.cancelled:
             job.state = "cancelled"  # cancelled while queued
         else:
             job.state = "running"
+            log.info("Job %s started: %s", job.id, job.title)
             self._main(lambda: self._notify_unless_finished(job), context)
             try:
                 job.result = work(job.progress) or {}
@@ -195,6 +199,7 @@ class JobRunner:
                 log.exception("job %s (%s) failed", job.id, job.title)
                 job.state = "failed"
                 job.error = f"{type(exc).__name__}: {exc}"
+        _log_end(job, time.monotonic() - started)
         self._main(lambda: self._end(job, finish), context)
 
     def _end(self, job: Job, finish: Callable[[Job], None] | None) -> None:
@@ -205,3 +210,26 @@ class JobRunner:
                 log.exception("finishing job %s (%s) failed", job.id, job.title)
         self.jobs.pop(job.id, None)
         self._notify(job)
+
+
+def _log_end(job: Job, seconds: float) -> None:
+    """Log how ``job`` ended: its counts of items by outcome (its result's
+    lists, e.g. "moved"), the bytes and the time. The items' errors, which the
+    user sees in the job's report, are a warning, with the first of them."""
+    progress = job.progress.snapshot()
+    counts = [
+        f"{len(names)} {key}"
+        for key, names in job.result.items()
+        if isinstance(names, list) and names and key != "errors"
+    ]
+    counts.append(f"{progress['files_done']} files, {progress['bytes_done']} bytes")
+    log.info("Job %s %s in %.1f s: %s", job.id, job.state, seconds, ", ".join(counts))
+    errors = job.result.get("errors") or []
+    if errors:
+        log.warning(
+            "Job %s (%s): %d errors, the first: %s",
+            job.id,
+            job.title,
+            len(errors),
+            errors[0],
+        )

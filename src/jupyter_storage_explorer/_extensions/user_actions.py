@@ -22,6 +22,7 @@ from __future__ import annotations
 import hashlib
 import importlib.resources
 import importlib.util
+import logging
 import pathlib
 import sys
 import warnings
@@ -38,6 +39,8 @@ if TYPE_CHECKING:
 # Looked for in each Jupyter configuration directory: a file, then a folder.
 USER_ACTIONS_FILE = pathlib.Path("storage-explorer", "actions.py")
 USER_ACTIONS_DIR = pathlib.Path("storage-explorer", "actions")
+
+log = logging.getLogger(__name__)
 
 
 def action_files() -> list[pathlib.Path]:
@@ -92,7 +95,13 @@ def load_user_actions(
             problems.append(
                 f"user actions {path} not loaded: {type(exc).__name__}: {exc}"
             )
+            log.warning("%s", problems[-1])
             continue
+        log.info(
+            "User actions loaded from %s: %s",
+            path,
+            ", ".join(getattr(a, "__name__", a.label) for a in found) or "none",
+        )
         actions += found
     return actions, problems
 

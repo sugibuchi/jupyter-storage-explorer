@@ -3,7 +3,9 @@ rows and requests; and ``fetch_rows``, how a page is read."""
 
 from __future__ import annotations
 
+import logging
 import math
+import time
 from typing import TYPE_CHECKING, Any
 
 import narwhals as nw
@@ -23,6 +25,8 @@ if TYPE_CHECKING:
 
     from jupyter_storage_explorer._explorer.states import ExplorerStates
     from jupyter_storage_explorer.base import Location
+
+log = logging.getLogger(__name__)
 
 MODES = ("auto", "live", "memory")
 
@@ -495,11 +499,30 @@ class DataQuery:
     def handle(self, content: dict[str, Any]) -> dict[str, Any] | None:
         """The reply to a request by its "type", or None if it is not a query
         request (one of ``REQUESTS``)."""
+        kind = content.get("type")
         handler = {
             "query_rows": self.rows,
             "query_check": self.check,
             "query_save": self.save,
             "query_reload": self.reload,
             "query_mode": self.switch_mode,
-        }.get(content.get("type"))
-        return handler(content) if handler is not None else None
+        }.get(kind)
+        if handler is None:
+            return None
+        started = time.monotonic()
+        reply = handler(content)
+        where = getattr(self.key, "url", self.key)
+        took = time.monotonic() - started
+        if reply and reply.get("error"):
+            log.warning("Data browser %s on %s: %s", kind, where, reply["error"])
+        elif kind == "query_save":
+            log.debug("Data browser %s on %s in %.3f s", kind, where, took)
+        else:
+            log.info(
+                "Data browser %s on %s (%s mode) in %.2f s",
+                kind,
+                where,
+                getattr(self, "mode", "?"),
+                took,
+            )
+        return reply

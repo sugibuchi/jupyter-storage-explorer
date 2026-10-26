@@ -35,6 +35,7 @@ is not a security boundary: users can still copy files with code.
 
 from __future__ import annotations
 
+import logging
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -42,6 +43,8 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+
+log = logging.getLogger(__name__)
 
 # The location of files on the user's computer, in the browser: uploads from
 # it and "Download to local", e.g. "browser:///report.csv".
@@ -114,16 +117,25 @@ class TransferPolicy:
 
     def allows(self, source: str, dest: str) -> bool:
         """Whether a file may go from URL ``source`` to URL ``dest``."""
-        for rule in self.rules:
+        return self._deciding(source, dest) is None
+
+    def _deciding(self, source: str, dest: str) -> int | None:
+        """The index of the rule refusing the transfer, or None if it is
+        allowed."""
+        for index, rule in enumerate(self.rules):
             if rule.matches(source, dest):
-                return rule.allow
-        return True
+                return None if rule.allow else index
+        return None
 
     def error(self, source: str, dest: str) -> str | None:
         """None if allowed, else why not, naming both URLs (to tell which
-        rule applied)."""
-        if self.allows(source, dest):
+        rule applied). A refusal is logged with the rule's index."""
+        index = self._deciding(source, dest)
+        if index is None:
             return None
+        log.warning(
+            "Transfer %s → %s refused by transfer_policy rule %d", source, dest, index
+        )
         return f"not allowed by the transfer policy ({source} → {dest})"
 
 
