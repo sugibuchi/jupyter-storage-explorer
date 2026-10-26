@@ -254,7 +254,7 @@ class StorageExplorer(
         a warning; an option a plugin does not have is a ValueError. The
         plugins' operations and mappers are used after those given and
         before the defaults; their actions, before all others.
-    user_actions : {"enabled", "disabled"}, default "enabled"
+    user_actions : {"enabled", "disabled"}, default "disabled"
         Whether to use the actions of the user's files,
         ``storage-explorer/actions.py`` and ``storage-explorer/actions/*.py``
         in Jupyter's configuration directories (``jupyter --paths``): the
@@ -265,7 +265,9 @@ class StorageExplorer(
         cannot be used, e.g. with an error or an action of the same label as
         another, is left out with a warning. Enabled, the settings menu
         offers to edit the user's ``actions.py``, created from a template if
-        it is missing, and to reload the files' actions.
+        it is missing, and to reload the files' actions. Disabled by default,
+        so that an explorer in a notebook has only what the notebook gives
+        it: the launcher's tabs and side panel enable it.
     actions : sequence of Action, optional
         Actions of your own, functions decorated with
         ``actions.view`` or ``code``. They are tried in order after
@@ -510,7 +512,7 @@ class StorageExplorer(
         unsafe_mode: str = "on_demand",
         code_snippet: str | Sequence[str] = "enabled",
         plugin_options: Mapping[str, Mapping[str, Any]] | None = None,
-        user_actions: Literal["enabled", "disabled"] = "enabled",
+        user_actions: Literal["enabled", "disabled"] = "disabled",
         actions: Sequence[Action[Any]] | None = None,
         engine_options: EngineOptions | None = None,
         engine_preference: Sequence[str] | None = None,

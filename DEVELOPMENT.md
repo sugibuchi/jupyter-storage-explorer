@@ -1036,7 +1036,7 @@ The explorer's `ActionChain`, in `_explorer/actions.py`, holds its actions in or
 1. the plugins' actions;
 2. `default_actions()`, by default `DEFAULT_ACTIONS`, the built-in ones;
 3. the explorer's `actions=`;
-4. the actions of the user's files, unless `user_actions="disabled"` (see below).
+4. the actions of the user's files, with `user_actions="enabled"` (see below).
 
 Plugins are installed to enrich or change the explorer, so a plugin's view of a format is its default. Actions given
 and the user's add to the explorer's: they are offered in "Preview as" and "Python code", and are the default only for
@@ -1050,6 +1050,10 @@ offers Text's views of a CSV file, under Text.
 `load_user_actions`, in `_extensions/user_actions.py`, reads the user's action files in Jupyter's configuration directories, the
 user's first. In each, `storage-explorer/actions.py` comes first, then `storage-explorer/actions/*.py` by name, without
 those starting with `_`.
+
+The files configure the user's JupyterLab, so only the launcher's explorers read them: its tabs and side panel pass
+`user_actions="enabled"`. An explorer in a notebook reads none by default, so that it has only what the notebook gives
+it.
 
 - Each file is imported as a module of its own, registered in `sys.modules`, as dataclasses and type hints look
   modules up.

@@ -1,7 +1,9 @@
 """Actions of the user's own, from files: ``storage-explorer/actions.py`` and
 ``storage-explorer/actions/*.py`` in Jupyter's configuration directories
-(``jupyter --paths``, config section), which every explorer loads, in
-notebooks, the launcher's tabs and the side panel alike.
+(``jupyter --paths``, config section), which the launcher's tabs and side
+panel load. Explorers in notebooks load them only with
+``user_actions="enabled"``: the user's JupyterLab configuration stays apart
+from what a notebook configures.
 
 The user's directory comes first, then the environment's and the system's;
 in each, ``actions.py``, then the folder's files by name, but those whose

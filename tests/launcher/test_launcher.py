@@ -42,7 +42,11 @@ def no_launched(monkeypatch):
 
 def defaults() -> tuple:
     """The arguments of a tab's explorer without any launcher.py."""
-    return (".",), {"height": "fill", "states": launcher.states_file()}
+    return (".",), {
+        "height": "fill",
+        "states": launcher.states_file(),
+        "user_actions": "enabled",
+    }
 
 
 @pytest.fixture
@@ -271,6 +275,7 @@ class TestMerging:
         _, kwargs = settings.explorer_arguments(sidebar=True)
         assert kwargs == {
             "states": launcher.states_file(),
+            "user_actions": "enabled",
             "max_upload_bytes": 5,
             **launcher.SIDEBAR,
         }

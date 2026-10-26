@@ -400,9 +400,12 @@ To view or load a format your own way, see [Actions of your own](#actions-of-you
 ## Actions of your own
 
 Views and code of your own, called actions, go in `~/.jupyter/storage-explorer/actions.py`. The ⚙ menu's
-**Edit actions** opens it in JupyterLab's editor, created from a commented example if it is missing. Every explorer
-then offers them in **Preview as** and **Python code**, beside its own. **Reload actions**, in the same menu, applies
-a change to the file.
+**Edit actions** opens it in JupyterLab's editor, created from a commented example if it is missing. The launcher's
+tabs and side panel then offer them in **Preview as** and **Python code**, beside their own. **Reload actions**, in
+the same menu, applies a change to the file.
+
+An explorer in a notebook reads no actions files, so it has only what the notebook gives it. `user_actions="enabled"`
+makes it read them.
 
 The [Action development guide](action-development-guide.md) shows how, step by step.
 
@@ -543,7 +546,7 @@ Storages and data:
 |---------------------------|------------------------------------------------------------------------------------------------------------|
 | `filesystems={...}`       | Several named storages; see [Several storages in one explorer](#several-storages-in-one-explorer).         |
 | `plugin_options={...}`    | The plugins' options, by key, e.g. `{"pandas-support": {"enabled": False}}`; see each plugin's README. |
-| `user_actions="enabled"`  | `"disabled"`: no actions of your files; see [Turning them off](action-development-guide.md#turning-them-off). |
+| `user_actions="disabled"` | `"enabled"`: the actions of your files, as in the launcher's explorers; see [Actions of your own](#actions-of-your-own). |
 | `engine_options={...}`    | The engines' options; see [Engine options](#engine-options).                                               |
 | `engine_preference=[...]` | The engines in the order they are offered, the first chosen until the user chooses; see [Engines](#engines). |
 

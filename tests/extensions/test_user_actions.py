@@ -140,7 +140,9 @@ class TestFiles:
         )
         memfs.pipe_file("/a.csv", b"a\n1\n")
         explorer = StorageExplorer(
-            fs=memfs, engine_options={"python": {"csv": {"rows": 5}}}
+            fs=memfs,
+            engine_options={"python": {"csv": {"rows": 5}}},
+            user_actions="enabled",
         )
         item = explorer._detect_now("/a.csv", memfs)
         view = explorer._actions.view(Csv(), item.ctx, ViewLimits(), None)
@@ -171,12 +173,14 @@ class TestTemplate:
 class TestExplorer:
     def test_after_those_given(self, user, memfs):
         write(user, "shout.py", SHOUT.format(suffix=""))
-        explorer = StorageExplorer(fs=memfs)
+        explorer = StorageExplorer(fs=memfs, user_actions="enabled")
         assert "Shout" in labels(explorer._actions.actions)
 
-    def test_not_used(self, user, memfs):
+    @pytest.mark.parametrize("kwargs", [{}, {"user_actions": "disabled"}])
+    def test_not_used(self, user, memfs, kwargs):
+        # By default too: a notebook's explorer has only what it is given.
         write(user, "shout.py", SHOUT.format(suffix=""))
-        explorer = StorageExplorer(fs=memfs, user_actions="disabled")
+        explorer = StorageExplorer(fs=memfs, **kwargs)
         assert "Shout" not in labels(explorer._actions.actions)
 
     @pytest.mark.parametrize("setting", [True, False, "on", None])
@@ -187,7 +191,7 @@ class TestExplorer:
     def test_a_file_left_out_with_a_warning(self, user, memfs):
         write(user, "broken.py", "raise RuntimeError('no')\n")
         with pytest.warns(RuntimeWarning, match=r"broken\.py not loaded"):
-            StorageExplorer(fs=memfs)
+            StorageExplorer(fs=memfs, user_actions="enabled")
 
     def test_a_label_of_the_explorers_actions(self, user, memfs):
         # The explorer's own actions win: the file is left out.
@@ -196,5 +200,7 @@ class TestExplorer:
         namespace: dict = {}
         exec(compile(source, "given", "exec"), namespace)
         with pytest.warns(RuntimeWarning, match="two actions labelled 'Shout'"):
-            explorer = StorageExplorer(fs=memfs, actions=[namespace["given"]])
+            explorer = StorageExplorer(
+                fs=memfs, actions=[namespace["given"]], user_actions="enabled"
+            )
         assert labels(explorer._actions.actions).count("Shout") == 1
