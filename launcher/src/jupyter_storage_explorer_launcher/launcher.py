@@ -203,6 +203,9 @@ class Settings:
         kwargs: dict[str, Any] = {
             "height": "fill",
             "states": states_file(),
+            # The user's actions files configure JupyterLab's explorers, the
+            # launcher's: explorers in notebooks read none by default.
+            "user_actions": "enabled",
             **self.parameters,
             **(SIDEBAR if sidebar else {}),
         }

@@ -188,8 +188,8 @@ Write docs so that people can review them. That covers this file, DEVELOPMENT.md
 Update the docs when operations, formats or options change. Keep user docs short: what users do, not how it works.
 
 `actions`, `operations` and `filesystem_mappers` are for development. They come last in the options table of
-docs/storage-explorer.md and in the launcher's template. Only docs/plugin-development-guide.md explains them, in "Trying
-components in an explorer".
+docs/storage-explorer.md and in the launcher's template. docs/plugin-development-guide.md explains them, in "Trying
+components in an explorer". docs/action-development-guide.md uses `actions` too, to develop an action in a notebook.
 
 ### Links and images
 

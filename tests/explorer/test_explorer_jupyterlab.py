@@ -7,6 +7,7 @@ import json
 import pathlib
 from typing import Any
 
+import pytest
 from explorers import Explorer, entries, make
 
 from jupyter_storage_explorer._explorer import jupyterlab_files
@@ -293,17 +294,19 @@ class TestConfigFiles:
         open_ = {"type": "settings_open", "rid": 1, "file": "launcher", "create": True}
         assert "denied" in mem_explorer.request(open_)["error"]
 
-    def test_the_users_actions_file(self, mem_explorer):
-        # Offered in every explorer, created from the template when asked.
-        path = pathlib.Path(mem_explorer._config_paths["actions"])
+    def test_the_users_actions_file(self, memfs):
+        # Offered with user actions enabled, created from the template when asked.
+        explorer = make("/", fs=memfs, user_actions="enabled")
+        path = pathlib.Path(explorer._config_paths["actions"])
         assert path.parts[-2:] == ("storage-explorer", "actions.py")
         open_ = {"type": "settings_open", "rid": 1, "file": "actions"}
-        assert mem_explorer.request(open_)["missing"] is True
-        assert "error" not in mem_explorer.request({**open_, "create": True})
+        assert explorer.request(open_)["missing"] is True
+        assert "error" not in explorer.request({**open_, "create": True})
         text = path.read_text(encoding="utf-8")
         assert text.startswith("# Storage Explorer actions: yours.")
         assert "@view" in text
 
-    def test_no_actions_file_with_user_actions_disabled(self, memfs):
-        explorer = make("/", fs=memfs, user_actions="disabled")
+    @pytest.mark.parametrize("kwargs", [{}, {"user_actions": "disabled"}])
+    def test_no_actions_file_with_user_actions_disabled(self, memfs, kwargs):
+        explorer = make("/", fs=memfs, **kwargs)
         assert explorer._config_paths == {}

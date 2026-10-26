@@ -12,8 +12,9 @@ This guide covers actions for your own use. To package them for others, see the
 
 ## Your actions file
 
-Your actions go in `~/.jupyter/storage-explorer/actions.py`. The ⚙ menu's **Edit actions** opens it in JupyterLab's
-editor, and creates it from a commented example if it is missing.
+Your actions go in `~/.jupyter/storage-explorer/actions.py`. The explorers opened by the launcher offer them. In their
+⚙ menu, **Edit actions** opens the file in JupyterLab's editor, and creates it from a commented example if it is
+missing.
 
 <img src="figs/actions-menu.png" width="164" alt="The explorer's settings menu, open: Columns, Edit actions, Reload actions and About">
 
@@ -33,7 +34,18 @@ In addition, you can store actions in Python files under `~/.jupyter/storage-exp
 
 ## A first action
 
-This action gives code pretty-printing a JSON file:
+### Develop it in a notebook
+
+Write and try actions in a notebook first, then move them to your actions file. Open a notebook with three cells.
+
+The first cell installs the explorer in the notebook's kernel:
+
+```python
+# If the jupyter-storage-explorer package is not installed
+%pip install jupyter-storage-explorer
+```
+
+The second cell is the action. This one gives code pretty-printing a JSON file:
 
 ```python
 from jupyter_storage_explorer.actions import code
@@ -54,13 +66,35 @@ def pretty_print_json(url):
     return PRETTY_PRINT.format(url=url)
 ```
 
-Save it in your actions file, and choose **Reload actions** in the explorer's ⚙ menu. Right-click a file named
-`*.json`: **Python code** now offers "Pretty print json".
+The third cell opens an explorer with the action:
 
-<img src="figs/actions-first.png" width="417" alt="A JSON file's right-click menu, Python code open: Pretty print json (Python) beside the built-in snippets">
+```python
+from jupyter_storage_explorer import StorageExplorer
+
+StorageExplorer("s3://my-bucket/data", actions=[pretty_print_json])
+```
+
+Run the three cells, and right-click a file named `*.json` in the explorer. **Python code** now offers "Pretty print
+json".
+
+<img src="figs/actions-notebook.png" width="662" alt="The notebook's three cells, and its explorer below them: a JSON file's right-click menu, with Python code open on Pretty print json (Python)">
 
 The template is a multi-line string, with `{url!r}` where the file's URL goes, in quotes. `.strip()` removes the
 blank lines around it.
+
+After changing the action, run the second and third cells again. The new explorer has the new version.
+
+### Move it to your actions file
+
+Once the action works, move it to your actions file, so that the launcher's explorers offer it:
+
+1. Choose **Edit actions** in the ⚙ menu of an explorer opened by the launcher. Your actions file opens in
+   JupyterLab's editor.
+2. Paste the second cell into it, and save it.
+3. Choose **Reload actions** in the same menu. Right-click a JSON file to check that **Python code** offers "Pretty
+   print json".
+
+<img src="figs/actions-first.png" width="417" alt="A JSON file's right-click menu, Python code open: Pretty print json (Python) beside the built-in snippets">
 
 ## Action basics
 
@@ -431,8 +465,8 @@ from what is known:
 
 ## When something goes wrong
 
-- A file that cannot be read, e.g. with a syntax error, is left out with a warning, under the explorer's cell. The
-  explorer still opens, with the other files' actions.
+- A file that cannot be read, e.g. with a syntax error, is left out with a warning, under the explorer. The explorer
+  still opens, with the other files' actions.
 - On **Reload actions**, the explorer shows such a file's error instead, and keeps the other files' actions.
 - A file with an action of the same label as another one is left out too: give it another label.
 - What a view raises is shown in the preview panel as the item's error.
@@ -440,7 +474,9 @@ from what is known:
 
 ## How the files are read
 
-- Every explorer reads the files when it is created, wherever it is.
+- The launcher's tabs and side panel read the files when they are created.
+- An explorer in a notebook reads none, so it has only what the notebook gives it. `user_actions="enabled"` makes it
+  read them.
 - **Reload actions** reads them again, and lists the folder shown again. The preview open keeps its view until you open
   another.
 - It reads `actions.py` first, then the folder's files by name.
@@ -451,8 +487,7 @@ from what is known:
 
 ## Turning them off
 
-`StorageExplorer(user_actions="disabled")` reads no actions files, and its menu has neither **Edit actions** nor
-**Reload actions**.
+An explorer reading no actions files has neither **Edit actions** nor **Reload actions** in its menu.
 
 In the launcher's tabs, an administrator can turn them off for everyone in a system `launcher.py`:
 

@@ -54,7 +54,7 @@ def labels(explorer):
 
 class TestReload:
     def test_a_new_action(self, memfs, actions_file):
-        explorer = make("/", fs=memfs)
+        explorer = make("/", fs=memfs, user_actions="enabled")
         assert "Upper case" not in labels(explorer)
         write(actions_file, UPPER_CASE)
         reply = reload(explorer)
@@ -63,7 +63,7 @@ class TestReload:
 
     def test_an_action_removed(self, memfs, actions_file):
         write(actions_file, UPPER_CASE)
-        explorer = make("/", fs=memfs)
+        explorer = make("/", fs=memfs, user_actions="enabled")
         write(actions_file, "")
         assert reload(explorer)["actions"] == 0
         assert "Upper case" not in labels(explorer)
@@ -72,7 +72,7 @@ class TestReload:
         # The folder is listed again with the new format, and the page told
         # of its label.
         memfs.pipe_file("/data/a.abc", b"x")
-        explorer = make("/data", fs=memfs)
+        explorer = make("/data", fs=memfs, user_actions="enabled")
         assert {e["name"]: e["format"] for e in entries(explorer)}["a.abc"] == ""
         write(actions_file, ABC_FILES)
         reload(explorer)
@@ -81,7 +81,7 @@ class TestReload:
 
     def test_a_broken_file_left_out(self, memfs, actions_file):
         # The other files' actions are used; the broken one is told.
-        explorer = make("/", fs=memfs)
+        explorer = make("/", fs=memfs, user_actions="enabled")
         write(actions_file, UPPER_CASE)
         broken = actions_file.parent / "actions" / "broken.py"
         broken.parent.mkdir()
@@ -93,7 +93,7 @@ class TestReload:
         assert "Upper case" in labels(explorer)
 
     def test_the_engine_kept(self, memfs, actions_file):
-        explorer = make("/", fs=memfs)
+        explorer = make("/", fs=memfs, user_actions="enabled")
         engine = explorer._engine
         write(actions_file, UPPER_CASE)
         reload(explorer)

@@ -1573,7 +1573,8 @@ def widget_view(lab: Lab, page: Page) -> None:
 
 
 # A user's actions file, in the Jupyter configuration folder: an explorer
-# created in a notebook uses it, after the built-in view.
+# created in a notebook with user_actions="enabled" uses it, after the
+# built-in view.
 USER_ACTIONS_FILE = """\
 from jupyter_storage_explorer.formats import Text
 from jupyter_storage_explorer.views import TextView
@@ -1603,7 +1604,7 @@ from jupyter_storage_explorer import StorageExplorer
 memory = fsspec.filesystem("memory")
 memory.pipe_file("/mine/a.txt", b"stressed")
 memory.pipe_file("/mine/b.abc", b"quiet")
-StorageExplorer("/mine", fs=memory, preview_panel="open")"""
+StorageExplorer("/mine", fs=memory, preview_panel="open", user_actions="enabled")"""
 
 
 @lab_check
