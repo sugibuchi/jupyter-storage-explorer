@@ -66,13 +66,13 @@ After changing the action, run the second and third cells again. The new explore
 
 Once the action works, move it to your actions file, so that the launcher's explorers offer it:
 
-1. Choose **Edit actions** in the âš™ menu of an explorer opened by the launcher. Your actions file opens in
+<img src="figs/actions-menu.png" width="164" alt="The explorer's settings menu, open: Columns, Edit actions, Reload actions and About">
+
+1. Choose **Edit actions** in the ⚙ menu of an explorer opened by the launcher. Your actions file opens in
    JupyterLab's editor: see [Your actions files](#your-actions-files).
 2. Paste the second cell into it, and save it.
 3. Choose **Reload actions** in the same menu. Right-click a JSON file to check that **Python code** offers "Pretty
    print json".
-
-<img src="figs/actions-menu.png" width="164" alt="The explorer's settings menu, open: Columns, Edit actions, Reload actions and About">
 
 ## Action basics
 
@@ -93,7 +93,7 @@ are in `jupyter_storage_explorer.formats`:
 | Format                           | Files                                                       |
 |----------------------------------|-------------------------------------------------------------|
 | `Text`                           | Plain text, `.txt`, and the base of every text format below |
-| `PythonScript`, `Sql`, `Yaml`, â€¦ | Code and configuration, e.g. `.py`, `.sql`, `.yaml`, `.log` |
+| `PythonScript`, `Sql`, `Yaml`, … | Code and configuration, e.g. `.py`, `.sql`, `.yaml`, `.log` |
 | `Markdown`                       | `.md`, `.markdown`                                          |
 | `Json`                           | `.json`                                                     |
 | `JsonLines`                      | `.jsonl`, `.ndjson`                                         |
@@ -102,7 +102,7 @@ are in `jupyter_storage_explorer.formats`:
 | `DeltaLake`                      | Folders of Delta Lake tables                                |
 | `Excel`                          | `.xlsx`, `.xlsm`                                            |
 | `Image`                          | No file itself: the base of every image format below        |
-| `Png`, `Jpeg`, `Gif`, â€¦          | Images, e.g. `.png`, `.jpg`, `.gif`, `.webp`                |
+| `Png`, `Jpeg`, `Gif`, …          | Images, e.g. `.png`, `.jpg`, `.gif`, `.webp`                |
 | `Svg`                            | `.svg`: an `Image` and a `Text` format                      |
 
 [Supported formats](storage-explorer.md#supported-formats) lists the code, configuration and image formats.
