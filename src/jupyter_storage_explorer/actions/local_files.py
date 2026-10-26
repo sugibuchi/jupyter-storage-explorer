@@ -8,10 +8,12 @@ from __future__ import annotations
 import atexit
 import hashlib
 import itertools
+import logging
 import os
 import shutil
 import tempfile
 import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, TypeAlias
@@ -21,6 +23,8 @@ from jupyter_storage_explorer.filesystems.locations import LocalLocation
 
 if TYPE_CHECKING:
     from jupyter_storage_explorer.base import ItemContext, Location
+
+log = logging.getLogger(__name__)
 
 # What the cache holds of an item (``LocalFileCache.status``).
 CacheStatus: TypeAlias = Literal["cached", "invalid", "not_cached"]
@@ -165,6 +169,7 @@ class LocalFileCache:
                 copy = self._copies.get(ctx.location)
                 valid = copy is not None and copy.version == _version(ctx)
                 if valid and copy.path.exists():
+                    log.debug("The copy of %s reused", ctx.location.url)
                     return self._use(copy)
             # Downloaded outside the cache's lock: other files' calls go on.
             path = self._download(ctx)
@@ -252,6 +257,7 @@ class LocalFileCache:
         """Delete ``copy``, holding the lock, and the stale copies that can be."""
         del self._copies[location]
         _remove(copy.path)
+        log.debug("The copy of %s deleted", location.url)
         self._stale = [path for path in self._stale if not _remove(path)]
 
     def _download(self, ctx: ItemContext) -> Path:
@@ -266,12 +272,19 @@ class LocalFileCache:
         # The file's name, which some libraries read (e.g. its extension).
         path = folder / ctx.name
         partial = folder / f".{ctx.name}.part"
+        started = time.monotonic()
         try:
             ctx.fs.get_file(ctx.path, str(partial))
             os.replace(partial, path)
         except BaseException:
             shutil.rmtree(folder, ignore_errors=True)
             raise
+        log.info(
+            "Copied %s to the kernel's disk: %d bytes in %.1f s",
+            ctx.location.url,
+            path.stat().st_size,
+            time.monotonic() - started,
+        )
         return path
 
 

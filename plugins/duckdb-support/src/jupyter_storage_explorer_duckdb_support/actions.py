@@ -31,6 +31,7 @@ plugin loads without it.
 from __future__ import annotations
 
 import io
+import time
 from dataclasses import dataclass
 from inspect import cleandoc
 from typing import TYPE_CHECKING, Any
@@ -41,6 +42,7 @@ from fsspec.spec import AbstractFileSystem
 from jupyter_storage_explorer.actions import (
     ActionOptions,
     code,
+    get_logger,
     local_file_cache,
     register_actions,
     view,
@@ -75,6 +77,8 @@ from jupyter_storage_explorer.views import (
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
+
+log = get_logger(__name__)
 
 AS_RELATION = "Load as relation"
 OPEN_DATABASE = "Open the database"
@@ -499,7 +503,9 @@ def parquet_view(
     def read(con: Any) -> Any:
         if _read_by_duckdb(fmt, ctx, options):
             url = _duckdb_url(ctx)
+            log.debug("%s read by DuckDB from its URL", ctx.path)
         else:
+            log.debug("%s read by DuckDB through the explorer's filesystem", ctx.path)
             # The explorer's filesystem as it is, on this connection only:
             # DuckDB reads it before its own readers (e.g. httpfs' s3://),
             # and its own URL of the item, not the location's.
@@ -542,10 +548,12 @@ def _text_view(
 
     if _read_by_duckdb(fmt, ctx, options):
         url = _duckdb_url(ctx)
+        log.debug("%s read by DuckDB from its URL", ctx.path)
         return _query_view(_connect(options), lambda con: read(con, url))
     cache = local_file_cache()
 
     def copied() -> View:
+        log.debug("%s read by DuckDB from a copy on the kernel's disk", ctx.path)
         path = cache.get(ctx).as_posix()
         try:
             view = _query_view(_connect(options), lambda con: read(con, path))
@@ -556,8 +564,15 @@ def _text_view(
         return view
 
     def first(size: int) -> View:
+        started = time.monotonic()
         with ctx.fs.open(ctx.path, "rb") as f:
             data = f.read(size + 1)
+        log.info(
+            "Read the beginning of %s into memory: %d bytes in %.1f s",
+            ctx.path,
+            len(data),
+            time.monotonic() - started,
+        )
         cut = len(data) > size
         if cut:
             data = data[: data.rfind(b"\n", 0, size) + 1] or data[:size]
@@ -569,6 +584,7 @@ def _text_view(
     limit = limits.max_whole_file_bytes
     if cache.status(ctx) == "cached" or (size is not None and size <= limit):
         return copied()
+    log.debug("%s is over %d bytes: the user chooses how much to read", ctx.path, limit)
     whole = f"The whole file ({format_size(size)})" if size else "The whole file"
     return ViewWithChoice(
         message=(
@@ -792,6 +808,7 @@ def database_view(ctx: ItemContext, options: DuckDBOptions, limits: ViewLimits) 
             con.close()
             release()
             raise
+        log.debug("Database %s opened: %d tables and views", ctx.path, len(tables))
         if not tables:
             con.close()
             release()

@@ -4,6 +4,7 @@ code, its options, and its entry point."""
 from __future__ import annotations
 
 import io
+import logging
 from importlib.metadata import entry_points
 
 import openpyxl
@@ -463,6 +464,14 @@ class TestStoragesPolarsCannotRead:
         view = prompt.answer(label)
         assert isinstance(view, QueryView)
         assert (view.data.collect().height, view.more) == (rows, more)
+
+    def test_reads_logged(self, make_item, caplog):
+        caplog.set_level(logging.INFO)
+        data(csv_view, Csv(), make_item("/a.csv", b"a;b\n1;2\n"))
+        assert any(
+            r.getMessage().startswith("Read /a.csv whole through fsspec: 8 bytes")
+            for r in caplog.records
+        )
 
     def test_delta_viewed_only_where_delta_rs_reads(self, make_item, tmp_path):
         make_item("/t/_delta_log/0.json", b"{}")

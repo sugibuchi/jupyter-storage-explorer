@@ -12,6 +12,7 @@ Databricks Connect's own configuration, e.g. the environment's.
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -35,7 +36,7 @@ from jupyter_storage_explorer_pyspark_support import (
 )
 from jupyter_storage_explorer_pyspark_support.actions import AS_DATA_FRAME
 
-from jupyter_storage_explorer.actions import code, register_actions, view
+from jupyter_storage_explorer.actions import code, get_logger, register_actions, view
 from jupyter_storage_explorer.base import ItemContext
 from jupyter_storage_explorer.engine import Engine
 from jupyter_storage_explorer.formats.delta import DeltaLake
@@ -51,6 +52,8 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
     from fsspec import AbstractFileSystem
+
+log = get_logger(__name__)
 
 
 class DatabricksConnect(PythonPackage):
@@ -86,7 +89,14 @@ def databricks_session(
     builder = DatabricksSession.builder
     if (config := _workspace_config(fs)) is not None:
         builder = builder.sdkConfig(config)
+    started = time.monotonic()
     session = builder.getOrCreate()
+    # The workspace's host only: the configuration holds its credentials.
+    log.info(
+        "Databricks Connect session ready in %.1f s, on %s",
+        time.monotonic() - started,
+        getattr(config, "host", None) or "Databricks Connect's configuration",
+    )
     for key, value in (session_options or {}).items():
         session.conf.set(key, value)
     return session

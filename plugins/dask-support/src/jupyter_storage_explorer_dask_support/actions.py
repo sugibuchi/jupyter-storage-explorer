@@ -50,6 +50,7 @@ from fsspec.implementations.dirfs import DirFileSystem
 from jupyter_storage_explorer.actions import (
     ActionOptions,
     code,
+    get_logger,
     local_file_cache,
     register_actions,
     view,
@@ -79,6 +80,8 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
     from fsspec.spec import AbstractFileSystem
+
+log = get_logger(__name__)
 
 AS_DATA_FRAME = "Load as DataFrame"
 
@@ -385,14 +388,21 @@ def _text_view(
     blocks = {"blocksize": blocksize}
     arguments = {**blocks, **defaults, **given}
     read = getattr(dd, reader)
+    log.debug("%s read in blocks of %s bytes", ctx.path, blocksize or "any")
     if isinstance(ctx.location, LocalLocation):
         return QueryView(data=read(ctx.url_or_local_path, **arguments))
     if (rebuilt := _rebuilt_url(ctx)) is not None:
         url, storage_options = rebuilt
+        log.debug("%s read by Dask from its URL", ctx.path)
         return QueryView(data=read(url, storage_options=storage_options, **arguments))
     cache = local_file_cache()
 
     def copied() -> View:
+        log.debug(
+            "%s read by Dask from a copy on the kernel's disk: fsspec cannot "
+            "make its filesystem from a URL",
+            ctx.path,
+        )
         path = cache.get(ctx).as_posix()
         try:
             view = QueryView(data=read(path, **arguments))
