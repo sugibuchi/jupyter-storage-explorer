@@ -22,6 +22,7 @@ from jupyter_storage_explorer.actions.local_files import (
     LocalFileCache,
     local_file_cache,
 )
+from jupyter_storage_explorer.util import get_logger
 
 __all__ = [
     "Action",
@@ -31,6 +32,7 @@ __all__ = [
     "LocalFileCache",
     "ViewAction",
     "code",
+    "get_logger",
     "local_file_cache",
     "register_actions",
     "view",

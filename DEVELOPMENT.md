@@ -932,6 +932,8 @@ Rules for new records:
 
 - Never log storage options, credentials, options' values or file contents. Storages are named with their protocol.
 - A listing is logged with its count of items, never the items: folders may hold tens of thousands.
+- Plugins and users' actions files log through `util.get_logger(__name__)`, also exported by the top level and
+  `actions`. It puts their loggers under `jupyter_storage_explorer`, which their packages' names are not.
 - The launcher's package logs to `jupyter_storage_explorer.launcher`, so that the Logging menu's level applies. It
   logs only once the explorer is made, which sets up the kernel's logging. Before, records would reach stderr, which
   the tab shows.

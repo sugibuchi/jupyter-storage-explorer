@@ -82,6 +82,19 @@ class TestReload:
             "The user's actions reloaded: 0 actions, 1 files left out",
         ) in messages
 
+    def test_get_logger(self, memfs, actions_file, caplog):
+        # An actions file's records go to the explorer's logger, named after
+        # the file.
+        caplog.set_level(logging.INFO)
+        write(
+            actions_file,
+            UPPER_CASE.replace("import view", "import get_logger, view")
+            + '\nget_logger(__name__).info("loading")\n',
+        )
+        make("/", fs=memfs, user_actions="enabled", logging_level="INFO")
+        record = next(r for r in caplog.records if r.getMessage() == "loading")
+        assert record.name == "jupyter_storage_explorer.user_actions.actions"
+
     def test_an_action_removed(self, memfs, actions_file):
         write(actions_file, UPPER_CASE)
         explorer = make("/", fs=memfs, user_actions="enabled")
