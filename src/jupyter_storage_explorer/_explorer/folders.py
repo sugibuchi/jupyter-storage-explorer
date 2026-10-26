@@ -7,14 +7,15 @@ from typing import TYPE_CHECKING, Any
 
 from jupyter_storage_explorer import _infos, _paths
 from jupyter_storage_explorer._explorer.listing import Listing
-from jupyter_storage_explorer.formats import DataFormat, ItemContext
+from jupyter_storage_explorer.base import ItemContext
 from jupyter_storage_explorer.formats.base import detect as detect_format
 
 if TYPE_CHECKING:
     from fsspec.spec import AbstractFileSystem
 
     from jupyter_storage_explorer._jobs.loader import Load
-    from jupyter_storage_explorer.location import Location
+    from jupyter_storage_explorer.base import Location
+    from jupyter_storage_explorer.formats import DataFormat
 
 
 @dataclass

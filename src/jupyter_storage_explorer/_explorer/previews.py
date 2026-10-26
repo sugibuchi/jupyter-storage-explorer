@@ -18,10 +18,11 @@ from jupyter_storage_explorer._explorer.view_tab import ViewTab
 from jupyter_storage_explorer._json import jsonable
 from jupyter_storage_explorer._query.data_query import DataQuery
 from jupyter_storage_explorer._query.table_set import SEPARATOR, TableSet
+from jupyter_storage_explorer.actions.python import PythonEngine
+from jupyter_storage_explorer.base import ItemContext
 from jupyter_storage_explorer.data_explorer import DataExplorer
-from jupyter_storage_explorer.formats import (
-    DataFormat,
-    ItemContext,
+from jupyter_storage_explorer.formats.base import matching_formats
+from jupyter_storage_explorer.views import (
     JupyterWidgetView,
     MediaView,
     QueryView,
@@ -31,8 +32,6 @@ from jupyter_storage_explorer.formats import (
     ViewWithChoice,
     ViewWithPrompt,
 )
-from jupyter_storage_explorer.formats.base import matching_formats
-from jupyter_storage_explorer.formats.python import PythonEngine
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -41,7 +40,8 @@ if TYPE_CHECKING:
     from fsspec import AbstractFileSystem
 
     from jupyter_storage_explorer._explorer.actions import Recipe
-    from jupyter_storage_explorer.formats.actions import ViewAction
+    from jupyter_storage_explorer.actions import ViewAction
+    from jupyter_storage_explorer.formats import DataFormat
 
 log = logging.getLogger(__name__)
 

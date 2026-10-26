@@ -39,17 +39,11 @@ from jupyter_storage_explorer_pyspark_support import (
 from jupyter_storage_explorer_pyspark_support import actions as pyspark
 
 from jupyter_storage_explorer._explorer.actions import ActionChain
-from jupyter_storage_explorer.filesystems import S3Location
-from jupyter_storage_explorer.formats import (
-    Csv,
-    DeltaLake,
-    JsonLines,
-    Parquet,
-    QueryView,
-    ViewLimits,
-)
-from jupyter_storage_explorer.formats.actions import CodeAction
+from jupyter_storage_explorer.actions import CodeAction
+from jupyter_storage_explorer.filesystems.locations import S3Location
+from jupyter_storage_explorer.formats import Csv, DeltaLake, JsonLines, Parquet
 from jupyter_storage_explorer.testing import local_item
+from jupyter_storage_explorer.views import QueryView, ViewLimits
 
 LIMITS = ViewLimits()
 # The real one: the session fixture below replaces it for the views.

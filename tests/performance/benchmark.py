@@ -23,10 +23,10 @@ from fsspec.implementations.asyn_wrapper import AsyncFileSystemWrapper
 from fsspec.implementations.memory import MemoryFileSystem
 
 from jupyter_storage_explorer import DataExplorer, QuerySettings, StorageExplorer
-from jupyter_storage_explorer.filesystems import (
+from jupyter_storage_explorer.filesystems import Progress
+from jupyter_storage_explorer.filesystems.operations import (
     AsyncFsspecOperations,
     FsspecOperations,
-    Progress,
 )
 
 LATENCY = 0.05  # seconds per call

@@ -15,7 +15,8 @@ from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
 from jupyter_storage_explorer import Location
-from jupyter_storage_explorer.filesystems import DatabricksMapper, FileSystemMapper
+from jupyter_storage_explorer.filesystems import FileSystemMapper
+from jupyter_storage_explorer.filesystems.mappers import DatabricksMapper
 
 if TYPE_CHECKING:
     from fsspec import AbstractFileSystem

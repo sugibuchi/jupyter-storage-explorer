@@ -1,4 +1,4 @@
-"""location.py and filesystems/locations.py: locations compare equal when they
+"""base.py and filesystems/locations.py: locations compare equal when they
 name the same item, have URLs, and travel as JSON."""
 
 from __future__ import annotations
@@ -8,7 +8,7 @@ import dataclasses
 import pytest
 
 from jupyter_storage_explorer import Location
-from jupyter_storage_explorer.filesystems import (
+from jupyter_storage_explorer.filesystems.locations import (
     AbfsLocation,
     FsspecLocation,
     GcsLocation,

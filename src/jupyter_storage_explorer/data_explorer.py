@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
     import narwhals as nw
 
-    from jupyter_storage_explorer.location import Location
+    from jupyter_storage_explorer.base import Location
 
 # The key DataExplorer's settings are kept under, in its own states.
 _KEY = "data"
@@ -89,7 +89,7 @@ class DataExplorer(anywidget.AnyWidget):
         first rows when it opens, and each page of a live query's result (on
         the data itself, not rows in memory), e.g. to skip rows in a library
         the default reads them all for; None to leave them to the default,
-        ``jupyter_storage_explorer.fetch_rows``, which has an example.
+        which skips rows where the library can and else drops them.
     title : str, optional
         Shown above the table. Default: the dataframe's type, e.g.
         "LazyFrame".
@@ -111,7 +111,6 @@ class DataExplorer(anywidget.AnyWidget):
     --------
     StorageExplorer : The file explorer, whose data browser is the same.
     QuerySettings : Settings written in code.
-    fetch_rows : How pages are read by default.
 
     Examples
     --------

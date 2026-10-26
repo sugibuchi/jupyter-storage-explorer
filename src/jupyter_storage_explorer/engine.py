@@ -9,10 +9,10 @@ from typing import TYPE_CHECKING, Any, ClassVar, TypeAlias
 
 # At run time, not only for type checkers: EngineOptions, a public alias,
 # names it.
-from jupyter_storage_explorer.location import Location
+from jupyter_storage_explorer.base import Location
 
 if TYPE_CHECKING:
-    from jupyter_storage_explorer.formats.packages import PythonPackage
+    from jupyter_storage_explorer.packages import PythonPackage
 
 # StorageExplorer's engine_options: {engine key: {format name or "*": options}},
 # the options a dict, or a function of the item's location returning one

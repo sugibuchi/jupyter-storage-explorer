@@ -16,9 +16,9 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
     from importlib.metadata import Distribution
 
+    from jupyter_storage_explorer.actions import Action
     from jupyter_storage_explorer.filesystems.mapper import FileSystemMapper
     from jupyter_storage_explorer.filesystems.operation import FileSystemOperations
-    from jupyter_storage_explorer.formats.actions import Action
     from jupyter_storage_explorer.formats.base import DataFormat
 
 # The entry point group plugins register their class in, named by its key.
@@ -110,7 +110,7 @@ class StorageExplorerPlugin:
         linking to the home page. Empty or None without them.
     actions : sequence of Action
         What the plugin does with formats' data, in the order tried:
-        functions decorated with ``formats.actions.view`` or ``code``, given
+        functions decorated with ``actions.view`` or ``code``, given
         as ``register_actions(...)``; their formats are detected too.
     formats : sequence of DataFormat classes
         Formats of the plugin's own that none of its actions names (rare:

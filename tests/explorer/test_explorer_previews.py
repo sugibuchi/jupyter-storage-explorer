@@ -20,18 +20,12 @@ from jupyter_storage_explorer._explorer import previews
 from jupyter_storage_explorer._explorer.actions import ActionChain
 from jupyter_storage_explorer._explorer.view_tab import ViewTab
 from jupyter_storage_explorer._query.settings import QuerySettings
+from jupyter_storage_explorer.actions import ViewAction, code, view
+from jupyter_storage_explorer.actions.python import PythonEngine
 from jupyter_storage_explorer.data_explorer import DataExplorer
-from jupyter_storage_explorer.formats import (
-    PythonPackage,
-    QueryView,
-    TableView,
-    Text,
-    TextView,
-    ViewLimits,
-    file_format,
-)
-from jupyter_storage_explorer.formats.actions import ViewAction, code, view
-from jupyter_storage_explorer.formats.python import PythonEngine
+from jupyter_storage_explorer.formats import Text, file_format
+from jupyter_storage_explorer.packages import PythonPackage
+from jupyter_storage_explorer.views import QueryView, TableView, TextView, ViewLimits
 
 
 class TestPreview:

@@ -5,9 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from jupyter_storage_explorer import StorageExplorerPlugin, StorageExplorerPluginOptions
-from jupyter_storage_explorer.filesystems import FileSystemMapper, FsspecOperations
-from jupyter_storage_explorer.formats import Csv, Engine
-from jupyter_storage_explorer.formats.actions import code, register_actions
+from jupyter_storage_explorer.actions import code, register_actions
+from jupyter_storage_explorer.engine import Engine
+from jupyter_storage_explorer.filesystems import FileSystemMapper
+from jupyter_storage_explorer.filesystems.operations import FsspecOperations
+from jupyter_storage_explorer.formats import Csv
 
 
 class AvroFormat(Csv):

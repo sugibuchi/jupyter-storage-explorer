@@ -1,4 +1,4 @@
-"""Engines (formats/engine.py, PythonEngine in formats/python.py, the others
+"""Engines (engine.py, PythonEngine in actions/python.py, the others
 in the plugins): which are offered, in which order, which views an item, and
 the explorer's choice of one."""
 
@@ -12,20 +12,15 @@ from all_actions import all_actions
 from explorers import make, path_of
 from jupyter_storage_explorer_databricks_support import DatabricksConnect
 
+from jupyter_storage_explorer import packages
 from jupyter_storage_explorer._explorer.actions import ActionChain
 from jupyter_storage_explorer._explorer.states import ExplorerStates
-from jupyter_storage_explorer.formats import (
-    Csv,
-    DeltaLake,
-    Engine,
-    Markdown,
-    Parquet,
-    PythonPackage,
-    packages,
-)
-from jupyter_storage_explorer.formats.actions import code, view
-from jupyter_storage_explorer.formats.packages import DeltaLake as DeltaLakePackage
-from jupyter_storage_explorer.formats.python import PythonEngine
+from jupyter_storage_explorer.actions import code, view
+from jupyter_storage_explorer.actions.python import PythonEngine
+from jupyter_storage_explorer.engine import Engine
+from jupyter_storage_explorer.formats import Csv, DeltaLake, Markdown, Parquet
+from jupyter_storage_explorer.packages import DeltaLake as DeltaLakePackage
+from jupyter_storage_explorer.packages import PythonPackage
 
 
 class Installed(PythonPackage):

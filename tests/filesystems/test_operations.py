@@ -18,17 +18,17 @@ from jupyter_storage_explorer._jobs import runner as jobs
 from jupyter_storage_explorer._jobs.operation_chain import OperationChain
 from jupyter_storage_explorer._jobs.progress import JobProgress
 from jupyter_storage_explorer._jobs.runner import JobRunner
-from jupyter_storage_explorer.filesystems import (
-    AsyncFsspecOperations,
-    AtomicMoveOperation,
-    FsspecOperations,
-)
 from jupyter_storage_explorer.filesystems.operation import (
     FileSystemOperations,
     Measurement,
     OperationCancelled,
     Progress,
     measure_file_info,
+)
+from jupyter_storage_explorer.filesystems.operations import (
+    AsyncFsspecOperations,
+    AtomicMoveOperation,
+    FsspecOperations,
 )
 
 

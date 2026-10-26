@@ -15,8 +15,8 @@ from jupyter_storage_explorer.formats import Text
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
 
+    from jupyter_storage_explorer.actions import Action
     from jupyter_storage_explorer.formats import DataFormat
-    from jupyter_storage_explorer.formats.actions import Action
 
 
 class UserActionsMixin:

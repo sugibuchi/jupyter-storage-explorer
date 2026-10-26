@@ -11,29 +11,16 @@ from dataclasses import dataclass
 from inspect import cleandoc
 from typing import TYPE_CHECKING, Any
 
+from jupyter_storage_explorer.actions import ActionOptions, code, register_actions, view
+from jupyter_storage_explorer.base import ItemContext
+from jupyter_storage_explorer.engine import Engine
 from jupyter_storage_explorer.filesystems.locations import LocalLocation
-from jupyter_storage_explorer.formats.actions import (
-    ActionOptions,
-    code,
-    register_actions,
-    view,
-)
-from jupyter_storage_explorer.formats.base import DataFormat, ItemContext
 from jupyter_storage_explorer.formats.delta import DeltaLake
-from jupyter_storage_explorer.formats.engine import Engine
 from jupyter_storage_explorer.formats.excel import Excel
-from jupyter_storage_explorer.formats.packages import DeltaLake as DeltaLakePackage
-from jupyter_storage_explorer.formats.packages import Fsspec, PyArrow, PythonPackage
 from jupyter_storage_explorer.formats.parquet import Parquet
 from jupyter_storage_explorer.formats.text import Csv, Json, JsonLines
-from jupyter_storage_explorer.formats.views import (
-    Leaf,
-    QueryView,
-    TableSetView,
-    View,
-    ViewLimits,
-    ViewWithChoice,
-)
+from jupyter_storage_explorer.packages import DeltaLake as DeltaLakePackage
+from jupyter_storage_explorer.packages import Fsspec, PyArrow, PythonPackage
 from jupyter_storage_explorer.util import (
     LIBRARY_DEFAULT,
     LibraryDefault,
@@ -43,10 +30,19 @@ from jupyter_storage_explorer.util import (
     secret_dict_field,
     secret_field,
 )
+from jupyter_storage_explorer.views import (
+    Leaf,
+    QueryView,
+    TableSetView,
+    View,
+    ViewLimits,
+    ViewWithChoice,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
 
+    from jupyter_storage_explorer.formats.base import DataFormat
     from jupyter_storage_explorer.formats.parquet import ParquetLayout
 
 AS_LAZY_FRAME = "Load as LazyFrame"
@@ -54,7 +50,7 @@ AS_DATA_FRAME = "Load as DataFrame"
 
 
 # The engine's library, and those only polars uses (the support libraries
-# several engines use are the core's: jupyter_storage_explorer.formats.packages).
+# several engines use are the core's: jupyter_storage_explorer.packages).
 
 
 class Polars(PythonPackage):

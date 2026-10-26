@@ -22,13 +22,13 @@ import fsspec
 import pytest
 from fsspec.implementations.memory import MemoryFileSystem
 
+from jupyter_storage_explorer.base import ItemContext
 from jupyter_storage_explorer.filesystems import MapperChain, default_mappers
-from jupyter_storage_explorer.formats import ItemContext
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from jupyter_storage_explorer.location import Location
+    from jupyter_storage_explorer.base import Location
 
 __all__ = ["item_of", "local_item", "make_item", "memfs"]
 

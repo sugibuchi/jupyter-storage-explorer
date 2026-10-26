@@ -40,17 +40,16 @@ from jupyter_storage_explorer_duckdb_support import (
 from jupyter_storage_explorer_duckdb_support import actions as duckdb_actions
 from jupyter_storage_explorer_duckdb_support.actions import _read_by_duckdb
 
-from jupyter_storage_explorer.filesystems import (
+from jupyter_storage_explorer.actions import LocalFileCache
+from jupyter_storage_explorer.filesystems.locations import (
     AbfsLocation,
     S3Location,
     SftpLocation,
 )
-from jupyter_storage_explorer.formats import (
-    Csv,
-    DeltaLake,
-    JsonLines,
-    LocalFileCache,
-    Parquet,
+from jupyter_storage_explorer.formats import Csv, DeltaLake, JsonLines, Parquet
+from jupyter_storage_explorer.formats.base import detect
+from jupyter_storage_explorer.testing import item_of, local_item
+from jupyter_storage_explorer.views import (
     QueryView,
     TableSetView,
     TextView,
@@ -58,8 +57,6 @@ from jupyter_storage_explorer.formats import (
     ViewWithChoice,
     ViewWithConfirmation,
 )
-from jupyter_storage_explorer.formats.base import detect
-from jupyter_storage_explorer.testing import item_of, local_item
 
 LIMITS = ViewLimits(max_display_rows=2)
 SQLITE_BYTES = b"SQLite format 3\0" + b"\0" * 100

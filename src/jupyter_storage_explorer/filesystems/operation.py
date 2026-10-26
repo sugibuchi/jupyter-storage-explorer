@@ -241,7 +241,7 @@ class FileSystemOperations:
     Every method raises ``NotSupported``. Override those you implement, and
     raise ``self.NotSupported`` in them too for filesystems (or cases) you do
     not handle: each method is given the filesystem, and the next operations
-    object (in the end ``FsspecOperations``, see the ``filesystems`` package)
+    object (in the end ``FsspecOperations``, see ``filesystems.operations``)
     then does it. Any other exception
     is an error of the operation, reported to the user, including
     ``NotImplementedError`` raised by a library.

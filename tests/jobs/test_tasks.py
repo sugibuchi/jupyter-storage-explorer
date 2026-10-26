@@ -13,15 +13,12 @@ from jupyter_storage_explorer._jobs.incoming import IncomingFiles
 from jupyter_storage_explorer._jobs.operation_chain import OperationChain
 from jupyter_storage_explorer._jobs.progress import JobProgress
 from jupyter_storage_explorer._jobs.tasks import FileTasks, Task
-from jupyter_storage_explorer.filesystems import (
-    FsspecOperations,
-    LocalMapper,
-    MapperChain,
-    default_mappers,
-)
+from jupyter_storage_explorer.filesystems import MapperChain, default_mappers
+from jupyter_storage_explorer.filesystems.mappers import LocalMapper
 from jupyter_storage_explorer.filesystems.operation import (
     FileSystemOperations,
 )
+from jupyter_storage_explorer.filesystems.operations import FsspecOperations
 
 
 @pytest.fixture

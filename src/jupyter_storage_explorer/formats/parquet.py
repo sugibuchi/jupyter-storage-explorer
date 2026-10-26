@@ -12,8 +12,7 @@ from jupyter_storage_explorer.formats.base import DataFormat
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
 
-    from jupyter_storage_explorer.formats.base import ItemContext
-    from jupyter_storage_explorer.location import Location
+    from jupyter_storage_explorer.base import ItemContext, Location
 
 # Items of a directory looked at to decide whether it is a Parquet dataset.
 _MAX_DETECT_ITEMS = 100

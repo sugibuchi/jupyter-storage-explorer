@@ -17,7 +17,7 @@ from jupyter_storage_explorer.formats.base import DataFormat
 from jupyter_storage_explorer.formats.images import Image
 
 if TYPE_CHECKING:
-    from jupyter_storage_explorer.formats.base import ItemContext
+    from jupyter_storage_explorer.base import ItemContext
 
 
 class Text(DataFormat):

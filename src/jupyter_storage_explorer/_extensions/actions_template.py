@@ -9,8 +9,8 @@
 # See "Action development guide":
 # https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/action-development-guide.md
 
+from jupyter_storage_explorer.actions import code, view
 from jupyter_storage_explorer.formats import Json, Text
-from jupyter_storage_explorer.formats.actions import code, view
 
 # # A second view of text files, in upper case: your actions add to the
 # # explorer's, so "Preview as" offers it beside the explorer's own view. The

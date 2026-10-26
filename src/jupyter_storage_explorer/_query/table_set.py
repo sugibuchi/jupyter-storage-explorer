@@ -6,13 +6,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from jupyter_storage_explorer._explorer.common import error_text
-from jupyter_storage_explorer.formats.views import Leaf, TableSetView
+from jupyter_storage_explorer.views import Leaf, TableSetView
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
     from jupyter_storage_explorer._query.data_query import DataQuery
-    from jupyter_storage_explorer.formats.views import Node, View
+    from jupyter_storage_explorer.views import Node, View
 
 # Between the item's path and a table's id in the data browser's requests'
 # "path" (see query_path): neither holds it.

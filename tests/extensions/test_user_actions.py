@@ -10,14 +10,16 @@ import pytest
 
 from jupyter_storage_explorer import StorageExplorer
 from jupyter_storage_explorer._extensions.user_actions import load_user_actions
-from jupyter_storage_explorer.formats import Csv, ViewLimits
+from jupyter_storage_explorer.formats import Csv
+from jupyter_storage_explorer.views import ViewLimits
 
 # A user's file: an action of its own, and one imported (a built-in), which
 # is not the file's.
 SHOUT = """\
-from jupyter_storage_explorer.formats import Text, TextView
-from jupyter_storage_explorer.formats.actions import view
-from jupyter_storage_explorer.formats.python import PythonEngine, text_view
+from jupyter_storage_explorer.formats import Text
+from jupyter_storage_explorer.views import TextView
+from jupyter_storage_explorer.actions import view
+from jupyter_storage_explorer.actions.python import PythonEngine, text_view
 
 
 @view(format=Text, engine=PythonEngine, label="Shout{suffix}")
@@ -119,9 +121,11 @@ class TestFiles:
             """\
             from dataclasses import dataclass
 
-            from jupyter_storage_explorer.formats import ActionOptions, Csv, TextView
-            from jupyter_storage_explorer.formats.actions import view
-            from jupyter_storage_explorer.formats.python import PythonEngine
+            from jupyter_storage_explorer.actions import ActionOptions
+            from jupyter_storage_explorer.formats import Csv
+            from jupyter_storage_explorer.views import TextView
+            from jupyter_storage_explorer.actions import view
+            from jupyter_storage_explorer.actions.python import PythonEngine
 
 
             @dataclass(frozen=True, kw_only=True)

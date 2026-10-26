@@ -10,7 +10,7 @@ from explorers import entries, make
 
 UPPER_CASE = """\
 from jupyter_storage_explorer.formats import Text
-from jupyter_storage_explorer.formats.actions import view
+from jupyter_storage_explorer.actions import view
 
 
 @view(format=Text, label="Upper case")
@@ -21,7 +21,7 @@ def upper_case(fs, path):
 
 ABC_FILES = """\
 from jupyter_storage_explorer.formats import file_format
-from jupyter_storage_explorer.formats.actions import code
+from jupyter_storage_explorer.actions import code
 
 
 @code(format=file_format(".abc", label="ABC files", name="abc"))

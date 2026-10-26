@@ -13,7 +13,8 @@ import pytest
 from in_a_kernel import until
 from sqlframe.duckdb import DuckDBSession
 
-from jupyter_storage_explorer import DataExplorer, QuerySettings, fetch_rows
+from jupyter_storage_explorer import DataExplorer, QuerySettings
+from jupyter_storage_explorer._query.data_query import fetch_rows
 
 DF = pl.DataFrame({"a": [3, 1, 2], "b": ["x", "y", None]})
 

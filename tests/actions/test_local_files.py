@@ -1,4 +1,4 @@
-"""formats/local_files.py: local copies of remote files, downloaded on
+"""actions/local_files.py: local copies of remote files, downloaded on
 demand, valid while the remote file's modification time is the same, kept
 while used."""
 
@@ -10,7 +10,7 @@ import time
 
 import pytest
 
-from jupyter_storage_explorer.formats import LocalFileCache, local_file_cache
+from jupyter_storage_explorer.actions import LocalFileCache, local_file_cache
 from jupyter_storage_explorer.testing import local_item
 
 

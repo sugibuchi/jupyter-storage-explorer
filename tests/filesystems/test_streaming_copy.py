@@ -12,12 +12,12 @@ from fsspec.implementations.asyn_wrapper import AsyncFileSystemWrapper
 from fsspec.spec import AbstractBufferedFile
 
 from jupyter_storage_explorer._jobs.progress import JobProgress
-from jupyter_storage_explorer.filesystems import (
+from jupyter_storage_explorer.filesystems import _streaming
+from jupyter_storage_explorer.filesystems.operation import OperationCancelled
+from jupyter_storage_explorer.filesystems.operations import (
     AsyncFsspecOperations,
     FsspecOperations,
-    _streaming,
 )
-from jupyter_storage_explorer.filesystems.operation import OperationCancelled
 
 DATA = bytes(range(256)) * 4  # 1 KiB
 

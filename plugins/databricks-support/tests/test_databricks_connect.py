@@ -28,7 +28,7 @@ from jupyter_storage_explorer_pyspark_support import (
 )
 from jupyter_storage_explorer_pyspark_support import parquet_view as pyspark_view
 
-from jupyter_storage_explorer.filesystems import S3Location
+from jupyter_storage_explorer.filesystems.locations import S3Location
 from jupyter_storage_explorer.formats import Parquet
 from jupyter_storage_explorer.testing import local_item
 

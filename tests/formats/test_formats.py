@@ -18,21 +18,23 @@ from jupyter_storage_explorer.formats import (
     Jpeg,
     Json,
     Markdown,
-    MarkdownView,
-    MediaView,
     Parquet,
     Png,
-    PythonPackage,
     PythonScript,
     Svg,
     Text,
-    TextView,
-    TreeView,
-    ViewLimits,
     Yaml,
 )
 from jupyter_storage_explorer.formats.base import matching_formats
 from jupyter_storage_explorer.formats.defaults import DEFAULT_FORMATS
+from jupyter_storage_explorer.packages import PythonPackage
+from jupyter_storage_explorer.views import (
+    MarkdownView,
+    MediaView,
+    TextView,
+    TreeView,
+    ViewLimits,
+)
 
 CHAIN = ActionChain(all_actions())
 DEFAULT_FORMATS_MADE = [cls() for cls in DEFAULT_FORMATS]

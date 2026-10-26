@@ -20,8 +20,7 @@ from jupyter_storage_explorer import _infos
 from jupyter_storage_explorer.filesystems.locations import LocalLocation
 
 if TYPE_CHECKING:
-    from jupyter_storage_explorer.formats.base import ItemContext
-    from jupyter_storage_explorer.location import Location
+    from jupyter_storage_explorer.base import ItemContext, Location
 
 # What the cache holds of an item (``LocalFileCache.status``).
 CacheStatus: TypeAlias = Literal["cached", "invalid", "not_cached"]

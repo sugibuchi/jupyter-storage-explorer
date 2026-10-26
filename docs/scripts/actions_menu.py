@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 # The guide's first action, as the user's actions file.
 FIRST_ACTION = '''\
 from jupyter_storage_explorer.formats import Json
-from jupyter_storage_explorer.formats.actions import code
+from jupyter_storage_explorer.actions import code
 
 PRETTY_PRINT = """
 import json

@@ -222,8 +222,8 @@ ignore = [
 [tool.ruff.lint.flake8-type-checking]
 # Actions' decorators read the options class from the annotation at run time.
 runtime-evaluated-decorators = [
-    "jupyter_storage_explorer.formats.actions.code",
-    "jupyter_storage_explorer.formats.actions.view",
+    "jupyter_storage_explorer.actions.code",
+    "jupyter_storage_explorer.actions.view",
 ]
 
 [tool.ruff.lint.flake8-bugbear]

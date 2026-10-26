@@ -8,10 +8,11 @@ from all_actions import NO_PLUGINS
 from jupyter_storage_explorer import StorageExplorer
 from jupyter_storage_explorer._explorer.actions import ActionChain
 from jupyter_storage_explorer._explorer.icons import format_icons
+from jupyter_storage_explorer.actions import view
+from jupyter_storage_explorer.actions.defaults import DEFAULT_ACTIONS
+from jupyter_storage_explorer.actions.python import PythonEngine
 from jupyter_storage_explorer.formats import FILE_ICONS, Csv
-from jupyter_storage_explorer.formats.actions import view
-from jupyter_storage_explorer.formats.defaults import DEFAULT_ACTIONS, DEFAULT_FORMATS
-from jupyter_storage_explorer.formats.python import PythonEngine
+from jupyter_storage_explorer.formats.defaults import DEFAULT_FORMATS
 
 
 class TestFileIcons:

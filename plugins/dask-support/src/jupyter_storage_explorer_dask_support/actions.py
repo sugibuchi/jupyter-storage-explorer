@@ -47,25 +47,19 @@ import fsspec
 from fsspec.core import split_protocol
 from fsspec.implementations.dirfs import DirFileSystem
 
-from jupyter_storage_explorer.filesystems.locations import LocalLocation
-from jupyter_storage_explorer.formats.actions import (
+from jupyter_storage_explorer.actions import (
     ActionOptions,
     code,
+    local_file_cache,
     register_actions,
     view,
 )
-from jupyter_storage_explorer.formats.base import ItemContext
-from jupyter_storage_explorer.formats.engine import Engine
-from jupyter_storage_explorer.formats.local_files import local_file_cache
-from jupyter_storage_explorer.formats.packages import PyArrow, PythonPackage
+from jupyter_storage_explorer.base import ItemContext
+from jupyter_storage_explorer.engine import Engine
+from jupyter_storage_explorer.filesystems.locations import LocalLocation
 from jupyter_storage_explorer.formats.parquet import Parquet
 from jupyter_storage_explorer.formats.text import Csv, JsonLines
-from jupyter_storage_explorer.formats.views import (
-    QueryView,
-    View,
-    ViewLimits,
-    ViewWithConfirmation,
-)
+from jupyter_storage_explorer.packages import PyArrow, PythonPackage
 from jupyter_storage_explorer.util import (
     LIBRARY_DEFAULT,
     LibraryDefault,
@@ -73,6 +67,12 @@ from jupyter_storage_explorer.util import (
     format_kwargs,
     format_size,
     secret_dict_field,
+)
+from jupyter_storage_explorer.views import (
+    QueryView,
+    View,
+    ViewLimits,
+    ViewWithConfirmation,
 )
 
 if TYPE_CHECKING:
@@ -89,7 +89,7 @@ _COPY_KEPT = 600
 
 # The engine's libraries: Dask, and pandas, which Dask's partitions are and
 # the data browser collects them into. PyArrow, which dask.dataframe
-# requires, is the core's (jupyter_storage_explorer.formats.packages).
+# requires, is the core's (jupyter_storage_explorer.packages).
 
 
 class Dask(PythonPackage):

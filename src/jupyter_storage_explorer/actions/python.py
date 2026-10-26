@@ -21,18 +21,14 @@ from pygments.formatters import HtmlFormatter
 from pygments.lexers import get_lexer_by_name
 from pygments.util import ClassNotFound
 
-from jupyter_storage_explorer.formats.actions import (
-    ActionOptions,
-    code,
-    register_actions,
-    view,
-)
-from jupyter_storage_explorer.formats.base import ItemContext
-from jupyter_storage_explorer.formats.engine import Engine
+from jupyter_storage_explorer.actions import ActionOptions, code, register_actions, view
+from jupyter_storage_explorer.base import ItemContext
+from jupyter_storage_explorer.engine import Engine
 from jupyter_storage_explorer.formats.images import Image
-from jupyter_storage_explorer.formats.packages import Fsspec, Pillow
 from jupyter_storage_explorer.formats.text import Json, Markdown, Text
-from jupyter_storage_explorer.formats.views import (
+from jupyter_storage_explorer.packages import Fsspec, Pillow
+from jupyter_storage_explorer.util import format_kwargs, format_size, secret_dict_field
+from jupyter_storage_explorer.views import (
     MarkdownView,
     MediaView,
     TextView,
@@ -40,7 +36,6 @@ from jupyter_storage_explorer.formats.views import (
     View,
     ViewLimits,
 )
-from jupyter_storage_explorer.util import format_kwargs, format_size, secret_dict_field
 
 if TYPE_CHECKING:
     from collections.abc import Mapping

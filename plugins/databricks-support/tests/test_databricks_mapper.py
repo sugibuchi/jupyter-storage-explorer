@@ -16,12 +16,9 @@ from jupyter_storage_explorer_databricks_support import (
 )
 
 from jupyter_storage_explorer import Location
-from jupyter_storage_explorer.filesystems import (
-    DatabricksMapper,
-    FsspecLocation,
-    MapperChain,
-    default_mappers,
-)
+from jupyter_storage_explorer.filesystems import MapperChain, default_mappers
+from jupyter_storage_explorer.filesystems.locations import FsspecLocation
+from jupyter_storage_explorer.filesystems.mappers import DatabricksMapper
 
 HOST = "https://ADB-1234567890123456.7.azuredatabricks.net/"
 

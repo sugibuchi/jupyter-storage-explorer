@@ -7,7 +7,7 @@ import pytest
 from explorers import make, storage
 
 from jupyter_storage_explorer import _paths
-from jupyter_storage_explorer.filesystems import S3Location
+from jupyter_storage_explorer.filesystems.locations import S3Location
 
 
 def test_download(mem_explorer):

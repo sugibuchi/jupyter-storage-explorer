@@ -34,17 +34,11 @@ from jupyter_storage_explorer_dask_support import (
 )
 
 from jupyter_storage_explorer._query.data_query import fetch_rows
+from jupyter_storage_explorer.actions import local_file_cache
 from jupyter_storage_explorer.filesystems.locations import S3Location
-from jupyter_storage_explorer.formats import (
-    Csv,
-    JsonLines,
-    Parquet,
-    QueryView,
-    ViewLimits,
-    ViewWithConfirmation,
-    local_file_cache,
-)
+from jupyter_storage_explorer.formats import Csv, JsonLines, Parquet
 from jupyter_storage_explorer.testing import item_of, local_item
+from jupyter_storage_explorer.views import QueryView, ViewLimits, ViewWithConfirmation
 
 dd = pytest.importorskip("dask.dataframe")
 pd = pytest.importorskip("pandas")

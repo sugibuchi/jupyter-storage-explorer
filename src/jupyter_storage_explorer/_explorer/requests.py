@@ -13,7 +13,7 @@ from jupyter_storage_explorer._explorer.common import (
 from jupyter_storage_explorer._jobs import properties
 from jupyter_storage_explorer._jobs.tasks import FileTasks, Plan
 from jupyter_storage_explorer._jobs.transfer_policy import computer_url
-from jupyter_storage_explorer.location import Location
+from jupyter_storage_explorer.base import Location
 from jupyter_storage_explorer.util import format_size
 
 if TYPE_CHECKING:
