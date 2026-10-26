@@ -13,20 +13,29 @@ from jupyter_storage_explorer._explorer.actions import ActionChain
 from jupyter_storage_explorer.formats import (
     Csv,
     DeltaLake,
+    Ico,
     Image,
+    Jpeg,
     Json,
     Markdown,
     MarkdownView,
     MediaView,
     Parquet,
+    Png,
     PythonPackage,
+    PythonScript,
+    Svg,
     Text,
     TextView,
     TreeView,
     ViewLimits,
+    Yaml,
 )
+from jupyter_storage_explorer.formats.base import matching_formats
+from jupyter_storage_explorer.formats.defaults import DEFAULT_FORMATS
 
 CHAIN = ActionChain(all_actions())
+DEFAULT_FORMATS_MADE = [cls() for cls in DEFAULT_FORMATS]
 
 
 def parquet_bytes(df: pl.DataFrame) -> bytes:
@@ -176,6 +185,65 @@ def test_delta_detection(make_item, memfs):
     assert not DeltaLake().matches(make_item("/u"))
 
 
+class TestTextFormats:
+    @pytest.mark.parametrize(
+        ("path", "fmt"),
+        [
+            ("/a.txt", Text),
+            ("/a.py", PythonScript),
+            ("/a.yml", Yaml),
+            ("/a.md", Markdown),
+            ("/a.csv", Csv),
+            ("/a.svg", Svg),
+        ],
+    )
+    def test_each_kind_by_its_extensions(self, make_item, path, fmt):
+        found = matching_formats(make_item(path, b""), formats=DEFAULT_FORMATS_MADE)
+        assert [type(f) for f in found] == [fmt]
+        assert isinstance(found[0], Text)
+
+    def test_kinds_rank_above_the_fallback(self):
+        geojson = type("GeoJson", (Text,), {"name": "geojson", "label": "GeoJSON"})
+        assert (Text.priority, PythonScript.priority, geojson.priority) == (-10, 0, 0)
+
+    def test_svg_is_an_image_too(self):
+        assert isinstance(Svg(), Image)
+        assert Svg().mime_type("/a.svg") == "image/svg+xml"
+
+    @pytest.mark.parametrize(
+        ("path", "language"),
+        [
+            ("/a.py", "python"),
+            ("/a.md", "markdown"),
+            ("/a.json", "json"),
+            ("/Dockerfile", "docker"),  # no format of its own: Pygments knows it
+            ("/a.txt", None),
+            ("/a.unknown", None),
+        ],
+    )
+    def test_language_from_pygments(self, path, language):
+        assert Text().language(path) == language
+
+
+class TestImageFormats:
+    @pytest.mark.parametrize(
+        ("path", "fmt", "mime"),
+        [
+            ("/a.png", Png, "image/png"),
+            ("/a.JPG", Jpeg, "image/jpeg"),
+            ("/a.jpeg", Jpeg, "image/jpeg"),
+            ("/a.ico", Ico, "image/x-icon"),
+        ],
+    )
+    def test_each_kind_by_its_extensions(self, make_item, path, fmt, mime):
+        found = matching_formats(make_item(path, b""), formats=DEFAULT_FORMATS_MADE)
+        assert [type(f) for f in found] == [fmt]
+        assert found[0].mime_type(path) == mime
+
+    def test_image_matches_no_file_itself(self, make_item):
+        assert not Image().matches(make_item("/a.png", b""))
+
+
 LIMITS = ViewLimits(max_display_rows=2)
 
 
@@ -214,9 +282,20 @@ class TestViews:
         assert md.text == "# Title\n"
 
     def test_image(self, make_item):
-        media = view(Image(), make_item("/a.png", b"\x89PNG"))
+        media = view(Png(), make_item("/a.png", b"\x89PNG"))
         assert isinstance(media, MediaView)
         assert (media.mime, media.data) == ("image/png", b"\x89PNG")
+
+    def test_text_views_of_a_kind_without_its_own(self, make_item):
+        # A Python script has no views of its own: Text's.
+        text = view(PythonScript(), make_item("/a.py", b"import os\n"))
+        assert (type(text), text.language) == (TextView, "python")
+
+    def test_own_views_replace_the_base_classes(self, make_item):
+        # Markdown's own view, never Text's; an SVG image's, Image's.
+        assert isinstance(view(Markdown(), make_item("/a.md", b"# A\n")), MarkdownView)
+        media = view(Svg(), make_item("/a.svg", b"<svg/>"))
+        assert (type(media), media.mime) == (MediaView, "image/svg+xml")
 
     def test_nothing_installed(self, make_item, monkeypatch):
         monkeypatch.setattr(PythonPackage, "is_installed", lambda self: False)
@@ -225,7 +304,7 @@ class TestViews:
     def test_image_needs_no_package(self, make_item, monkeypatch):
         # The browser shows images itself: Pillow is for the load code only.
         monkeypatch.setattr(PythonPackage, "is_installed", lambda self: False)
-        assert isinstance(view(Image(), make_item("/a.png", b"\x89PNG")), MediaView)
+        assert isinstance(view(Png(), make_item("/a.png", b"\x89PNG")), MediaView)
 
 
 class TestRecipes:
@@ -235,11 +314,11 @@ class TestRecipes:
         assert "data = json.load(f)" in code["fsspec: Load the JSON value"]
 
     def test_svg_has_no_recipe(self, make_item):
-        assert CHAIN.recipes(Image(), make_item("/a.svg", b"<svg/>")) == []
+        assert CHAIN.recipes(Svg(), make_item("/a.svg", b"<svg/>")) == []
 
     def test_runs_in_a_new_notebook(self, make_item):
         # Its imports first, whatever the notebook has imported.
-        [recipe] = CHAIN.recipes(Image(), make_item("/a.png", b""))
+        [recipe] = CHAIN.recipes(Png(), make_item("/a.png", b""))
         assert recipe.title == "Open the image"
         assert recipe.code == (
             "import fsspec\n"

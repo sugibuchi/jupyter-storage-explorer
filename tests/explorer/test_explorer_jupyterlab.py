@@ -88,10 +88,11 @@ class TestOpenInJupyterLab:
 
     def test_text_formats(self, mem_explorer):
         # Opened in JupyterLab's text editor even when it does not know the
-        # file type; data files are not (Parquet, Excel), nor are formats
-        # JupyterLab knows itself (CSV, JSON).
-        assert {"text", "markdown"} <= set(mem_explorer._text_formats)
-        assert not {"parquet", "excel", "delta", "image", "csv"} & set(
+        # file type: Text and its subclasses, not data files (Parquet, Excel).
+        assert {"text", "markdown", "csv", "python-script"} <= set(
+            mem_explorer._text_formats
+        )
+        assert not {"parquet", "excel", "delta", "image"} & set(
             mem_explorer._text_formats
         )
 

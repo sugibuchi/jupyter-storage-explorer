@@ -184,7 +184,7 @@ def text_view(
     fmt: Text, ctx: ItemContext, options: FsspecOptions, limits: ViewLimits
 ) -> View:
     """Text and code files: from their beginning, highlighted by their
-    extension."""
+    names."""
     text, truncated = ctx.head_text(limits.max_bytes)
     note = _size_note(ctx, limits) if truncated else ""
     return _text_view(text, fmt.language(ctx.path), note)
@@ -192,8 +192,8 @@ def text_view(
 
 @view(format=Markdown, engine=PythonEngine)
 def markdown_view(ctx: ItemContext, limits: ViewLimits) -> View:
-    """Markdown, rendered by the browser. Registered before ``text_view``:
-    Markdown is a Text format."""
+    """Markdown, rendered by the browser: the default view of Markdown files,
+    before Text's ``text_view``."""
     text, truncated = ctx.head_text(limits.max_bytes)
     note = _size_note(ctx, limits) if truncated else ""
     return MarkdownView(text=text, note=note)
@@ -237,7 +237,7 @@ def image_view(fmt: Image, ctx: ItemContext, limits: ViewLimits) -> View:
 
 def _not_svg(fmt: Image, ctx: ItemContext, options: ActionOptions) -> bool:
     """Whether Pillow can open the image: not SVG."""
-    return fmt.mime_type(ctx.path) != "image/svg+xml"
+    return fmt.mime != "image/svg+xml"
 
 
 @code(
@@ -253,7 +253,8 @@ def image_code(ctx: ItemContext, options: FsspecOptions) -> str:
     return _fsspec_code(IMAGE_TEMPLATE, ctx, options)
 
 
-# In the order tried: Markdown before Text, of which it is one.
+# In the order tried among the actions of one format. The explorer tries a
+# format's own actions before its base classes', e.g. Markdown's before Text's.
 BUILT_IN_ACTIONS = register_actions(
     json_view,
     json_code,

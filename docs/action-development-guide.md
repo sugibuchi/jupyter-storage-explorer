@@ -78,20 +78,31 @@ Both are in `jupyter_storage_explorer.formats.actions`.
 The first argument of `@view` and `@code` is the format of the files the action is offered for. The explorer's formats
 are in `jupyter_storage_explorer.formats`:
 
-| Format      | Files                                                                  |
-|-------------|------------------------------------------------------------------------|
-| `Text`      | Text and code, e.g. `.txt`, `.log`, `.py`, `.sql`, `.yaml`, `.xml`     |
-| `Markdown`  | `.md`, `.markdown`                                                     |
-| `Json`      | `.json`                                                                |
-| `JsonLines` | `.jsonl`, `.ndjson`                                                    |
-| `Csv`       | `.csv`, `.tsv`                                                         |
-| `Parquet`   | `.parquet`, `.parq`                                                    |
-| `DeltaLake` | Folders of Delta Lake tables                                           |
-| `Excel`     | `.xlsx`, `.xlsm`                                                       |
-| `Image`     | `.png`, `.jpg`, `.gif`, `.webp`, `.svg` and other images               |
+| Format                           | Files                                                       |
+|----------------------------------|-------------------------------------------------------------|
+| `Text`                           | Plain text, `.txt`, and the base of every text format below |
+| `PythonScript`, `Sql`, `Yaml`, … | Code and configuration, e.g. `.py`, `.sql`, `.yaml`, `.log` |
+| `Markdown`                       | `.md`, `.markdown`                                          |
+| `Json`                           | `.json`                                                     |
+| `JsonLines`                      | `.jsonl`, `.ndjson`                                         |
+| `Csv`                            | `.csv`, `.tsv`                                              |
+| `Parquet`                        | `.parquet`, `.parq`                                         |
+| `DeltaLake`                      | Folders of Delta Lake tables                                |
+| `Excel`                          | `.xlsx`, `.xlsm`                                            |
+| `Image`                          | No file itself: the base of every image format below        |
+| `Png`, `Jpeg`, `Gif`, …          | Images, e.g. `.png`, `.jpg`, `.gif`, `.webp`                |
+| `Svg`                            | `.svg`: an `Image` and a `Text` format                      |
 
-Plugins add others, in their packages. An action is also offered for the subclasses of its format, e.g. a `Text`
-action for Markdown files.
+[Supported formats](storage-explorer.md#supported-formats) lists the code, configuration and image formats.
+
+Plugins add others, in their packages.
+
+An action is also offered for the subclasses of its format, unless they have actions of their own of the same kind:
+
+- `Text`'s view previews Python scripts, which have no views of their own.
+- An `Image` action does every kind of image, e.g. PNG and JPEG images.
+- Markdown files are previewed by Markdown's own view. **Preview as** still offers Text's, under "Text".
+- CSV files get CSV's code in **Python code**, not Text's.
 
 For files no format covers, make a format of your own with `file_format`, from `jupyter_storage_explorer.formats`:
 
@@ -116,11 +127,11 @@ def read_avro_records(url):
 `file_format` names the files in several ways:
 
 ```python
-file_format(".abc")                            # files named *.abc
-file_format([".yml", ".yaml"])                 # either ending
-file_format(names="Dockerfile")                # files of that name
-file_format(names="*.zarr", is_dir=True)       # folders, by name
-file_format(".log", label="Logs", name="logs") # with a label and a name of your own
+file_format(".abc")  # files named *.abc
+file_format([".yml", ".yaml"])  # either ending
+file_format(names="Dockerfile")  # files of that name
+file_format(names="*.zarr", is_dir=True)  # folders, by name
+file_format(".log", label="Logs", name="logs")  # with a label and a name of your own
 ```
 
 Case is ignored.
@@ -148,13 +159,13 @@ Never put secrets in it: code gets copied and shared.
 
 A view returns what to show:
 
-| Returned                           | Shown                                                         |
-|------------------------------------|---------------------------------------------------------------|
-| A `str`                            | As text.                                                      |
-| A `dict` or a `list`               | As a collapsible tree.                                        |
-| A dataframe                        | In the data browser, to page, sort and filter. Best lazy.     |
-| A Jupyter widget, e.g. ipywidgets' | As it is, as a notebook shows it: see [Views](#views).        |
-| A view object                      | As the object says: see [Views](#views).                      |
+| Returned                           | Shown                                                     |
+|------------------------------------|-----------------------------------------------------------|
+| A `str`                            | As text.                                                  |
+| A `dict` or a `list`               | As a collapsible tree.                                    |
+| A dataframe                        | In the data browser, to page, sort and filter. Best lazy. |
+| A Jupyter widget, e.g. ipywidgets' | As it is, as a notebook shows it: see [Views](#views).    |
+| A view object                      | As the object says: see [Views](#views).                  |
 
 For example, this view shows text files in upper case:
 
@@ -176,16 +187,16 @@ def upper_case(fs, path):
 A view object shows more than plain data, e.g. highlighted text. The view classes are in
 `jupyter_storage_explorer.formats`:
 
-| View                                  | Shows                                                       |
-|---------------------------------------|-------------------------------------------------------------|
-| `TextView(text=...)`                  | Text; with `html`, Pygments' HTML of it, highlighted.       |
-| `MarkdownView(text=...)`              | Markdown, rendered.                                         |
-| `TreeView(value=...)`                 | A JSON-like value, as a collapsible tree.                   |
-| `QueryView(data=...)`                 | A dataframe, in the data browser.                           |
-| `TableView(columns=..., rows=...)`    | A small table of values, without the data browser.          |
-| `MediaView(mime=..., data=...)`       | An image, from its bytes.                                   |
-| `TableSetView(nodes=..., loader=...)` | Several tables, e.g. a database's, in a tree or on tabs.    |
-| `JupyterWidgetView(widget=...)`       | A Jupyter widget, e.g. a chart's or a map's.                |
+| View                                  | Shows                                                    |
+|---------------------------------------|----------------------------------------------------------|
+| `TextView(text=...)`                  | Text; with `html`, Pygments' HTML of it, highlighted.    |
+| `MarkdownView(text=...)`              | Markdown, rendered.                                      |
+| `TreeView(value=...)`                 | A JSON-like value, as a collapsible tree.                |
+| `QueryView(data=...)`                 | A dataframe, in the data browser.                        |
+| `TableView(columns=..., rows=...)`    | A small table of values, without the data browser.       |
+| `MediaView(mime=..., data=...)`       | An image, from its bytes.                                |
+| `TableSetView(nodes=..., loader=...)` | Several tables, e.g. a database's, in a tree or on tabs. |
+| `JupyterWidgetView(widget=...)`       | A Jupyter widget, e.g. a chart's or a map's.             |
 
 Each also takes a `title`, shown above the view, and a `note`, shown under it.
 
@@ -239,7 +250,7 @@ def head(fs, path):
 
     return ViewWithChoice(
         message="How much to read?",
-        choices={"1 KB": 1024, "1 MB": 1024**2},
+        choices={"1 KB": 1024, "1 MB": 1024 ** 2},
         factory=read,
         style="button",
     )
@@ -247,9 +258,9 @@ def head(fs, path):
 
 - `button` is the button's label, "View" by default.
 - `ViewWithChoice`'s `style` shows the choices:
-  - `"radio"`, the default, as radio buttons;
-  - `"dropdown"`, as a dropdown menu;
-  - `"button"`, as a button for each choice.
+    - `"radio"`, the default, as radio buttons;
+    - `"dropdown"`, as a dropdown menu;
+    - `"button"`, as a button for each choice.
 - `with_cancel=True` adds a **Cancel** button to a choice, which shows nothing.
 - The answers are kept: when the data browser reads the data again, it asks no more.
 
@@ -341,16 +352,16 @@ StorageExplorer("s3://bucket/notes", engine_options={"python": {"text": {"charac
 
 The `ctx` parameter is the item, an `ItemContext`. It has what the other parameters give, and more:
 
-| `ctx.`               | What                                                                               |
-|----------------------|------------------------------------------------------------------------------------|
-| `url`, `url_or_local_path`, `name`, `path`, `size`, `is_dir`, `fs` | As the parameters of the same names. |
-| `location`           | Where the item is, independently of fsspec, e.g. an S3 bucket and key.             |
-| `info`               | fsspec's info of the item, e.g. its modification time.                             |
-| `children`           | A folder's listing, as fsspec's entries; `None` for a file.                        |
-| `child_names`        | The names of a folder's items.                                                     |
-| `head(n)`            | The file's first `n` bytes.                                                        |
-| `head_text(n)`       | Its first `n` bytes as text, cut after the last whole line, and whether it is longer. |
-| `read_whole(limits)` | The whole file, or an error if it is larger than `limits.max_whole_file_bytes`.    |
+| `ctx.`                                                             | What                                                                                  |
+|--------------------------------------------------------------------|---------------------------------------------------------------------------------------|
+| `url`, `url_or_local_path`, `name`, `path`, `size`, `is_dir`, `fs` | As the parameters of the same names.                                                  |
+| `location`                                                         | Where the item is, independently of fsspec, e.g. an S3 bucket and key.                |
+| `info`                                                             | fsspec's info of the item, e.g. its modification time.                                |
+| `children`                                                         | A folder's listing, as fsspec's entries; `None` for a file.                           |
+| `child_names`                                                      | The names of a folder's items.                                                        |
+| `head(n)`                                                          | The file's first `n` bytes.                                                           |
+| `head_text(n)`                                                     | Its first `n` bytes as text, cut after the last whole line, and whether it is longer. |
+| `read_whole(limits)`                                               | The whole file, or an error if it is larger than `limits.max_whole_file_bytes`.       |
 
 `ctx.head` reads the file once for the item: detection and other actions often read the same beginning. On cloud
 storages, each read is a round trip.

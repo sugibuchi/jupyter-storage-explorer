@@ -205,6 +205,32 @@ def test_menu_info(mem_explorer, monkeypatch):
     assert folder["formats"] == ["delta"]
 
 
+def test_menu_info_of_kinds(memfs):
+    # A kind of text file or image is viewed by default as itself, and as each
+    # base class: its views in "Preview as" under the format they are of.
+    memfs.pipe_file("/d/a.py", b"import os\n")
+    memfs.pipe_file("/d/a.svg", b"<svg/>")
+    explorer = make("/d", fs=memfs)
+
+    def menu(path):
+        return explorer.request({"type": "menu_info", "rid": 1, "path": path})
+
+    script = menu("/d/a.py")
+    assert script["formats"] == ["python-script", "text"]
+    assert script["view"] == {"format": "python-script", "engine": None}
+    assert [v["label"] for v in script["views"]] == ["Text"]
+    assert [r["title"] for r in script["recipes"]] == ["Read the text"]
+    image = menu("/d/a.svg")
+    assert image["formats"] == ["svg", "image", "text"]
+    assert image["view"] == {"format": "svg", "engine": None}
+    assert [v["label"] for v in image["views"]] == ["Image", "Text"]
+    memfs.pipe_file("/d/a.png", b"\x89PNG")
+    png = menu("/d/a.png")
+    assert png["formats"] == ["png", "image"]
+    assert [v["label"] for v in png["views"]] == ["Image"]
+    assert [r["title"] for r in png["recipes"]] == ["Open the image"]
+
+
 @code(format=SQLite, engine=PythonEngine, label="Connect")
 def sqlite_code(fmt, ctx, options):
     return "import sqlite3"

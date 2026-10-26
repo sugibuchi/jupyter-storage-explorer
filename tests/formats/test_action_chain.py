@@ -45,12 +45,14 @@ from jupyter_storage_explorer.formats import (
 )
 from jupyter_storage_explorer.formats.actions import code, view
 from jupyter_storage_explorer.formats.defaults import DEFAULT_ACTIONS, DEFAULT_FORMATS
+from jupyter_storage_explorer.formats.images import IMAGE_FORMATS
 from jupyter_storage_explorer.formats.python import (
     FsspecOptions,
     PythonEngine,
     text_code,
     text_view,
 )
+from jupyter_storage_explorer.formats.text import TEXT_FORMATS
 
 LIMITS = ViewLimits(max_display_rows=2)
 
@@ -139,6 +141,8 @@ def test_formats_are_the_actions():
         Csv,
         Excel,
         JsonLines,
+        *TEXT_FORMATS,
+        *IMAGE_FORMATS,
     ]
     # Each chain has its own: formats keep what detection finds.
     other = ActionChain(ALL_ACTIONS).formats

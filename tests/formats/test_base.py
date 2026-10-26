@@ -156,12 +156,13 @@ class TestDetection:
             Parquet,
         ]
 
-    def test_fallback_to_text(self, make_item):
-        item = make_item("/a.csv", b"a,b\n")
-        assert [type(f) for f in matching_formats(item, formats=[Text(), Csv()])] == [
-            Csv,
-            Text,
-        ]
+    def test_text_matches_its_own_files_only(self, make_item):
+        # A CSV file is a Text by its class, not by Text matching it.
+        formats = [Text(), Csv()]
+        csv_file = make_item("/a.csv", b"a,b\n")
+        assert [type(f) for f in matching_formats(csv_file, formats=formats)] == [Csv]
+        txt_file = make_item("/a.txt", b"a\n")
+        assert [type(f) for f in matching_formats(txt_file, formats=formats)] == [Text]
 
     def test_unknown(self, make_item):
         assert detect(make_item("/a.bin", b"\0"), formats=[Text(), Csv()]) is None

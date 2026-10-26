@@ -344,8 +344,48 @@ StorageExplorer("s3://my-bucket/data", states=ExplorerStates("states.json", max_
 | JSON                                                         | `json`       | Collapsible tree                |              | Python, polars, pandas                                                                 |
 | Excel (`.xlsx`)                                              | `excel`      | Its sheets, on tabs             | ✓            | polars, pandas                                                                         |
 | Markdown                                                     | `markdown`   | Rendered                        |              | Python                                                                                 |
-| Text, code, configuration (YAML, SQL, Python, …)             | `text`       | With syntax highlighting        |              | Python                                                                                 |
-| Images (PNG, JPEG, GIF, SVG, …)                              | `image`      | Shown                           |              | Python (Pillow)                                                                        |
+| Code and configuration (Python, SQL, YAML, …), see below     | e.g. `yaml`  | With syntax highlighting        |              | Python                                                                                 |
+| Plain text (`.txt`)                                          | `text`       | As it is                        |              | Python                                                                                 |
+| Images (PNG, JPEG, GIF, …), see below                        | e.g. `png`   | Shown                           |              | Python (Pillow)                                                                        |
+| SVG images                                                   | `svg`        | Shown                           |              |                                                                                        |
+
+The formats of code and configuration files:
+
+| Format           | Name            | Files                  |
+|------------------|-----------------|------------------------|
+| Python script    | `python-script` | `.py`                  |
+| R script         | `r-script`      | `.r`                   |
+| Shell script     | `shell-script`  | `.sh`                  |
+| SQL              | `sql`           | `.sql`                 |
+| JavaScript       | `javascript`    | `.js`                  |
+| TypeScript       | `typescript`    | `.ts`                  |
+| Java             | `java`          | `.java`                |
+| Scala            | `scala`         | `.scala`               |
+| YAML             | `yaml`          | `.yaml`, `.yml`        |
+| TOML             | `toml`          | `.toml`                |
+| INI              | `ini`           | `.ini`, `.cfg`         |
+| Configuration    | `conf`          | `.conf`                |
+| Properties       | `properties`    | `.properties`          |
+| XML              | `xml`           | `.xml`                 |
+| HTML             | `html`          | `.html`                |
+| Log              | `log`           | `.log`                 |
+| reStructuredText | `rst`           | `.rst`                 |
+
+All of them are text formats, as are Markdown, CSV, JSON, JSON Lines and SVG images. **Preview as** also offers each
+text file as plain text.
+
+The formats of images:
+
+| Format     | Name   | Files            |
+|------------|--------|------------------|
+| PNG image  | `png`  | `.png`           |
+| JPEG image | `jpeg` | `.jpg`, `.jpeg`  |
+| GIF image  | `gif`  | `.gif`           |
+| WebP image | `webp` | `.webp`          |
+| BMP image  | `bmp`  | `.bmp`           |
+| Icon       | `ico`  | `.ico`           |
+| AVIF image | `avif` | `.avif`          |
+| SVG image  | `svg`  | `.svg`           |
 
 PySpark's formats are also Databricks Connect's, with databricks-support.
 
@@ -392,7 +432,7 @@ StorageExplorer(
 | `pyspark`            | `delta`, `parquet`, `csv`, `json-lines`                  | pyspark-support's [Engine options](../plugins/pyspark-support/README.md#engine-options)       |
 | `databricks-connect` | `delta`, `parquet`, `csv`, `json-lines`                  | databricks-support's [Engine options](../plugins/databricks-support/README.md#engine-options) |
 | `dask`               | `parquet`, `csv`, `json-lines`                           | dask-support's [Engine options](../plugins/dask-support/README.md#engine-options)             |
-| `python`             | `json`, `text` (also Markdown's code), `image`           | `storage_options`: `fsspec.open`'s keyword arguments, in the code                             |
+| `python`             | `json`, `text` (also Markdown's and code files' code), `image` | `storage_options`: `fsspec.open`'s keyword arguments, in the code                             |
 
 Options that look like credentials are left out of the code. An engine, format or option name that no action takes is
 an error.

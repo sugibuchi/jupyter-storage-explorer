@@ -178,10 +178,19 @@ class ActionChain:
         self, fmt: DataFormat, kind: type[Action[Any]]
     ) -> list[Action[Any]]:
         """The actions of ``kind`` for ``fmt``, installed or not, whatever the
-        item, in order."""
-        return [
+        item, in order: those of the most specific of its classes that has
+        any. A format's own actions replace its base classes', e.g. a CSV
+        file is not viewed as Text, but as CSV or not at all; a format
+        without actions of its own has its base classes', e.g. a Python
+        script, Text's. The explorer offers the others under the base
+        format, e.g. "Preview as" Text (``_detection``)."""
+        found = [
             a for a in self.actions if isinstance(fmt, a.format) and isinstance(a, kind)
         ]
+        if not found:
+            return []
+        own = min((a.format for a in found), key=type(fmt).__mro__.index)
+        return [a for a in found if a.format is own]
 
     def installed(self, fmt: DataFormat, kind: type[Action[Any]] = ViewAction) -> bool:
         """Whether an action of ``kind`` for ``fmt`` is installed, whatever the

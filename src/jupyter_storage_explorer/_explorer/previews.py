@@ -60,6 +60,20 @@ def _not_viewed(verb: str) -> dict[str, Any]:
     return {"kind": "notice", "text": f"Not {verb}", "again": verb == "previewed"}
 
 
+def _with_bases(found: list[DataFormat], formats: list[DataFormat]) -> list[DataFormat]:
+    """``found`` and, after them, those of ``formats`` that are base classes
+    of theirs, e.g. Text for a CSV file: the item can be viewed as those too,
+    in "Preview as", which lists a view under its own format."""
+    by_class = {type(f): f for f in formats}
+    result = list(found)
+    for fmt in found:
+        for cls in type(fmt).__mro__[1:]:
+            base = by_class.get(cls)
+            if base is not None and base not in result:
+                result.append(base)
+    return result
+
+
 class _Detected(NamedTuple):
     """An item of the storage shown with a location, as formats and actions
     are given it, and the formats it matches, best first (see
@@ -313,7 +327,8 @@ class PreviewsMixin:
         ctx = ItemContext(
             location=location, fs=fs, path=path, info=info, children=children
         )
-        return _Detected(ctx, matching_formats(ctx, formats=self._formats))
+        found = matching_formats(ctx, formats=self._formats)
+        return _Detected(ctx, _with_bases(found, self._formats))
 
     def _engine_label(self, key: str | None) -> str:
         """The label of the engine of ``key``, e.g. "Polars"; "" for the
