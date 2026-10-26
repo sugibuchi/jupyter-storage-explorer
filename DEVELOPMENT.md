@@ -919,6 +919,23 @@ The tabs and the side panel are kernels of their own, each writing to files of i
 - When a kernel opens a day's file, every kernel's files of the days before beyond `log_file_backup` are deleted. One
   still open elsewhere is deleted another time.
 
+What each level logs, with a module's own `logging.getLogger(__name__)`:
+
+- ERROR: `log.exception` for the machinery's failures, e.g. a job's or a load's.
+- WARNING: errors the user sees too, e.g. a view refused, a listing failed, a transfer refused, a plugin or actions
+  file left out. A view's traceback is added at DEBUG only.
+- INFO: what the user does, with its time: an explorer created, plugins and the user's actions loaded or reloaded,
+  views, the data browser's requests, jobs started and ended with their counts, and the launcher's tabs opened.
+- DEBUG: folders listed, items detected, jobs queued, and each message from the page with its time.
+
+Rules for new records:
+
+- Never log storage options, credentials, options' values or file contents. Storages are named with their protocol.
+- A listing is logged with its count of items, never the items: folders may hold tens of thousands.
+- The launcher's package logs to `jupyter_storage_explorer.launcher`, so that the Logging menu's level applies. It
+  logs only once the explorer is made, which sets up the kernel's logging. Before, records would reach stderr, which
+  the tab shows.
+
 The settings menu opens the kernel's file of the day as a configuration file (`_offer_config_file`), read-only: the
 kernel refuses to save it.
 

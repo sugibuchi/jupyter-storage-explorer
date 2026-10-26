@@ -114,6 +114,8 @@ the code. The traps:
   could not be read.
 - The listing is sent as columns, without paths or URLs: folders may hold tens of thousands of items. The kernel's
   sorting and filters in `_explorer/listing.py` must follow the browser's.
+- Logs never hold storage options, credentials, options' values or file contents. A listing is logged by its count.
+  DEVELOPMENT.md's Logs says what each level logs.
 - `open_preview` is deprecated, with a `DeprecationWarning`.
 - A format's `matches` reads nothing: it runs for every file listed. A signature check goes in `sniff`.
 - `formats` imports none of `actions`, `views` and `_explorer`, and `actions` never imports `_explorer`.

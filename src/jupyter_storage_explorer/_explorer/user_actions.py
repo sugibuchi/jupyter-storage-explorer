@@ -4,6 +4,7 @@ action files without creating the explorer again."""
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 
 from jupyter_storage_explorer._explorer.actions import ActionChain
@@ -17,6 +18,8 @@ if TYPE_CHECKING:
 
     from jupyter_storage_explorer.actions import Action
     from jupyter_storage_explorer.formats import DataFormat
+
+log = logging.getLogger(__name__)
 
 
 class UserActionsMixin:
@@ -66,11 +69,18 @@ class UserActionsMixin:
         were. Only with user_actions "enabled", which offers the file."""
         if "actions" not in self._config_files:
             return {"error": "this explorer reads no actions files"}
+        log.info("Reloading the user's actions")
         try:
             users, problems = load_user_actions(self._other_actions)
             chain = self._chain_of(users)
         except Exception as exc:
+            log.warning("Reloading the user's actions failed: %s", error_text(exc))
             return {"error": error_text(exc)}
+        log.info(
+            "The user's actions reloaded: %d actions, %d files left out",
+            len(users),
+            len(problems),
+        )
         self._actions = chain
         self._formats = chain.formats
         with self.hold_trait_notifications():
