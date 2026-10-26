@@ -125,7 +125,7 @@ The [`notebooks`](https://github.com/sugibuchi/jupyter-storage-explorer/tree/mai
 widget on sample data.
 
 See [Installation](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#installation)
-for the storage packages and the other options.
+for more details.
 
 ## Documentation
 
