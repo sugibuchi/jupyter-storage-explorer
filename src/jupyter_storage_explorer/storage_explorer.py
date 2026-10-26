@@ -276,10 +276,12 @@ class StorageExplorer(
     logging_menu : {"enabled", "disabled"}, default "disabled"
         Where the explorer's logs go. Disabled, to the console: the
         kernel's stderr, which JupyterLab shows under the cell. Enabled, to
-        files of one day each, ``storage-explorer/logs/storage-explorer.<date>.log``
-        in the user's Jupyter configuration directory, and the settings menu
-        offers Logging: the level, remembered in ``states``, and the day's
-        file, opened read-only in JupyterLab with the launcher's extension.
+        files of one day and kernel each,
+        ``storage-explorer/logs/storage-explorer.<date>.<pid>.log`` in the
+        user's Jupyter configuration directory, and the settings menu offers
+        Logging: the level, remembered in ``states``, and the kernel's file
+        of the day, opened read-only in JupyterLab with the launcher's
+        extension.
         The launcher's tabs and side panel enable it.
     logging_level : str, default "WARNING"
         The records logged: "DEBUG", "INFO", "WARNING", "ERROR" or
@@ -1331,10 +1333,13 @@ class StorageExplorer(
     def _on_logging_level(self, change: dict[str, Any]) -> None:
         """The user chose a level (the Logging menu): log at it, and
         remember it for the explorers with the menu. Not without the menu,
-        whose explorers log as they were created."""
+        whose explorers log as they were created. A line of INFO or below
+        says so in the kernel's file, which it creates: users then find it
+        with "Open log file" before anything else is logged."""
         if getattr(self, "_engine_ready", False) and self._log_backups is not None:
             _logs.configure(change["new"], self._log_backups)
             self._states.remember_logging_level(change["new"])
+            _logs.log.info("Logging at %s", change["new"])
 
     @traitlets.observe("_engine")
     def _on_engine(self, change: dict[str, Any]) -> None:

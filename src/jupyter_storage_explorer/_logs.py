@@ -8,10 +8,12 @@ the package's logger, so the last setting made applies to them all
 An explorer in a notebook logs to the console, the kernel's stderr, which
 JupyterLab shows under the cell. The launcher's explorers log to files
 instead, in ``storage-explorer/logs`` in the user's Jupyter configuration
-directory: one a day, ``storage-explorer.<date>.log``, shared by the kernels,
-which append to it. A kernel moves to the next day's file at local midnight.
-No file is ever renamed, as Windows cannot rename a file another kernel has
-open: the oldest files beyond the backups kept are deleted instead.
+directory: one a day for each kernel, ``storage-explorer.<date>.<pid>.log``.
+The launcher's tabs and its side panel are kernels of their own, so no two
+processes write to one file. A kernel moves to the next day's file at local
+midnight. No file is ever renamed, as Windows cannot rename a file another
+kernel has open: the files of the oldest days beyond the backups kept are
+deleted instead.
 """
 
 from __future__ import annotations
@@ -19,6 +21,7 @@ from __future__ import annotations
 import contextlib
 import datetime as dt
 import logging
+import os
 import pathlib
 import re
 import sys
@@ -28,6 +31,7 @@ from typing import IO, Any
 from jupyter_core.paths import jupyter_config_dir
 
 LOGGER_NAME = "jupyter_storage_explorer"
+log = logging.getLogger(__name__)
 
 # The levels users choose from, by name, and "disabled": no records at all.
 LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
@@ -37,11 +41,9 @@ _ALIASES = {"WARN": "WARNING"}
 
 # In the user's Jupyter configuration directory.
 LOG_DIR = pathlib.Path("storage-explorer", "logs")
-_FILE_NAME = re.compile(r"storage-explorer\.(\d{4}-\d{2}-\d{2})\.log")
+_FILE_NAME = re.compile(r"storage-explorer\.(\d{4}-\d{2}-\d{2})\.\d+\.log")
 
-# The process id tells apart the kernels writing to one file: the launcher's
-# tabs and its side panel each have their own.
-_FORMAT = "%(asctime)s %(process)d %(levelname)s %(name)s: %(message)s"
+_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
 
 
 def level_name(value: Any, name: str = "logging_level") -> str:
@@ -68,20 +70,26 @@ def log_folder() -> pathlib.Path:
 
 
 def log_file(
-    day: dt.date | None = None, folder: pathlib.Path | None = None
+    day: dt.date | None = None,
+    folder: pathlib.Path | None = None,
+    pid: int | None = None,
 ) -> pathlib.Path:
-    """The log file of ``day``, by default today's (local time), in
-    ``folder``, by default ``log_folder()``."""
+    """The log file of ``day``, by default today's (local time), of the
+    process ``pid``, by default this kernel's, in ``folder``, by default
+    ``log_folder()``."""
     day = day or dt.date.today()
-    return (folder or log_folder()) / f"storage-explorer.{day.isoformat()}.log"
+    pid = os.getpid() if pid is None else pid
+    name = f"storage-explorer.{day.isoformat()}.{pid}.log"
+    return (folder or log_folder()) / name
 
 
 class DailyFileHandler(logging.Handler):
-    """Writes records to the file of their day, in ``folder``, keeping the
-    files of ``backups`` days before today (see the module's docstring).
+    """Writes records to this kernel's file of their day, in ``folder``,
+    keeping the files of ``backups`` days before today (see the module's
+    docstring).
 
-    The file is opened for appending and flushed after each record, so that
-    other kernels' records interleave by line.
+    The file is opened for appending, as the process id of a kernel gone may
+    come back, and flushed after each record, so that it can be read at once.
     """
 
     def __init__(self, folder: pathlib.Path, backups: int) -> None:
@@ -112,18 +120,19 @@ class DailyFileHandler(logging.Handler):
         self._delete_old(day)
 
     def _delete_old(self, day: dt.date) -> None:
-        """Delete the files of the days before ``day`` but the ``backups``
-        latest. Another kernel may still have one open, e.g. on Windows: it
-        is then deleted another time."""
-        older = sorted(
-            path
-            for path in self.folder.iterdir()
-            if (match := _FILE_NAME.fullmatch(path.name))
-            and match.group(1) < day.isoformat()
-        )
-        for path in older[: max(len(older) - self.backups, 0)]:
-            with contextlib.suppress(OSError):
-                path.unlink()
+        """Delete every kernel's files of the days before ``day`` but the
+        ``backups`` latest days. Another kernel may still have one open, e.g.
+        on Windows: it is then deleted another time."""
+        older: dict[str, list[pathlib.Path]] = {}
+        for path in self.folder.iterdir():
+            match = _FILE_NAME.fullmatch(path.name)
+            if match and match.group(1) < day.isoformat():
+                older.setdefault(match.group(1), []).append(path)
+        days = sorted(older)
+        for old in days[: max(len(days) - self.backups, 0)]:
+            for path in older[old]:
+                with contextlib.suppress(OSError):
+                    path.unlink()
 
     def _close_stream(self) -> None:
         if self._stream is not None:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime as dt
 import io
 import logging
+import os
 import time
 
 import pytest
@@ -55,20 +56,36 @@ class TestDailyFiles:
         assert _logs.log_file(first, tmp_path).read_text("utf-8") == "one\ntwo\n"
         assert _logs.log_file(second, tmp_path).read_text("utf-8") == "three\n"
 
-    def test_appended_to(self, tmp_path):
-        # Another kernel's lines stay: the file is shared.
+    def test_a_file_per_kernel(self, tmp_path):
+        # Another kernel's file is left alone, and named by its process id.
         day = dt.date(2026, 10, 26)
-        _logs.log_file(day, tmp_path).write_text("theirs\n", "utf-8")
+        theirs = _logs.log_file(day, tmp_path, pid=1)
+        theirs.write_text("theirs\n", "utf-8")
         handler = _logs.DailyFileHandler(tmp_path, backups=14)
         handler.setFormatter(logging.Formatter("%(message)s"))
         handler.emit(at(day, "mine"))
         handler.close()
-        assert _logs.log_file(day, tmp_path).read_text("utf-8") == "theirs\nmine\n"
+        assert theirs.read_text("utf-8") == "theirs\n"
+        mine = _logs.log_file(day, tmp_path)
+        assert mine.name == f"storage-explorer.2026-10-26.{os.getpid()}.log"
+        assert mine.read_text("utf-8") == "mine\n"
+
+    def test_appended_to(self, tmp_path):
+        # A process id may come back: what the gone kernel wrote stays.
+        day = dt.date(2026, 10, 26)
+        _logs.log_file(day, tmp_path).write_text("before\n", "utf-8")
+        handler = _logs.DailyFileHandler(tmp_path, backups=14)
+        handler.setFormatter(logging.Formatter("%(message)s"))
+        handler.emit(at(day, "after"))
+        handler.close()
+        assert _logs.log_file(day, tmp_path).read_text("utf-8") == "before\nafter\n"
 
     def test_old_files_deleted(self, tmp_path):
-        days = [dt.date(2026, 10, d) for d in range(1, 11)]
-        for day in days:
-            _logs.log_file(day, tmp_path).write_text("old\n", "utf-8")
+        # By day, whichever kernels wrote them.
+        for d in range(1, 11):
+            for pid in (1, 2):
+                path = _logs.log_file(dt.date(2026, 10, d), tmp_path, pid=pid)
+                path.write_text("old\n", "utf-8")
         (tmp_path / "notes.txt").write_text("not a log", "utf-8")
         handler = _logs.DailyFileHandler(tmp_path, backups=3)
         handler.emit(at(dt.date(2026, 10, 11), "new"))
@@ -76,19 +93,23 @@ class TestDailyFiles:
         kept = sorted(p.name for p in tmp_path.iterdir())
         assert kept == [
             "notes.txt",
-            "storage-explorer.2026-10-08.log",
-            "storage-explorer.2026-10-09.log",
-            "storage-explorer.2026-10-10.log",
-            "storage-explorer.2026-10-11.log",
+            "storage-explorer.2026-10-08.1.log",
+            "storage-explorer.2026-10-08.2.log",
+            "storage-explorer.2026-10-09.1.log",
+            "storage-explorer.2026-10-09.2.log",
+            "storage-explorer.2026-10-10.1.log",
+            "storage-explorer.2026-10-10.2.log",
+            _logs.log_file(dt.date(2026, 10, 11), tmp_path).name,
         ]
 
     def test_no_backups(self, tmp_path):
-        _logs.log_file(dt.date(2026, 10, 1), tmp_path).write_text("old\n", "utf-8")
+        old = _logs.log_file(dt.date(2026, 10, 1), tmp_path, pid=1)
+        old.write_text("old\n", "utf-8")
         handler = _logs.DailyFileHandler(tmp_path, backups=0)
         handler.emit(at(dt.date(2026, 10, 2), "new"))
         handler.close()
         assert [p.name for p in tmp_path.iterdir()] == [
-            "storage-explorer.2026-10-02.log"
+            _logs.log_file(dt.date(2026, 10, 2), tmp_path).name
         ]
 
 
