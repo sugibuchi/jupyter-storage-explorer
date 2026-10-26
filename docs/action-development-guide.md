@@ -481,6 +481,33 @@ def sqlite_tables(ctx):
 A view keeping the copy open, e.g. a database's connection, releases it when closed: see
 [Reading the item](plugin-development-guide.md#reading-the-item).
 
+### Logging
+
+Get a logger with `get_logger(__name__)`, from `jupyter_storage_explorer.actions`:
+
+```python
+from jupyter_storage_explorer.actions import get_logger, view
+from jupyter_storage_explorer.formats import Text
+
+log = get_logger(__name__)
+
+
+@view(format=Text, label="Upper case")
+def upper_case(fs, path):
+    log.info("Reading %s", path)
+    with fs.open(path, "rt") as f:
+        return f.read().upper()
+```
+
+- Its records go where the explorer's do, at the level the explorer logs: see
+  [Logs](storage-explorer.md#logs).
+- In a notebook, an explorer shows only warnings and errors by default. Create it with `logging_level="INFO"` to see
+  your INFO records under the cell.
+- In your actions files, the logger is named after the file, e.g. `jupyter_storage_explorer.user_actions.actions` for
+  `actions.py`.
+- `logging.getLogger(__name__)` would not work: its records would ignore the explorer's level and miss its log files.
+- Never log credentials, options' values or the contents of files.
+
 ### Your actions files
 
 Your actions file is `~/.jupyter/storage-explorer/actions.py`. Actions can also go in Python files under

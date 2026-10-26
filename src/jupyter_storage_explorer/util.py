@@ -6,12 +6,14 @@
 - dataclass fields holding secrets, which generated code leaves out
   (``secret_field``, ``secret_dict_field``);
 - ``LIBRARY_DEFAULT``, the default of options that are a library's
-  arguments, left to the library.
+  arguments, left to the library;
+- loggers whose records go where the explorer's do (``get_logger``).
 """
 
 from __future__ import annotations
 
 import dataclasses
+import logging
 import re
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
@@ -25,9 +27,56 @@ __all__ = [
     "format_arguments",
     "format_kwargs",
     "format_size",
+    "get_logger",
     "secret_dict_field",
     "secret_field",
 ]
+
+# The explorer's logger, which the explorer's logging settings apply to (see
+# _logs.py), and the names of the modules of the user's actions files (see
+# _extensions/user_actions.py): a digest of the file's path, then its name.
+_LOGGER = "jupyter_storage_explorer"
+_USER_ACTIONS_MODULE = re.compile(
+    r"jupyter_storage_explorer_user_actions_[0-9a-f]+_(?P<stem>.+)"
+)
+
+
+def get_logger(name: str) -> logging.Logger:
+    """A logger for an action or a plugin, whose records go where the
+    explorer's do: at the level chosen with ``logging_level`` or the Logging
+    menu, to the console in a notebook, or to the launcher's log files.
+
+    Also importable from ``jupyter_storage_explorer`` and
+    ``jupyter_storage_explorer.actions``.
+
+    Parameters
+    ----------
+    name : str
+        The module's ``__name__``.
+
+    Returns
+    -------
+    logging.Logger
+        A child of the explorer's logger, ``jupyter_storage_explorer``:
+
+        - ``jupyter_storage_explorer.user_actions.<file>`` in a user's actions
+          file, e.g. ``jupyter_storage_explorer.user_actions.actions`` for
+          ``actions.py``;
+        - the explorer's own modules' loggers as they are;
+        - else ``jupyter_storage_explorer.ext.<name>``, e.g. for a plugin's
+          modules, or ``__main__`` in a notebook.
+
+    Examples
+    --------
+    >>> from jupyter_storage_explorer.actions import get_logger
+    >>> log = get_logger(__name__)
+    >>> log.info("Reading %s", path)  # doctest: +SKIP
+    """
+    if name == _LOGGER or name.startswith(_LOGGER + "."):
+        return logging.getLogger(name)
+    if match := _USER_ACTIONS_MODULE.fullmatch(name):
+        return logging.getLogger(f"{_LOGGER}.user_actions.{match['stem']}")
+    return logging.getLogger(f"{_LOGGER}.ext.{name}")
 
 
 def format_size(size: float) -> str:

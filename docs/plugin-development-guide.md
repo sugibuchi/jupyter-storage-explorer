@@ -960,6 +960,25 @@ __all__ = [
 - `name`, `description` and `version` come from the package's metadata (`[project]`): the class does not repeat them.
 - A plugin that cannot be imported or created is left out with a warning, and greyed out in "About".
 
+### Logging
+
+Each module of a plugin gets its logger with `get_logger(__name__)`. Import it from `jupyter_storage_explorer` or
+`jupyter_storage_explorer.actions`, whichever the module imports from already:
+
+```python
+from jupyter_storage_explorer.actions import get_logger, view
+
+log = get_logger(__name__)
+```
+
+- The logger is a child of the explorer's, e.g. `jupyter_storage_explorer.ext.jupyter_storage_explorer_duckdb_support.actions`.
+  Its records go where the explorer's do, at the level users choose: see [Logs](storage-explorer.md#logs).
+- `logging.getLogger(__name__)` would not work: a plugin's package is no child of `jupyter_storage_explorer`.
+- Log at the levels the explorer does, which DEVELOPMENT.md's "Logs" lists. INFO is for what users do, with its
+  time. WARNING is for what goes wrong for them, and DEBUG for the details.
+- Never log credentials, storage options, options' values or the contents of files. Log a listing by its count of
+  items.
+
 ### The README
 
 Write the README in this layout, as this repository's plugins' are. Keep each part short: what users need to install
@@ -1237,6 +1256,7 @@ def filesystem_mappers():
 - [ ] Code text from module-level `inspect.cleandoc` templates, filled with `str.format`.
 - [ ] Views reading a whole large file ask first, with a `ViewWithPrompt`.
 - [ ] Secrets declared with `secret_field` / `secret_dict_field`; code options through `options.code_value`.
+- [ ] Loggers from `get_logger(__name__)`, logging no credentials, options' values or file contents.
 - [ ] A model per format whose fields are its reader's arguments (default `LIBRARY_DEFAULT`), passed with `arguments()`
       and `code_arguments()`, and tabled in the README with the library's descriptions.
 - [ ] README: the plugin's options (`enabled`, `priority`, its own) and its components' parameters.

@@ -11,6 +11,7 @@ from jupyter_storage_explorer.plugin import (
     StorageExplorerPluginOptions,
 )
 from jupyter_storage_explorer.storage_explorer import StorageExplorer
+from jupyter_storage_explorer.util import get_logger
 
 __all__ = [
     "DataExplorer",
@@ -23,4 +24,5 @@ __all__ = [
     "StorageExplorer",
     "StorageExplorerPlugin",
     "StorageExplorerPluginOptions",
+    "get_logger",
 ]

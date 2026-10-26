@@ -117,7 +117,8 @@ def users_actions_warned(others: Sequence[Action[Any]]) -> list[Action[Any]]:
 
 def _load(path: pathlib.Path) -> Any:
     """Import ``path`` as a module of its own, registered (as dataclasses and
-    type hints look modules up) under a name unique to the file."""
+    type hints look modules up) under a name unique to the file, which
+    ``util.get_logger`` turns back into the file's name."""
     digest = hashlib.sha1(str(path).encode(), usedforsecurity=False).hexdigest()[:12]
     name = f"jupyter_storage_explorer_user_actions_{digest}_{path.stem}"
     spec = importlib.util.spec_from_file_location(name, path)
