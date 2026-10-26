@@ -77,6 +77,25 @@ class TestOnChange:
         selected(explorer, "sub")
         assert calls == [1]
 
+    def test_called_back_by_the_page_in_ipython(self, explorer, monkeypatch):
+        # So that an Output's with block shows what they display (see
+        # _callbacks.py): the page's answer names the functions it is for.
+        changes, queries = [], []
+        explorer.on_change(lambda e: changes.append(e.selected_urls))
+        explorer.on_query_change(queries.append)
+        monkeypatch.setattr("IPython.get_ipython", object)
+        selected(explorer, "notes.txt")
+        selected(explorer, "notes.txt", "sub")
+        asked = [c for c, _ in explorer.sent if c.get("type") == "callbacks"]
+        assert asked == [{"type": "callbacks", "name": "change"}]
+        explorer.message({"type": "callbacks", "name": "query"})  # not asked
+        assert (changes, queries) == ([], [])
+        explorer.message({"type": "callbacks", "name": "change"})
+        explorer.message({"type": "callbacks", "name": "change"})  # another view
+        assert len(changes[0]) == 2
+        assert len(changes) == 1
+        assert queries == []
+
 
 class TestQueryResult:
     def query_rows(self, explorer, path, **settings):

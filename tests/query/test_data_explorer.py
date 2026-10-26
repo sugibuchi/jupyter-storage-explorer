@@ -288,13 +288,32 @@ class TestOnChange:
             explorer.request({"type": "query_rows", "settings": {"hidden": ["b"]}})
         assert explorer.sent[-1]["rows"] == [[3], [1], [2]]
 
-        # In IPython, logged with its traceback: the other functions still run.
+        # In IPython, called back by the page, and logged with its traceback:
+        # the other functions still run.
         monkeypatch.setattr("IPython.get_ipython", object)  # a shell of any kind
         caplog.clear()
         explorer.request({"type": "query_rows", "settings": {}})
+        assert explorer.sent[-1] == {"type": "callbacks", "name": "change"}
+        assert calls == []
+        explorer.request({"type": "callbacks", "name": "change"})
         [record] = [r for r in caplog.records if r.levelname == "ERROR"]
         assert "given to the widget failed" in record.getMessage()
         assert record.exc_info is not None
+        assert calls == [[3, 1, 2]]
+
+    def test_called_back_by_the_page_in_ipython(self, monkeypatch):
+        """In IPython, the page calls the functions back, so that an Output's
+        with block shows what they display: once for several changes, and once
+        however many views of the widget answer."""
+        explorer, calls = self.explorer()
+        monkeypatch.setattr("IPython.get_ipython", object)
+        explorer.request({"type": "query_rows", "settings": RESULT_SETTINGS})
+        explorer.request({"type": "query_rows", "settings": {"hidden": ["b"]}})
+        asked = [m for m in explorer.sent if m.get("type") == "callbacks"]
+        assert asked == [{"type": "callbacks", "name": "change"}]
+        assert calls == []
+        explorer.request({"type": "callbacks", "name": "change"})
+        explorer.request({"type": "callbacks", "name": "change"})  # another view
         assert calls == [[3, 1, 2]]
 
 

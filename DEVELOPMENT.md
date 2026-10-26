@@ -388,6 +388,11 @@ each is called once per change.
 - `StorageExplorer.on_query_change` hears of the query in the preview panel and of its result settings. It is called
   after the data browser's replies and when the preview changes, but not while a preview loads.
 
+In a kernel, a change does not call the functions: it sends a "callbacks" message, naming them, to the page. They run
+as the kernel handles the page's answer. JupyterLab routes an `Output`'s `with` block only while the message being
+handled is still awaited, and a change often comes after a load, once the reply has gone. Changes before the answer
+make one call, however many views answer.
+
 `StorageExplorer` itself keeps:
 
 - its state, set up in `__init__`;
@@ -1217,7 +1222,8 @@ their `DataQuery` or `TableSet`:
 - Loads of one lane run one at a time, in order, as a query is not safe to use from two threads at once.
 - Lanes of other data run side by side.
 - Closing a query or table set goes through its lane, after the requests still reading it.
-- The reply is sent on the main thread, then `on_change` and `on_query_change` functions are told.
+- The reply is sent on the main thread, then the page is asked to call back the `on_change` and `on_query_change`
+  functions.
 
 This holds in the preview panel, in view tabs and in a `DataExplorer` of its own.
 

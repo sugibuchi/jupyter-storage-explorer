@@ -525,8 +525,12 @@ explorer.query_table  # of an item of several tables (a database, a workbook...)
 
 `on_change(f)` calls `f(explorer)` when the folder shown or the selection changes, and `on_query_change(f)` when
 `query_result()` does: another table opened in the preview panel (or none), also another of an item's several tables,
-other filters, sort or columns, or the data read again. The functions run as the kernel handles the widget's messages, so what they print goes to no cell: display
-into an `ipywidgets.Output`. Keep them quick: the widget waits for them. `remove=True` stops calling one.
+other filters, sort or columns, or the data read again. `remove=True` stops calling one.
+
+- What the functions print goes to no cell: display into an `ipywidgets.Output`, in its `with` block.
+- Keep them quick: the kernel does nothing else meanwhile.
+- They run only while the explorer is shown, as the page calls them back.
+- Errors outside the `with` block are logged: see [Logs](#logs).
 
 For example, a chart of the CSV file you click, which follows the filters you set in the data browser. Some CSV files
 in a cloud storage first:
@@ -571,23 +575,20 @@ chart = ipywidgets.Output()
 
 
 def draw(explorer):
-    chart.outputs = ()
-    result = explorer.query_result()
-    if result is None:
-        return  # no table in the preview panel
-    daily = result.group_by("date").agg(pl.col("amount").sum()).sort("date").collect()
-    fig, ax = plt.subplots(figsize=(8, 3))
-    ax.plot(daily["date"], daily["amount"])
-    plt.close(fig)  # shown in chart, not by the cell
-    chart.append_display_data(fig)
+    with chart:
+        chart.clear_output(wait=True)
+        result = explorer.query_result()
+        if result is None:
+            return  # no table in the preview panel
+        daily = result.group_by("date").agg(pl.col("amount").sum()).sort("date").collect()
+        plt.figure(figsize=(8, 3))
+        plt.plot(daily["date"], daily["amount"])
+        plt.show()
 
 
 explorer.on_query_change(draw)
 chart
 ```
-
-The function sets the chart's content, rather than display into it with `with chart:`. It runs once the data browser
-has its rows, when what a `with` block displays reaches no output. Its errors are logged: see [Logs](#logs).
 
 Filter by channel in the data browser, and the chart shows that channel's sales. Without the data browser,
 `on_change` and `selected_urls` give the files themselves, e.g. `pl.read_csv(url)` for each one selected.

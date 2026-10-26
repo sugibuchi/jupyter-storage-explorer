@@ -589,9 +589,9 @@ class StorageExplorer(
         # The functions given to on_change() and on_query_change(), and what
         # they last heard of (see _changed, _query_changed); first, as the
         # traits set up below call them.
-        self._change_callbacks = Callbacks()
+        self._change_callbacks = Callbacks("change")
         self._change_basis: tuple[str, str, tuple[str, ...]] | None = None
-        self._query_callbacks = Callbacks()
+        self._query_callbacks = Callbacks("query")
         self._query_basis: tuple[DataQuery, dict[str, Any]] | None = None
         self._transfer_policy = TransferPolicy(transfer_policy)
         self._fetch_rows = fetch_rows
@@ -1008,12 +1008,10 @@ class StorageExplorer(
         callback : callable
             Called with the explorer, as ``callback(explorer)``. What it prints
             or displays goes to no cell (the kernel answers the widget, not a
-            cell): set the content of an ``ipywidgets.Output`` shown in a
-            cell, with ``outputs = ()`` and ``append_display_data``, as in the
-            example. A ``with`` block of the ``Output`` may show nothing: the
-            function can run once the widget's message is answered, e.g. after
-            a folder's listing. Errors are logged and do not stop the other
-            functions.
+            cell): display into an ``ipywidgets.Output`` shown in a cell, as in
+            the example. Errors in its ``with`` block are shown there as
+            tracebacks, and others are logged: neither stops the other
+            functions. It runs only while the widget is shown in a page.
         remove : bool, default False
             Stop calling ``callback`` instead.
 
@@ -1027,10 +1025,11 @@ class StorageExplorer(
         >>> import polars as pl
         >>> schema = ipywidgets.Output()
         >>> def show_schema(explorer):
-        ...     schema.outputs = ()
-        ...     for url in explorer.selected_urls:
-        ...         if url.endswith(".parquet"):
-        ...             schema.append_display_data(pl.read_parquet_schema(url))
+        ...     with schema:
+        ...         schema.clear_output(wait=True)
+        ...         for url in explorer.selected_urls:
+        ...             if url.endswith(".parquet"):
+        ...                 display(pl.read_parquet_schema(url))
         >>> explorer = StorageExplorer("s3://my-bucket/data")
         >>> explorer.on_change(show_schema)
         >>> display(explorer, schema)
@@ -1128,12 +1127,11 @@ class StorageExplorer(
         ----------
         callback : callable
             Called with the explorer, as ``callback(explorer)``. What it prints
-            or displays goes to no cell: set the content of an
-            ``ipywidgets.Output`` shown in a cell, with ``outputs = ()`` and
-            ``append_display_data``, as in the example. A ``with`` block of
-            the ``Output`` shows nothing: the function runs once the data
-            browser has its rows, after the widget's message is answered.
-            Errors are logged and do not stop the other functions.
+            or displays goes to no cell: display into an
+            ``ipywidgets.Output`` shown in a cell, as in the example. Errors
+            in its ``with`` block are shown there as tracebacks, and others
+            are logged: neither stops the other functions. It runs only while
+            the widget is shown in a page.
         remove : bool, default False
             Stop calling ``callback`` instead.
 
@@ -1148,13 +1146,12 @@ class StorageExplorer(
         >>> import matplotlib.pyplot as plt
         >>> chart = ipywidgets.Output()
         >>> def redraw(explorer):
-        ...     chart.outputs = ()
-        ...     if (lf := explorer.query_result()) is not None:
-        ...         df = lf.collect()
-        ...         fig, ax = plt.subplots()
-        ...         ax.plot(df["date"], df["amount"])
-        ...         plt.close(fig)  # shown in chart, not by the cell
-        ...         chart.append_display_data(fig)
+        ...     with chart:
+        ...         chart.clear_output(wait=True)
+        ...         if (lf := explorer.query_result()) is not None:
+        ...             df = lf.collect()
+        ...             plt.plot(df["date"], df["amount"])
+        ...             plt.show()
         >>> explorer = StorageExplorer("s3://my-bucket/sales", preview_panel="open")
         >>> explorer.on_query_change(redraw)
         >>> display(explorer, chart)
@@ -1269,6 +1266,12 @@ class StorageExplorer(
             # Files cut here were pasted in another explorer (told by its frontend).
             "changed": lambda c: self._sources_changed(c["filesystem"], c["paths"]),
             "view_tab_closed": self._view_tab_closed,
+            # Asked for by the functions given to on_change() and
+            # on_query_change() (see _callbacks.py).
+            "callbacks": lambda c: (
+                self._change_callbacks.answer(self, c)
+                or self._query_callbacks.answer(self, c)
+            ),
         }
 
     def _preview_notice(self, content: dict[str, Any]) -> None:
