@@ -7,7 +7,7 @@
 [![License](https://img.shields.io/pypi/l/jupyter-storage-explorer)](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/LICENSE)
 [![CI](https://github.com/sugibuchi/jupyter-storage-explorer/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/sugibuchi/jupyter-storage-explorer/actions/workflows/ci.yaml)
 [![codecov](https://codecov.io/gh/sugibuchi/jupyter-storage-explorer/graph/badge.svg?token=TFA12UL1IQ)](https://codecov.io/gh/sugibuchi/jupyter-storage-explorer)
-[![Try it on Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/sugibuchi/jupyter-storage-explorer/v0.24.0?urlpath=lab/tree/binder/demo.ipynb)
+[![Try it on Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/sugibuchi/jupyter-storage-explorer/v0.25.0?urlpath=lab/tree/binder/demo.ipynb)
 
 **`StorageExplorer`** is a file explorer for cloud storage and data lakes, right inside Jupyter, in the spirit of Azure
 Storage Explorer. It is built on [fsspec](https://filesystem-spec.readthedocs.io/), so it reaches every storage fsspec
@@ -84,7 +84,7 @@ does: S3, Azure, Google Cloud Storage, SFTP, Hugging Face and many more. See
 ## Quick start
 
 **Try it without installing anything**:
-[open the demo on Binder](https://mybinder.org/v2/gh/sugibuchi/jupyter-storage-explorer/v0.24.0?urlpath=lab/tree/binder/demo.ipynb),
+[open the demo on Binder](https://mybinder.org/v2/gh/sugibuchi/jupyter-storage-explorer/v0.25.0?urlpath=lab/tree/binder/demo.ipynb),
 a made-up data lake in a notebook and in the launcher's tab. It may take a minute to start.
 
 ### From the JupyterLab launcher
