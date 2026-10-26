@@ -88,8 +88,12 @@ explorer.result().group_by("region").agg(pl.col("amount").sum()).collect()
 ## Following the widget: on_change
 
 `explorer.on_change(function)` calls `function(explorer)` whenever `result()` changes in the widget, e.g. to redraw a
-chart; `on_change(function, remove=True)` stops it. Draw into an `ipywidgets.Output` shown in a cell, and keep it
-quick: the widget waits for it.
+chart; `on_change(function, remove=True)` stops it.
+
+- Draw into an `ipywidgets.Output` shown in a cell, in its `with` block.
+- Keep it quick: the kernel does nothing else meanwhile.
+- It runs only while the widget is shown, as the page calls it back.
+- Errors outside the `with` block are logged: see [Logs](storage-explorer.md#logs).
 
 ```python
 import ipywidgets

@@ -51,7 +51,12 @@ function render({ model, el }) {
     return (dy) => (body.style.height = `${Math.max(80, start + dy)}px`);
   });
 
-  const onCustomMsg = (msg) => msg.type === "reply" && onReply(msg);
+  function onCustomMsg(msg) {
+    if (msg.type === "reply") onReply(msg);
+    // The kernel calls on_change's functions as it handles this answer, so
+    // that an Output's with block shows what they display.
+    else if (msg.type === "callbacks") model.send({ type: "callbacks", name: msg.name });
+  }
   const handlers = {
     "change:_title": renderHead,
     "change:_library": renderHead,

@@ -525,8 +525,12 @@ explorer.query_table  # of an item of several tables (a database, a workbook...)
 
 `on_change(f)` calls `f(explorer)` when the folder shown or the selection changes, and `on_query_change(f)` when
 `query_result()` does: another table opened in the preview panel (or none), also another of an item's several tables,
-other filters, sort or columns, or the data read again. The functions run as the kernel handles the widget's messages, so what they print goes to no cell: display
-into an `ipywidgets.Output`. Keep them quick: the widget waits for them. `remove=True` stops calling one.
+other filters, sort or columns, or the data read again. `remove=True` stops calling one.
+
+- What the functions print goes to no cell: display into an `ipywidgets.Output`, in its `with` block.
+- Keep them quick: the kernel does nothing else meanwhile.
+- They run only while the explorer is shown, as the page calls them back.
+- Errors outside the `with` block are logged: see [Logs](#logs).
 
 For example, a chart of the CSV file you click, which follows the filters you set in the data browser. Some CSV files
 in a cloud storage first:

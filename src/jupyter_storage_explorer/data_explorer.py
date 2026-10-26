@@ -207,7 +207,7 @@ class DataExplorer(anywidget.AnyWidget):
             _query=self._data.opening(),
             _height=height,
         )
-        self._change_callbacks = Callbacks()
+        self._change_callbacks = Callbacks("change")
         # Answers the data browser's requests in worker threads.
         self._loader = Loader()
         # What result() was built from when on_change's functions last heard of it.
@@ -280,8 +280,9 @@ class DataExplorer(anywidget.AnyWidget):
             Called with the explorer, as ``callback(explorer)``. What it prints
             or displays goes to no cell (the kernel answers the widget, not a
             cell): display into an ``ipywidgets.Output`` shown in a cell, as in
-            the example. Errors are shown as tracebacks in the same place and
-            do not stop the other functions.
+            the example. Errors in its ``with`` block are shown there as
+            tracebacks, and others are logged: neither stops the other
+            functions. It runs only while the widget is shown in a page.
         remove : bool, default False
             Stop calling ``callback`` instead.
 
@@ -337,6 +338,10 @@ class DataExplorer(anywidget.AnyWidget):
         They may read the data (e.g. a Spark job for each page), so they run
         in a worker thread, one at a time (see _jobs/loader.py): the kernel
         stays free meanwhile."""
+        if content.get("type") == "callbacks":
+            # Asked for by the on_change functions (see _callbacks.py).
+            self._change_callbacks.answer(self, content)
+            return
         if content.get("type") not in REQUESTS:
             return
         data = self._data

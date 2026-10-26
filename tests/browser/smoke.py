@@ -1128,8 +1128,8 @@ def lab_check(fn: Callable[[Lab, Page], None]) -> Callable[[Lab, Page], None]:
     return fn
 
 
-# An explorer whose preview panel starts open, and labels its on_change and
-# on_query_change functions write to.
+# An explorer whose preview panel starts open, a label its on_change function
+# sets, and an Output its on_query_change function prints into, in a with block.
 CALLBACKS = """\
 import demo_data
 import ipywidgets
@@ -1142,7 +1142,7 @@ explorer = StorageExplorer(
     preview_panel="open",
 )
 selected = ipywidgets.Label("-").add_class("smoke-selected")
-rows = ipywidgets.Label("-").add_class("smoke-rows")
+rows = ipywidgets.Output().add_class("smoke-rows")
 
 
 def show_selected(e):
@@ -1150,8 +1150,10 @@ def show_selected(e):
 
 
 def show_rows(e):
-    result = e.query_result()
-    rows.value = "none" if result is None else str(len(result.collect()))
+    with rows:
+        rows.clear_output(wait=True)
+        result = e.query_result()
+        print("none" if result is None else len(result.collect()))
 
 
 explorer.on_change(show_selected)
@@ -1985,6 +1987,45 @@ def python_callbacks(lab: Lab, page: Page) -> None:
     expect(rows).to_have_text("none")
     x.row("customers").dblclick()
     expect(selected).to_have_text("-")
+
+
+# A DataExplorer, and an Output its on_change function prints into, as the docs
+# show: the function runs once the rows are read, called back by the page so
+# that its with block reaches the Output.
+DATA_CALLBACKS = """\
+import ipywidgets
+import polars as pl
+from jupyter_storage_explorer import DataExplorer
+
+explorer = DataExplorer(pl.DataFrame({"channel": ["online", "retail", "wholesale"] * 4}))
+shown = ipywidgets.Output().add_class("smoke-output")
+
+
+def show(e):
+    with shown:
+        shown.clear_output(wait=True)
+        print(f"{len(e.result())} rows")
+
+
+explorer.on_change(show)
+show(explorer)
+display(explorer, shown)"""
+
+
+@lab_check
+def data_explorer_callbacks(lab: Lab, page: Page) -> None:
+    lab.open_notebook(page, DATA_CALLBACKS)
+    shown = page.locator(".smoke-output")
+    expect(shown).to_contain_text("12 rows", timeout=60_000)
+    header = page.locator(
+        "th", has=page.locator(".jse-query-name", has_text="channel")
+    ).first
+    header.locator(".jse-query-filter").click()
+    dialog = page.locator(".jse-confirm:visible")
+    dialog.locator("select").first.select_option(label="Contains")
+    dialog.locator("input[type=text], input:not([type])").first.fill("wholesale")
+    dialog.get_by_role("button", name="Apply").click()
+    expect(shown).to_contain_text("4 rows")
 
 
 def open_launcher_tab(lab: Lab, page: Page) -> Locator:

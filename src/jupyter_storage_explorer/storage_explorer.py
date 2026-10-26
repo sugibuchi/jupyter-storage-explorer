@@ -589,9 +589,9 @@ class StorageExplorer(
         # The functions given to on_change() and on_query_change(), and what
         # they last heard of (see _changed, _query_changed); first, as the
         # traits set up below call them.
-        self._change_callbacks = Callbacks()
+        self._change_callbacks = Callbacks("change")
         self._change_basis: tuple[str, str, tuple[str, ...]] | None = None
-        self._query_callbacks = Callbacks()
+        self._query_callbacks = Callbacks("query")
         self._query_basis: tuple[DataQuery, dict[str, Any]] | None = None
         self._transfer_policy = TransferPolicy(transfer_policy)
         self._fetch_rows = fetch_rows
@@ -1009,8 +1009,9 @@ class StorageExplorer(
             Called with the explorer, as ``callback(explorer)``. What it prints
             or displays goes to no cell (the kernel answers the widget, not a
             cell): display into an ``ipywidgets.Output`` shown in a cell, as in
-            the example. Errors are shown as tracebacks in the same place and
-            do not stop the other functions.
+            the example. Errors in its ``with`` block are shown there as
+            tracebacks, and others are logged: neither stops the other
+            functions. It runs only while the widget is shown in a page.
         remove : bool, default False
             Stop calling ``callback`` instead.
 
@@ -1128,8 +1129,9 @@ class StorageExplorer(
             Called with the explorer, as ``callback(explorer)``. What it prints
             or displays goes to no cell: display into an
             ``ipywidgets.Output`` shown in a cell, as in the example. Errors
-            are shown as tracebacks in the same place and do not stop the
-            other functions.
+            in its ``with`` block are shown there as tracebacks, and others
+            are logged: neither stops the other functions. It runs only while
+            the widget is shown in a page.
         remove : bool, default False
             Stop calling ``callback`` instead.
 
@@ -1264,6 +1266,12 @@ class StorageExplorer(
             # Files cut here were pasted in another explorer (told by its frontend).
             "changed": lambda c: self._sources_changed(c["filesystem"], c["paths"]),
             "view_tab_closed": self._view_tab_closed,
+            # Asked for by the functions given to on_change() and
+            # on_query_change() (see _callbacks.py).
+            "callbacks": lambda c: (
+                self._change_callbacks.answer(self, c)
+                or self._query_callbacks.answer(self, c)
+            ),
         }
 
     def _preview_notice(self, content: dict[str, Any]) -> None:

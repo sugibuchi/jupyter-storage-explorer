@@ -199,6 +199,9 @@ function render({ model, el }) {
     else if (msg.type === "reply") onReply(msg);
     else if (msg.type === "job") x.jobs.onJob(msg);
     else if (msg.type === "view_tab") x.jupyterlab.onViewTab(msg);
+    // The kernel calls on_change's functions as it handles this answer, so
+    // that an Output's with block shows what they display.
+    else if (msg.type === "callbacks") model.send({ type: "callbacks", name: msg.name });
   }
 
   const handlers = {
