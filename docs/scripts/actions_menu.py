@@ -1,6 +1,6 @@
 """In the action development guide: docs/figs/actions-notebook.png, the
-notebook developing the guide's first action, its explorer showing the action
-in a JSON file's "Python code" submenu; and docs/figs/actions-menu.png, an
+notebook cell creating the explorer with the guide's first action, the
+explorer showing the action in a JSON file's "Python code" submenu; and docs/figs/actions-menu.png, an
 explorer's settings menu (⚙), open, with "Actions" and its "Edit" and "Reload".
 
 uv run --group docs docs/scripts/actions_menu.py
@@ -79,11 +79,10 @@ def notebook(lab: Lab) -> None:
         mine.hover()  # kept: moving the mouse away would close the submenu
         page.wait_for_timeout(800)
 
-        # The cells, from the first's top to the explorer's bottom, and the
-        # menus wherever they reach out of them.
+        # The third cell, the explorer's, down to the explorer's bottom, and
+        # the menus wherever they reach out of it.
         cells = page.locator(".jp-Notebook .jp-Cell")
-        x0, y0, x1, _ = box(cells.first)
-        y1 = box(cells.nth(2))[3]
+        x0, y0, x1, y1 = box(cells.nth(2))
         sx0, _, sx1, sy1 = box(mine.locator("xpath=.."))
         menu = page.locator(".jse-menu:not(.jse-submenu)").first
         _, _, mx1, my1 = box(menu)
