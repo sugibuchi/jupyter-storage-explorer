@@ -7,11 +7,18 @@ plugin loads without it."""
 from __future__ import annotations
 
 import io
+import time
 from dataclasses import dataclass
 from inspect import cleandoc
 from typing import TYPE_CHECKING, Any
 
-from jupyter_storage_explorer.actions import ActionOptions, code, register_actions, view
+from jupyter_storage_explorer.actions import (
+    ActionOptions,
+    code,
+    get_logger,
+    register_actions,
+    view,
+)
 from jupyter_storage_explorer.base import ItemContext
 from jupyter_storage_explorer.engine import Engine
 from jupyter_storage_explorer.filesystems.locations import LocalLocation
@@ -44,6 +51,8 @@ if TYPE_CHECKING:
 
     from jupyter_storage_explorer.formats.base import DataFormat
     from jupyter_storage_explorer.formats.parquet import ParquetLayout
+
+log = get_logger(__name__)
 
 AS_LAZY_FRAME = "Load as LazyFrame"
 AS_DATA_FRAME = "Load as DataFrame"
@@ -400,11 +409,19 @@ def _read_through_fsspec(
     limit = limits.max_whole_file_bytes
 
     def read(first: int | None) -> View:
+        started = time.monotonic()
         if first is None:
             data = ctx.fs.cat_file(ctx.path)
         else:
             with ctx.fs.open(ctx.path, "rb") as f:
                 data = f.read(first + 1)
+        log.info(
+            "Read %s %s through fsspec: %d bytes in %.1f s",
+            ctx.path,
+            "whole" if first is None else "in part",
+            len(data),
+            time.monotonic() - started,
+        )
         cut = first is not None and len(data) > first
         if cut:
             data = data[: data.rfind(b"\n", 0, first) + 1] or data[:first]
@@ -412,6 +429,7 @@ def _read_through_fsspec(
 
     if size is not None and size <= limit:
         return read(None)
+    log.debug("%s is over %d bytes: the user chooses how much to read", ctx.path, limit)
     whole = f"The whole file ({format_size(size)})" if size else "The whole file"
     first = f"Its first {format_size(limit)}"
     return ViewWithChoice(
@@ -708,7 +726,9 @@ def parquet_view(
 
     layout = fmt.layout(ctx) if ctx.is_dir else None
     if not _read_by_polars(fmt, ctx, options):
+        log.debug("%s read as a PyArrow dataset through fsspec", ctx.path)
         return QueryView(data=_pyarrow_dataset(ctx, layout))
+    log.debug("%s scanned by polars from its URL", ctx.path)
     defaults = {
         "hive_partitioning": layout is not None and bool(layout.keys),
         "hidden_file_prefix": [".", "_"],

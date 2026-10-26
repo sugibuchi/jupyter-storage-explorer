@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from importlib.metadata import entry_points
 from typing import Any, Self
 
@@ -178,6 +179,36 @@ def test_without_a_hierarchical_namespace(service, monkeypatch):
             ops.mkdir(fs, "data/new")
     assert asked == [1]
     assert service.calls == []
+
+
+def test_namespace_not_told_is_a_warning(service, monkeypatch, caplog):
+    # Without the error's message, which may quote a request's URL.
+    fs = AzureBlobFileSystem(account_name="blobs", account_key="a2V5")
+
+    async def account_information() -> dict[str, Any]:
+        raise PermissionError("https://blobs.blob.core.windows.net/?sig=secret")
+
+    monkeypatch.setattr(
+        fs.service_client, "get_account_information", account_information
+    )
+    with pytest.raises(FileSystemOperations.NotSupported):
+        AzureDataLakeGen2Operation().mkdir(fs, "data/new")
+    [record] = [r for r in caplog.records if r.levelname == "WARNING"]
+    assert "cannot tell whether it has a hierarchical namespace" in record.getMessage()
+    assert "(PermissionError)" in record.getMessage()
+    assert "secret" not in caplog.text
+
+
+def test_rename_logged(lake, service, monkeypatch, caplog):
+    caplog.set_level(logging.INFO)
+    is_dir(monkeypatch, lake, False)
+    AzureDataLakeGen2Operation().move(
+        lake, "data/a.csv", lake, "data/b.csv", JobProgress(), same=True
+    )
+    assert any(
+        r.getMessage().startswith("Renamed data/a.csv to data/b.csv with the Data Lake")
+        for r in caplog.records
+    )
 
 
 @pytest.mark.parametrize(

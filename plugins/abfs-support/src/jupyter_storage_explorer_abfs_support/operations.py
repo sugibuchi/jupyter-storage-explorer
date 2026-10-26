@@ -7,11 +7,12 @@ import asyncio
 import contextlib
 import importlib
 import threading
+import time
 from typing import TYPE_CHECKING, Any
 
 from fsspec.asyn import sync
 
-from jupyter_storage_explorer import _paths
+from jupyter_storage_explorer import _paths, get_logger
 from jupyter_storage_explorer.filesystems.operation import (
     FileSystemOperations,
     OperationCancelled,
@@ -27,6 +28,8 @@ if TYPE_CHECKING:
     from fsspec import AbstractFileSystem
 
     from jupyter_storage_explorer.filesystems.operation import Progress
+
+log = get_logger(__name__)
 
 
 class AzureDataLakeGen2Operation(FileSystemOperations):
@@ -95,9 +98,16 @@ class AzureDataLakeGen2Operation(FileSystemOperations):
         progress.working_on(_paths.basename(source))
         is_dir = fs.isdir(source)
         new_name = f"{new_container}/{new_key}"
+        started = time.monotonic()
         self._run_with_datalake_service(
             fs,
             lambda service: self._rename(service, container, key, new_name, is_dir),
+        )
+        log.info(
+            "Renamed %s to %s with the Data Lake API in %.1f s",
+            source,
+            target,
+            time.monotonic() - started,
         )
         fs.invalidate_cache(source)
         fs.invalidate_cache(target)
@@ -118,6 +128,7 @@ class AzureDataLakeGen2Operation(FileSystemOperations):
         if not _split(source)[1] or not _split(target)[1]:
             raise self.NotSupported  # containers: adlfs's own
         is_dir = fs.isdir(source)
+        started = time.monotonic()
         try:
             self._run_with_datalake_service(
                 fs,
@@ -125,6 +136,12 @@ class AzureDataLakeGen2Operation(FileSystemOperations):
             )
         finally:
             fs.invalidate_cache(target)
+        log.info(
+            "Copied %s to %s within the account (Copy Blob) in %.1f s",
+            source,
+            target,
+            time.monotonic() - started,
+        )
 
     def mkdir(self, fs: AbstractFileSystem, path: str) -> None:
         fs = self._gen2(fs)
@@ -152,6 +169,13 @@ class AzureDataLakeGen2Operation(FileSystemOperations):
             known = self._has_hierarchical_namespace(fs)
             with self._lock:
                 self._hierarchical[fs.account_url] = known
+            log.info(
+                "%s: %s",
+                fs.account_url,
+                "a hierarchical namespace, so moves and copies use the Data Lake API"
+                if known
+                else "no hierarchical namespace, so adlfs moves and copies",
+            )
         if not known:
             raise self.NotSupported
         return fs
@@ -162,7 +186,14 @@ class AzureDataLakeGen2Operation(FileSystemOperations):
         Gen2), asked with adlfs's own Blob Storage client."""
         try:
             info = sync(fs.loop, fs.service_client.get_account_information)
-        except Exception:
+        except Exception as exc:
+            # The error's type only: Azure's messages may quote request URLs.
+            log.warning(
+                "%s: cannot tell whether it has a hierarchical namespace (%s), "
+                "e.g. for lack of permission: adlfs moves and copies",
+                fs.account_url,
+                type(exc).__name__,
+            )
             return False  # cannot tell: leave it to adlfs
         return bool(info.get("is_hns_enabled"))
 

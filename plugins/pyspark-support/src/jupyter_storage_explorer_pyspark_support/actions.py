@@ -11,13 +11,20 @@ plugin loads without it."""
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field, fields
 from inspect import cleandoc
 from typing import TYPE_CHECKING, Any
 
 import narwhals as nw
 
-from jupyter_storage_explorer.actions import ActionOptions, code, register_actions, view
+from jupyter_storage_explorer.actions import (
+    ActionOptions,
+    code,
+    get_logger,
+    register_actions,
+    view,
+)
 from jupyter_storage_explorer.base import ItemContext
 from jupyter_storage_explorer.engine import Engine
 from jupyter_storage_explorer.formats.delta import DeltaLake
@@ -32,6 +39,8 @@ if TYPE_CHECKING:
     from dataclasses import Field
 
     from jupyter_storage_explorer.formats.base import DataFormat
+
+log = get_logger(__name__)
 
 # Spark (Hadoop) names for storage URLs: TLS "abfss" for Azure, as Spark
 # expects it (storage accounts usually require secure transfer); "s3a", the
@@ -91,11 +100,26 @@ def spark_session(session_options: Mapping[str, Any] | None = None) -> Any:
 
     active = SparkSession.getActiveSession()
     if active is not None and not session_options:
+        log.debug("The active Spark session used")
         return active
     builder = SparkSession.builder
     for key, value in (session_options or {}).items():
         builder = builder.config(key, value)
-    return builder.getOrCreate()
+    # Before as well as after: a session starting can take minutes, or hang.
+    log.debug(
+        "Calling SparkSession.builder.getOrCreate(), with %d session options",
+        len(session_options or {}),
+    )
+    started = time.monotonic()
+    session = builder.getOrCreate()
+    # Their count only: their values may be credentials, e.g. an account key.
+    log.info(
+        "Spark session %s in %.1f s, with %d session options",
+        "found" if active is not None else "ready",
+        time.monotonic() - started,
+        len(session_options or {}),
+    )
+    return session
 
 
 def _url(ctx: ItemContext) -> str:

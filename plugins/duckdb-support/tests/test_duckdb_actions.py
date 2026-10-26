@@ -5,6 +5,7 @@ format, its options, and its entry point."""
 from __future__ import annotations
 
 import dataclasses
+import logging
 import threading
 from importlib.metadata import entry_points
 
@@ -324,6 +325,23 @@ class TestText:
         # Copied: viewed again without asking.
         view = csv_view(Csv(), item, CsvByDuckDBOptions(), limits)
         assert isinstance(view, QueryView)
+
+    def test_logged(self, make_item, cache, caplog):
+        # How the file was read, and its copy, with their bytes.
+        caplog.set_level(logging.DEBUG)
+        item = make_item("/d/a.csv", b"x,y\n1,2\n")
+        query_view(csv_view, Csv(), item).close()
+        messages = [r.getMessage() for r in caplog.records]
+        assert "/d/a.csv read by DuckDB from a copy on the kernel's disk" in messages
+        assert any(
+            m.startswith("Copied memory:///d/a.csv to the kernel's disk: 8 bytes")
+            for m in messages
+        )
+        loggers = {r.name for r in caplog.records}
+        assert (
+            "jupyter_storage_explorer.ext.jupyter_storage_explorer_duckdb_support.actions"
+            in loggers
+        )
 
     def test_remote_json_lines_first_bytes(self, make_item):
         lines = b"".join(b'{"a": %d}\n' % i for i in range(100))

@@ -12,7 +12,13 @@ from dataclasses import dataclass
 from inspect import cleandoc
 from typing import TYPE_CHECKING, Any
 
-from jupyter_storage_explorer.actions import ActionOptions, code, register_actions, view
+from jupyter_storage_explorer.actions import (
+    ActionOptions,
+    code,
+    get_logger,
+    register_actions,
+    view,
+)
 from jupyter_storage_explorer.base import ItemContext
 from jupyter_storage_explorer.engine import Engine
 from jupyter_storage_explorer.formats.excel import Excel
@@ -37,6 +43,8 @@ from jupyter_storage_explorer.views import (
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
+log = get_logger(__name__)
+
 AS_DATA_FRAME = "Load as DataFrame"
 
 
@@ -50,6 +58,10 @@ def _query_view(df: Any, limits: ViewLimits) -> QueryView:
     """The rows read (see ``_rows``) in the data browser, which says when
     they are only the first of the data."""
     more = len(df) > limits.max_memory_rows
+    log.debug(
+        "pandas read %s rows into memory",
+        f"the first {limits.max_memory_rows}" if more else f"all {len(df)}",
+    )
     return QueryView(data=df.head(limits.max_memory_rows), more=more)
 
 
