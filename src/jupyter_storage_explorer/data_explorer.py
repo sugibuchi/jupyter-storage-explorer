@@ -77,7 +77,8 @@ class DataExplorer(anywidget.AnyWidget):
     mode : {"auto", "live", "memory"}, default "auto"
         Where queries run first: "auto" is live for lazy data, unless it has
         at most ``max_live_rows`` rows (kept in memory then), and in memory
-        for eager data; "live" is for lazy data only.
+        for eager data. "live" is for lazy data only, and also keeps data of
+        at most ``max_live_rows`` rows in memory.
     max_live_rows : int, default 5000
         Data up to this size is kept in memory.
     max_memory_rows : int, default 100_000
