@@ -105,40 +105,42 @@ StorageExplorer(
 
 ### Browse
 
-Click a folder in the tree to show it in the list; double-click it, or click ▸, to expand or collapse it. Double-click a
-folder in the list to go into it; ↑ goes up, ⟳ refreshes, ◀ ▶ pages through the list. Ctrl+click (⌘+click) selects
-several items. Hover over an item for its size, times, format and URL. The tree button, first in the toolbar, hides
-the tree for more room for the list, and shows it again. ⚙ → **Columns** shows or hides the list's columns besides
-the name: Size, Modified, Created and Format; your choice is remembered (the side panel's apart from the others').
+- Click a folder in the tree to show it. Double-click it, or click ▸, to expand it.
+- Double-click a folder in the list to go into it. ↑ goes up, ⟳ refreshes and ◀ ▶ page through the list.
+- Ctrl+click (⌘+click) selects several items.
+- Hover over an item for its size, times, format and URL.
+- The tree button, first in the toolbar, hides or shows the tree.
+- ⚙ → **Columns** chooses the list's columns.
 
 <img src="figs/using-browse.png" width="830" alt="Browsing a folder, with two items selected">
 
 ### Filter
 
-Type in the field above the list to show names containing the text, or matching a regular expression with **.\***.
-✕ or Esc clears; opening another folder clears it too.
+Type above the list to show the names containing the text. Text with **.\*** is a regular expression. ✕ or Esc clears
+the filter.
 
 <img src="figs/using-filter.png" width="562" alt="The list filtered with a regular expression">
 
 ### View files
 
-Select a file and click **Preview** at the bottom right of the list (with nothing selected: the folder shown, e.g. a
-Delta Lake table), or double-click a file JupyterLab cannot open, e.g. Parquet. The preview panel opens below the list;
-tables open in the [data browser](#data-browser-and-view-tabs). While it is open, clicking a file or a data folder (a
-Delta Lake table, a Parquet dataset) previews it. Right-click → **View** *format* **in new tab** opens it in
-a JupyterLab tab of its own. **Close preview** or Esc closes the panel.
+- **Preview**, at the bottom right, previews the file selected, or the folder shown, e.g. a Delta Lake table.
+- Double-clicking a file JupyterLab cannot open, e.g. Parquet, previews it too.
+- While the preview is open, clicking a file or a data folder previews it.
+- Right-click → **View** *format* **in new tab** opens it in a tab of its own.
+- **Close preview** or Esc closes the preview.
+
+Tables open in the [data browser](#data-browser-and-view-tabs).
 
 <img src="figs/using-preview.png" width="562" alt="Preview in the status bar, and Preview as in the right-click menu of a Markdown file">
 
 ### Edit files
 
-Double-click a file, or right-click → **Edit**, to open it in JupyterLab's editor; **Save** writes it back to the
-storage. Needs the [launcher](../launcher/README.md) package.
+Double-click a file, or right-click → **Edit**, to open it in JupyterLab's editor. **Save** writes it back. This needs
+the [launcher](../launcher/README.md).
 
 ### Switch engine
 
-Previews read data with an [engine](#engines), shown left of **Preview**: Polars, pandas, DuckDB, PySpark or Dask, each
-when installed. Click it to choose another; the preview open is shown again with it, and the choice is remembered.
+Previews read data with the [engine](#engines) shown left of **Preview**. Click it to choose another.
 
 <img src="figs/using-engine.png" width="829" alt="The engines' menu, above the engine in the status bar">
 
@@ -156,15 +158,14 @@ when installed. Click it to choose another; the preview open is shown again with
 
 ### Properties
 
-A file's size, modification time and everything its storage tells about it; for folders and several items, the number
-of files and folders, their total size, and the oldest and newest files.
+A file's properties are what its storage tells about it. Those of folders and several items are counts, sizes and
+times of the files they hold.
 
 <img src="figs/using-properties.png" width="640" alt="The properties of a folder">
 
 ### Bookmarks
 
-Right-click a folder → **Add bookmark**. ☆ lists them; click one to open it, right-click it for Copy URL (Copy path
-for a local folder) and Delete bookmark.
+Right-click a folder → **Add bookmark**. ☆ lists the bookmarks: click one to open it.
 
 <img src="figs/using-bookmarks.png" width="334" alt="The bookmarks menu">
 
@@ -174,7 +175,7 @@ Between storages and between explorers, also in other notebooks.
 
 ### Keyboard shortcuts
 
-Click the list, then use the keys its right-click menu shows (⌘ instead of Ctrl on macOS):
+Click the list, then use these keys, with ⌘ instead of Ctrl on macOS:
 
 | Key            | Does                                                         |
 |----------------|--------------------------------------------------------------|
@@ -188,18 +189,16 @@ Folders still need [Unsafe mode](#unsafe-operations).
 
 ### Drag and drop
 
-Drop files from JupyterLab's file browser or your computer to upload them; drag files onto a folder to move them, onto
-another explorer of the same JupyterLab page (another tab or notebook) to copy them there, as Paste does, or onto
-JupyterLab's file browser to download them (needs [the launcher](../launcher/README.md)). Drags from other browser tabs
-or windows are refused.
+- Drop files from JupyterLab's file browser or your computer to upload them.
+- Drag files onto a folder to move them.
+- Drag them onto another explorer of the same page to copy them there.
+- Drag them onto JupyterLab's file browser to download them, with the [launcher](../launcher/README.md).
 
 ### Background operations
 
-Moving, renaming, deleting, pasting and downloading to JupyterLab run in the background, with progress and **Cancel** above the
-status bar.
+Moves, deletes, pastes and downloads to JupyterLab run in the background, with progress and **Cancel**.
 
-An error stays in the status bar until you click it; hover over it to read all of it. A preview or tab that cannot be
-shown says why, with the full error, e.g. Spark's stack trace, under **Details**.
+An error stays in the status bar until you click it. A preview or tab that fails shows the full error under **Details**.
 
 ## Unsafe operations
 
