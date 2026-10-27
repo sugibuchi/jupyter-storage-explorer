@@ -25,7 +25,7 @@ Without `deltalake`, `fastexcel` or `pyarrow`, the other formats still work.
 
 ### Prerequisites
 
-- polars needs credentials for cloud storage: see [Authentication](#authentication).
+- polars needs credentials for cloud storage: see [Authentication](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/plugins/polars-support/README.md#authentication).
 
 ### Authentication
 
@@ -99,7 +99,7 @@ Hugging Face. On other storages, such as SFTP, the explorer reads through fsspec
 
 - CSV and JSON Lines files are read into memory. For files over `max_whole_file_bytes`, 10 MB by default, you choose
   between the whole file and its first 10 MB.
-- Parquet files and folders are read lazily as PyArrow datasets. The Parquet [engine options](#engine-options) do not
+- Parquet files and folders are read lazily as PyArrow datasets. The Parquet [engine options](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/plugins/polars-support/README.md#engine-options) do not
   apply.
 - Delta Lake tables cannot be viewed.
 - "Python code" reads a file whole into a DataFrame, never a LazyFrame. Folders and Delta Lake tables get no code.
@@ -147,7 +147,7 @@ Every format but JSON and Excel takes:
 | Option                | Default  | Meaning                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 |-----------------------|----------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `storage_options`     | `None`   | polars' `storage_options`: object_store's keys, not fsspec's ([AWS](https://docs.rs/object_store/latest/object_store/aws/enum.AmazonS3ConfigKey.html), [GCP](https://docs.rs/object_store/latest/object_store/gcp/enum.GoogleConfigKey.html), [Azure](https://docs.rs/object_store/latest/object_store/azure/enum.AzureConfigKey.html); Delta Lake's are [delta-rs'](https://delta-io.github.io/delta-rs/latest/usage/loading-table/)). Without them, polars reads credentials from the environment. |
-| `credential_provider` | `"auto"` | polars' `credential_provider`: a function giving cloud storage credentials; see [Authentication](#authentication).                                                                                                                                                                                                                                                                                                                                                                     |
+| `credential_provider` | `"auto"` | polars' `credential_provider`: a function giving cloud storage credentials; see [Authentication](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/plugins/polars-support/README.md#authentication).                                                                                                                                                                                                                                                                                                                                                                     |
 
 Every format takes `fsspec_storage_options` (default `None`): `fsspec.open`'s keyword arguments in the code that opens
 the file with fsspec. That is Excel's code, and the other formats' on storages polars cannot read itself.

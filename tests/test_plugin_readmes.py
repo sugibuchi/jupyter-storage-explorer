@@ -10,7 +10,8 @@ import tomllib
 
 import pytest
 
-PLUGINS = sorted((pathlib.Path(__file__).parents[1] / "plugins").glob("*-support"))
+ROOT = pathlib.Path(__file__).parents[1]
+PLUGINS = sorted((ROOT / "plugins").glob("*-support"))
 
 
 def sections(text: str) -> dict[str, str]:
@@ -71,6 +72,22 @@ def test_the_full_extras_libraries_are_tabled(plugin):
 
 def test_prerequisites_say_what_the_environment_provides(plugin):
     assert readme(plugin)["Prerequisites"].strip().startswith("- ")
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        ROOT / "README.md",
+        ROOT / "launcher" / "README.md",
+        ROOT / "plugins" / "README.md",
+    ]
+    + [p / "README.md" for p in PLUGINS],
+    ids=lambda p: p.parent.name,
+)
+def test_no_links_to_sections_of_the_same_page(path):
+    # PyPI shows these READMEs, but gives their headings no anchors.
+    text = path.read_text(encoding="utf-8")
+    assert re.findall(r"\]\(#[^)]*\)", text) == []
 
 
 def test_plugin_options_have_both_examples(plugin):

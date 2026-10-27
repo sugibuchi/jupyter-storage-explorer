@@ -30,9 +30,9 @@ instead: with Databricks Connect installed, this plugin's engine is not offered.
 - The plugin expects Spark to reach your storage already, e.g. through
   [`spark-defaults.conf`](https://spark.apache.org/docs/latest/configuration.html#overriding-configuration-directory)
   or [Databricks unified authentication](https://docs.databricks.com/aws/en/dev-tools/auth/unified-auth).
-- `session_options` in [Engine options](#engine-options) can add Spark properties. With a session already running,
+- `session_options` in [Engine options](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/plugins/pyspark-support/README.md#engine-options) can add Spark properties. With a session already running,
   only those Spark can change at run time apply.
-- Spark reads the items' URLs itself. `supported_protocols` in [Engine options](#engine-options) says which storages it
+- Spark reads the items' URLs itself. `supported_protocols` in [Engine options](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/plugins/pyspark-support/README.md#engine-options) says which storages it
   reaches, e.g. `["s3a"]` for a cluster configured for S3 only.
 
 ## Plugin options

@@ -1008,7 +1008,8 @@ The first command installs them:
 ### Prerequisites
 
 - The plugin expects DuckDB to reach your storage already, as configured in the environment: DuckDB reads the data
-  without options. You can still give options in [Engine options](#engine-options).
+  without options. You can still give options in
+  [Engine options](https://github.com/me/jupyter-storage-explorer-duckdb-support/blob/main/README.md#engine-options).
 
 ## Plugin options
 
@@ -1046,6 +1047,8 @@ format: each option, its default and its meaning, from the library's documentati
   configuration reference of a library that does not use fsspec, as polars-support links object_store's. Say which
   storages it reads itself, and how it reads the others, e.g. through the explorer's filesystem.
 - **Plugin options** shows one example for `StorageExplorer` and one for `launcher.py`, then the options' table.
+- Links, also to the README's own sections, are absolute URLs: PyPI shows the README, but resolves neither relative
+  paths nor `#` anchors of its headings.
 - Code blocks are formatted as ruff formats Python. `uvx ruff format` formats the README's blocks too, and CI checks
   them with the plugins' code.
 - A note on how the data browser behaves with the library, e.g. what it reads, goes in a section of its own after

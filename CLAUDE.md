@@ -197,6 +197,8 @@ components in an explorer". docs/action-development-guide.md uses `actions` too,
 
 - The READMEs use absolute URLs for images and links to files, as PyPI shows them but cannot resolve relative paths.
   Images are `raw.githubusercontent.com/.../main/...`, files `github.com/.../blob/main/...`.
+- A README links to its own sections by absolute URL too, as PyPI gives headings no anchors.
+  `tests/test_plugin_readmes.py` checks it.
 - `docs/` is read on GitHub only, so it uses relative paths.
 - Screenshots are in `docs/figs/`, and the launcher's in `launcher/figs/`. They are taken at 2× and shown at their CSS
   size, with `<img width="...">`.
