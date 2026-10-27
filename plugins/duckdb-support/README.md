@@ -40,24 +40,17 @@ with `duckdb.install_extension("delta")` where the kernel cannot download it.
 
 ## How DuckDB reads your data
 
-- Parquet files and folders are read lazily: DuckDB reads only the columns and row groups that each page, filter or
-  sort needs.
-  - Off the storages it reads itself, DuckDB reads through the explorer's filesystem.
-  - DuckDB cannot read through filesystems without modification times, such as fsspec's HTTP and zip filesystems.
-    There, it does not view Parquet.
-- DuckDB reads a whole CSV or JSON Lines file again for each filter, sort or count. Off the storages it reads itself,
-  the explorer first copies the file to the kernel's disk.
-  - Files up to `max_whole_file_bytes`, 10 MB by default, are copied at once.
-  - For larger files, you choose between copying the whole file and reading its first 10 MB into memory.
-- DuckDB opens only local database files. The explorer copies other storages' databases to the kernel's disk first,
-  and asks before copying one larger than `max_whole_file_bytes`.
-- A copy is kept for 10 minutes after its last view closes, and while the remote file is unchanged. The copies are
-  deleted when the kernel exits.
-- A database shows its tables and views in a tree, by schema. The data browser opens the one you choose.
-- "Python code" reads by URL the storages that DuckDB's extensions reach: local disks, S3, Google Cloud Storage,
-  Azure, HTTP(S) and Hugging Face.
-  - Elsewhere, such as on SFTP, the code registers fsspec's filesystem with DuckDB.
-  - A remote database's code downloads it with fsspec, then opens it.
+Parquet files and folders are read lazily: DuckDB reads only the columns and row groups that each page, filter or
+sort needs. It cannot read Parquet through filesystems without modification times, such as fsspec's HTTP and zip
+filesystems.
+
+DuckDB reads a whole CSV or JSON Lines file again for each filter, sort or count. Off the storages it reads itself,
+the explorer first copies the file to the kernel's disk. For files over `max_whole_file_bytes`, 10 MB by default, you
+choose between copying the whole file and reading its first 10 MB.
+
+A database shows its tables and views in a tree, by schema, and the data browser opens the one you choose. DuckDB
+opens only local database files, so the explorer copies other storages' databases to the kernel's disk first. It asks
+first for files over `max_whole_file_bytes`.
 
 ## Plugin options
 
@@ -102,9 +95,9 @@ Every format takes:
 
 | Option                   | Default | Meaning                                                                                                                                                                                         |
 |--------------------------|---------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `config`                 | `None`  | `duckdb.connect`'s `config`: DuckDB's [settings](https://duckdb.org/docs/stable/configuration/overview), e.g. `{"threads": 4, "memory_limit": "2GB"}`. Keys that look like credentials are left out of the code. |
+| `config`                 | `None`  | `duckdb.connect`'s `config`: DuckDB's [settings](https://duckdb.org/docs/stable/configuration/overview), e.g. `{"threads": 4, "memory_limit": "2GB"}`. |
 | `url_schemes`            | `()`    | The URL schemes of the storages DuckDB reads itself, e.g. `["s3", "gs"]`. Local files are always read by URL. Other storages are read through the explorer's filesystem.                       |
-| `fsspec_storage_options` | `None`  | fsspec's keyword arguments in the code on storages DuckDB's extensions do not reach, such as SFTP. Keys that look like credentials are left out.                                               |
+| `fsspec_storage_options` | `None`  | fsspec's keyword arguments in the code on storages DuckDB's extensions do not reach, such as SFTP.                                               |
 
 The other options are each format's reader's arguments, of the same names, with their descriptions from DuckDB's
 documentation. Those not set are not passed, so DuckDB's defaults, shown below, apply, except where the explorer sets

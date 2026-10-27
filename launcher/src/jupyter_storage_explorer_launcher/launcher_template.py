@@ -7,6 +7,8 @@
 #
 # See https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/launcher/README.md#configuration-details
 
+from jupyter_storage_explorer.engine import by_protocol  # noqa: F401  # for engine_options()
+
 
 # The storages offered, by name: a URL, or an fsspec filesystem for options
 # such as credentials. "." is the folder the tab opens on. Empty, it changes
@@ -32,13 +34,19 @@ def filesystems():
 
 
 # Options of the engines reading the data for previews, the data browser
-# and code, by engine, then format ("*": all formats). See "Engine options"
-# in docs/storage-explorer.md.
+# and code, by engine, then format ("*": all formats); by_protocol gives
+# options by storage, e.g. credentials. See "Engine options" in
+# docs/storage-explorer.md.
 #
 # def engine_options():
+#     import polars as pl
+#
 #     return {
 #         "polars": {
-#             "*": {"storage_options": {"aws_region": "eu-west-1"}},
+#             "*": by_protocol({
+#                 "abfs": {"credential_provider": pl.CredentialProviderAzure()},
+#                 "s3": {"credential_provider": pl.CredentialProviderAWS(profile_name="analytics")},
+#             }),
 #             "delta": {"use_pyarrow": True},
 #         },
 #     }

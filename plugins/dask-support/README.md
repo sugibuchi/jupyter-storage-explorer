@@ -37,26 +37,19 @@ The plugin is not in the explorer's `all` and `all-supports` extras: install it 
 
 ## How Dask reads your data
 
-- A Parquet file's partitions are its row groups, and a folder's partitions are its files. Each page reads only the
-  first partitions it needs.
-- A Parquet folder is read as its data files, so Spark's `_temporary` folders and `_SUCCESS` files are left out.
-- CSV and JSON Lines files are read in blocks of at most `max_whole_file_bytes`, 10 MB by default. Each page reads
-  only the first blocks it needs.
-- The data browser asks Dask for blocks of half that size, as Dask makes blocks of one to two times the size asked
-  for. The `blocksize` [engine option](#engine-options) sets another size.
-- A filter matching few rows, and a sort, read every partition.
-- Dask guesses a CSV file's column types from its beginning. A later value of another type then fails the page. Set
-  `dtype` or `assume_missing` in the engine options, or a larger `sample`.
-- A CSV file whose quoted values hold line breaks cannot be cut into blocks. Set `blocksize` to `None` for such files.
-- A file compressed as the `compression` option says is read whole: Dask cannot cut it into blocks.
-- A file compressed as the `compression` option says is read whole: Dask cannot cut it into blocks.
-- Some storages' filesystems cannot be given to Dask by URL. On those, the explorer first copies CSV and JSON Lines
-  files to the kernel's disk.
-  - Files up to `max_whole_file_bytes` are copied at once. For larger files, the explorer asks first.
-  - A copy is kept for 10 minutes after its last view closes, and while the remote file is unchanged. The copies are
-    deleted when the kernel exits.
-- In memory mode, the data browser holds the rows as a pandas DataFrame.
-- "Python code" reads the item by its URL, with fsspec's credentials from the environment or `storage_options`.
+Each page of the data browser reads only the first partitions it needs. A Parquet file's partitions are its row
+groups, and a folder's are its files. CSV and JSON Lines files are cut into blocks of about `max_whole_file_bytes`,
+10 MB by default. The `blocksize` [engine option](#engine-options) sets another size. A filter matching few rows, or a
+sort, reads every partition.
+
+Dask guesses a CSV file's column types from its beginning, so a later value of another type fails the page. Set
+`dtype` or `assume_missing` in the engine options, or a larger `sample`.
+
+Compressed files are read whole. CSV files whose quoted values hold line breaks need `blocksize` set to `None`, which
+reads them whole too.
+
+On storages that Dask cannot read by URL, the explorer first copies CSV and JSON Lines files to the kernel's disk. It
+asks first for files over `max_whole_file_bytes`.
 
 ## Plugin options
 
@@ -101,13 +94,11 @@ Every format takes:
 
 | Option            | Default | Meaning                                                                                                                                                   |
 |-------------------|---------|-----------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `storage_options` | `None`  | Dask's `storage_options`, fsspec's keyword arguments, in the code. The data browser reads through the explorer's filesystem, with its own credentials. Keys that look like credentials are left out. |
+| `storage_options` | `None`  | Dask's `storage_options`, fsspec's keyword arguments, in the code. The data browser reads through the explorer's filesystem, with its own credentials. |
 
 The other options are each format's reader's arguments, of the same names, with their descriptions from Dask's and
 pandas' API documentation. Those not set are not passed, so the libraries' defaults, shown below, apply, except where
-the explorer sets its own. Values that are Python objects are used in the data browser but left out of the code, as
-are options that look like credentials. Data types such as `np.float64` in `dtype` are such objects; strings such as
-`"Int64"` are fine.
+the explorer sets its own.
 
 ### Parquet (`parquet`)
 

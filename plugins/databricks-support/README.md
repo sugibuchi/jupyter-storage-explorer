@@ -34,7 +34,7 @@ pyspark-support, whose actions the Databricks Connect engine shares.
 ### Prerequisites
 
 - fsspec-databricks reaches the workspace with the Databricks SDK's configuration: e.g. `DATABRICKS_HOST` and a
-  credential, a profile of `~/.databrickscfg`, or the notebook's own on Databricks. See
+  credential, or a profile of `~/.databrickscfg`. See
   [Databricks unified authentication](https://docs.databricks.com/aws/en/dev-tools/auth/unified-auth).
 - Databricks Connect also needs compute in that configuration: a cluster, e.g. `DATABRICKS_CLUSTER_ID`, or serverless.
   See [Databricks Connect](https://docs.databricks.com/aws/en/dev-tools/databricks-connect/python/).

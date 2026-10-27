@@ -1,6 +1,7 @@
 """The engines handling formats' data: the ``Engine`` interface (python.py
-has ``PythonEngine``, the built-in actions'; plugins define the others), and
-``EngineOptions``, the type of the engines' options, ``engine_options``."""
+has ``PythonEngine``, the built-in actions'; plugins define the others),
+``EngineOptions``, the type of the engines' options, ``engine_options``, and
+``by_protocol``, options that depend on the storage."""
 
 from __future__ import annotations
 
@@ -20,6 +21,79 @@ if TYPE_CHECKING:
 EngineOptions: TypeAlias = Mapping[
     str, Mapping[str, Mapping[str, Any] | Callable[[Location], Mapping[str, Any]]]
 ]
+
+# Options in engine_options: a dict, or a function of the item's location.
+_Options: TypeAlias = Mapping[str, Any] | Callable[[Location], Mapping[str, Any]]
+
+# The key of the options for every protocol, as "*" is for every format.
+_ALL_PROTOCOLS = "*"
+
+
+def by_protocol(
+    options: Mapping[str, _Options],
+) -> Callable[[Location], dict[str, Any]]:
+    """Options that depend on the storage, by the protocol of the item's URL.
+
+    Give the function returned in ``engine_options`` in place of a dict of
+    options, for one format or ``"*"``.
+
+    Parameters
+    ----------
+    options : mapping
+        Protocol -> options. A protocol is that of the item's location
+        (``Location.protocol``): ``"abfs"``, ``"s3"``, ``"gs"``, ``"sftp"``,
+        ``"file"``, ``"memory"``, ``"dbfs"`` or another storage's. ``"*"``
+        gives the options of every protocol, which a protocol's own
+        override. Each options is a dict, or a function of the item's
+        location returning one.
+
+    Returns
+    -------
+    callable
+        A function of the item's location returning its options: none for a
+        protocol not given, without ``"*"``.
+
+    Raises
+    ------
+    ValueError
+        When the explorer is created, for an option no action of the engine
+        takes. A function's options are checked when it is called.
+
+    Examples
+    --------
+    >>> StorageExplorer(
+    ...     "abfs://lake@account.dfs.core.windows.net",
+    ...     engine_options={
+    ...         "polars": {
+    ...             "*": by_protocol({
+    ...                 "abfs": {"credential_provider": pl.CredentialProviderAzure()},
+    ...                 "s3": {"credential_provider": pl.CredentialProviderAWS(profile_name="personal")},
+    ...             }),
+    ...         },
+    ...     },
+    ... )
+    """
+    return _ByProtocol(dict(options))
+
+
+class _ByProtocol:
+    """What ``by_protocol`` returns: a function of the location, which keeps
+    its options so that the explorer checks the dicts when it is created."""
+
+    def __init__(self, options: dict[str, _Options]) -> None:
+        self.options = options
+
+    def __call__(self, location: Location) -> dict[str, Any]:
+        merged: dict[str, Any] = {}
+        for key in (_ALL_PROTOCOLS, location.protocol):
+            values = self.options.get(key)
+            if callable(values):
+                values = values(location)
+            merged.update(values or {})
+        return merged
+
+    def __repr__(self) -> str:
+        return f"by_protocol({self.options!r})"
 
 
 class Engine:

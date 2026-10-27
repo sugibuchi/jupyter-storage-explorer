@@ -25,26 +25,84 @@ Without `deltalake`, `fastexcel` or `pyarrow`, the other formats still work.
 
 ### Prerequisites
 
-- The plugin expects polars to reach your storage already, as configured in the environment: polars reads the data
-  without options. You can still give options in [Engine options](#engine-options).
-- polars and deltalake do not use fsspec: they read cloud storage with Rust's object_store. Its configuration keys,
-  which it also reads from environment variables, are listed for
-  [AWS](https://docs.rs/object_store/latest/object_store/aws/enum.AmazonS3ConfigKey.html),
-  [GCP](https://docs.rs/object_store/latest/object_store/gcp/enum.GoogleConfigKey.html) and
-  [Azure](https://docs.rs/object_store/latest/object_store/azure/enum.AzureConfigKey.html). For Delta Lake tables, see
-  [delta-rs' storage options](https://delta-io.github.io/delta-rs/latest/usage/loading-table/).
-- polars reads lazily only what its own readers reach: local disks, S3, Google Cloud Storage, Azure, HTTP(S) and
-  Hugging Face.
-- On other storages, such as SFTP, the explorer reads CSV and JSON Lines files into memory for polars.
-  - Files up to `max_whole_file_bytes`, 10 MB by default, are read at once.
-  - For larger files, you choose between the whole file and its first 10 MB.
-- On those storages, Parquet files and folders are read as PyArrow datasets through fsspec.
-  - They are still read lazily: PyArrow reads only the columns and row groups needed, and some ahead.
-  - The Parquet [engine options](#engine-options) do not apply there.
-- polars cannot view Delta Lake tables on those storages.
-- There, "Python code" opens a file with fsspec and reads it into a DataFrame, as polars reads a file object whole.
-  - It offers no LazyFrame, which would read the file whole all the same.
-  - Folders, such as Parquet datasets, and Delta Lake tables get no polars code there.
+- polars needs credentials for cloud storage: see [Authentication](#authentication).
+
+### Authentication
+
+polars and deltalake read cloud storage themselves, not through the explorer's fsspec filesystems. So they need
+credentials of their own, besides those of fsspec.
+
+We recommend configuring them with polars'
+[credential providers](https://docs.pola.rs/user-guide/io/cloud-storage/), one per storage with `by_protocol`:
+
+```python
+import polars as pl
+from jupyter_storage_explorer import StorageExplorer
+from jupyter_storage_explorer.engine import by_protocol
+
+StorageExplorer(
+    filesystems={
+        "Lake": "abfs://lake@account.dfs.core.windows.net",
+        "Personal": "s3://my-bucket",
+    },
+    engine_options={
+        "polars": {
+            "*": by_protocol(
+                {
+                    "abfs": {"credential_provider": pl.CredentialProviderAzure()},
+                    "s3": {
+                        "credential_provider": pl.CredentialProviderAWS(
+                            profile_name="personal"
+                        )
+                    },
+                }
+            ),
+        },
+    },
+)
+```
+
+polars has these credential providers:
+
+- [`pl.CredentialProviderAWS`](https://docs.pola.rs/api/python/stable/reference/api/polars.CredentialProviderAWS.html):
+  S3, e.g. with an AWS profile.
+- [`pl.CredentialProviderAzure`](https://docs.pola.rs/api/python/stable/reference/api/polars.CredentialProviderAzure.html):
+  Azure Storage, e.g. with a credential from azure-identity.
+- [`pl.CredentialProviderGCP`](https://docs.pola.rs/api/python/stable/reference/api/polars.CredentialProviderGCP.html):
+  Google Cloud Storage.
+
+For the launcher's tabs, `engine_options()` in `launcher.py` returns the same engine options:
+
+```python
+def engine_options():
+    return {
+        "polars": {
+            "*": by_protocol(
+                {
+                    "abfs": {"credential_provider": pl.CredentialProviderAzure()},
+                }
+            ),
+        },
+    }
+```
+
+Instead of engine options, you can configure the environment variables of object_store, the library polars reads
+cloud storage with. See its keys for
+[AWS](https://docs.rs/object_store/latest/object_store/aws/enum.AmazonS3ConfigKey.html),
+[Azure](https://docs.rs/object_store/latest/object_store/azure/enum.AzureConfigKey.html) and
+[GCP](https://docs.rs/object_store/latest/object_store/gcp/enum.GoogleConfigKey.html).
+
+### Limitations
+
+polars reads lazily only the storages its own readers reach: local disks, S3, Google Cloud Storage, Azure, HTTP(S) and
+Hugging Face. On other storages, such as SFTP, the explorer reads through fsspec:
+
+- CSV and JSON Lines files are read into memory. For files over `max_whole_file_bytes`, 10 MB by default, you choose
+  between the whole file and its first 10 MB.
+- Parquet files and folders are read lazily as PyArrow datasets. The Parquet [engine options](#engine-options) do not
+  apply.
+- Delta Lake tables cannot be viewed.
+- "Python code" reads a file whole into a DataFrame, never a LazyFrame. Folders and Delta Lake tables get no code.
 
 ## Plugin options
 
@@ -77,7 +135,6 @@ StorageExplorer(
     "s3://my-bucket/lake",
     engine_options={
         "polars": {
-            "*": {"storage_options": {"aws_region": "eu-west-1"}},
             "csv": {"null_values": ["NA"], "try_parse_dates": True},
             "delta": {"version": 3},
         },
@@ -90,15 +147,14 @@ Every format but JSON and Excel takes:
 | Option                | Default  | Meaning                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 |-----------------------|----------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `storage_options`     | `None`   | polars' `storage_options`: object_store's keys, not fsspec's ([AWS](https://docs.rs/object_store/latest/object_store/aws/enum.AmazonS3ConfigKey.html), [GCP](https://docs.rs/object_store/latest/object_store/gcp/enum.GoogleConfigKey.html), [Azure](https://docs.rs/object_store/latest/object_store/azure/enum.AzureConfigKey.html); Delta Lake's are [delta-rs'](https://delta-io.github.io/delta-rs/latest/usage/loading-table/)). Without them, polars reads credentials from the environment. |
-| `credential_provider` | `"auto"` | polars' `credential_provider`: a function giving cloud storage credentials, in the data browser only (never in the code).                                                                                                                                                                                                                                                                                                                                                                     |
+| `credential_provider` | `"auto"` | polars' `credential_provider`: a function giving cloud storage credentials; see [Authentication](#authentication).                                                                                                                                                                                                                                                                                                                                                                     |
 
 Every format takes `fsspec_storage_options` (default `None`): `fsspec.open`'s keyword arguments in the code that opens
 the file with fsspec. That is Excel's code, and the other formats' on storages polars cannot read itself.
 
 The other options are each format's reader's arguments, of the same names, with their descriptions from polars' API
 documentation. Those not set are not passed, so polars' defaults, shown below, apply, except where the explorer sets
-its own. Values that are Python objects (e.g. data types such as `pl.String` in `schema_overrides`) are used in the
-data browser but left out of the code, as are options that look like credentials.
+its own.
 
 ### CSV (`csv`)
 

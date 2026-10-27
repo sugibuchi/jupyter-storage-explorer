@@ -29,7 +29,7 @@ instead: with Databricks Connect installed, this plugin's engine is not offered.
 
 - The plugin expects Spark to reach your storage already, e.g. through
   [`spark-defaults.conf`](https://spark.apache.org/docs/latest/configuration.html#overriding-configuration-directory)
-  or a Databricks cluster's notebook.
+  or [Databricks unified authentication](https://docs.databricks.com/aws/en/dev-tools/auth/unified-auth).
 - `session_options` in [Engine options](#engine-options) can add Spark properties. With a session already running,
   only those Spark can change at run time apply.
 - Spark reads the items' URLs itself. `supported_protocols` in [Engine options](#engine-options) says which storages it
@@ -90,8 +90,7 @@ Every format takes:
 | `supported_protocols` | `SPARK_PROTOCOLS` | The URL schemes Spark reads, as Spark names them: by default `file`, `hdfs`, `s3a`, `gs`, `abfss`, `abfs`, `wasbs`, `wasb` and `dbfs`. Items elsewhere, e.g. on SFTP, are neither viewed nor given code with Spark. `None`: any. |
 
 The other options are each format's reader options, from Spark's and Delta Lake's documentation, in snake case. Those
-left unset (None) are left to Spark, whose defaults are shown. Options that look like credentials are left out of the
-generated code.
+left unset (None) are left to Spark, whose defaults are shown.
 
 ### CSV (`csv`)
 
