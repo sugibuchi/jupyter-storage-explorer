@@ -231,7 +231,11 @@ function createTransfers(x) {
     const copied = [];
     const skipped = [];
     try {
-      const { conflicts = [] } = await x.busy.run("Checking…", () => request({ type: "upload_check", dest, names }));
+      const { conflicts = [], error } = await x.busy.run("Checking…", () => request({ type: "upload_check", dest, names }));
+      if (error) {
+        x.flash(`Cannot upload: ${visible(error)}`, { error: true });
+        return;
+      }
       let toSend = files;
       if (conflicts.length) {
         const choice = await x.operations.askConflicts(conflicts, dest);

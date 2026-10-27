@@ -9,6 +9,7 @@ import concurrent.futures
 import dataclasses
 import logging
 import time
+from functools import partial
 from typing import TYPE_CHECKING, Any, NamedTuple
 
 from jupyter_storage_explorer import _paths
@@ -441,7 +442,7 @@ class PreviewsMixin:
         a Parquet dataset's layout); ValueError if it no longer matches, or
         the item is gone. Safe in a worker thread: it leaves the explorer's
         detections (``_detected``) to the main thread."""
-        ctx.fs.invalidate_cache(ctx.path)
+        self._drop_cached(ctx.path, ctx.fs)
         try:
             info = self._info(ctx.path, ctx.fs)
         except FileNotFoundError:
@@ -1055,7 +1056,7 @@ class PreviewsMixin:
         kind = content["type"]
 
         def reply(answer: dict[str, Any]) -> None:
-            self.send({"type": "reply", "rid": content["rid"], **answer})
+            self._reply(content, answer)
             self._query_changed(
                 reloaded=kind == "query_reload" and "error" not in answer
             )
@@ -1105,9 +1106,7 @@ class PreviewsMixin:
             except Exception as exc:
                 return {"error": error_text(exc)}
 
-        def reply(answer: dict[str, Any]) -> None:
-            self.send({"type": "reply", "rid": content["rid"], **answer})
-
+        reply = partial(self._reply, content)
         self._loader.submit(work, reply, reply)
 
     def _view_entries(

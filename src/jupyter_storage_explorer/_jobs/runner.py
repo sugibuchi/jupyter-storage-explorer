@@ -196,9 +196,14 @@ class JobRunner:
             except OperationCancelled:
                 job.state = "cancelled"
             except Exception as exc:
+                from jupyter_storage_explorer._explorer.common import (  # noqa: PLC0415
+                    error_text,
+                )
+
                 log.exception("job %s (%s) failed", job.id, job.title)
                 job.state = "failed"
-                job.error = f"{type(exc).__name__}: {exc}"
+                # As loads' errors: a readable first line (e.g. Spark's).
+                job.error = error_text(exc)
         _log_end(job, time.monotonic() - started)
         self._main(lambda: self._end(job, finish), context)
 

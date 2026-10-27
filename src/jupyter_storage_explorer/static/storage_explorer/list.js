@@ -180,6 +180,11 @@ function createList(x) {
     state.pages.set(key, null);
     const reply = await request({ type: "list", ...query });
     if (reply.stale || kernelPages !== state) return; // the listing has changed since
+    if (reply.error) {
+      state.pages.delete(key); // asked again when drawn again
+      x.flash(`Cannot list the folder: ${visible(reply.error)}`, { error: true });
+      return;
+    }
     const entries = decodeColumns(reply.listing);
     for (const e of entries) state.seen.set(e.path, e);
     state.pages.set(key, { ...reply, entries });
@@ -266,7 +271,7 @@ function createList(x) {
     const key = (entry) => `${filesystem}\n${entry.path}`;
     const missing = rows.map(([, entry]) => entry).filter((e) => hasUrl(e) && !tooltipLocations.has(key(e)));
     if (missing.length) {
-      const asked = x.locationsOf(missing).then(
+      const asked = x.locationsOf(missing, { quiet: true }).then(
         (locations) => missing.forEach((e, i) => tooltipLocations.set(key(e), locations[i])),
         () => missing.forEach((e) => tooltipLocations.delete(key(e))), // asked again when drawn again
       );

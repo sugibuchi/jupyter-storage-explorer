@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 import json
 
 import pytest
@@ -45,6 +46,18 @@ class TestFile:
         again.reload()
         assert again.columns("standard") == ["size"]
         assert again.columns("x") is None
+
+    def test_changes_from_several_threads(self, tmp_path):
+        # The data browser remembers queries in worker threads while the main
+        # thread changes bookmarks: no change drops another.
+        states = ExplorerStates(tmp_path / "states.json", max_queries=100)
+        with concurrent.futures.ThreadPoolExecutor(8) as pool:
+            for i in range(40):
+                pool.submit(states.add_bookmark, "Lake", f"b/{i}", f"s3://b/{i}")
+                pool.submit(states.remember_query, f"s3://q/{i}", SORTED)
+        again = ExplorerStates(tmp_path / "states.json", max_queries=100)
+        assert len(again.bookmarks) == 40
+        assert len(again.queries) == 40
 
     def test_logging_level(self, tmp_path):
         path = tmp_path / "states.json"

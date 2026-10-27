@@ -231,11 +231,14 @@ class FileRequestsMixin:
         try:
             name = _paths.safe_name(content["name"])
             target = _paths.join(content["dest"], name)
-            refused = self._transfer_policy.error(
-                computer_url(name), self._policy_url(self._fs, target)
-            )
-            if refused is not None:
-                raise PermissionError(refused)
+            # Checked on the first piece, against the storage it then goes to:
+            # the file keeps it (see Incoming) if the user shows another.
+            if upload_id not in self._incoming:
+                refused = self._transfer_policy.error(
+                    computer_url(name), self._policy_url(self._fs, target)
+                )
+                if refused is not None:
+                    raise PermissionError(refused)
             piece = bytes(buffers[0]) if buffers else None
             self._incoming.add(upload_id, piece, target, self._fs)
             if not content["last"]:

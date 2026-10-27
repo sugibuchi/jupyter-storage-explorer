@@ -19,6 +19,7 @@ from jupyter_storage_explorer._callbacks import Callbacks
 from jupyter_storage_explorer._explorer.about import AboutMixin, _explorer_version
 from jupyter_storage_explorer._explorer.bookmarks import BookmarksMixin
 from jupyter_storage_explorer._explorer.common import (
+    error_text,
     explorers,
     open_storage,
     within_top,
@@ -1201,6 +1202,10 @@ class StorageExplorer(
                 time.monotonic() - started,
             )
 
+    def _reply(self, content: dict[str, Any], answer: dict[str, Any]) -> None:
+        """Answer request ``content``: its "reply", of the same "rid"."""
+        self.send({"type": "reply", "rid": content["rid"], **answer})
+
     def _handle_message(self, kind: Any, content: dict[str, Any], buffers: Any) -> None:
         if kind in _QUERY_REQUESTS:
             # In a worker thread, as they may read the data (see _answer_query).
@@ -1209,8 +1214,13 @@ class StorageExplorer(
             # In a worker thread too, as detecting the item reads it.
             self._answer_menu_info(content)
         elif (request := self._requests(buffers or []).get(kind)) is not None:
-            reply = request(content)
-            self.send({"type": "reply", "rid": content["rid"], **reply})
+            # Always answered: the page waits for each request's reply.
+            try:
+                answer = request(content)
+            except Exception as exc:
+                log.exception("Answering %s failed", kind)
+                answer = {"error": error_text(exc)}
+            self._reply(content, answer)
         elif (notice := self._notices().get(kind)) is not None:
             notice(content)
 
@@ -1478,4 +1488,12 @@ class StorageExplorer(
         self._detected = None
         self._detections_forgotten += 1
         self._detections_running.clear()
+        self._drop_cached(path, fs)
+
+    def _drop_cached(
+        self, path: str | None = None, fs: AbstractFileSystem | None = None
+    ) -> None:
+        """Forget fsspec's cached listings (of ``path``, else all), and nothing
+        of the explorer's own: safe in a worker thread, and for another
+        filesystem than the one shown."""
         (fs or self._fs).invalidate_cache(path)

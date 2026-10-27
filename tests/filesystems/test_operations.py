@@ -656,10 +656,12 @@ class TestJobRunner:
         runner = JobRunner(lambda job: None)
 
         def boom(progress):
-            raise ValueError("no")
+            raise OSError("no")
 
         failed = runner.submit("test", "Failing", boom)
-        assert (failed.state, failed.error) == ("failed", "ValueError: no")
+        # As loads' errors (error_text): the explorer's refusals, ValueErrors,
+        # without their type.
+        assert (failed.state, failed.error) == ("failed", "OSError: no")
 
         def cancel_midway(progress):
             progress.cancel()
