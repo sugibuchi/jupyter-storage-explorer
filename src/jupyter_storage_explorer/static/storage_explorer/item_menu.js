@@ -99,6 +99,8 @@ function createItemMenu(x) {
   return function itemMenu(targets, withOpen = true) {
     const single = targets.length === 1 ? targets[0] : null;
     const count = targets.length > 1 ? `${targets.length} ` : "";
+    // "Copy" for one item, "Copy 3 files" for several.
+    const counted = (verb, noun) => (count ? `${verb} ${count}${noun}` : verb);
     // Items without a URL (the kernel's _url gave None) are not treated as data:
     // no preview or code.
     const data = single && hasUrl(single) ? single : null;
@@ -160,10 +162,10 @@ function createItemMenu(x) {
     // "Copy" and "Cut" copy for "Paste" (and put the URLs on the clipboard).
     const clipboard = [];
     if (withUrls && allowed) {
-      clipboard.push({ label: count ? `Copy ${count}${what}` : "Copy", icon: "copy", shortcut: key("mod+c"), action: () => x.clipboard.copyFiles(targets) });
+      clipboard.push({ label: counted("Copy", what), icon: "copy", shortcut: key("mod+c"), action: () => x.clipboard.copyFiles(targets) });
       if (!targets.some((t) => t.path === model.get("_root"))) {
         clipboard.push({
-          label: count ? `Cut ${count}${what}` : "Cut",
+          label: counted("Cut", what),
           icon: "cut",
           shortcut: key("mod+x"),
           action: () => x.clipboard.copyFiles(targets, true),
@@ -176,28 +178,21 @@ function createItemMenu(x) {
     // on the clipboard, so "Copy URL" is for folders, which "Copy" leaves to
     // unsafe mode; on a local disk, "Copy" gives paths, so it is for files too.
     const local = model.get("_local_paths");
-    if (withUrls && (!files || local)) {
-      clipboard.push({
-        label: `Copy ${count}URL${count ? "s" : ""}`,
-        icon: "link",
+    // "Copy URL" or "Copy 3 URLs": the locations' `field` ("url", "path").
+    const copyLocations = (field, noun, icon) => {
+      const copied = count ? `${count}${noun}s` : noun;
+      return {
+        label: `Copy ${copied}`,
+        icon,
         action: async () =>
           x.copyText(
-            (await x.locationsOf(targets)).map((l) => l.url),
-            count ? `${count}URLs` : "URL",
+            (await x.locationsOf(targets)).map((l) => l[field]),
+            copied,
           ),
-      });
-    }
-    if (withUrls && local) {
-      clipboard.push({
-        label: `Copy ${count}path${count ? "s" : ""}`,
-        icon: "file",
-        action: async () =>
-          x.copyText(
-            (await x.locationsOf(targets)).map((l) => l.path),
-            count ? `${count}paths` : "path",
-          ),
-      });
-    }
+      };
+    };
+    if (withUrls && (!files || local)) clipboard.push(copyLocations("url", "URL", "link"));
+    if (withUrls && local) clipboard.push(copyLocations("path", "path", "file"));
     const paste = folder && x.clipboard.pasteItem(folder.path);
     if (paste) clipboard.push(paste);
 
@@ -211,8 +206,7 @@ function createItemMenu(x) {
       change.push({ label: "Rename", icon: "edit", shortcut: key("F2"), action: () => x.operations.rename(single) });
     }
     if (folder) change.push({ label: "Create a folder", icon: "new-folder", action: () => x.operations.createFolder(folder.path) });
-    if (allowed)
-      change.push({ label: count ? `Delete ${count}${what}` : "Delete", icon: "close", shortcut: key("Delete"), action: () => x.operations.remove(targets) });
+    if (allowed) change.push({ label: counted("Delete", what), icon: "close", shortcut: key("Delete"), action: () => x.operations.remove(targets) });
 
     // Files only: downloading folders is intentionally not supported. The
     // kernel refuses files the explorer's policy does not let go there.
@@ -220,9 +214,9 @@ function createItemMenu(x) {
     if (files) {
       const paths = targets.map((t) => t.path);
       downloads.push(
-        { label: count ? `Download ${count}files to local` : "Download to local", icon: "download", action: () => x.transfers.download(paths) },
+        { label: `${counted("Download", "files")} to local`, icon: "download", action: () => x.transfers.download(paths) },
         {
-          label: count ? `Download ${count}files to JupyterLab` : "Download to JupyterLab",
+          label: `${counted("Download", "files")} to JupyterLab`,
           icon: "inbox",
           action: () => x.transfers.downloadToJupyterLab(paths),
         },

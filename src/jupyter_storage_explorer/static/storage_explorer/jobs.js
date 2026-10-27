@@ -33,8 +33,8 @@ function createJobs(x) {
 
   // e.g. "12 / 340 files · 45 MB / 1.2 GB · a.csv"; "Counting files…".
   function jobDetail(job) {
-    if (job.cancelling) return "Cancelling…";
-    if (job.state === "queued") return "Waiting…";
+    const waiting = jobWaitText(job);
+    if (waiting) return waiting;
     if (!job.files_total) return "Counting files…";
     const parts = [`${job.files_done.toLocaleString()} / ${job.files_total.toLocaleString()} files`];
     if (job.bytes_total) parts.push(`${formatSize(job.bytes_done)} / ${formatSize(job.bytes_total)}`);
@@ -106,6 +106,14 @@ function createJobs(x) {
     watch: (id, show) => watchers.set(id, show),
     unwatch: (id) => watchers.delete(id),
   };
+}
+
+// "Cancelling…" or "Waiting…" for a job not running (yet, or any more), else
+// null: its progress is then shown instead.
+function jobWaitText(job) {
+  if (job.cancelling) return "Cancelling…";
+  if (job.state === "queued") return "Waiting…";
+  return null;
 }
 
 // The end of a job's message, after `parts` (e.g. ["Pasted a.csv"]): why it

@@ -3,51 +3,22 @@
 // Joined after icons.js, common.js, query.js and sections.js (see _static.py).
 
 function render({ model, el }) {
-  const title = h("span", { className: "jse-preview-name" });
-  const badge = h("span", { className: "jse-badge" });
-  const body = h("div", { className: "jse-dialog-body jse-view-tab-body" });
-  const { request, onReply } = createRequester(model);
-
-  el.classList.add("jse-widget", "jse-view-tab", "jse-fill");
-  // Keep JupyterLab's shortcuts from firing while keys are pressed in the widget.
-  el.dataset.lmSuppressShortcuts = "true";
-  el.replaceChildren(h("div", { className: "jse-dialog-head" }, title, badge), body);
+  const frame = createFrame(model, el, { className: "jse-view-tab jse-fill", bodyClass: "jse-view-tab-body", label: "_label" });
 
   // Lets Markdown views load the vendored libraries through this widget's kernel.
-  fetchVendor = async (name) => {
-    const reply = await request({ type: "vendor", name });
-    if (reply.error) throw new Error(reply.error);
-    return reply.source;
-  };
-
-  function renderHead() {
-    title.textContent = title.title = visible(model.get("_title"));
-    badge.textContent = model.get("_label");
-  }
+  fetchVendor = vendorFetcher(frame.request);
 
   // A prompt's answer goes to the kernel, which shows the view of it in the
   // tab, in a widget of its own.
   const actions = { answer: (content) => model.send({ type: "answer", ...content }), widgetManager: model.widget_manager };
 
   function renderView() {
-    body.replaceChildren(renderSection(model.get("_view"), actions));
+    frame.body.replaceChildren(renderSection(model.get("_view"), actions));
   }
 
-  const onCustomMsg = (msg) => msg.type === "reply" && onReply(msg);
-  const handlers = {
-    "change:_title": renderHead,
-    "change:_label": renderHead,
-    "change:_view": renderView,
-    "msg:custom": onCustomMsg,
-  };
-  for (const [event, handler] of Object.entries(handlers)) model.on(event, handler);
-
-  renderHead();
+  const unbind = frame.bind({ "change:_view": renderView });
   renderView();
-
-  return () => {
-    for (const [event, handler] of Object.entries(handlers)) model.off(event, handler);
-  };
+  return unbind;
 }
 
 export default { render };

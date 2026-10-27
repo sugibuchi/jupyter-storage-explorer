@@ -6,15 +6,19 @@
 function render({ model, el }) {
   // Requests answered by a {"type": "reply", "rid"} message.
   const { request, onReply } = createRequester(model);
-  // Small confirmation dialog, e.g. "Upload sales.csv? [Cancel] [Upload]";
-  // over the whole window in the side panel, which is too narrow for it.
-  const confirm = createConfirm(model.get("_layout") === "sidebar");
+  // The narrow layout of JupyterLab's side bar (the launcher's side panel):
+  // two bars (toolbar.js), the pager below the list (list.js), fewer columns
+  // (the CSS), and dialogs over the whole window.
+  const sidebar = model.get("_layout") === "sidebar";
+  // Small confirmation dialog, e.g. "Upload sales.csv? [Cancel] [Upload]".
+  const confirm = createConfirm(sidebar);
 
   // The explorer: what its features share, and the features themselves (set
   // below), which use each other through it once all are made.
   const x = {
     model,
     el,
+    sidebar,
     request,
     ask: confirm.ask,
     answer: confirm.answer,
@@ -65,8 +69,7 @@ function render({ model, el }) {
     },
   };
   x.busy = createBusy();
-  // Over the whole window in the side panel, which is too narrow for it.
-  x.modal = createModal(el, model.get("_layout") === "sidebar");
+  x.modal = createModal(el, sidebar);
   x.menu = createMenu();
   x.jobs = createJobs(x);
   x.unsafe = createUnsafe(x);
@@ -88,11 +91,7 @@ function render({ model, el }) {
   createShortcuts(x).attach(x.list.pane);
 
   // Lets Markdown previews load the vendored libraries through this widget's kernel.
-  fetchVendor = async (name) => {
-    const reply = await request({ type: "vendor", name });
-    if (reply.error) throw new Error(reply.error);
-    return reply.source;
-  };
+  fetchVendor = vendorFetcher(request);
 
   // --- Layout ---
 
@@ -106,10 +105,6 @@ function render({ model, el }) {
   // and its mapper, whose CSS shows its storages (mapper_css.js).
   el.classList.add("jse-widget", "jse-browser");
   const renderProtocol = () => (el.dataset.fsProtocol = model.get("_fs_protocol"));
-  // The narrow layout of JupyterLab's side bar (the launcher's side panel):
-  // two bars (toolbar.js), the pager below the list (list.js) and fewer
-  // columns (the CSS).
-  const sidebar = model.get("_layout") === "sidebar";
   el.classList.toggle("jse-sidebar", sidebar);
   // Focusable, so Escape reaches the widget after a click anywhere in it.
   el.tabIndex = -1;

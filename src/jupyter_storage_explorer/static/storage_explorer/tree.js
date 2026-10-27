@@ -111,7 +111,7 @@ function createTree(x) {
         if (more) {
           const note = h("div", {
             className: "jse-node jse-tree-more",
-            textContent: `plus ${more.toLocaleString()} folder${more === 1 ? "" : "s"}`,
+            textContent: `plus ${plural(more, "folder")}`,
           });
           note.style.paddingLeft = `${(depth + 1) * 14 + 4 + 16}px`; // aligned with the folders' icons
           wrap.append(note);

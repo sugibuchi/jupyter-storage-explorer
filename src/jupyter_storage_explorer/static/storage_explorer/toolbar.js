@@ -6,8 +6,7 @@
 // then Unsafe mode; below (pathBar), Up and the folder's path.
 
 function createToolbar(x) {
-  const { model } = x;
-  const sidebar = model.get("_layout") === "sidebar";
+  const { model, sidebar } = x;
   // Shows or hides the folder tree (_tree_view); none without a tree.
   const treeBtn = iconButton("tree", "Folder tree", "jse-tree-btn");
   const upBtn = iconButton("up", "Parent directory");
@@ -258,10 +257,7 @@ function createUnsafe(x) {
     // turns the switch off.
     take() {
       const was = on();
-      if (was && switchable()) {
-        model.set("_unsafe_mode", false);
-        model.save_changes();
-      }
+      if (was && switchable()) set(false);
       return was;
     },
     // Why `action` (e.g. "move folders") is refused: the switch is off, or

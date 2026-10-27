@@ -23,7 +23,7 @@ function createPreview(x) {
   // engine instead of the one chosen ("Preview as"); `action` (a view's id,
   // a number) with that view of the engine instead of its first.
   function open(path, format = null, engine = undefined, action = null) {
-    model.send({ type: "preview", path, format, ...(engine === undefined ? {} : { engine }), ...(action ? { action } : {}) });
+    model.send({ type: "preview", ...viewTarget(path, format, engine, action) });
   }
 
   // Without a preview panel (preview_panel="disabled"), the menus offer no

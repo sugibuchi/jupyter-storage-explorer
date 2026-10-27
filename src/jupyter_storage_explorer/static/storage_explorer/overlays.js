@@ -179,18 +179,23 @@ function createMenu() {
     });
   }
 
-  // Opens the menu of `items` where the event `ev` happened.
-  function show(ev, items) {
-    ev.preventDefault();
-    ev.stopPropagation(); // keep JupyterLab's own context menu from opening
+  // Opens the menu of `items` at (x, y), in client coordinates.
+  function openAt(x, y, items) {
     el.replaceChildren(...rows(items));
     document.body.append(layer);
     el.hidden = false;
     owner = null;
-    at = { x: ev.clientX, y: ev.clientY };
+    at = { x, y };
     place();
     document.addEventListener("pointerdown", onOutsidePointer, true);
     document.addEventListener("keydown", onKey, true);
+  }
+
+  // Opens the menu of `items` where the event `ev` happened.
+  function show(ev, items) {
+    ev.preventDefault();
+    ev.stopPropagation(); // keep JupyterLab's own context menu from opening
+    openAt(ev.clientX, ev.clientY, items);
   }
 
   // Separators only between visible rows: none first, last or doubled, as
@@ -268,13 +273,14 @@ function createMenu() {
     // Opens the menu of `items` below `button`, which then closes it (see isOpenFrom).
     showBelow(button, items) {
       const box = button.getBoundingClientRect();
-      show({ clientX: box.left, clientY: box.bottom, preventDefault() {}, stopPropagation() {} }, items);
+      openAt(box.left, box.bottom, items);
       owner = button;
     },
-    // Opens the menu of `items` above `button` (in the status bar), likewise.
+    // Opens the menu of `items` above `button` (in the status bar), likewise:
+    // placed again once open, from its height.
     showAbove(button, items) {
       const box = button.getBoundingClientRect();
-      show({ clientX: box.left, clientY: box.top, preventDefault() {}, stopPropagation() {} }, items);
+      openAt(box.left, box.top, items);
       at = { x: box.left, y: box.top - el.offsetHeight };
       place();
       owner = button;

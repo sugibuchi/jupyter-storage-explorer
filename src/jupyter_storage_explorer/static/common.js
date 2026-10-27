@@ -123,6 +123,63 @@ function createConfirm(onPage = false) {
   return { el: layer ? null : el, ask, answer };
 }
 
+// The frame of a widget showing one thing under a title bar: a DataExplorer,
+// and the tabs of "View in a new tab". The title is the `_title` trait, the
+// badge the trait named `label` (a library, a format); `className` is the
+// widget's own, and `after` elements go after the status line. Returns
+// {body, request, ask, answer, flash}, what the data browser's panels take
+// (see createQueryPanel), and bind(handlers): it listens to the model
+// (handlers by event, "msg:custom" for the messages other than replies),
+// shows the title bar, and returns the function that stops it all.
+// Not the storage explorer's, whose unused names check_js.py reports.
+// eslint-disable-next-line no-unused-vars
+function createFrame(model, el, { className, bodyClass, label, after = [] }) {
+  const title = h("span", { className: "jse-preview-name" });
+  const badge = h("span", { className: "jse-badge" });
+  const body = h("div", { className: `jse-dialog-body ${bodyClass}` });
+  const statusEl = h("div", { className: "jse-status", hidden: true });
+  const { el: confirmEl, ask, answer } = createConfirm();
+  const { request, onReply } = createRequester(model);
+
+  el.classList.add("jse-widget", ...className.split(" "));
+  // Keep JupyterLab's notebook shortcuts (e.g. "dd" deletes a cell) from
+  // firing while keys are pressed in the widget.
+  el.dataset.lmSuppressShortcuts = "true";
+  el.replaceChildren(h("div", { className: "jse-dialog-head" }, title, badge), body, statusEl, ...after, confirmEl);
+
+  let flashTimer;
+  // A short message under the body, e.g. why a choice was not applied.
+  function flash(message) {
+    statusEl.textContent = visible(message);
+    statusEl.hidden = false;
+    clearTimeout(flashTimer);
+    flashTimer = setTimeout(() => (statusEl.hidden = true), 2500);
+  }
+
+  function renderHead() {
+    title.textContent = title.title = visible(model.get("_title")); // e.g. a file's name
+    badge.textContent = model.get(label);
+  }
+
+  function bind(handlers) {
+    const { "msg:custom": onMessage, ...rest } = handlers;
+    const all = {
+      "change:_title": renderHead,
+      [`change:${label}`]: renderHead,
+      "msg:custom": (msg) => (msg.type === "reply" ? onReply(msg) : onMessage?.(msg)),
+      ...rest,
+    };
+    for (const [event, handler] of Object.entries(all)) model.on(event, handler);
+    renderHead();
+    return () => {
+      for (const [event, handler] of Object.entries(all)) model.off(event, handler);
+      clearTimeout(flashTimer);
+    };
+  }
+
+  return { body, request, ask, answer, flash, bind };
+}
+
 // The buttons of a confirmation: Cancel, and `label`, answering true.
 function confirmButtons(label) {
   return [

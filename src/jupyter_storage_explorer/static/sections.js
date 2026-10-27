@@ -59,6 +59,16 @@ function renderWidget(section, actions) {
 
 // Set by each widget's render(): asks its kernel for a vendored library's source.
 let fetchVendor = null;
+
+// The fetchVendor of a widget whose requests go through `request`
+// (createRequester): "vendor", answered by _static.vendor_source.
+function vendorFetcher(request) {
+  return async (name) => {
+    const reply = await request({ type: "vendor", name });
+    if (reply.error) throw new Error(reply.error);
+    return reply.source;
+  };
+}
 let markdownLibs = null; // Promise of {marked, DOMPurify}
 
 async function importSource(source) {

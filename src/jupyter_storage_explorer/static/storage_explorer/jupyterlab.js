@@ -40,18 +40,25 @@ function createJupyterLab(x) {
     return jupyterlab.canOpen(entry.name) || model.get("_text_formats").includes(entry.format);
   }
 
+  // Opens `path` of `storage` in JupyterLab, read and saved through the
+  // kernel with `names` added to the requests (what the file is to it);
+  // `failure` starts the message of an error.
+  function openInLab(storage, path, names, failure) {
+    const ask = (type, options) => askKernel({ ...options, type, ...names });
+    globalThis[JUPYTERLAB].open({
+      explorer: model.get("_explorer_id"),
+      storage,
+      path,
+      get: (options) => ask("jupyterlab_get", options),
+      save: (options) => ask("jupyterlab_save", options),
+    }).catch((err) => x.flash(`${failure}: ${err.message ?? err}`, { error: true }));
+  }
+
   function open(path) {
     x.unsafe.take(); // an operation, though not a risky one
     // The storage shown now: the file stays in it while the explorer moves on.
     const filesystem = model.get("_filesystem");
-    const ask = (type, options) => askKernel({ ...options, type, filesystem, path });
-    globalThis[JUPYTERLAB].open({
-      explorer: model.get("_explorer_id"),
-      storage: filesystem,
-      path,
-      get: (options) => ask("jupyterlab_get", options),
-      save: (options) => ask("jupyterlab_save", options),
-    }).catch((err) => x.flash(`Cannot open in JupyterLab: ${err.message ?? err}`, { error: true }));
+    openInLab(filesystem, path, { filesystem, path }, "Cannot open in JupyterLab");
   }
 
   // The configuration files of the settings menu, by key (the kernel's
@@ -85,15 +92,8 @@ function createJupyterLab(x) {
       x.flash(`Cannot open ${file.name}: ${reply.error}`, { error: true });
       return;
     }
-    const ask = (type, options) => askKernel({ ...options, type, settings: key });
-    globalThis[JUPYTERLAB].open({
-      explorer: model.get("_explorer_id"),
-      storage: file.storage,
-      // The file's own name, e.g. the day's log file's.
-      path: reply.name ?? file.name,
-      get: (options) => ask("jupyterlab_get", options),
-      save: (options) => ask("jupyterlab_save", options),
-    }).catch((err) => x.flash(`Cannot open ${file.name}: ${err.message ?? err}`, { error: true }));
+    // Named by the file's own name, e.g. the day's log file's.
+    openInLab(file.storage, reply.name ?? file.name, { settings: key }, `Cannot open ${file.name}`);
   }
 
   // "View in a new tab": the kernel answers at once ("view_tab"), and the
@@ -112,7 +112,7 @@ function createJupyterLab(x) {
 
   // `format`, `engine` and `action` as for the preview (preview.js's open).
   async function openViewTab(path, format = null, engine = undefined, action = null) {
-    const reply = await request({ type: "view_tab", path, format, ...(engine === undefined ? {} : { engine }), ...(action ? { action } : {}) });
+    const reply = await request({ type: "view_tab", ...viewTarget(path, format, engine, action) });
     if (reply.error) {
       x.flash(`Cannot open a tab: ${reply.error}`, { error: true });
       return;
