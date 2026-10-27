@@ -768,6 +768,9 @@ The public `Progress`, in `filesystems/operation.py`, has only what operations u
 The main thread is reached through the kernel's asyncio loop. Without a running loop, as in tests, jobs run at once, so
 tests see their result immediately.
 
+Closing the explorer cancels its jobs, queued or running. Each still finishes, so that it cleans up, e.g. an upload's
+temporary file, but shows nothing.
+
 A request answers `{"job": id}`. The kernel then sends `{"type": "job", ...}` messages as the job runs, and one with the
 result when it ends. The frontend's `x.jobs.result()` waits for that one.
 
@@ -775,7 +778,7 @@ Uploads come in two kinds:
 
 - A drop from JupyterLab's file browser is a copy from the kernel's local disk: `FileTasks.upload`.
 - Files from the user's computer arrive in pieces, in `_jobs/incoming.py`. The last piece starts
-  `FileTasks.upload_file`.
+  `FileTasks.upload_file`. Closing the explorer discards the files still arriving.
 
 ### Properties
 

@@ -71,6 +71,11 @@ class IncomingFiles:
         """File ``upload_id``, complete: the caller now owns its temporary file."""
         return self._files.pop(upload_id)
 
+    def discard_all(self) -> None:
+        """Forget every file being received, e.g. as the explorer closes."""
+        for upload_id in list(self._files):
+            self.discard(upload_id)
+
     def discard(self, upload_id: str) -> None:
         """Forget file ``upload_id`` and delete what was received of it."""
         incoming = self._files.pop(upload_id, None)

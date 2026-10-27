@@ -116,6 +116,8 @@ class JobsMixin:
         removed, and show the folders it changed."""
         if task.cleanup is not None:
             task.cleanup()
+        if self._closed:
+            return  # nothing shows what it changed
         for fs, path in task.moved_away:
             self._moved_away(fs, path)
         if not self._mappers.same_filesystem(task.fs, self._fs):

@@ -551,6 +551,8 @@ class StorageExplorer(
             [*(operations or ()), *components.operations, *self.default_operations()]
         )
         self._jobs = JobRunner(self._send_job)
+        # Set by close(): jobs ending afterwards only clean up.
+        self._closed = False
         # "Properties" counts files with jobs of its own: it changes nothing,
         # so it need not wait for a move or a copy to end.
         self._scans = JobRunner(self._send_job, prefix="scan")
@@ -1013,12 +1015,26 @@ class StorageExplorer(
 
     def close(self) -> None:
         """Close the widget, with the views it shows: the preview panel's and
-        those of its tabs ("View in a new tab"), whose tabs close with it."""
+        those of its tabs ("View in a new tab"), whose tabs close with it.
+        Its jobs are cancelled, and files being uploaded are discarded."""
         # Also called on deletion, of explorers whose __init__ failed too.
+        self._closed = True
         if hasattr(self, "_view_tabs"):
             self._release_preview()
             self._release_view_tabs()
+            self._stop_work()
         super().close()
+
+    def _stop_work(self) -> None:
+        """Stop what runs for the explorer: its jobs, uploads and loads."""
+        self._jobs.close()
+        self._scans.close()
+        if hasattr(self, "_incoming"):
+            self._incoming.discard_all()
+        loads = [self._listing_load, self._selection_load, *self._tree_loads.values()]
+        for load in loads:
+            if load is not None:
+                load.cancel()
 
     def _changed(self) -> None:
         """Call the ``on_change`` functions if the storage, the folder shown or
