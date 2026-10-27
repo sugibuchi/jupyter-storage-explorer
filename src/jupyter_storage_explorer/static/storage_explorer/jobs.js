@@ -113,7 +113,8 @@ function createJobs(x) {
 // what = "Paste") and the item it left incomplete (e.g. a folder partly
 // copied).
 function jobOutcome(result, parts, what) {
-  if (result.state === "failed") return [`Failed: ${result.error}`];
+  // The error's first line says what went wrong; the rest is in the log.
+  if (result.state === "failed") return [`Failed: ${result.error.split("\n", 1)[0]}`];
   if (!(result.cancelled || result.state === "cancelled")) return [];
   const out = [parts.length ? "cancelled" : `${what} cancelled`];
   if (result.incomplete) out.push(`${result.incomplete} left incomplete`);

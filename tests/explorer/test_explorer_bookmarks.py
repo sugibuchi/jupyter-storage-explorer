@@ -16,6 +16,19 @@ class TestBookmarks:
         reply = explorer.request({"type": "bookmarks", "rid": 1})
         return [(b["filesystem"], b["path"], b["label"]) for b in reply["bookmarks"]]
 
+    def test_a_failure_is_answered(self, mem_explorer, monkeypatch):
+        # The page waits for each request's reply: one that fails gets one,
+        # with the error, rather than none.
+        def unwritable(*args, **kwargs):
+            raise PermissionError("states.json is read-only")
+
+        monkeypatch.setattr(mem_explorer._states, "add_bookmark", unwritable)
+        reply = mem_explorer.request(
+            {"type": "bookmark_add", "rid": 7, "path": "/data"}
+        )
+        assert reply["rid"] == 7
+        assert reply["error"] == "PermissionError: states.json is read-only"
+
     def test_add_the_folder_shown(self, mem_explorer):
         mem_explorer._current_dir = "/data"
         reply = mem_explorer.request(

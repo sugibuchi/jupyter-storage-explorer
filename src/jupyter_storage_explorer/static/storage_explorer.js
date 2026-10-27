@@ -45,8 +45,13 @@ function render({ model, el }) {
     // The locations of items ({path}), from the kernel: the listing does not
     // carry them. Each {url, path: a local item's plain path (else null),
     // location: its JSON, which files copied or dragged carry}, or null.
-    async locationsOf(items) {
-      const { locations } = await request({ type: "locations", paths: items.map((t) => t.path) });
+    // Rejects on the kernel's error, flashed unless `quiet` (the tooltips').
+    async locationsOf(items, { quiet = false } = {}) {
+      const { locations, error } = await request({ type: "locations", paths: items.map((t) => t.path) });
+      if (error) {
+        if (!quiet) x.flash(`Cannot find the locations: ${visible(error)}`, { error: true });
+        throw new Error(error);
+      }
       return locations;
     },
     // Puts `lines` on the system clipboard; `what` they are, for the message.

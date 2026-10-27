@@ -119,7 +119,7 @@ class JobsMixin:
         for fs, path in task.moved_away:
             self._moved_away(fs, path)
         if not self._mappers.same_filesystem(task.fs, self._fs):
-            task.fs.invalidate_cache()  # the user has switched filesystems
+            self._drop_cached(fs=task.fs)  # the user has switched filesystems
             return
         for source, target in task.moved:
             self._forget(source, moved_to=target)
@@ -148,7 +148,7 @@ class JobsMixin:
             if self._mappers.same_filesystem(fs, self._fs):
                 gone.append((path, None))
             else:
-                fs.invalidate_cache(_paths.parent(path, fs))
+                self._drop_cached(_paths.parent(path, fs), fs)
         if shown:
             gone += changes.moved[followed.moved :]
             gone += [(path, None) for path in changes.removed[followed.removed :]]
@@ -203,7 +203,7 @@ class JobsMixin:
         """
         parent = _paths.parent(path, fs)
         if not self._mappers.same_filesystem(fs, self._fs):
-            fs.invalidate_cache(parent)
+            self._drop_cached(parent, fs)
             return
         self._forget(path)
         self._refresh_dir(parent)
@@ -216,9 +216,9 @@ class JobsMixin:
             return
         fs = storage.fs
         parents = {_paths.parent(p, fs) for p in paths}
-        if fs is not self._fs:
+        if not self._mappers.same_filesystem(fs, self._fs):
             for parent in parents:
-                fs.invalidate_cache(parent)
+                self._drop_cached(parent, fs)
             return
         for parent in parents:
             self._invalidate_cache(parent)

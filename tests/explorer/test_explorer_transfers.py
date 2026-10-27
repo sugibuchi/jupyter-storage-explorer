@@ -397,6 +397,21 @@ class TestTransferPolicy:
         assert not files.exists("/d/sub/c.txt")
         assert explorer.request({**piece, "dest": "/d"}, [b"c"])["copied"] == ["c.txt"]
 
+    def test_upload_checked_against_the_storage_it_started_on(self, files, tmp_path):
+        # The file goes where its first piece said, even if the user shows
+        # another storage before the last one: checked once, against it.
+        policy = [{"rule": "deny", "src": "browser:///.*", "dest": "file:///.*"}]
+        explorer = make(
+            filesystems={"mem": files, "local": str(tmp_path)}, transfer_policy=policy
+        )
+        piece = {"type": "upload_chunk", "rid": 1, "id": "u", "name": "c.txt"}
+        first = explorer.request({**piece, "dest": "/d", "last": False}, [b"a"])
+        assert "error" not in first
+        explorer._filesystem = "local"
+        last = explorer.request({**piece, "dest": "/d", "last": True}, [b"b"])
+        assert last["copied"] == ["c.txt"]
+        assert files.cat_file("/d/c.txt") == b"ab"
+
     def test_jupyterlab_side_is_jupyterlab_urls(self, files, tmp_path):
         """Transfers with JupyterLab's file browser are told apart from the
         explorer's own local storage, on the same disk."""

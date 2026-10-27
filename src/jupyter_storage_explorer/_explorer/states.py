@@ -34,6 +34,7 @@ import json
 import os
 import pathlib
 import tempfile
+import threading
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -140,6 +141,10 @@ class ExplorerStates:
         self._logging_level: str | None = None
         # Keys of the file this version does not know, written back as they are.
         self._others: dict[str, Any] = {}
+        # Changes come from the main thread and from the data browser's
+        # requests, in worker threads (remember_query): one at a time, so that
+        # one's reload never drops another's change before it is written.
+        self._lock = threading.RLock()
         self.reload()
 
     # --- The file ---
@@ -155,6 +160,10 @@ class ExplorerStates:
         ValueError
             If the file is not a JSON object.
         """
+        with self._lock:
+            self._read()
+
+    def _read(self) -> None:
         if self.path is None or not self.path.exists():
             return
         try:
@@ -188,14 +197,15 @@ class ExplorerStates:
         made to what other kernels wrote since, then write it. A file that
         cannot be read (e.g. a typo made by hand) is not written over: the
         change is then kept in memory only."""
-        try:
-            self.reload()
-            readable = True
-        except (OSError, ValueError):
-            readable = False
-        yield
-        if readable:
-            self._write()
+        with self._lock:
+            try:
+                self.reload()
+                readable = True
+            except (OSError, ValueError):
+                readable = False
+            yield
+            if readable:
+                self._write()
 
     def _write(self) -> None:
         """Write the file, if any: whole, through a temporary file, so that

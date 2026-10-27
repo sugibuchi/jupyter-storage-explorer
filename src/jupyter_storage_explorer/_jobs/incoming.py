@@ -41,6 +41,10 @@ class IncomingFiles:
         self.max_bytes = max_bytes
         self._files: dict[str, Incoming] = {}
 
+    def __contains__(self, upload_id: str) -> bool:
+        """Whether file ``upload_id`` has had its first piece."""
+        return upload_id in self._files
+
     def add(
         self, upload_id: str, piece: bytes | None, target: str, fs: AbstractFileSystem
     ) -> Incoming:
