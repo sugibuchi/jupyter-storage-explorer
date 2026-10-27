@@ -38,6 +38,7 @@ final. Each file may have these functions, all optional:
     value is replaced whole, e.g. a ``storage_options`` dict). Options may
     be a function of the item's location returning them: merged with
     another layer's, the later layer's options still win option by option.
+    A ``by_protocol`` merged with dicts stays one, which the explorer checks.
 ``operations()``
     ``[FileSystemOperations, ...]``: file operations of your own, tried
     before ``StorageExplorer.default_operations()``; a later layer's come
@@ -480,16 +481,50 @@ def _merged_options(earlier: Any, later: Any) -> Any:
     """A later layer's options of a format over an earlier layer's, option by
     option: a dict while both are dicts, else a function of the location
     (as either may be) giving the earlier's options updated with the
-    later's."""
+    later's.
+
+    Dicts and ``by_protocol``s merge into a ``by_protocol``, so that the
+    explorer still checks their dicts when it is created: a dict is then
+    the options of every protocol."""
     if earlier is None:
         return dict(later) if isinstance(later, dict) else later
     if isinstance(earlier, dict) and isinstance(later, dict):
         return {**earlier, **later}
+    from jupyter_storage_explorer.engine import _ByProtocol, by_protocol  # noqa: PLC0415
+
+    if all(isinstance(o, (dict, _ByProtocol)) for o in (earlier, later)):
+        return by_protocol(
+            _merged_by_protocol(_protocols_of(earlier), _protocols_of(later))
+        )
 
     def options(location: Any) -> dict[str, Any]:
         return {**_options_at(earlier, location), **_options_at(later, location)}
 
     return options
+
+
+def _protocols_of(options: Any) -> dict[str, Any]:
+    """A dict or ``by_protocol``'s options by protocol, "*" for every one."""
+    return {"*": options} if isinstance(options, dict) else options.options
+
+
+def _merged_by_protocol(
+    earlier: dict[str, Any], later: dict[str, Any]
+) -> dict[str, Any]:
+    """Two layers' options by protocol as one. A protocol's are those of
+    every protocol, then its own, of the earlier layer, then the same of
+    the later: the later's "*" still overrides the earlier's protocol."""
+    merged = {}
+    for protocol in dict.fromkeys([*earlier, *later]):
+        parts = [earlier.get("*"), later.get("*")]
+        if protocol != "*":
+            parts = [parts[0], earlier.get(protocol), parts[1], later.get(protocol)]
+        result = None
+        for part in parts:
+            if part is not None:
+                result = _merged_options(result, part)
+        merged[protocol] = result
+    return merged
 
 
 def _options_at(options: Any, location: Any) -> dict[str, Any]:
