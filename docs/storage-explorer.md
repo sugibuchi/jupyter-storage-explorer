@@ -623,7 +623,7 @@ Operations and transfers:
 
 | Option                      | Meaning                                                                                                     |
 |-----------------------------|-------------------------------------------------------------------------------------------------------------|
-| `unsafe_mode="on_demand"`   | Folder operations: with the Unsafe mode slider, `"always"` or `"blocked"`; see [Unsafe operations](#unsafe-operations). |
+| `unsafe_mode="on_demand"`   | Folder operations: with the Unsafe mode slider, `"always"`, or `"blocked"`, refused by the kernel whatever the page asks; see [Unsafe operations](#unsafe-operations). |
 | `code_snippet="enabled"`    | **Python code**: the code of every engine installed, `"disabled"` (no such item), or the engines named, e.g. `["polars", "pyspark"]` (`"python"` for JSON, text and images). |
 | `transfer_policy=[...]`     | Where files may be copied or moved; see [Transfer policy](#transfer-policy).                                |
 
