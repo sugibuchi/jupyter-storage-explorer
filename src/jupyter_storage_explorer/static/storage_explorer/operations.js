@@ -143,7 +143,7 @@ function createOperations(x) {
     const old = basename(target.path);
     const dot = old.lastIndexOf(".");
     await askName({
-      lines: [h("div", { textContent: `Rename ${old}` })],
+      lines: [h("div", { textContent: visible(`Rename ${old}`) })],
       button: "Rename",
       value: old,
       selected: !isFolder(target) && dot > 0 ? dot : old.length,

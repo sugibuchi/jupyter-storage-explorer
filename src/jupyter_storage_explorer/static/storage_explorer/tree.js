@@ -79,7 +79,7 @@ function createTree(x) {
 
       const row = h(
         "div",
-        { className: "jse-node" + (dir.path === current ? " jse-active" : ""), title: dir.path },
+        { className: "jse-node" + (dir.path === current ? " jse-active" : ""), title: visible(dir.path) },
         twisty,
         h("span", { className: "jse-icon" }, fileIcon(dir.name, true)),
         h("span", { className: "jse-label", textContent: visible(dir.name) }),

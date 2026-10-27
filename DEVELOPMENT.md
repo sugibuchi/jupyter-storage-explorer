@@ -510,6 +510,9 @@ The extension has four plugins:
 | `files.ts`     | "Open in JupyterLab": a drive serving the files explorers opened.                       |
 | `queryTabs.ts` | "View in a new tab".                                                                   |
 
+`common.ts` holds what they share: `visible()`, as in `static/common.js`, and the registry where explorers find their
+functions.
+
 **The tab.** ipywidgets binds a console's widgets to its first kernel. So a tab whose session is lost, or whose kernel
 changes or restarts, is replaced by a new tab.
 

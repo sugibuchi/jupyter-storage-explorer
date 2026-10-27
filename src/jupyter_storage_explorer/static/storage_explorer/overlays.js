@@ -4,7 +4,8 @@
 
 // Shown over the widget while a file operation waits for the kernel: it
 // blocks clicks and keys from the start, and shows itself after a moment
-// (CSS, .jse-busy), so quick operations do not flicker.
+// (CSS, .jse-busy), so quick operations do not flicker. Its messages may
+// name files: they go through visible().
 function createBusy() {
   const text = h("div", { className: "jse-busy-text" });
   const el = h(
@@ -22,7 +23,7 @@ function createBusy() {
 
   function start(message) {
     count += 1;
-    text.textContent = message;
+    text.textContent = visible(message);
     // Restart the delay of its appearance.
     el.hidden = true;
     void el.offsetWidth;
@@ -49,7 +50,7 @@ function createBusy() {
       }
     },
     // Changes the message shown, e.g. to show progress.
-    say: (message) => (text.textContent = message),
+    say: (message) => (text.textContent = visible(message)),
   };
 }
 
@@ -145,15 +146,16 @@ function createMenu() {
   // `hidden` rows can be shown later through the element passed to `ref(row)`.
   // `title`: the row's tooltip. `menu()`: the items of the menu right-clicking
   // the row opens in place of this one. `shortcut`: its key in the file list
-  // (a key of shortcuts.js'), shown at the right.
+  // (a key of shortcuts.js'), shown at the right. Labels and titles may name
+  // files: they go through visible() here, for every menu.
   function rows(items) {
     return items.map((item) => {
       if (item === "-") return h("div", { className: "jse-menu-sep" });
       const row = h(
         "div",
-        { className: "jse-menu-item" + (item.disabled ? " jse-disabled" : ""), hidden: Boolean(item.hidden), title: item.title ?? "" },
+        { className: "jse-menu-item" + (item.disabled ? " jse-disabled" : ""), hidden: Boolean(item.hidden), title: visible(item.title ?? "") },
         h("span", { className: "jse-menu-icon" }, ...(item.icon ? [icon(item.icon)] : [])),
-        h("span", { className: "jse-menu-label", textContent: item.label }),
+        h("span", { className: "jse-menu-label", textContent: visible(item.label) }),
         ...(item.shortcut ? [h("span", { className: "jse-menu-shortcut", textContent: keyLabel(item.shortcut) })] : []),
       );
       item.ref?.(row);

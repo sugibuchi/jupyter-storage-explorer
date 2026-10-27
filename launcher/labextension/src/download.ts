@@ -15,6 +15,8 @@ import { JupyterFrontEnd, JupyterFrontEndPlugin } from '@jupyterlab/application'
 import { Dialog, Notification, showDialog } from '@jupyterlab/apputils';
 import { DirListing, FileBrowser, IFileBrowserFactory } from '@jupyterlab/filebrowser';
 
+import { visible } from './common';
+
 const ITEMS_TYPE = 'application/x-jupyter-storage-explorer-items';
 const DRAG = Symbol.for('jupyter-storage-explorer.drag');
 const EXPLORERS = Symbol.for('jupyter-storage-explorer.explorers');
@@ -53,8 +55,9 @@ interface IDrag {
 const currentDrag = (): IDrag | null =>
   ((globalThis as Record<symbol, unknown>)[DRAG] as IDrag | null | undefined) ?? null;
 
+// Messages naming files and folders show them through visible().
 function describeFiles(names: string[]): string {
-  return names.length === 1 ? names[0] : `${names.length} files`;
+  return names.length === 1 ? visible(names[0]) : `${names.length} files`;
 }
 
 // An explorer's drag, while this page has one (only the types are readable before the drop).
@@ -69,7 +72,7 @@ async function download(
   dir: string,
   localDir: string
 ): Promise<void> {
-  const where = `/${localDir}`;
+  const where = visible(`/${localDir}`);
   const names = items.files.map(f => f.name);
   const paths = items.files.map(f => f.path);
   const confirm = await showDialog({
@@ -116,7 +119,7 @@ async function download(
     });
   }
   for (const error of errors) {
-    Notification.error(`Download failed: ${error}`);
+    Notification.error(`Download failed: ${visible(error)}`);
   }
 }
 
@@ -203,7 +206,7 @@ function acceptDownloads(browser: FileBrowser, app: JupyterFrontEnd): void {
       // Without the drive prefix (e.g. "RTC:"): relative to the server's folder.
       const localDir = app.serviceManager.contents.localPath(dir);
       download(browser, explorer, items, dir, localDir).catch(error =>
-        Notification.error(`Download failed: ${error}`)
+        Notification.error(`Download failed: ${visible(String(error))}`)
       );
     },
     true
