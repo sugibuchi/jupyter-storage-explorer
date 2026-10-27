@@ -118,20 +118,18 @@ chart  # in another cell
 ## Settings in code: QuerySettings
 
 `settings=` sets the filters, sort order, hidden columns and widths to start with: a `QuerySettings`, or a dict or
-JSON text. To keep settings made in the widget, print them and paste them into your code:
+JSON text. To keep settings made in the widget, print them as a dict and paste it into your code:
 
 ```python
 explorer = DataExplorer(orders_df)
-print(explorer.settings.to_json())  # after filtering and sorting in the widget
+print(explorer.settings.to_dict())  # after filtering and sorting in the widget
 
-settings = """
-{
+settings = {
     "filters": {"price": {"op": "range", "min": "10", "max": ""}},
-    "sort": {"column": "date", "descending": true},
+    "sort": {"column": "date", "descending": True},
     "hidden": ["comment"],
-    "widths": {}
+    "widths": {},
 }
-"""
 DataExplorer(orders_df, settings=settings)
 ```
 

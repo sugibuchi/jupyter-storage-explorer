@@ -24,8 +24,8 @@ class QuerySettings:
 
     Settings that do not fit the data (unknown columns, filters for another
     type) are left out when it opens. To keep settings made in the widget,
-    print ``explorer.settings.to_json()`` and paste the text into your code,
-    as ``DataExplorer``'s ``settings`` or ``QuerySettings.from_json(...)``.
+    print ``explorer.settings.to_dict()`` and paste the dict into your code,
+    as ``DataExplorer``'s ``settings`` or ``QuerySettings.from_dict(...)``.
 
     Attributes
     ----------
