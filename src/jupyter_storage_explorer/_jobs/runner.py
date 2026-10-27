@@ -189,28 +189,49 @@ class JobRunner:
         finish: Callable[[Job], None] | None,
         context: contextvars.Context,
     ) -> None:
-        """In the job's thread: do the work, then finish on the main thread."""
+        """In the job's thread: do the work, then finish on the main thread.
+
+        The job's fields change only on the main thread, which reads them
+        meanwhile (reports, ``cancel``): its outcome is kept here until
+        ``_end`` sets it, so the page never sees a job ended before
+        ``finish`` has run, or failed without its error."""
         started = time.monotonic()
+        result: dict[str, Any] = {}
+        error = ""
         if job.progress.cancelled:
-            job.state = "cancelled"  # cancelled while queued
+            state = "cancelled"  # cancelled while queued
         else:
-            job.state = "running"
             log.info("Job %s started: %s", job.id, job.title)
-            self._main(lambda: self._notify_unless_finished(job), context)
+            self._main(lambda: self._start(job), context)
             try:
-                job.result = work(job.progress) or {}
-                job.state = "cancelled" if job.result.get("cancelled") else "done"
+                result = work(job.progress) or {}
+                state = "cancelled" if result.get("cancelled") else "done"
             except OperationCancelled:
-                job.state = "cancelled"
+                state = "cancelled"
             except Exception as exc:
                 log.exception("job %s (%s) failed", job.id, job.title)
-                job.state = "failed"
+                state = "failed"
                 # As loads' errors: a readable first line (e.g. Spark's).
-                job.error = error_text(exc)
-        _log_end(job, time.monotonic() - started)
-        self._main(lambda: self._end(job, finish), context)
+                error = error_text(exc)
+        _log_end(job, state, result, time.monotonic() - started)
+        self._main(lambda: self._end(job, state, result, error, finish), context)
 
-    def _end(self, job: Job, finish: Callable[[Job], None] | None) -> None:
+    def _start(self, job: Job) -> None:
+        """On the main thread: the job's work has started."""
+        job.state = "running"
+        self._notify(job)
+
+    def _end(
+        self,
+        job: Job,
+        state: str,
+        result: dict[str, Any],
+        error: str,
+        finish: Callable[[Job], None] | None,
+    ) -> None:
+        """On the main thread: the job has ended, with ``state``, ``result``
+        and ``error``."""
+        job.state, job.result, job.error = state, result, error
         if finish is not None:
             try:
                 finish(job)
@@ -220,19 +241,20 @@ class JobRunner:
         self._notify(job)
 
 
-def _log_end(job: Job, seconds: float) -> None:
-    """Log how ``job`` ended: its counts of items by outcome (its result's
-    lists, e.g. "moved"), the bytes and the time. The items' errors, which the
-    user sees in the job's report, are a warning, with the first of them."""
+def _log_end(job: Job, state: str, result: dict[str, Any], seconds: float) -> None:
+    """Log how ``job`` ended, in ``state``: its counts of items by outcome
+    (``result``'s lists, e.g. "moved"), the bytes and the time. The items'
+    errors, which the user sees in the job's report, are a warning, with the
+    first of them."""
     progress = job.progress.snapshot()
     counts = [
         f"{len(names)} {key}"
-        for key, names in job.result.items()
+        for key, names in result.items()
         if isinstance(names, list) and names and key != "errors"
     ]
     counts.append(f"{progress['files_done']} files, {progress['bytes_done']} bytes")
-    log.info("Job %s %s in %.1f s: %s", job.id, job.state, seconds, ", ".join(counts))
-    errors = job.result.get("errors") or []
+    log.info("Job %s %s in %.1f s: %s", job.id, state, seconds, ", ".join(counts))
+    errors = result.get("errors") or []
     if errors:
         log.warning(
             "Job %s (%s): %d errors, the first: %s",
