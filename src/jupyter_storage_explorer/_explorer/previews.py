@@ -987,7 +987,10 @@ class PreviewsMixin:
         """The user answered the prompt of a view tab, which ``widget``
         shows: read the view of the answer for the tab (see
         ``_view_tab_request``). Ignored if the widget no longer shows it."""
-        if content.get("prompt") != asking.id or widget.view.get("prompt") != asking.id:
+        if (
+            content.get("prompt") != asking.id
+            or widget._view.get("prompt") != asking.id
+        ):
             return
         if content.get("cancel"):
             widget._show(_not_viewed("viewed"))
