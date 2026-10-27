@@ -13,6 +13,8 @@ that library, e.g. the syntax of regular expressions.
   ``ExplorerStates`` (_explorer/states.py) remembers of a dataset.
 - data_query.py: ``DataQuery``, one dataset open in the data browser, and
   ``fetch_rows``.
+- table_set.py: ``TableSet``, the tables of a ``TableSetView``, with a
+  ``DataQuery`` on the one chosen.
 
 Settings are plain JSON-like dicts, shared with the frontend and remembered
 per dataset, with the mode::

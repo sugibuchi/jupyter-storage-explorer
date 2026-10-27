@@ -93,7 +93,7 @@ function createItemMenu(x) {
       });
     }
     info.codeSub.replaceChildren(...x.menu.rows(items));
-    x.menu.place(); // rows shown above may have pushed it out of the widget
+    x.menu.place(); // rows shown above may have pushed it out of the window
   }
 
   return function itemMenu(targets, withOpen = true) {

@@ -435,6 +435,7 @@ The storage explorer's parts are in `static/storage_explorer/`, one feature each
 - `jupyterlab.js`, `properties.js` and `jobs.js`;
 - `toolbar.js`, with unsafe mode, bookmarks and the settings menu;
 - `engine.js`, the engine chosen, and `about.js`, the settings menu's About;
+- `mapper_css.js`, the mappers' CSS on the page;
 - `overlays.js`, for the busy screen, dialogs and menus, and `util.js`.
 
 Each part is a function `createX(x)` returning its elements and functions. `x` is the explorer, made in `render()`. It

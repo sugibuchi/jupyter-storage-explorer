@@ -16,6 +16,7 @@ from jupyter_storage_explorer.formats import Text
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
 
+    from jupyter_storage_explorer._explorer.jupyterlab import _Path
     from jupyter_storage_explorer.actions import Action
     from jupyter_storage_explorer.formats import DataFormat
 
@@ -38,7 +39,7 @@ class UserActionsMixin:
     _chain_options: tuple[Mapping[str, Any] | None, Sequence[str]]
     _actions: ActionChain
     _formats: list[DataFormat]
-    _config_files: dict[str, tuple[str, Callable[[], Any]]]
+    _config_files: dict[str, tuple[_Path, Callable[[], Any] | None]]
     _engines: list[dict[str, str]]
     _engine: str
 

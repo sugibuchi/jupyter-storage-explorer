@@ -618,12 +618,12 @@ class StorageExplorer(
         for problem in problems:
             warnings.warn(problem, RuntimeWarning, stacklevel=2)
         components = PluginComponents(self._plugins)
-        # How files are moved, copied, deleted and downloaded (see filesystems/),
-        # and the jobs doing it in the background (see _jobs/runner.py).
         # What filesystems reach, their URLs and back (see filesystems/).
         self._mappers = MapperChain(
             [*(filesystem_mappers or ()), *components.mappers, *default_mappers()]
         )
+        # How files are moved, copied, deleted and downloaded (see filesystems/),
+        # and the jobs doing it in the background (see _jobs/runner.py).
         self._operations = OperationChain(
             [*(operations or ()), *components.operations, *self.default_operations()]
         )
@@ -936,7 +936,7 @@ class StorageExplorer(
         try:
             return self._isdir(path)
         except Exception:
-            return False  # cannot tell: stay at the top
+            return False  # cannot tell: not bookmarked
 
     # --- Public interface ---
 
@@ -1390,7 +1390,7 @@ class StorageExplorer(
         if getattr(self, "_engine_ready", False) and self._log_backups is not None:
             _logs.configure(change["new"], self._log_backups)
             self._states.remember_logging_level(change["new"])
-            _logs.log.info("Logging at %s", change["new"])
+            log.info("Logging at %s", change["new"])
 
     @traitlets.observe("_engine")
     def _on_engine(self, change: dict[str, Any]) -> None:
@@ -1402,7 +1402,7 @@ class StorageExplorer(
             self._states.remember_engine(change["new"])
         self._show_selected_format()
         self._show_current_format()
-        # A preview still loading is loaded again, with the new engine.
+        # The preview open, loaded or still loading, is opened again with it.
         preview = self._preview
         if preview.get("path"):
             self._open_preview(preview["path"], preview.get("format"))

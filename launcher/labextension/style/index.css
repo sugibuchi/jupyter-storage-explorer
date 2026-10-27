@@ -62,13 +62,9 @@
   border: none;
 }
 
-.jse-launcher-panel .jse-widget {
-  border: none;
-  border-radius: 0;
-}
-
-/* "Query data in new tab" (queryTabs.ts): the data browser fills the tab, as
-   the explorer does its own. */
+/* The explorer fills its tab, and so does a view in a tab of its own ("View
+   in a new tab", queryTabs.ts). */
+.jse-launcher-panel .jse-widget,
 .jse-query-tab .jse-widget {
   border: none;
   border-radius: 0;
@@ -100,12 +96,6 @@
   margin: 4px 0 0;
   overflow: auto;
   white-space: pre;
-}
-
-/* The output of launcher.py's style(): a <style> element, which applies even
-   when hidden. */
-.jse-launcher-panel .jp-OutputArea-child:has(.jp-RenderedHTMLCommon > style:only-child) {
-  display: none;
 }
 
 .jse-launcher-panel .jp-OutputArea-output {

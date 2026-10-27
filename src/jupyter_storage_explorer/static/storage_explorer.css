@@ -414,7 +414,7 @@
 
 .jse-menu {
   position: absolute;
-  z-index: 20; /* above the preview dialog */
+  z-index: 20; /* in its layer, .jse-menu-layer, which is above the page */
   min-width: 150px;
   padding: 4px 0;
   border: 1px solid var(--jp-border-color1, #bdbdbd);
@@ -673,7 +673,7 @@
 .jse-note.jse-error-text:empty {
   display: none;
 }
-/* The busy dialog (busy() in storage_explorer.js): from the start it blocks
+/* The busy dialog (createBusy in overlays.js): from the start it blocks
    the widget, invisibly; after a moment it shows (dimmed backdrop, message). */
 .jse-busy {
   z-index: 20; /* above the other dialogs */
@@ -803,7 +803,7 @@
   }
 }
 
-/* Properties (showProperties in storage_explorer.js): label and value rows. */
+/* Properties (properties.js): label and value rows. */
 .jse-props {
   border-collapse: collapse;
   width: 100%;

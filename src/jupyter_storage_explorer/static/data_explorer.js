@@ -1,5 +1,5 @@
 // Data Explorer: the data browser for one dataframe, on its own.
-// Joined after common.js and query.js (see _static.py).
+// Joined after icons.js, common.js, query.js and sections.js (see _static.py).
 
 function render({ model, el }) {
   const title = h("span", { className: "jse-preview-name" });

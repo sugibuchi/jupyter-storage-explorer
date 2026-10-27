@@ -1149,24 +1149,24 @@ class PreviewsMixin:
         def own(f: DataFormat, views: list[ViewAction]) -> list[ViewAction]:
             return [v for v in views if v.format is type(f) or v.format not in matched]
 
-        view = None
+        default_view = None
         if formats and ctx is not None:
             try:
                 key = self._actions.engine_for(formats[0], ctx, chosen)
             except LookupError:
                 pass
             else:
-                view = {"format": formats[0].name, "engine": key}
+                default_view = {"format": formats[0].name, "engine": key}
         return {
             "formats": [f.name for f in formats],
-            "view": view,
+            "view": default_view,
             "views": [
-                view
+                entry
                 for f in formats
                 if ctx is not None
                 for key, views in self._actions.views_by_engine(f, ctx).items()
                 if (shown := own(f, views))
-                for view in self._view_entries(f, key, shown)
+                for entry in self._view_entries(f, key, shown)
             ],
             # The frontend gets the packages' names, listed under the code.
             "recipes": [

@@ -1,4 +1,5 @@
-"""File operations planned for ``StorageExplorer``: move, delete, paste, upload, download.
+"""File operations planned for ``StorageExplorer``: move, rename, delete, paste,
+upload, download. Properties are counted in properties.py.
 
 Each is planned by a ``FileTasks`` method on the kernel's main thread: checks
 (folders only in unsafe mode, never into themselves, ...) and the files that
@@ -544,10 +545,10 @@ class FileTasks:
                 plans.append(_Copy(source_fs, source, target))
         return plans
 
-    def upload_file(self, local_path: str, target: str, cleanup: bool = True) -> Task:
+    def upload_file(self, local_path: str, target: str) -> Task:
         """Copy one local file to ``target`` with the operations' ``upload``,
-        e.g. one received from the browser; with ``cleanup``, the local file is
-        deleted once the job has ended. Result: {"copied", "errors"}."""
+        e.g. one received from the browser, which is deleted once the job has
+        ended. Result: {"copied", "errors"}."""
         fs, ops = self.fs, self.ops
         name, dest = _paths.basename(target), _paths.parent(target, fs)
         task = Task("upload", f"Uploading {name} into {_paths.basename(dest)}", fs)
@@ -569,7 +570,7 @@ class FileTasks:
                 os.unlink(local_path)
 
         task.work = work
-        task.cleanup = remove if cleanup else None
+        task.cleanup = remove
         return task
 
     # --- Download: files into a folder of the kernel's machine ---

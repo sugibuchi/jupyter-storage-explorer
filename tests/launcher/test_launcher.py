@@ -746,8 +746,8 @@ def test_old_launch_function_is_reported(tmp_path):
     path = layer(tmp_path, "user", "def launch():\n    return None")
     settings = load_settings([path])
     assert settings.warnings == [
-        f"{path}: launch() is no longer used; set filesystems(), parameters() etc. "
-        "instead (see the launcher's README)"
+        f"{path}: launch() is no longer used and is ignored; set filesystems(), "
+        "parameters() etc. instead (see the launcher's README)"
     ]
     assert settings.explorer_arguments() == defaults()
 

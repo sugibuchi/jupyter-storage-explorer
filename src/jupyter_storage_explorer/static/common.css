@@ -1,7 +1,8 @@
 /* Shared by the widgets: colours, buttons, dialogs, tables, text. Joined
-   before query.css and each widget's own stylesheet (see _static.py). */
-/* The widget's own element. StorageExplorer's also has the class
-   "jse-browser", and DataExplorer's "jse-data-explorer". */
+   before query.css, sections.css and each widget's own stylesheet (see
+   _static.py). */
+/* The widget's own element. Each widget's also has a class of its own, e.g.
+   "jse-browser" for StorageExplorer, "jse-data-explorer" for DataExplorer. */
 /* Colours are JupyterLab's theme variables, so they follow its theme (dark
    included), with fallbacks for other frontends. */
 .jse-widget {

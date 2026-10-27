@@ -31,7 +31,6 @@ from typing import IO, Any
 from jupyter_core.paths import jupyter_config_dir
 
 LOGGER_NAME = "jupyter_storage_explorer"
-log = logging.getLogger(__name__)
 
 # The levels users choose from, by name, and "disabled": no records at all.
 LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")

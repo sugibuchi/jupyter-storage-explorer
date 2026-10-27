@@ -1,7 +1,7 @@
-// Shared by the widgets. Each widget's module is this file, query.js and the
-// widget's own file (storage_explorer.js, data_explorer.js) joined together by
-// the kernel (see _static.py), as an anywidget module cannot import files next
-// to it.
+// Shared by the widgets. Each widget's module is the shared files (icons.js,
+// this file, query.js and sections.js), its parts (static/<widget>/) and its
+// own file, joined together by the kernel (see _static.esm), as an anywidget
+// module cannot import files next to it.
 
 // Characters that change how the text around them reads, or are not seen:
 // controls, bidi embeddings, overrides and isolates (e.g. "report\u202Egpj.exe"
@@ -25,11 +25,11 @@ function h(tag, props = {}, ...children) {
 // An error from the kernel (see error_text in _explorer/common.py): its first
 // line, which says what went wrong, and the rest folded under "Details", e.g.
 // a Java stack trace. Each line goes through visible(), tabs as spaces.
-function errorBlock(text, className = "jse-preview-error") {
+function errorBlock(text) {
   const lines = String(text)
     .split(/\r?\n/)
     .map((line) => visible(line.replace(/\t/g, "    ")));
-  const el = h("div", { className }, h("div", { className: "jse-error-summary", textContent: lines[0] }));
+  const el = h("div", { className: "jse-preview-error" }, h("div", { className: "jse-error-summary", textContent: lines[0] }));
   const rest = lines.slice(1).join("\n").trim();
   if (rest) {
     el.append(h("details", { className: "jse-error-details" }, h("summary", { textContent: "Details" }), h("pre", { textContent: rest })));
