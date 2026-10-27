@@ -6,6 +6,7 @@ import asyncio
 import threading
 import time
 
+import pytest
 from in_a_kernel import until
 
 from jupyter_storage_explorer._jobs.runner import JobRunner
@@ -50,6 +51,39 @@ def test_the_outcome_reaches_the_job_on_the_main_thread():
     assert cancelled["cancelling"]
     assert finished == "finish"
     assert (final["state"], final["error"]) == ("failed", "bad value")
+
+
+def test_close_cancels_every_job():
+    """Running and queued jobs are cancelled, and each still finishes: that
+    is where it cleans up."""
+    started = threading.Event()
+    ran, finished = [], []
+
+    def first(progress):
+        started.set()
+        while True:
+            progress.check()
+            time.sleep(0.01)
+
+    async def main():
+        runner = JobRunner(lambda job: None)
+        jobs = [
+            runner.submit("move", "First", first, finish=finished.append),
+            runner.submit(
+                "move", "Second", lambda p: ran.append(1) or {}, finish=finished.append
+            ),
+        ]
+        await until(started.is_set)
+        runner.close()
+        await until(lambda: not runner.jobs)
+        with pytest.raises(RuntimeError):
+            runner.submit("move", "Third", lambda p: {})
+        return jobs
+
+    jobs = asyncio.run(main())
+    assert [job.state for job in jobs] == ["cancelled", "cancelled"]
+    assert finished == jobs
+    assert ran == []
 
 
 def test_a_job_cancelled_while_queued_never_runs():

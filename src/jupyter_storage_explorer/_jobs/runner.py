@@ -112,6 +112,7 @@ class JobRunner:
         self._prefix = prefix
         self.jobs: dict[str, Job] = {}
         self._ids = itertools.count(1)
+        self._closed = False
         loop = running_loop()
         self._main = main_thread(loop)
         if loop is not None:
@@ -166,10 +167,23 @@ class JobRunner:
         self._notify(job)
         return True
 
+    def close(self) -> None:
+        """Cancel every job, queued or running, as the explorer closes: each
+        stops at its next check, then its ``finish`` runs, so that it cleans
+        up (e.g. an upload's temporary file). The worker thread ends after
+        them, without the kernel waiting. No job can be submitted afterwards."""
+        self._closed = True
+        for job in list(self.jobs.values()):
+            log.info("Job %s cancelled: the explorer was closed", job.id)
+            job.progress.cancel()
+        self._executor.shutdown(wait=False)
+
     def _report(self, job: Job, update: Callable[[Job], None] | None) -> None:
         """On the main thread: a running job's progress, after ``update``."""
-        if job.finished:
-            return  # a late report: ``finish`` has shown everything
+        if job.finished or self._closed:
+            # A late report: ``finish`` has shown everything, or the
+            # explorer has closed.
+            return
         if update is not None:
             try:
                 update(job)
