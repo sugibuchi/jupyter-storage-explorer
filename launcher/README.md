@@ -28,25 +28,30 @@ It also integrates every Storage Explorer, in its tab or in a notebook, with Jup
 
 ## Installation
 
+Open a terminal in your JupyterLab and run the following. Then reload the page in your web browser.
+
 ```bash
 pip install "jupyter-storage-explorer-launcher[polars]"
 ```
 
-Run it in the Python environment of the default kernel, which is usually JupyterLab's own. Where depends on how
-JupyterLab runs:
+This installs the launcher in the Python environment of the default IPython kernel, which is usually JupyterLab's own.
+Requires JupyterLab 4.0 or later.
 
-- **JupyterLab in a virtual environment**, e.g. a venv or a conda environment: activate it, then run it there.
+If the default kernel runs in another environment than JupyterLab's, install the launcher in both. JupyterLab loads
+the extension, and the kernel imports the Python package.
+
+### Persist the installation
+
+An installation from a terminal is not kept in some environments:
+
+- **JupyterLab in a virtual environment**, e.g. a venv or a conda environment: the installation stays in it.
 - **A [Jupyter Docker Stacks](https://jupyter-docker-stacks.readthedocs.io/) image**, e.g. `quay.io/jupyter/scipy-notebook`:
-  - To try it, run it from a terminal in the running JupyterLab. The package is gone once the container is removed.
-  - To keep it, install it into the image's Python environment, in `/opt/conda`: `RUN pip install ...` in a
-    Dockerfile starting `FROM` the image.
-- **JupyterHub**: administrators install it in the single-user environment, often a Docker Stacks image as above.
-  Users can try it from a terminal in their server.
-- **The default kernel in another environment than JupyterLab's**: run it in both. JupyterLab loads the extension,
-  and the kernel imports the Python package.
+  the package is gone once the container is removed. To keep it, install it into the image's Python environment, in
+  `/opt/conda`: `RUN pip install ...` in a Dockerfile starting `FROM` the image.
+- **JupyterHub**: a user's server often runs in a container, e.g. a Docker Stacks image as above. Administrators
+  install the launcher in the single-user environment.
 
-Then reload the page in your web browser, and open an explorer: it starts with a new kernel. Requires JupyterLab 4.0 or
-later.
+### Extras
 
 The launcher has the same extras as `jupyter-storage-explorer`
 ([Installation](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#installation)), of two kinds:

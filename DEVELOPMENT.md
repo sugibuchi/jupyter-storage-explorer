@@ -1437,7 +1437,7 @@ Use these sections, leaving out those with nothing to say:
 - **Breaking changes**: what users must change in their code or `launcher.py`, and how.
 - Links to the documentation of the new features (absolute GitHub URLs).
 - **Install**: the `pip install -U` command for both packages. Say that the launcher requires the explorer of the same
-  version, and that JupyterLab must be restarted after upgrading it.
+  version, and that after upgrading it, users reload the page and open explorers with a new kernel.
 - **What's Changed** and **Full Changelog**: kept at the end, as generated.
 
 ### One-time setup for PyPI
