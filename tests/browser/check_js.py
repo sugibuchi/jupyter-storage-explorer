@@ -32,6 +32,9 @@ RULES = {
     "view_tab": ["no-undef: error"],
     "table_set_tab": ["no-undef: error"],
 }
+# The shared files' directives for no-unused-vars (e.g. on createFrame, which
+# the storage explorer does not use) are unused where that rule is off.
+UNCHECKED_DIRECTIVES = ["--report-unused-disable-directives-severity", "off"]
 
 
 def tool(name: str) -> str:
@@ -54,6 +57,7 @@ def main() -> int:
                 [node, "--check", module.name],
                 [npx, "--yes", ESLINT, "--no-config-lookup", "--global", GLOBALS]
                 + [arg for rule in rules for arg in ("--rule", rule)]
+                + ([] if widget == "storage_explorer" else UNCHECKED_DIRECTIVES)
                 + [module.name],
             ]
             ok = all(

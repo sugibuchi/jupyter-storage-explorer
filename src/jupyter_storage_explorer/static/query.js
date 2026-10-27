@@ -46,12 +46,14 @@ const INPUT_TYPES = {
   time: { type: "time", step: "1" },
 };
 
-// label: text, or an icon (an SVG element).
-function queryButton(label, onClick, title = "") {
-  const btn = h("button", { className: typeof label === "string" ? "jse-btn" : "jse-btn jse-icon-btn", title }, label);
+// `btn`, calling onClick() when clicked.
+function withClick(btn, onClick) {
   btn.addEventListener("click", onClick);
   return btn;
 }
+
+// A text button; icon buttons are iconButton()'s, named for screen readers too.
+const queryButton = (label, onClick, title = "") => withClick(h("button", { className: "jse-btn", title }, label), onClick);
 
 // e.g. "quantity >= 8", "price between 1 and 5", "product contains tea (any
 // case)", "comment: Not null".
@@ -230,13 +232,13 @@ function createQueryPanel(host, path, data) {
       status = `Rows ${(first + 1).toLocaleString()}–${(first + pageRows.length).toLocaleString()} / ${total}`;
     }
 
-    const prev = queryButton(icon("chevron-left"), prevPage, "Previous page");
+    const prev = withClick(iconButton("chevron-left", "Previous page"), prevPage);
     prev.disabled = view.loading || first === 0;
-    const next = queryButton(icon("chevron-right"), nextPage, "Next page");
+    const next = withClick(iconButton("chevron-right", "Next page"), nextPage);
     next.disabled = view.loading || !hasNext;
     const reset = queryButton("Reset", resetQuery, "Remove all filters and show all columns");
     reset.disabled = !resettable;
-    const reloadBtn = queryButton(icon("refresh"), reload, "Reload the data, e.g. after it changed");
+    const reloadBtn = withClick(iconButton("refresh", "Reload the data, e.g. after it changed"), reload);
     reloadBtn.disabled = view.loading;
     const toolbar = h(
       "div",

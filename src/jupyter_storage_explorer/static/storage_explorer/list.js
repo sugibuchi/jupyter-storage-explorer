@@ -63,7 +63,7 @@ function createList(x) {
   // The storage chooser comes first here while the tree is hidden (see
   // placeStorages in storage_explorer.js). In the sidebar layout, the pager
   // is below the list instead, shown when there are several pages.
-  const sidebar = model.get("_layout") === "sidebar";
+  const { sidebar } = x;
   const bar = h("div", { className: "jse-pane-bar" }, filter.el, ...(sidebar ? [] : [pagerEl]));
   const pane = h("div", { className: "jse-pane jse-list-pane" }, bar, el, ...(sidebar ? [pagerEl] : []));
   const statusEl = h("div", { className: "jse-status" });
@@ -492,7 +492,7 @@ function createList(x) {
       total = entries.length;
       matches = () => entries.filter((e) => filter.test(e.name)).length;
     }
-    const count = `${total.toLocaleString()} item${total === 1 ? "" : "s"}`;
+    const count = plural(total, "item");
     const selected = model.get("_selected");
     const matching = filter.active() ? `${matches().toLocaleString()} of ${count} match` : count;
     statusEl.textContent = matching + (selected.length ? `, ${selectionSummary(selected)} selected` : "");
@@ -506,7 +506,6 @@ function createList(x) {
     if (!entries.length) return paths.length.toLocaleString(); // not in the pages received
     const files = entries.filter((e) => !isFolder(e));
     const folders = entries.length - files.length;
-    const plural = (n, word) => `${n.toLocaleString()} ${word}${n === 1 ? "" : "s"}`;
     const parts = [];
     if (files.length) parts.push(`${plural(files.length, "file")} (${formatSize(files.reduce((sum, e) => sum + (e.size ?? 0), 0))})`);
     if (folders) parts.push(plural(folders, "folder"));

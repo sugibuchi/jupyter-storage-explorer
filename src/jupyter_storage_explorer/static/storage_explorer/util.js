@@ -30,6 +30,15 @@ const isFolder = (item) => item.type === "directory";
 // not treated as data (no preview or code) and are not copied.
 const hasUrl = (item) => !item.no_url;
 
+// What to view, as "preview" and "view_tab" messages give it: `path`, its
+// `format` (null: the first it matches), `engine` (a key, null for the
+// built-in views; left out: the one chosen) and `action` (a view's id; left
+// out: the engine's first view).
+const viewTarget = (path, format, engine, action) => ({ path, format, ...(engine === undefined ? {} : { engine }), ...(action ? { action } : {}) });
+
+// A count of things, e.g. "1 file", "1,234 files".
+const plural = (n, word) => `${n.toLocaleString()} ${word}${n === 1 ? "" : "s"}`;
+
 // "a.csv", "a.csv and b.csv", or "3 files: a.csv, b.csv, c.csv" (long lists shortened).
 function describeFiles(names) {
   names = names.map(visible);

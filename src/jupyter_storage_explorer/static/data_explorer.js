@@ -2,39 +2,14 @@
 // Joined after icons.js, common.js, query.js and sections.js (see _static.py).
 
 function render({ model, el }) {
-  const title = h("span", { className: "jse-preview-name" });
-  const badge = h("span", { className: "jse-badge" });
-  const body = h("div", { className: "jse-dialog-body jse-data-explorer-body" });
-  const statusEl = h("div", { className: "jse-status", hidden: true });
   const grip = h("div", { className: "jse-grip", title: "Drag to resize" });
-  const { el: confirmEl, ask, answer } = createConfirm();
-  const { request, onReply } = createRequester(model);
-
-  el.classList.add("jse-widget", "jse-data-explorer");
-  // Keep JupyterLab's notebook shortcuts (e.g. "dd" deletes a cell) from
-  // firing while keys are pressed in the widget.
-  el.dataset.lmSuppressShortcuts = "true";
-  el.replaceChildren(h("div", { className: "jse-dialog-head" }, title, badge), body, statusEl, grip, confirmEl);
-
-  let flashTimer;
-  // A short message under the table, e.g. why a choice was not applied.
-  function flash(message) {
-    statusEl.textContent = message;
-    statusEl.hidden = false;
-    clearTimeout(flashTimer);
-    flashTimer = setTimeout(() => (statusEl.hidden = true), 2500);
-  }
-
+  const frame = createFrame(model, el, { className: "jse-data-explorer", bodyClass: "jse-data-explorer-body", label: "_library", after: [grip] });
+  const { body } = frame;
   let panel = null;
-
-  function renderHead() {
-    title.textContent = title.title = visible(model.get("_title")); // a file's name in a view tab
-    badge.textContent = model.get("_library");
-  }
 
   function renderPanel() {
     panel?.dispose();
-    panel = createQueryPanel({ request, ask, answer, flash }, "", model.get("_query"));
+    panel = createQueryPanel(frame, "", model.get("_query"));
     body.replaceChildren(panel.el);
   }
 
@@ -51,28 +26,18 @@ function render({ model, el }) {
     return (dy) => (body.style.height = `${Math.max(80, start + dy)}px`);
   });
 
-  function onCustomMsg(msg) {
-    if (msg.type === "reply") onReply(msg);
-    // The kernel calls on_change's functions as it handles this answer, so
-    // that an Output's with block shows what they display.
-    else if (msg.type === "callbacks") model.send({ type: "callbacks", name: msg.name });
-  }
-  const handlers = {
-    "change:_title": renderHead,
-    "change:_library": renderHead,
+  const unbind = frame.bind({
     "change:_query": renderPanel,
     "change:_height": applyHeight,
-    "msg:custom": onCustomMsg,
-  };
-  for (const [event, handler] of Object.entries(handlers)) model.on(event, handler);
-
-  renderHead();
+    // The kernel calls on_change's functions as it handles this answer, so
+    // that an Output's with block shows what they display.
+    "msg:custom": (msg) => msg.type === "callbacks" && model.send({ type: "callbacks", name: msg.name }),
+  });
   applyHeight();
   renderPanel();
 
   return () => {
-    for (const [event, handler] of Object.entries(handlers)) model.off(event, handler);
-    clearTimeout(flashTimer);
+    unbind();
     panel?.dispose();
   };
 }

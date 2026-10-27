@@ -71,7 +71,7 @@ function createProperties(x) {
     x.jobs.watch(reply.job, (job) => {
       const parts = [`${job.files_done.toLocaleString()} files`, formatSize(job.bytes_done)];
       if (job.current) parts.push(job.current);
-      detail.textContent = job.cancelling ? "Cancelling…" : job.state === "queued" ? "Waiting…" : visible(parts.join(" · "));
+      detail.textContent = jobWaitText(job) ?? visible(parts.join(" · "));
     });
     const ended = x.jobs.result(reply);
     const asked = x.ask([h("div", { textContent: visible(`Counting the files of ${what}…`) }), detail], [{ label: "Cancel", value: "cancel" }]);
@@ -106,11 +106,10 @@ function createProperties(x) {
       ]),
     );
     if (result.errors.length) {
-      const count = result.errors.length;
       children.push(
         h("div", {
           className: "jse-section-title jse-error-text jse-props-title",
-          textContent: `Not counted: ${count} item${count > 1 ? "s" : ""} that could not be read`,
+          textContent: `Not counted: ${plural(result.errors.length, "item")} that could not be read`,
         }),
         h("pre", { className: "jse-text", textContent: visible(result.errors.join("\n")) }),
       );
