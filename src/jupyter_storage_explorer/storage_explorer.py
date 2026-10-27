@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import functools
 import itertools
 import logging
 import os
@@ -16,10 +17,10 @@ import traitlets
 
 from jupyter_storage_explorer import _logs, _paths, _static
 from jupyter_storage_explorer._callbacks import Callbacks
+from jupyter_storage_explorer._errors import error_text
 from jupyter_storage_explorer._explorer.about import AboutMixin, _explorer_version
 from jupyter_storage_explorer._explorer.bookmarks import BookmarksMixin
 from jupyter_storage_explorer._explorer.common import (
-    error_text,
     explorers,
     open_storage,
     within_top,
@@ -44,6 +45,8 @@ from jupyter_storage_explorer._jobs.loader import Loader
 from jupyter_storage_explorer._jobs.operation_chain import OperationChain
 from jupyter_storage_explorer._jobs.runner import JobRunner
 from jupyter_storage_explorer._jobs.transfer_policy import TransferPolicy
+from jupyter_storage_explorer._query.data_query import REQUESTS as QUERY_REQUESTS
+from jupyter_storage_explorer._query.data_query import ResultWatch
 from jupyter_storage_explorer.actions.defaults import DEFAULT_ACTIONS
 from jupyter_storage_explorer.filesystems import MapperChain, default_mappers
 from jupyter_storage_explorer.filesystems import (
@@ -52,6 +55,7 @@ from jupyter_storage_explorer.filesystems import (
 from jupyter_storage_explorer.filesystems.locations import LocalLocation
 from jupyter_storage_explorer.filesystems.mapper import protocols
 from jupyter_storage_explorer.formats.defaults import DEFAULT_FORMATS
+from jupyter_storage_explorer.util import format_size
 from jupyter_storage_explorer.views import ViewLimits
 
 if TYPE_CHECKING:
@@ -84,16 +88,7 @@ log = logging.getLogger(__name__)
 
 # The data browser's requests (see DataQuery.handle), and a table set's to
 # choose a table (see TableSet), after which query_result() may have changed.
-_QUERY_REQUESTS = frozenset(
-    {
-        "query_rows",
-        "query_check",
-        "query_save",
-        "query_reload",
-        "query_mode",
-        "table_set_open",
-    }
-)
+_QUERY_REQUESTS = QUERY_REQUESTS | {"table_set_open"}
 
 # The values of tree_view and preview_panel, and of layout.
 _PANEL_STATES = ("open", "closed", "disabled")
@@ -587,13 +582,16 @@ class StorageExplorer(
         _check_choice("unsafe_mode", unsafe_mode, _UNSAFE_MODES)
         # Fixed: the frontend only opens and closes the tree (_validate_tree_view).
         self._tree_disabled = tree_view == "disabled"
+        # Whether the explorer is set up: the observers of the user's choices
+        # (_on_engine, _on_columns, _on_logging_level) ignore the values set
+        # until then. First, as the traits set up below call them.
+        self._set_up = False
         # The functions given to on_change() and on_query_change(), and what
-        # they last heard of (see _changed, _query_changed); first, as the
-        # traits set up below call them.
+        # they last heard of (see _changed, _query_changed); first too.
         self._change_callbacks = Callbacks("change")
         self._change_basis: tuple[str, str, tuple[str, ...]] | None = None
         self._query_callbacks = Callbacks("query")
-        self._query_basis: tuple[DataQuery, dict[str, Any]] | None = None
+        self._query_watch = ResultWatch()
         self._transfer_policy = TransferPolicy(transfer_policy)
         self._fetch_rows = fetch_rows
         self._states = explorer_states(states)
@@ -753,13 +751,9 @@ class StorageExplorer(
         explorers[self._explorer_id] = self
         # The engines, and the one chosen: the user's last if still offered,
         # else the first; before the first listing, which tells what can be
-        # previewed with it. Not a choice of the user's: _on_engine ignores it.
-        engines = self._actions.engines
-        self._engines = [{"key": e.key, "label": e.label} for e in engines]
-        keys = [e.key for e in engines]
-        remembered = self._states.engine
-        self._engine = remembered if remembered in keys else (keys[0] if keys else "")
-        self._engine_ready = True
+        # previewed with it.
+        self._offer_engines(self._states.engine)
+        self._set_up = True
         self._filesystem = name  # shows its top level (see _on_filesystem)
         if preview_panel == "open":
             self._preview = {"empty": True}
@@ -777,7 +771,7 @@ class StorageExplorer(
             ", ".join(
                 f"{n} ({protocols(s.fs)[0]})" for n, s in self._filesystems.items()
             ),
-            ", ".join(keys) or "none",
+            ", ".join(e["key"] for e in self._engines) or "none",
             len(self._actions.actions),
         )
 
@@ -1213,20 +1207,28 @@ class StorageExplorer(
         elif kind == "menu_info":
             # In a worker thread too, as detecting the item reads it.
             self._answer_menu_info(content)
-        elif (request := self._requests(buffers or []).get(kind)) is not None:
-            # Always answered: the page waits for each request's reply.
-            try:
-                answer = request(content)
-            except Exception as exc:
-                log.exception("Answering %s failed", kind)
-                answer = {"error": error_text(exc)}
-            self._reply(content, answer)
-        elif (notice := self._notices().get(kind)) is not None:
+        elif kind == "upload_chunk":
+            # The only request with binary pieces: a piece of a file.
+            self._answer(content, lambda c: self._upload_chunk(c, buffers or []))
+        elif (request := self._requests.get(kind)) is not None:
+            self._answer(content, request)
+        elif (notice := self._notices.get(kind)) is not None:
             notice(content)
 
-    def _requests(self, buffers: list[Any]) -> dict[str, _Handler]:
-        """Request type -> handler(content), giving the reply. ``buffers``: the
-        message's binary pieces (a file's piece, for "upload_chunk")."""
+    def _answer(self, content: dict[str, Any], request: _Handler) -> None:
+        """Reply to ``content`` with what ``request`` answers, or its error:
+        always, as the page waits for each request's reply."""
+        try:
+            answer = request(content)
+        except Exception as exc:
+            log.exception("Answering %s failed", content.get("type"))
+            answer = {"error": error_text(exc)}
+        self._reply(content, answer)
+
+    @functools.cached_property
+    def _requests(self) -> dict[str, _Handler]:
+        """Request type -> handler(content), giving the reply; but
+        "upload_chunk", which takes the message's binary pieces too."""
         return {
             "vendor": lambda c: _static.vendor_source(c["name"]),
             # The listing has no locations (see _make_listing): asked for
@@ -1258,11 +1260,11 @@ class StorageExplorer(
             "properties": self._properties_request,
             "upload": self._upload_request,
             "upload_check": lambda c: self._upload_check(c["dest"], c["names"]),
-            "upload_chunk": lambda c: self._upload_chunk(c, buffers),
             "download_to_jupyterlab": self._download_to_jupyterlab_request,
             "download_to_server": self._download_to_server_request,
         }
 
+    @functools.cached_property
     def _notices(self) -> dict[str, Callable[[dict[str, Any]], None]]:
         """Notice type -> handler(content)."""
         return {
@@ -1370,7 +1372,7 @@ class StorageExplorer(
     def _on_columns(self, change: dict[str, Any]) -> None:
         """The user chose the list's columns (the settings menu): remember them
         for explorers of this layout."""
-        if getattr(self, "_engine_ready", False):
+        if self._set_up:
             self._states.remember_columns(self._layout, change["new"])
 
     @traitlets.validate("_logging_level")
@@ -1387,7 +1389,7 @@ class StorageExplorer(
         whose explorers log as they were created. A line of INFO or below
         says so in the kernel's file, which it creates: users then find it
         with "Open log file" before anything else is logged."""
-        if getattr(self, "_engine_ready", False) and self._log_backups is not None:
+        if self._set_up and self._log_backups is not None:
             _logs.configure(change["new"], self._log_backups)
             self._states.remember_logging_level(change["new"])
             log.info("Logging at %s", change["new"])
@@ -1396,8 +1398,8 @@ class StorageExplorer(
     def _on_engine(self, change: dict[str, Any]) -> None:
         """The user chose another engine (the settings menu): remember it,
         and show what can be previewed with it, the preview open included."""
-        if not getattr(self, "_engine_ready", False):
-            return  # set up by __init__
+        if not self._set_up:
+            return  # set by __init__, or _offer_engines
         if change["new"] and change["new"] != self._states.engine:
             self._states.remember_engine(change["new"])
         self._show_selected_format()
@@ -1472,6 +1474,26 @@ class StorageExplorer(
 
     def _read_bytes(self, path: str, fs: AbstractFileSystem | None = None) -> bytes:
         return (fs or self._fs).cat_file(path)
+
+    def _read_whole(
+        self,
+        path: str,
+        max_bytes: int,
+        *,
+        to: str,
+        done: str,
+        fs: AbstractFileSystem | None = None,
+    ) -> tuple[dict[str, Any], bytes]:
+        """The info and the bytes of the file at ``path``, read whole to
+        ``to`` it, e.g. "download"; ValueError if it is a folder, which
+        cannot be ``done``, or larger than ``max_bytes``."""
+        info = self._info(path, fs)
+        if info.get("type") == "directory":
+            raise ValueError(f"folders cannot be {done}")
+        size = info.get("size")
+        if size is not None and size > max_bytes:
+            raise ValueError(f"too large to {to} (over {format_size(max_bytes)})")
+        return info, self._read_bytes(path, fs)
 
     def _write_bytes(
         self, path: str, data: bytes, fs: AbstractFileSystem | None = None

@@ -17,7 +17,6 @@ once, and closing it after them.
 
 from __future__ import annotations
 
-import asyncio
 import collections
 import concurrent.futures
 import contextvars
@@ -26,7 +25,8 @@ import logging
 import threading
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
-from jupyter_storage_explorer._jobs.runner import _Inline, main_thread
+from jupyter_storage_explorer._errors import error_text
+from jupyter_storage_explorer._jobs.runner import _Inline, main_thread, running_loop
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Hashable
@@ -74,10 +74,7 @@ class Loader:
     the main thread."""
 
     def __init__(self) -> None:
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            loop = None
+        loop = running_loop()
         # In the context of the request submitting the load, as jobs (see
         # _jobs/runner.py).
         self._main = main_thread(loop)
@@ -130,10 +127,6 @@ class Loader:
         or ``reply({"error"})`` if ``work`` raises."""
 
         def answered() -> dict[str, Any]:
-            from jupyter_storage_explorer._explorer.common import (  # noqa: PLC0415
-                error_text,
-            )
-
             try:
                 return work()
             except Exception as exc:

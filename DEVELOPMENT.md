@@ -372,7 +372,7 @@ A message is a request or a notice:
 - A **notice** gets no answer, and its effects show in the traits. The exception is "download", answered by a message
   per file with the file's bytes attached.
 
-Most requests are answered at once, by their handler in `_requests()`. Those that read data are answered by a load
+Most requests are answered at once, by their handler in `_requests`. Those that read data are answered by a load
 later (see "Loading views"): the data browser's, and the right-click menu's. "view_tab" is answered at once, then
 followed by a "view_tab" message once its view has loaded.
 

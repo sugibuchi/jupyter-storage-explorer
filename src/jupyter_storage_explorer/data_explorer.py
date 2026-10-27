@@ -12,7 +12,12 @@ from jupyter_storage_explorer import _static
 from jupyter_storage_explorer._callbacks import Callbacks
 from jupyter_storage_explorer._explorer.states import ExplorerStates
 from jupyter_storage_explorer._jobs.loader import Loader
-from jupyter_storage_explorer._query.data_query import REQUESTS, DataQuery
+from jupyter_storage_explorer._query.data_query import (
+    REQUESTS,
+    DataQuery,
+    ResultWatch,
+    read_again,
+)
 from jupyter_storage_explorer._query.filters import normalize_settings
 from jupyter_storage_explorer._query.settings import QuerySettings
 
@@ -212,7 +217,7 @@ class DataExplorer(anywidget.AnyWidget):
         # Answers the data browser's requests in worker threads.
         self._loader = Loader()
         # What result() was built from when on_change's functions last heard of it.
-        self._result_basis = self._data.result_settings()
+        self._result_watch = ResultWatch(self._data)
         self.on_msg(self._on_custom_msg)
 
     def result(self, all_columns: bool = False) -> Any:
@@ -349,10 +354,7 @@ class DataExplorer(anywidget.AnyWidget):
 
         def reply(answer: dict[str, Any]) -> None:
             self.send({"type": "reply", "rid": content["rid"], **answer})
-            basis = data.result_settings()
-            reloaded = content.get("type") == "query_reload" and "error" not in answer
-            if basis != self._result_basis or reloaded:
-                self._result_basis = basis
+            if self._result_watch.changed(data, reloaded=read_again(content, answer)):
                 self._change_callbacks(self)
 
         self._loader.answer(data, lambda: data.handle(content) or {}, reply)

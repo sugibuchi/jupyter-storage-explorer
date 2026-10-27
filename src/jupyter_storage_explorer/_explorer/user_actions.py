@@ -7,8 +7,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
+from jupyter_storage_explorer._errors import error_text
 from jupyter_storage_explorer._explorer.actions import ActionChain
-from jupyter_storage_explorer._explorer.common import error_text
 from jupyter_storage_explorer._explorer.icons import format_icons
 from jupyter_storage_explorer._extensions.user_actions import load_user_actions
 from jupyter_storage_explorer.formats import Text
@@ -42,6 +42,7 @@ class UserActionsMixin:
     _config_files: dict[str, tuple[_Path, Callable[[], Any] | None]]
     _engines: list[dict[str, str]]
     _engine: str
+    _set_up: bool
 
     def _chain_of(self, users: Sequence[Action[Any]]) -> ActionChain:
         """The chain of the other actions, then ``users``."""
@@ -87,21 +88,21 @@ class UserActionsMixin:
         with self.hold_trait_notifications():
             for name, value in self._format_traits().items():
                 setattr(self, name, value)
-        self._reload_engines()
+        # The one chosen kept, if the new chain still offers it.
+        self._offer_engines(self._engine)
         self._refresh()
         self._show_selected_format()
         return {"actions": len(users), "problems": problems}
 
-    def _reload_engines(self) -> None:
-        """Offer the new chain's engines, keeping the one chosen if it is still
-        offered; otherwise the first, which is not the user's choice."""
+    def _offer_engines(self, preferred: str | None) -> None:
+        """Offer the chain's engines, with ``preferred`` chosen if it is
+        offered, else the first: not a choice of the user's, so the
+        observers, ``_on_engine`` among them, ignore it (``_set_up``)."""
         engines = self._actions.engines
         self._engines = [{"key": e.key, "label": e.label} for e in engines]
         keys = [e.key for e in engines]
-        if self._engine not in keys:
-            # As in __init__: _on_engine does not remember it.
-            self._engine_ready = False
-            try:
-                self._engine = keys[0] if keys else ""
-            finally:
-                self._engine_ready = True
+        set_up, self._set_up = self._set_up, False
+        try:
+            self._engine = preferred if preferred in keys else (keys[0] if keys else "")
+        finally:
+            self._set_up = set_up

@@ -4,10 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from jupyter_storage_explorer._explorer.common import (
-    error_text,
-    within_top,
-)
+from jupyter_storage_explorer._errors import error_text
+from jupyter_storage_explorer._explorer.common import within_top
 from jupyter_storage_explorer.filesystems.locations import LocalLocation
 
 

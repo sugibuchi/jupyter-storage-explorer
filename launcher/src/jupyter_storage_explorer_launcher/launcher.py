@@ -121,17 +121,21 @@ log = logging.getLogger("jupyter_storage_explorer.launcher")
 # Looked for in each Jupyter configuration directory.
 LAUNCHER_FILE = pathlib.Path("storage-explorer", "launcher.py")
 
+# The functions a launcher.py may have, besides parameters() and final(),
+# with how each one's values are merged with those of earlier layers (see the
+# module docstring); parameters() is merged parameter by parameter.
+_MERGES = {
+    "filesystems": "by name",
+    "plugin_options": "by plugin",
+    "actions": "first",
+    "engine_options": "by option",
+    "operations": "first",
+    "filesystem_mappers": "first",
+    "transfer_policy": "first",
+}
+
 # The functions a launcher.py may have, besides final().
-HOOKS = (
-    "filesystems",
-    "plugin_options",
-    "actions",
-    "engine_options",
-    "operations",
-    "filesystem_mappers",
-    "transfer_policy",
-    "parameters",
-)
+HOOKS = (*_MERGES, "parameters")
 
 # Former names of functions, taken for the new ones, also in final(). To be
 # removed in the major release.
@@ -152,23 +156,8 @@ RETIRED = {
 }
 
 # StorageExplorer arguments that are not "parameters": set by their own
-# function, or by the launcher.
-_NOT_PARAMETERS = frozenset(
-    {
-        "self",
-        "path",
-        "fs",
-        "filesystems",
-        "plugin_options",
-        "actions",
-        "engine_options",
-        # engine_options' former name (see ALIASES).
-        "format_options",
-        "operations",
-        "filesystem_mappers",
-        "transfer_policy",
-    }
-)
+# function (or one of its former names, see ALIASES), or by the launcher.
+_NOT_PARAMETERS = frozenset({"self", "path", "fs", *_MERGES, *ALIASES})
 
 
 class LauncherError(Exception):
@@ -220,18 +209,12 @@ class Settings:
             **self.parameters,
             **(SIDEBAR if sidebar else {}),
         }
-        if self.plugin_options:
-            kwargs["plugin_options"] = self.plugin_options
-        if self.actions:
-            kwargs["actions"] = list(self.actions)
-        if self.engine_options:
-            kwargs["engine_options"] = self.engine_options
-        if self.operations:
-            kwargs["operations"] = list(self.operations)
-        if self.filesystem_mappers:
-            kwargs["filesystem_mappers"] = list(self.filesystem_mappers)
-        if self.transfer_policy:
-            kwargs["transfer_policy"] = list(self.transfer_policy)
+        # The functions' values, as the explorer's arguments of their names:
+        # lists copied, so that the explorer never changes the settings.
+        for name in _MERGES:
+            value = getattr(self, name)
+            if name != "filesystems" and value:
+                kwargs[name] = list(value) if isinstance(value, list) else value
         filesystems = {k: v for k, v in self.filesystems.items() if v is not None}
         if filesystems:
             return (), {"filesystems": filesystems, **kwargs}
@@ -423,19 +406,6 @@ def _allowed(
     return False
 
 
-# How each function's values are merged with those of earlier layers (see the
-# module docstring); parameters() is merged parameter by parameter.
-_MERGES = {
-    "filesystems": "by name",
-    "plugin_options": "by plugin",
-    "actions": "first",
-    "engine_options": "by option",
-    "operations": "first",
-    "filesystem_mappers": "first",
-    "transfer_policy": "first",
-}
-
-
 def _load(path: pathlib.Path) -> Any:
     """Import ``path`` as a module of its own."""
     spec = importlib.util.spec_from_file_location(
@@ -549,7 +519,7 @@ def _check_parameter_name(name: str, path: pathlib.Path) -> None:
     if name in _NOT_PARAMETERS - {"self"}:
         raise LauncherError(
             f"{path}: parameters(): {name} is set by its own function, not parameters()"
-            if name in HOOKS or name in ALIASES
+            if name in _MERGES or name in ALIASES
             else f"{path}: parameters(): {name} is set by the launcher (use filesystems())"
         )
     if name not in _parameter_names():
@@ -557,7 +527,7 @@ def _check_parameter_name(name: str, path: pathlib.Path) -> None:
 
 
 def _check_final_name(name: str, path: pathlib.Path) -> None:
-    if name in HOOKS and name != "parameters":
+    if name in _MERGES:
         return
     if name not in _parameter_names():
         raise LauncherError(
