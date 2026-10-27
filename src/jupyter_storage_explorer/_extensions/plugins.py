@@ -12,6 +12,7 @@ from jupyter_storage_explorer.plugin import ENTRY_POINT_GROUP, StorageExplorerPl
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
     from importlib.metadata import EntryPoint
+    from typing import Self
 
     from jupyter_storage_explorer.actions import Action
     from jupyter_storage_explorer.filesystems.mapper import FileSystemMapper
@@ -19,6 +20,22 @@ if TYPE_CHECKING:
     from jupyter_storage_explorer.formats.base import DataFormat
 
 log = logging.getLogger(__name__)
+
+
+# Its attributes need a __dict__: a subclass of str takes no __slots__.
+class NotLoaded(str):  # noqa: SLOT000
+    """Why the plugin ``key`` was not loaded, as the warning says it, e.g.
+    "plugin 'x' not loaded: ImportError: ...": one of ``load_plugins``'
+    problems, with the ``reason`` alone, which "About" shows."""
+
+    def __new__(cls, key: str, reason: str) -> Self:
+        problem = super().__new__(cls, f"plugin {key!r} not loaded: {reason}")
+        problem.key = key
+        problem.reason = reason
+        return problem
+
+    key: str
+    reason: str
 
 
 def installed_plugins() -> dict[str, list[EntryPoint]]:
@@ -81,21 +98,19 @@ def _create(
     ``values``; None, and its reason in ``problems``, if it cannot be."""
     if len(registered) > 1:
         packages = sorted(str(e.dist.name if e.dist else e.value) for e in registered)
-        problems.append(f"plugin {name!r} not loaded: registered by {packages}")
+        problems.append(NotLoaded(name, f"registered by {packages}"))
         return None
     try:
         cls = registered[0].load()
     except Exception as exc:
-        problems.append(f"plugin {name!r} not loaded: {type(exc).__name__}: {exc}")
+        problems.append(NotLoaded(name, f"{type(exc).__name__}: {exc}"))
         return None
     if not (isinstance(cls, type) and issubclass(cls, StorageExplorerPlugin)):
-        problems.append(
-            f"plugin {name!r} not loaded: {cls!r} is no StorageExplorerPlugin"
-        )
+        problems.append(NotLoaded(name, f"{cls!r} is no StorageExplorerPlugin"))
         return None
     if getattr(cls, "key", None) != name:
         problems.append(
-            f"plugin {name!r} not loaded: its class's key is {getattr(cls, 'key', None)!r}"
+            NotLoaded(name, f"its class's key is {getattr(cls, 'key', None)!r}")
         )
         return None
     model = cls.options_model
@@ -108,7 +123,7 @@ def _create(
     try:
         plugin = cls(model(**values))
     except Exception as exc:
-        problems.append(f"plugin {name!r} not loaded: {type(exc).__name__}: {exc}")
+        problems.append(NotLoaded(name, f"{type(exc).__name__}: {exc}"))
         return None
     # Its package's metadata (name, description, version): the entry point's.
     plugin._distribution = registered[0].dist

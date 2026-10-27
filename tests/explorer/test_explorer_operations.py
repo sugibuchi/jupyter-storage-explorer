@@ -91,7 +91,12 @@ class TestRename:
     @pytest.mark.parametrize(
         ("path", "name", "unsafe", "error"),
         [
-            ("/data/sub", "other", False, "folders are renamed only in unsafe mode"),
+            (
+                "/data/sub",
+                "other",
+                False,
+                "folders are not renamed (turn on unsafe mode first)",
+            ),
             ("/", "other", True, "the top folder is not renamed"),
             ("/data/a.csv", "b.csv", False, "b.csv already exists"),
             ("/data/a.csv", "sub", False, "sub already exists"),

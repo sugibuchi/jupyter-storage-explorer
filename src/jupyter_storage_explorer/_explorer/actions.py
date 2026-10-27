@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from jupyter_storage_explorer._explorer.common import error_text
+from jupyter_storage_explorer._errors import error_text
 from jupyter_storage_explorer.actions import Action, CodeAction, ViewAction
 from jupyter_storage_explorer.actions.base import check_actions
 from jupyter_storage_explorer.actions.python import PythonEngine

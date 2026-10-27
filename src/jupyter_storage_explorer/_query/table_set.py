@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from jupyter_storage_explorer._explorer.common import error_text
+from jupyter_storage_explorer._errors import error_text
 from jupyter_storage_explorer.views import Leaf, TableSetView
 
 if TYPE_CHECKING:
@@ -128,6 +128,15 @@ class TableSet:
         if query is None:
             return {"error": "another table is shown; choose this one again"}
         return query.handle(content) or {}
+
+    def answer(self, content: dict[str, Any]) -> dict[str, Any]:
+        """Answer the panel's request: "table_set_open" (``choose``), else
+        the data browser's on the table its "path" names (see ``query_path``
+        and ``handle``)."""
+        if content.get("type") == "table_set_open":
+            return self.choose(content)
+        _, _, table = str(content.get("path", "")).partition(SEPARATOR)
+        return self.handle(content, table)
 
     def close(self) -> None:
         """Close the table's query, then the view (``View.close``)."""

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from jupyter_storage_explorer._explorer.common import SUMMARY_CHARS, error_text
+from jupyter_storage_explorer._errors import SUMMARY_CHARS, error_text
 
 
 class Py4JJavaError(Exception):

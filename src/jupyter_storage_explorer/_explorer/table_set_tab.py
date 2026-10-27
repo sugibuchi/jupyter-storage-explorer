@@ -11,7 +11,6 @@ import traitlets
 
 from jupyter_storage_explorer import _static
 from jupyter_storage_explorer._jobs.loader import Loader
-from jupyter_storage_explorer._query.table_set import SEPARATOR
 
 if TYPE_CHECKING:
     from jupyter_storage_explorer._query.table_set import TableSet
@@ -62,18 +61,8 @@ class TableSetTab(anywidget.AnyWidget):
         tables = self._table_set
         if tables is None or "rid" not in content:
             return
-        if content.get("type") == "table_set_open":
-
-            def work() -> dict[str, Any]:
-                return tables.choose(content)
-
-        else:
-            _, _, table = str(content.get("path", "")).partition(SEPARATOR)
-
-            def work() -> dict[str, Any]:
-                return tables.handle(content, table)
 
         def reply(answer: dict[str, Any]) -> None:
             self.send({"type": "reply", "rid": content["rid"], **answer})
 
-        self._loader.answer(tables, work, reply)
+        self._loader.answer(tables, lambda: tables.answer(content), reply)

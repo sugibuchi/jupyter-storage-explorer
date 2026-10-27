@@ -6,15 +6,12 @@ import os
 from typing import TYPE_CHECKING, Any
 
 from jupyter_storage_explorer import _paths
-from jupyter_storage_explorer._explorer.common import (
-    error_text,
-    explorers,
-)
+from jupyter_storage_explorer._errors import error_text
+from jupyter_storage_explorer._explorer.common import explorers
 from jupyter_storage_explorer._jobs import properties
 from jupyter_storage_explorer._jobs.tasks import FileTasks, Plan
 from jupyter_storage_explorer._jobs.transfer_policy import computer_url
 from jupyter_storage_explorer.base import Location
-from jupyter_storage_explorer.util import format_size
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -50,15 +47,9 @@ class FileRequestsMixin:
                 )
                 if refused is not None:
                     raise PermissionError(refused)
-                info = self._info(path)
-                if info.get("type") == "directory":
-                    raise ValueError("folders cannot be downloaded")
-                size = info.get("size")
-                if size is not None and size > _MAX_DOWNLOAD_BYTES:
-                    raise ValueError(
-                        f"too large to download (over {format_size(_MAX_DOWNLOAD_BYTES)})"
-                    )
-                data = self._read_bytes(path)
+                _, data = self._read_whole(
+                    path, _MAX_DOWNLOAD_BYTES, to="download", done="downloaded"
+                )
             except Exception as exc:
                 reply["error"] = f"{_paths.basename(path)}: {exc}"
                 self.send(reply)

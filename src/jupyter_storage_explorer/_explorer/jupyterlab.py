@@ -7,12 +7,9 @@ from typing import TYPE_CHECKING, Any
 
 from fsspec.implementations.local import LocalFileSystem
 
+from jupyter_storage_explorer._errors import error_text
 from jupyter_storage_explorer._explorer import jupyterlab_files
-from jupyter_storage_explorer._explorer.common import (
-    error_text,
-    within_top,
-)
-from jupyter_storage_explorer.util import format_size
+from jupyter_storage_explorer._explorer.common import within_top
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -112,16 +109,13 @@ class JupyterLabFilesMixin:
         jupyterlab_files.contents_model), or {"error"}."""
         try:
             fs, path = self._jupyterlab_file(content)
-            info = self._info(path, fs)
-            if info.get("type") == "directory":
-                raise ValueError("folders cannot be opened in JupyterLab")
-            size = info.get("size")
-            if size is not None and size > jupyterlab_files.MAX_BYTES:
-                raise ValueError(
-                    f"too large to open in JupyterLab "
-                    f"(over {format_size(jupyterlab_files.MAX_BYTES)})"
-                )
-            data = self._read_bytes(path, fs)
+            info, data = self._read_whole(
+                path,
+                jupyterlab_files.MAX_BYTES,
+                to="open in JupyterLab",
+                done="opened in JupyterLab",
+                fs=fs,
+            )
             model = jupyterlab_files.contents_model(
                 path,
                 data,

@@ -9,7 +9,7 @@ import time
 from typing import TYPE_CHECKING, Any
 
 from jupyter_storage_explorer import _paths
-from jupyter_storage_explorer._explorer.common import error_text
+from jupyter_storage_explorer._errors import error_text
 from jupyter_storage_explorer._jobs.tasks import FileTasks, Plan, Task
 from jupyter_storage_explorer._jobs.transfer_policy import jupyterlab_url
 

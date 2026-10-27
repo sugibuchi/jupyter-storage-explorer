@@ -7,7 +7,7 @@ import base64
 from importlib.metadata import PackageNotFoundError, distribution, version
 from typing import TYPE_CHECKING, Any
 
-from jupyter_storage_explorer._extensions.plugins import installed_plugins
+from jupyter_storage_explorer._extensions.plugins import NotLoaded, installed_plugins
 from jupyter_storage_explorer._static import STATIC
 from jupyter_storage_explorer.plugin import (
     homepage,
@@ -100,8 +100,7 @@ class AboutMixin:
 
     def _plugin_note(self, key: str) -> str:
         """Why the plugin ``key`` is not used."""
-        prefix = f"plugin {key!r} not loaded: "
-        problem = next((p for p in self._plugin_problems if p.startswith(prefix)), None)
-        if problem is not None:
-            return f"Not loaded: {problem.removeprefix(prefix)}"
+        for problem in self._plugin_problems:
+            if isinstance(problem, NotLoaded) and problem.key == key:
+                return f"Not loaded: {problem.reason}"
         return "Disabled"

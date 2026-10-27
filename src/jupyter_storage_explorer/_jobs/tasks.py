@@ -268,24 +268,43 @@ class FileTasks:
             target = _paths.join(dest, name)
             if _paths.norm(path) == _paths.norm(target):
                 continue  # already in that folder
-            if (refused := self._refused(self.fs, path, self.fs, target)) is not None:
-                errors.append(f"{name}: {refused}")
-            elif not self.fs.isdir(path):
-                moves.append((path, target, False))
-            elif not folders:
-                errors.append(
-                    f"{name}: folders are not moved (turn on unsafe mode first)"
+            refused = self._refused(self.fs, path, self.fs, target)
+            is_folder = refused is None and self.fs.isdir(path)
+            if is_folder:
+                refused = self._folder_refusal(
+                    path, "moved", folders, into=dest, target=target
                 )
-            elif _paths.norm(path) == _paths.norm(self.root):
-                errors.append(f"{name}: the top folder is not moved")
-            elif _paths.inside(dest, path):
-                errors.append(f"{name}: a folder cannot be moved into itself")
-            elif self.fs.exists(target):
-                # Folders are never merged into, or replace, what is there.
-                errors.append(f"{name}: already exists in that folder")
+            if refused is not None:
+                errors.append(f"{name}: {refused}")
             else:
-                moves.append((path, target, True))
+                moves.append((path, target, is_folder))
         return moves, errors
+
+    def _folder_refusal(
+        self,
+        path: str,
+        verb: str,
+        folders: bool,
+        *,
+        into: str | None = None,
+        target: str | None = None,
+        same: bool = True,
+    ) -> str | None:
+        """Why the folder at ``path`` is not ``verb``, e.g. "moved", or None.
+        Folders are handled only with ``folders`` (unsafe mode), never the
+        top folder, never into themselves (``into``: the folder it goes into),
+        and never onto what is at ``target``. ``same``: ``path`` is on ``fs``,
+        whose top folder and folders it may be."""
+        if not folders:
+            return f"folders are not {verb} (turn on unsafe mode first)"
+        if same and _paths.norm(path) == _paths.norm(self.root):
+            return f"the top folder is not {verb}"
+        if same and into is not None and _paths.inside(into, path):
+            return f"a folder cannot be {verb} into itself"
+        if target is not None and self.fs.exists(target):
+            # Folders are never merged into, or replace, what is there.
+            return "already exists in that folder"
+        return None
 
     # --- Rename: a move within the item's folder ---
 
@@ -304,10 +323,8 @@ class FileTasks:
         if _paths.norm(target) == _paths.norm(path):
             return {"error": "that is its name already"}
         is_dir = self.fs.isdir(path)
-        if is_dir and not folders:
-            return {"error": "folders are renamed only in unsafe mode"}
-        if is_dir and _paths.norm(path) == _paths.norm(self.root):
-            return {"error": "the top folder is not renamed"}
+        if is_dir and (refused := self._folder_refusal(path, "renamed", folders)):
+            return {"error": refused}
         if self.fs.exists(target):
             return {"error": f"{name} already exists"}
         if (refused := self._refused(self.fs, path, self.fs, target)) is not None:
@@ -366,12 +383,10 @@ class FileTasks:
         for path in paths:
             name = _paths.basename(path)
             is_folder = self.fs.isdir(path)
-            if is_folder and not folders:
-                errors.append(
-                    f"{name}: folders are not deleted (turn on unsafe mode first)"
-                )
-            elif is_folder and _paths.norm(path) == _paths.norm(self.root):
-                errors.append(f"{name}: the top folder is not deleted")
+            if is_folder and (
+                refused := self._folder_refusal(path, "deleted", folders)
+            ):
+                errors.append(f"{name}: {refused}")
             else:
                 items.append((path, is_folder))
         return items, errors
@@ -526,21 +541,17 @@ class FileTasks:
             refused = self._refused(
                 None if from_jupyterlab else source_fs, source, self.fs, target
             )
+            if refused is None and is_folder:
+                refused = self._folder_refusal(
+                    source,
+                    verb,
+                    folders,
+                    into=dest,
+                    target=target,
+                    same=self.same_filesystem(source_fs, self.fs),
+                )
             if refused is not None:
                 errors.append(f"{name}: {refused}")
-            elif is_folder and not folders:
-                errors.append(
-                    f"{name}: folders are not {verb} (turn on unsafe mode first)"
-                )
-            elif (
-                is_folder
-                and self.same_filesystem(source_fs, self.fs)
-                and _paths.inside(dest, source)
-            ):
-                errors.append(f"{name}: a folder cannot be {verb} into itself")
-            elif is_folder and self.fs.exists(target):
-                # Folders are never merged into, or replace, what is there.
-                errors.append(f"{name}: already exists in that folder")
             else:
                 plans.append(_Copy(source_fs, source, target))
         return plans

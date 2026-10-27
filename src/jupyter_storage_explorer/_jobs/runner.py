@@ -25,6 +25,7 @@ import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from jupyter_storage_explorer._errors import error_text
 from jupyter_storage_explorer._jobs.progress import JobProgress
 from jupyter_storage_explorer.filesystems.operation import OperationCancelled
 
@@ -78,6 +79,15 @@ class _Inline(concurrent.futures.Executor):
         return future
 
 
+def running_loop() -> asyncio.AbstractEventLoop | None:
+    """The kernel's asyncio loop, running on this thread; None without one
+    (tests, scripts), where work then runs synchronously."""
+    try:
+        return asyncio.get_running_loop()
+    except RuntimeError:
+        return None
+
+
 def main_thread(
     loop: asyncio.AbstractEventLoop | None,
 ) -> Callable[[Callable[[], None], contextvars.Context], Any]:
@@ -102,10 +112,7 @@ class JobRunner:
         self._prefix = prefix
         self.jobs: dict[str, Job] = {}
         self._ids = itertools.count(1)
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            loop = None
+        loop = running_loop()
         self._main = main_thread(loop)
         if loop is not None:
             self._executor: concurrent.futures.Executor = (
@@ -196,10 +203,6 @@ class JobRunner:
             except OperationCancelled:
                 job.state = "cancelled"
             except Exception as exc:
-                from jupyter_storage_explorer._explorer.common import (  # noqa: PLC0415
-                    error_text,
-                )
-
                 log.exception("job %s (%s) failed", job.id, job.title)
                 job.state = "failed"
                 # As loads' errors: a readable first line (e.g. Spark's).

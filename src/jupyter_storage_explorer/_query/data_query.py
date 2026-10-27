@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 
 import narwhals as nw
 
-from jupyter_storage_explorer._explorer.common import error_text
+from jupyter_storage_explorer._errors import error_text
 from jupyter_storage_explorer._json import jsonable
 from jupyter_storage_explorer._query.filters import (
     build_query,
@@ -533,3 +533,33 @@ class DataQuery:
                 took,
             )
         return reply
+
+
+def read_again(content: dict[str, Any], answer: dict[str, Any]) -> bool:
+    """Whether ``answer``, the reply to the data browser's request
+    ``content``, read the data again: a reload that worked, after which
+    ``result()`` may differ with the same settings."""
+    return content.get("type") == "query_reload" and "error" not in answer
+
+
+class ResultWatch:
+    """What a ``result()`` was last built from, as the functions told of its
+    changes (``on_change``, ``on_query_change``) last heard: the query and
+    its ``result_settings()``."""
+
+    def __init__(self, data: DataQuery | None = None) -> None:
+        self._basis = self._of(data)
+
+    @staticmethod
+    def _of(data: DataQuery | None) -> tuple[DataQuery, dict[str, Any]] | None:
+        return None if data is None else (data, data.result_settings())
+
+    def changed(self, data: DataQuery | None, *, reloaded: bool = False) -> bool:
+        """Whether the result of ``data`` (None: no query) has changed since
+        the last call: another query, other settings, or the data read again
+        (``reloaded``)."""
+        basis = self._of(data)
+        if basis == self._basis and not (reloaded and data is not None):
+            return False
+        self._basis = basis
+        return True

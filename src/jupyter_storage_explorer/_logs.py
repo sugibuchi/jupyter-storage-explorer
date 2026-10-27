@@ -184,10 +184,8 @@ def configure(level: str, backups: int | None) -> None:
     logger = logging.getLogger(LOGGER_NAME)
     target = ("console",) if backups is None else ("files", log_folder(), backups)
     with _lock:
-        if _handler is not None and (level == DISABLED or target != _target):
-            logger.removeHandler(_handler)
-            _handler.close()
-            _handler, _target = None, None
+        if level == DISABLED or target != _target:
+            _remove_handler(logger)
         if level == DISABLED:
             logger.setLevel(logging.CRITICAL + 1)
             return
@@ -206,11 +204,17 @@ def configure(level: str, backups: int | None) -> None:
 def reset() -> None:
     """Undo ``configure``: the package's logger as Python makes it. For
     tests."""
-    global _handler, _target
     logger = logging.getLogger(LOGGER_NAME)
     with _lock:
-        if _handler is not None:
-            logger.removeHandler(_handler)
-            _handler.close()
-            _handler, _target = None, None
+        _remove_handler(logger)
         logger.setLevel(logging.NOTSET)
+
+
+def _remove_handler(logger: logging.Logger) -> None:
+    """Remove and close the handler configure() added, if any. With _lock
+    held."""
+    global _handler, _target
+    if _handler is not None:
+        logger.removeHandler(_handler)
+        _handler.close()
+        _handler, _target = None, None

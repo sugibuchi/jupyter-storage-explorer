@@ -13,11 +13,12 @@ from functools import partial
 from typing import TYPE_CHECKING, Any, NamedTuple
 
 from jupyter_storage_explorer import _paths
-from jupyter_storage_explorer._explorer.common import error_text, explorers
+from jupyter_storage_explorer._errors import error_text
+from jupyter_storage_explorer._explorer.common import explorers
 from jupyter_storage_explorer._explorer.table_set_tab import TableSetTab
 from jupyter_storage_explorer._explorer.view_tab import ViewTab
 from jupyter_storage_explorer._json import jsonable
-from jupyter_storage_explorer._query.data_query import DataQuery
+from jupyter_storage_explorer._query.data_query import DataQuery, read_again
 from jupyter_storage_explorer._query.table_set import SEPARATOR, TableSet
 from jupyter_storage_explorer.actions.python import PythonEngine
 from jupyter_storage_explorer.base import ItemContext
@@ -42,6 +43,7 @@ if TYPE_CHECKING:
 
     from jupyter_storage_explorer._explorer.actions import Recipe
     from jupyter_storage_explorer.actions import ViewAction
+    from jupyter_storage_explorer.base import Location
     from jupyter_storage_explorer.formats import DataFormat
 
 log = logging.getLogger(__name__)
@@ -162,27 +164,40 @@ def _layered_fetch(
     return fetch
 
 
-class _TableRead:
-    """How the data browser reads a table set's table: with its loader,
-    ``load(again)``, keeping the ``QueryView`` it gave, if any, which tells
-    whether its rows are cut short (``more``) and how to read them
-    (``fetch``), and is closed once replaced or no longer shown."""
+class _ViewRead:
+    """How the data browser reads its data: with ``load(again)``, which gives
+    the data or a ``QueryView`` of it, e.g. a table set's loader. The
+    ``QueryView`` given last, if any, tells whether its rows are cut short
+    (``more``) and how to read them (``fetch``), and is closed once replaced
+    or no longer shown. ``first``: a ``QueryView`` just viewed, whose data
+    is read first rather than loaded twice."""
 
-    def __init__(self, load: Callable[[bool], Any]) -> None:
+    def __init__(
+        self, load: Callable[[bool], Any], first: QueryView | None = None
+    ) -> None:
         self._load = load
-        self.loaded: QueryView | None = None
-        # Whether the table was read: the next read is a reload.
+        self._first = first
+        self.loaded = first
+        # Whether the data was read: the next read is a reload.
         self.read = False
 
     def source(self) -> Any:
+        if self._first is not None and not self.read:
+            self.read = True
+            return self._first.data
         data = self._load(self.read)
         self.read = True
         if isinstance(data, QueryView):
-            previous, self.loaded = self.loaded, data
+            previous, self.loaded, self._first = self.loaded, data, None
             if previous is not None:
                 previous.close()
             return data.data
         return data
+
+    def rewind(self) -> None:
+        """Make the next read the first again, of the same data: after a
+        query that could not open with it."""
+        self.read = False
 
     def cut(self) -> bool:
         return self.loaded is not None and self.loaded.more
@@ -201,6 +216,45 @@ class _Loaded(NamedTuple):
 
     shown: View | DataQuery | TableSet | _Asking | None
     preview: dict[str, Any]
+
+
+def _empty_preview(path: str, action: int | None) -> dict[str, Any]:
+    """A preview of ``path``, or a view tab's, before its reads fill it in
+    (see ``PreviewsMixin._read_preview``)."""
+    return {
+        "path": path,
+        "name": _paths.basename(path),
+        "format": None,
+        "engine": None,
+        "engine_label": "",
+        "action": action,
+        "sections": [],
+        "error": "",
+    }
+
+
+def _failed(
+    preview: dict[str, Any],
+    shown: View | DataQuery | TableSet | _Asking | None,
+    exc: Exception,
+    what: str,
+) -> _Loaded:
+    """A preview's load whose reads raised ``exc``: ``preview`` with the
+    error, logged as the item ``what`` (e.g. "cannot be previewed"), and
+    ``shown``, what they made so far, closed."""
+    preview["error"] = error_text(exc)
+    # The user sees the error; its traceback is for DEBUG.
+    log.warning(
+        "%s %s: %s",
+        preview["path"],
+        what,
+        preview["error"],
+        exc_info=log.isEnabledFor(logging.DEBUG),
+    )
+    # Nothing shows it: released at once.
+    if shown is not None:
+        shown.close()
+    return _Loaded(None, preview)
 
 
 def _close_views_at_exit() -> None:
@@ -479,22 +533,25 @@ class PreviewsMixin:
         """
         if self._preview_load is not None:
             self._preview_load.cancel()
-        base = {
-            "path": path,
-            "name": _paths.basename(path),
-            "format": None,
-            "engine": None,
-            "engine_label": "",
-            "action": action,
-            "sections": [],
-            "error": "",
-        }
+        base = _empty_preview(path, action)
         # Shown while the (possibly remote) reads run.
         self._preview = {**base, "loading": True}
-        # What the worker needs of the explorer, as it is now: the storage
-        # shown and the engine chosen may change while it reads.
+        self._submit_preview(path, self._preview_work(base, format, engine, action))
+
+    def _preview_work(
+        self,
+        base: dict[str, Any],
+        format: str | None,
+        engine: str | EllipsisType | None,
+        action: int | None,
+        verb: str = "previewed",
+    ) -> Callable[[], _Loaded]:
+        """The reads of a preview, or of a view tab, as a load's work: they
+        fill a copy of ``base`` (see ``_read_preview``). What they need of
+        the explorer is taken now, as the storage shown and the engine chosen
+        may change while they run."""
         chosen = self._engine or None
-        detection = self._detection(path, self._fs)
+        detection = self._detection(base["path"], self._fs)
 
         def work() -> _Loaded:
             return self._read_preview(
@@ -504,9 +561,10 @@ class PreviewsMixin:
                 engine=engine,
                 action=action,
                 chosen=chosen,
+                verb=verb,
             )
 
-        self._submit_preview(path, work)
+        return work
 
     def _submit_preview(self, path: str, work: Callable[[], _Loaded]) -> None:
         """Run a preview's reads, ``work``, as a load, then show what it read
@@ -563,20 +621,12 @@ class PreviewsMixin:
         view of ``value``, the answer to ``asking``."""
         shown: View | DataQuery | TableSet | _Asking | None = None
         try:
-            view = asking.viewer.answer(asking.view, value)
-            shown = view
-            shown = self._show(view, asking.viewer, asking.item, preview)
+            shown = asking.viewer.answer(asking.view, value)
+            shown = self._show(shown, asking.viewer, asking.item, preview)
         except Exception as exc:
-            preview["error"] = error_text(exc)
-            log.warning(
-                "%s cannot be viewed with the answer given: %s",
-                preview["path"],
-                preview["error"],
-                exc_info=log.isEnabledFor(logging.DEBUG),
+            return _failed(
+                preview, shown, exc, "cannot be viewed with the answer given"
             )
-            if shown is not None:
-                shown.close()
-            shown = None
         return _Loaded(shown, preview)
 
     def _read_preview(
@@ -617,19 +667,7 @@ class PreviewsMixin:
                 shown = viewer()
                 shown = self._show(shown, viewer, item, preview)
         except Exception as exc:
-            preview["error"] = error_text(exc)
-            # The user sees the error; its traceback is for DEBUG.
-            log.warning(
-                "%s cannot be %s: %s",
-                path,
-                verb,
-                preview["error"],
-                exc_info=log.isEnabledFor(logging.DEBUG),
-            )
-            # Nothing shows it: released at once.
-            if shown is not None:
-                shown.close()
-            shown = None
+            return _failed(preview, shown, exc, f"cannot be {verb}")
         return _Loaded(shown, preview)
 
     def _show(
@@ -736,10 +774,7 @@ class PreviewsMixin:
         """Call the ``on_query_change`` functions if ``query_result()`` has
         changed since they last were: another query shown (or none), other
         filters, sort or columns, or the data read again (``reloaded``)."""
-        data = self._shown_query()
-        basis = None if data is None else (data, data.result_settings())
-        if basis != self._query_basis or (reloaded and data is not None):
-            self._query_basis = basis
+        if self._query_watch.changed(self._shown_query(), reloaded=reloaded):
             self._query_callbacks(self)
 
     def _new_query(
@@ -753,44 +788,39 @@ class PreviewsMixin:
         the view its data came from: each reload's view replaces it (closed
         once the new one is open), and closing the query closes the last.
         """
-        first = [view.data]
-        # The view the query's data is from, the only one open.
-        current = [view]
 
-        def source() -> Any:
-            if first:  # the data just viewed, not read twice
-                return first.pop()
+        def load(_again: bool) -> QueryView:
             again = viewer()
             if not isinstance(again, QueryView):
                 again.close()
                 raise ValueError(f"{item.ctx.name} cannot be queried now")
-            previous, current[0] = current[0], again
-            previous.close()
-            return again.data
+            return again
 
-        def close() -> None:
-            current[0].close()
+        return self._data_query(item.ctx.location, _ViewRead(load, view))
 
-        key = item.ctx.location
+    def _data_query(self, key: Location | str, reading: _ViewRead) -> DataQuery:
+        """The data browser's query of what ``reading`` reads, its settings
+        remembered under ``key``, with the mode last chosen for it."""
         state = self._states.query(key)
         mode = state.mode if state is not None else "auto"
         limits = self._view_limits
         options = {
-            "fetch": _layered_fetch(self._fetch_rows, lambda: current[0].fetch),
-            "cut": lambda: current[0].more,
+            "fetch": _layered_fetch(self._fetch_rows, reading.view_fetch),
+            "cut": reading.cut,
             "max_live_rows": limits.max_live_rows,
             "max_memory_rows": limits.max_memory_rows,
             "page_rows": limits.max_display_rows,
-            "on_close": close,
+            "on_close": reading.close,
         }
         try:
-            return DataQuery(source, key, self._states, mode=mode, **options)
+            return DataQuery(reading.source, key, self._states, mode=mode, **options)
         except ValueError:
             if mode != "live":
                 raise
-            # "live" chosen when the format scanned lazily, and no longer does.
-            first.append(view.data)
-            return DataQuery(source, key, self._states, **options)
+            # "live" chosen when the data was lazy, and no longer is: read
+            # again from the same view, not a reload.
+            reading.rewind()
+            return DataQuery(reading.source, key, self._states, **options)
 
     def _table_set(
         self, view: TableSetView, viewer: Callable[[], View], item: _Detected
@@ -808,35 +838,9 @@ class PreviewsMixin:
         the mode last chosen for it.
         """
         url = item.ctx.location.url
-        limits = self._view_limits
-        options = {
-            "max_live_rows": limits.max_live_rows,
-            "max_memory_rows": limits.max_memory_rows,
-            "page_rows": limits.max_display_rows,
-        }
 
         def make_query(table: str, load: Callable[[bool], Any]) -> DataQuery:
-            key = f"{url}#{table}"
-            state = self._states.query(key)
-            mode = state.mode if state is not None else "auto"
-            reading = _TableRead(load)
-            table_options = {
-                **options,
-                "fetch": _layered_fetch(self._fetch_rows, reading.view_fetch),
-                "cut": reading.cut,
-                "on_close": reading.close,
-            }
-            try:
-                return DataQuery(
-                    reading.source, key, self._states, mode=mode, **table_options
-                )
-            except ValueError:
-                if mode != "live":
-                    raise
-                # "live" chosen when the table was lazy, and no longer is:
-                # read again from the same view, not a reload.
-                reading.read = False
-                return DataQuery(reading.source, key, self._states, **table_options)
+            return self._data_query(f"{url}#{table}", _ViewRead(load))
 
         return TableSet(view, make_query, viewer)
 
@@ -867,32 +871,14 @@ class PreviewsMixin:
             return {"error": f"{path} has no URL, so it cannot be viewed"}
         load_id = f"view-{next(self._view_tab_ids)}"
         title = _paths.basename(path)
-        base = {
-            "path": path,
-            "name": title,
-            "format": None,
-            "engine": None,
-            "engine_label": "",
-            "sections": [],
-            "error": "",
-        }
-        format, engine = content.get("format") or None, content.get("engine", ...)
         action = action_id(content.get("action"))
-        # As for a preview: what the worker needs of the explorer, as it is now.
-        chosen = self._engine or None
-        detection = self._detection(path, self._fs)
-
-        def work() -> _Loaded:
-            return self._read_preview(
-                dict(base),
-                detection=detection,
-                format=format,
-                engine=engine,
-                action=action,
-                chosen=chosen,
-                verb="viewed",
-            )
-
+        work = self._preview_work(
+            _empty_preview(path, action),
+            content.get("format") or None,
+            content.get("engine", ...),
+            action,
+            verb="viewed",
+        )
         self._submit_view_tab(load_id, title, work)
         return {"load_id": load_id, "title": title, "url": location.url}
 
@@ -1060,21 +1046,15 @@ class PreviewsMixin:
 
         def reply(answer: dict[str, Any]) -> None:
             self._reply(content, answer)
-            self._query_changed(
-                reloaded=kind == "query_reload" and "error" not in answer
-            )
+            self._query_changed(reloaded=read_again(content, answer))
 
-        path, separator, table = content["path"].partition(SEPARATOR)
+        path, separator, _ = content["path"].partition(SEPARATOR)
         if kind == "table_set_open" or separator:
             tables = self._table_sets.get(path)
             if tables is None:
                 reply({"error": "the tables are no longer open; preview them again"})
-            elif kind == "table_set_open":
-                self._loader.answer(tables, lambda: tables.choose(content), reply)
             else:
-                self._loader.answer(
-                    tables, lambda: tables.handle(content, table), reply
-                )
+                self._loader.answer(tables, lambda: tables.answer(content), reply)
             return
         data = self._queries.get(path)
         if data is None:
