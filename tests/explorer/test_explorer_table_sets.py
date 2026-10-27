@@ -320,7 +320,7 @@ class TestViewTab:
 
     def test_tables_in_a_tab(self, local, tables, tab):
         assert isinstance(tab, TableSetTab)
-        assert (tab.title, tab.tables["table"]) == ("db.txt", "a")
+        assert (tab._title, tab._tables["table"]) == ("db.txt", "a")
         reply = self.ask(tab, {"type": "table_set_open", "table": "b"})
         assert reply["table"] == "b"
         reply = self.ask(

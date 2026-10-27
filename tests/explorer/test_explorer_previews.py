@@ -365,7 +365,7 @@ class TestPreviewLoadsInTheBackground:
             return explorer._view_tabs[loaded["model_id"]]
 
         tab = self.run(memfs, test)
-        assert (tab.title, tab.view["text"]) == ("a.txt", "a.txt")
+        assert (tab._title, tab._view["text"]) == ("a.txt", "a.txt")
 
     def test_a_view_tab_closed_while_loading(self, memfs, monkeypatch):
         closed = []
@@ -634,8 +634,8 @@ class TestViewTab:
         reply = local.view_tab(path)
         tab = local._view_tabs[reply["model_id"]]
         assert isinstance(tab, ViewTab)
-        assert (tab.title, tab.label) == ("notes.txt", "Text")
-        assert (tab.view["kind"], tab.view["text"]) == ("text", "hello\n")
+        assert (tab._title, tab._label) == ("notes.txt", "Text")
+        assert (tab._view["kind"], tab._view["text"]) == ("text", "hello\n")
 
     def test_view_tabs_load_markdown_libraries(self):
         tab = ViewTab(

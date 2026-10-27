@@ -30,10 +30,10 @@ class ViewTab(anywidget.AnyWidget):
     _css = _static.css("view_tab")
 
     # The view, as the frontend renders it: {"kind", ...its fields}.
-    view = traitlets.Dict().tag(sync=True)
+    _view = traitlets.Dict().tag(sync=True)
     # The tab's title bar: the item's name, and its format's label.
-    title = traitlets.Unicode().tag(sync=True)
-    label = traitlets.Unicode().tag(sync=True)
+    _title = traitlets.Unicode().tag(sync=True)
+    _label = traitlets.Unicode().tag(sync=True)
 
     def __init__(
         self,
@@ -44,7 +44,7 @@ class ViewTab(anywidget.AnyWidget):
         on_close: Callable[[], object] | None = None,
         on_answer: Callable[[dict[str, Any]], object] | None = None,
     ) -> None:
-        super().__init__(view=view, title=title, label=label)
+        super().__init__(_view=view, _title=title, _label=label)
         # The view's own close, called when the tab closes the widget.
         self._on_close = on_close
         # Given the answer to the prompt shown, if one is.
@@ -64,7 +64,7 @@ class ViewTab(anywidget.AnyWidget):
         answer."""
         self._on_close = on_close
         self._on_answer = on_answer
-        self.view = view
+        self._view = view
 
     def close(self) -> None:
         self._release()

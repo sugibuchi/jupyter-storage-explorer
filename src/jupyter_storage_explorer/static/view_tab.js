@@ -21,8 +21,8 @@ function render({ model, el }) {
   };
 
   function renderHead() {
-    title.textContent = title.title = visible(model.get("title"));
-    badge.textContent = model.get("label");
+    title.textContent = title.title = visible(model.get("_title"));
+    badge.textContent = model.get("_label");
   }
 
   // A prompt's answer goes to the kernel, which shows the view of it in the
@@ -30,14 +30,14 @@ function render({ model, el }) {
   const actions = { answer: (content) => model.send({ type: "answer", ...content }), widgetManager: model.widget_manager };
 
   function renderView() {
-    body.replaceChildren(renderSection(model.get("view"), actions));
+    body.replaceChildren(renderSection(model.get("_view"), actions));
   }
 
   const onCustomMsg = (msg) => msg.type === "reply" && onReply(msg);
   const handlers = {
-    "change:title": renderHead,
-    "change:label": renderHead,
-    "change:view": renderView,
+    "change:_title": renderHead,
+    "change:_label": renderHead,
+    "change:_view": renderView,
     "msg:custom": onCustomMsg,
   };
   for (const [event, handler] of Object.entries(handlers)) model.on(event, handler);

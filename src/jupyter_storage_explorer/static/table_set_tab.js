@@ -28,22 +28,22 @@ function render({ model, el }) {
   let panel = null;
 
   function renderHead() {
-    title.textContent = title.title = visible(model.get("title"));
-    badge.textContent = model.get("label");
+    title.textContent = title.title = visible(model.get("_title"));
+    badge.textContent = model.get("_label");
   }
 
   function renderTables() {
     panel?.dispose();
     // The kernel's requests need no item path: the tab shows one item.
-    panel = createTableSetPanel({ request, ask, answer, flash }, "", model.get("tables"));
+    panel = createTableSetPanel({ request, ask, answer, flash }, "", model.get("_tables"));
     body.replaceChildren(panel.el);
   }
 
   const onCustomMsg = (msg) => msg.type === "reply" && onReply(msg);
   const handlers = {
-    "change:title": renderHead,
-    "change:label": renderHead,
-    "change:tables": renderTables,
+    "change:_title": renderHead,
+    "change:_label": renderHead,
+    "change:_tables": renderTables,
     "msg:custom": onCustomMsg,
   };
   for (const [event, handler] of Object.entries(handlers)) model.on(event, handler);

@@ -175,10 +175,10 @@ class TestViewTab:
         assert asking["asking"] is True
         tab = explorer._view_tabs[asking["model_id"]]
         assert isinstance(tab, ViewTab)
-        assert tab.view["kind"] == "choice"
+        assert tab._view["kind"] == "choice"
         tab._on_custom_msg(
             tab,
-            {"type": "answer", "prompt": tab.view["prompt"], "value": "Lower"},
+            {"type": "answer", "prompt": tab._view["prompt"], "value": "Lower"},
             None,
         )
         # The view in a widget of its own, for the same tab.
@@ -186,7 +186,7 @@ class TestViewTab:
         assert viewed["load_id"] == asking["load_id"]
         assert "asking" not in viewed
         view = explorer._view_tabs[viewed["model_id"]]
-        assert view.view["text"] == "a.txt"
+        assert view._view["text"] == "a.txt"
         # The tab lets the prompt's widget go: the prompt stays with the view.
         explorer.message({"type": "view_tab_closed", "model_id": asking["model_id"]})
         assert events == ["made lower"]
@@ -199,9 +199,9 @@ class TestViewTab:
         [asking] = self.loaded(explorer)
         tab = explorer._view_tabs[asking["model_id"]]
         tab._on_custom_msg(
-            tab, {"type": "answer", "prompt": tab.view["prompt"], "cancel": True}, None
+            tab, {"type": "answer", "prompt": tab._view["prompt"], "cancel": True}, None
         )
-        assert tab.view == {"kind": "notice", "text": "Not viewed", "again": False}
+        assert tab._view == {"kind": "notice", "text": "Not viewed", "again": False}
         assert events == ["closed"]
 
     def test_an_error_after_the_answer(self, memfs):
@@ -211,10 +211,10 @@ class TestViewTab:
         tab = explorer._view_tabs[asking["model_id"]]
         tab._on_custom_msg(
             tab,
-            {"type": "answer", "prompt": tab.view["prompt"], "value": "Broken"},
+            {"type": "answer", "prompt": tab._view["prompt"], "value": "Broken"},
             None,
         )
-        assert tab.view == {"kind": "error", "text": "no such case"}
+        assert tab._view == {"kind": "error", "text": "no such case"}
         assert len(self.loaded(explorer)) == 1  # the tab keeps the widget
 
 
