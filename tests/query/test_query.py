@@ -126,6 +126,23 @@ class TestNormalizeSettings:
         )
         assert settings["filters"] == {}
 
+    def test_blank_text_bound_is_open(self):
+        # As the browser shows it: "name >= a", not also "<= '  '".
+        settings = normalize_settings(
+            {"filters": {"name": {"op": "range", "min": " a", "max": "  "}}}, SCHEMA
+        )
+        assert settings["filters"]["name"] == {
+            "op": "range",
+            "min": " a",  # text keeps its spaces
+            "max": "",
+            "case_sensitive": True,
+        }
+
+    def test_every_column_hidden_shows_them(self):
+        # As the browser, which keeps a column shown.
+        settings = normalize_settings({"hidden": list(SCHEMA)}, SCHEMA)
+        assert settings["hidden"] == []
+
 
 class TestFilters:
     """Each filter, run by each library."""
@@ -467,6 +484,25 @@ class TestModes:
         query = mode_query()
         query.handle({"type": "query_mode", "mode": "memory"})
         assert query.handle({"type": "query_reload"})["mode"]["mode"] == "memory"
+
+    def test_failed_reload_leaves_the_query_as_it_was(self):
+        # The new data is given, then fails when its first rows are read.
+        broken = BIG.lazy().select(pl.col("missing"))
+        frames = iter([BIG.lazy(), broken])
+        query = mode_query(lambda: next(frames))
+        native = query.native
+        assert "error" in query.handle({"type": "query_reload"})
+        assert query.native is native
+        assert rows_of(query, window=3)["rows"] == [[0], [1], [2]]
+
+    def test_live_reload_of_data_now_eager(self):
+        # "live" chosen for lazy data, which a reload gives as a dataframe:
+        # queried in memory, as "auto" does, rather than failing each time.
+        frames = iter([BIG.lazy(), BIG])
+        query = mode_query(lambda: next(frames), mode="live")
+        reply = query.handle({"type": "query_reload"})
+        assert "error" not in reply
+        assert reply["mode"]["fixed"] == "The data is a dataframe in memory."
 
     def test_live_limit(self):
         reads = []

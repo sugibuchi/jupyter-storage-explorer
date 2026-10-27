@@ -25,7 +25,9 @@ const VALUE_HINTS = { numeric: "e.g. 10", temporal: "e.g. 2025-01-31", text: "" 
 // Column widths: automatic until a column is resized, then fixed. Part of the
 // dataset's settings ("widths": {column name: px}), so the kernel remembers
 // them with the filters.
+// Kept within the kernel's range (_query/filters.py).
 const MIN_COLUMN_WIDTH = 40;
+const MAX_COLUMN_WIDTH = 2000;
 const DEFAULT_COLUMN_WIDTH = 120;
 
 // The filter types that take no value (Null, Not null, Empty, Not empty) are
@@ -341,7 +343,8 @@ function createQueryPanel(host, path, data) {
         const startWidth = widths[name];
         handle.setPointerCapture(ev.pointerId);
         const move = (e) => {
-          widths[name] = Math.max(MIN_COLUMN_WIDTH, Math.round(startWidth + e.clientX - startX));
+          const width = Math.round(startWidth + e.clientX - startX);
+          widths[name] = Math.min(MAX_COLUMN_WIDTH, Math.max(MIN_COLUMN_WIDTH, width));
           cols[i].style.width = `${widths[name]}px`;
           table.style.width = `${columns.reduce((sum, c) => sum + widths[c.name], 0)}px`;
         };

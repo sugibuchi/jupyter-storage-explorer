@@ -94,6 +94,8 @@ def normalize_settings(settings: Any, schema: Any) -> dict[str, Any]:
     else:
         sort = {"column": sort["column"], "descending": bool(sort.get("descending"))}
     hidden = [c for c in settings.get("hidden") or [] if c in schema]
+    if len(set(hidden)) >= len(schema):
+        hidden = []  # as the browser, which keeps a column shown
     widths = {
         c: int(min(_MAX_WIDTH, max(_MIN_WIDTH, w)))
         for c, w in (settings.get("widths") or {}).items()
@@ -111,8 +113,11 @@ def _normalize_filter(f: dict[str, Any], kind: str) -> dict[str, Any] | None:
         return {"op": op}
     if op == "range":
         # Bounds may be given as numbers or dates (from Python, see QuerySettings).
+        # A blank one is open, as the browser shows it, even for text, whose
+        # other bounds keep their spaces.
         bounds = {b: as_text(f.get(b)) for b in ("min", "max")}
-        if not any(v.strip() for v in bounds.values()):
+        bounds = {b: v if v.strip() else "" for b, v in bounds.items()}
+        if not any(bounds.values()):
             return None  # no bound: nothing to filter
         normalized: dict[str, Any] = {"op": op, **bounds}
     else:
@@ -233,8 +238,7 @@ def _range_expression(
         except (ValueError, TypeError) as exc:
             raise ValueError(f"{name}: {exc}") from exc
         conditions.append(col >= literal if bound == "min" else col <= literal)
-    if not conditions:
-        raise ValueError("enter a minimum, a maximum or both")
+    # Normalized filters have a bound (see _normalize_filter).
     return conditions[0] if len(conditions) == 1 else conditions[0] & conditions[1]
 
 

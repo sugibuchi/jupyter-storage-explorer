@@ -622,10 +622,10 @@ class TestViewTab:
             {
                 "type": "query_save",
                 "rid": 2,
-                "settings": {"sort": None, "hidden": ["a"]},
+                "settings": {"sort": None, "widths": {"a": 80}},
             }
         )
-        assert local._states.query(url).settings.to_dict()["hidden"] == ["a"]
+        assert local._states.query(url).settings.to_dict()["widths"] == {"a": 80}
         local.message({"type": "view_tab_closed", "model_id": reply["model_id"]})
         assert reply["model_id"] not in local._view_tabs
 

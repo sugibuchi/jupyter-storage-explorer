@@ -157,8 +157,9 @@ class DataQuery:
     lazy data, unless it has at most ``max_live_rows`` rows: the first query
     reads them all anyway, so they are kept in memory. Eager data (pandas,
     PyArrow, polars DataFrames, ...) is always queried in memory, so "live"
-    raises ValueError for it. When all the data is in memory, the mode cannot
-    be switched.
+    raises ValueError for it. For lazy data, "live" also keeps data of at most
+    ``max_live_rows`` rows in memory, as "auto" does. When all the data is in
+    memory, the mode cannot be switched.
 
     Every read of lazy data, the first rows when opening and each live page,
     goes through ``fetch`` if given (an explorer's: its ``fetch_rows``, the
@@ -214,8 +215,10 @@ class DataQuery:
 
     # --- Modes ---
 
-    def _open(self, mode: str) -> None:
+    def _open(self, mode: str, *, reloading: bool = False) -> None:
         """Read the data (again) and set up queries in ``mode`` ("auto", "live" or "memory").
+        A reload (``reloading``) in "live" mode of data now eager queries it
+        in memory, as "auto" does, rather than failing each time.
 
         Sets ``implementation`` (the data's library), ``source`` (the lazy
         data, or None for eager data), ``mode``,
@@ -235,7 +238,7 @@ class DataQuery:
         self.implementation = data.implementation
         self.type_name = type(nw.to_native(native, pass_through=True)).__name__
         if isinstance(data, nw.DataFrame):
-            if mode == "live":
+            if mode == "live" and not reloading:
                 raise ValueError(
                     f"live mode needs lazy data (e.g. a polars LazyFrame, DuckDB "
                     f"or Spark); {data.implementation} dataframes are queried in "
@@ -371,9 +374,13 @@ class DataQuery:
         """Read the data again, e.g. after it changed on storage, in the mode
         last chosen: its columns, the frontend's settings fitted to them
         (columns may have changed), and the mode."""
+        # _open sets the state as it goes: a failure part way leaves it as it was.
+        state = dict(vars(self))
         try:
-            self._open(self.requested)
+            self._open(self.requested, reloading=True)
         except Exception as exc:
+            vars(self).clear()
+            vars(self).update(state)
             return {"error": error_text(exc)}
         return self._view(content)
 
