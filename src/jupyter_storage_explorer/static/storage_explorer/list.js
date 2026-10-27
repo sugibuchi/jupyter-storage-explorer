@@ -255,7 +255,7 @@ function createList(x) {
     if (entry.mtime != null) lines.push(`Modified: ${formatTime(entry.mtime)}`);
     if (entry.ctime != null) lines.push(`Created: ${formatTime(entry.ctime)}`);
     if (entry.format) lines.push(`Format: ${x.formatLabel(entry.format)}`);
-    if (location != null) lines.push(hasUrl(entry) ? `URL: ${location}` : `Path: ${location}`);
+    if (location != null) lines.push(hasUrl(entry) ? `URL: ${visible(location)}` : `Path: ${visible(location)}`);
     return lines.join("\n");
   }
 

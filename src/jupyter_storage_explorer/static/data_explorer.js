@@ -28,7 +28,7 @@ function render({ model, el }) {
   let panel = null;
 
   function renderHead() {
-    title.textContent = title.title = model.get("_title");
+    title.textContent = title.title = visible(model.get("_title")); // a file's name in a view tab
     badge.textContent = model.get("_library");
   }
 

@@ -3,9 +3,10 @@
 // dialog blocks the widget, showing how far it has got, with Cancel. Not an
 // operation: unsafe mode stays as it is.
 
-// A table of [label, value] rows; a value is text or an element.
+// A table of [label, value] rows; a value is text, shown through visible()
+// (paths, URLs, the storage's info), or an element.
 function propertyTable(rows) {
-  const cell = (value) => (value instanceof Node ? value : cellText(value));
+  const cell = (value) => (value instanceof Node ? value : visible(cellText(value)));
   return h(
     "table",
     { className: "jse-props" },
@@ -22,7 +23,7 @@ function sizeText(bytes) {
 // A time with the file it is of below, e.g. for the oldest file.
 function stampText(stamp) {
   if (!stamp) return "No modification times";
-  return h("div", {}, h("div", { textContent: formatTime(stamp.mtime) }), h("div", { className: "jse-note", textContent: stamp.path }));
+  return h("div", {}, h("div", { textContent: formatTime(stamp.mtime) }), h("div", { className: "jse-note", textContent: visible(stamp.path) }));
 }
 
 function createProperties(x) {
@@ -48,18 +49,17 @@ function createProperties(x) {
 
   function showFile(file) {
     const rows = [
-      ["Name", visible(file.name)],
+      ["Name", file.name],
       ["Path", file.path],
       ...(file.url ? [["URL", file.url]] : []),
       ["Size", sizeText(file.size)],
       ["Modified", formatTime(file.mtime)],
     ];
-    // Everything the filesystem's info() gave, as it gave it.
-    const info = Object.entries(file.info).map(([key, value]) => [key, value]);
     x.modal.show(`Properties of ${file.name}`, [
       propertyTable(rows),
       h("div", { className: "jse-section-title jse-props-title", textContent: "From the storage" }),
-      propertyTable(info),
+      // Everything the filesystem's info() gave, as it gave it.
+      propertyTable(Object.entries(file.info)),
     ]);
   }
 
@@ -71,10 +71,10 @@ function createProperties(x) {
     x.jobs.watch(reply.job, (job) => {
       const parts = [`${job.files_done.toLocaleString()} files`, formatSize(job.bytes_done)];
       if (job.current) parts.push(job.current);
-      detail.textContent = job.cancelling ? "Cancelling…" : job.state === "queued" ? "Waiting…" : parts.join(" · ");
+      detail.textContent = job.cancelling ? "Cancelling…" : job.state === "queued" ? "Waiting…" : visible(parts.join(" · "));
     });
     const ended = x.jobs.result(reply);
-    const asked = x.ask([h("div", { textContent: `Counting the files of ${what}…` }), detail], [{ label: "Cancel", value: "cancel" }]);
+    const asked = x.ask([h("div", { textContent: visible(`Counting the files of ${what}…`) }), detail], [{ label: "Cancel", value: "cancel" }]);
     // Cancel, Esc and clicks outside cancel; the end of the job closes the dialog.
     const first = await Promise.race([ended.then(() => "ended"), asked]);
     let result;
@@ -112,7 +112,7 @@ function createProperties(x) {
           className: "jse-section-title jse-error-text jse-props-title",
           textContent: `Not counted: ${count} item${count > 1 ? "s" : ""} that could not be read`,
         }),
-        h("pre", { className: "jse-text", textContent: result.errors.join("\n") }),
+        h("pre", { className: "jse-text", textContent: visible(result.errors.join("\n")) }),
       );
     }
     x.modal.show(`Properties of ${what}`, children);

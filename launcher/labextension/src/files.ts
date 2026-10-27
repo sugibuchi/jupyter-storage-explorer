@@ -21,9 +21,9 @@ import { PathExt } from '@jupyterlab/coreutils';
 import { Contents, ServerConnection } from '@jupyterlab/services';
 import { ISignal, Signal } from '@lumino/signaling';
 
+import { registry } from './common';
+
 const DRIVE_NAME = 'StorageExplorer';
-// Where explorers find this extension (see static/storage_explorer/jupyterlab.js).
-const REGISTRY = Symbol.for('jupyter-storage-explorer.jupyterlab');
 const REFUSED = 'Files of Storage Explorer are opened, renamed and deleted in the explorer.';
 
 // The options JupyterLab reads a file with.
@@ -177,8 +177,7 @@ export const filesPlugin: JupyterFrontEndPlugin<void> = {
     const drive = new StorageDrive(contents.serverSettings);
     contents.addDrive(drive);
     // Shared with the other plugins' functions (queryTabs.ts).
-    const registry = ((globalThis as Record<symbol, any>)[REGISTRY] ??= {});
-    Object.assign(registry, {
+    Object.assign(registry(), {
       // Whether JupyterLab knows the type of a file of this name (e.g. CSV,
       // JSON, notebooks, images), so has an editor or viewer for it; the
       // explorer also opens the files it reads as text.

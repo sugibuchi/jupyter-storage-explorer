@@ -18,8 +18,8 @@ function render({ model, el }) {
     request,
     ask: confirm.ask,
     answer: confirm.answer,
-    // A short message in the status bar, in place of the item count.
-    // A short notice; with { error: true }, an error that stays until clicked.
+    // A short notice in the status bar, in place of the item count; with
+    // { error: true }, an error that stays until clicked. Through visible().
     flash: (message, options) => x.list.flash(message, options),
     // The kernel identifies formats by name (e.g. "delta"); users see their label.
     formatLabel: (name) => model.get("_format_labels")[name] ?? name,

@@ -22,24 +22,14 @@ import type { IRenderMimeRegistry } from '@jupyterlab/rendermime';
 import { spreadsheetIcon } from '@jupyterlab/ui-components';
 import { BoxPanel, Widget } from '@lumino/widgets';
 
-// Where explorers find this extension's functions (see static/storage_explorer/jupyterlab.js).
-const REGISTRY = Symbol.for('jupyter-storage-explorer.jupyterlab');
+import { registry, visible } from './common';
+
 const WIDGET_MIME = 'application/vnd.jupyter.widget-view+json';
 const TAB_CLASS = 'jse-query-tab';
-
-// Characters that change how the text around them reads, or are not seen, as
-// the explorer's `visible()` shows them (static/common.js): an error naming a
-// file cannot then pass for another.
-const HIDDEN_CHARACTERS =
-  // eslint-disable-next-line no-control-regex
-  /[\u0000-\u001f\u007f-\u009f­؜᠎​-‏‪-‮⁠-⁯﻿￹-￻]/g;
-
-function visible(text: string): string {
-  return text.replace(
-    HIDDEN_CHARACTERS,
-    c => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`
-  );
-}
+// The owner's kernel statuses in which the tab's widget is gone: restarted
+// from the Kernel menu ("restarting"), by the server ("autorestarting") or by
+// another client (only "starting"), or dead.
+const KERNEL_GONE = ['restarting', 'autorestarting', 'starting', 'dead'];
 
 // A tab an explorer asks for.
 interface IViewTab {
@@ -97,8 +87,8 @@ function openTab(app: JupyterFrontEnd, tab: IViewTab): IViewTabHandle {
   // No toolbar: the views have their own heads. Hidden through Lumino, which
   // lays the tab out again (hidden with CSS, it would keep its room).
   panel.toolbar.hide();
-  panel.title.label = tab.title;
-  panel.title.caption = tab.caption;
+  panel.title.label = visible(tab.title);
+  panel.title.caption = visible(tab.caption);
   panel.title.icon = spreadsheetIcon;
   panel.title.closable = true;
   panel.disposed.connect(() => tab.onClose());
@@ -111,7 +101,7 @@ function openTab(app: JupyterFrontEnd, tab: IViewTab): IViewTabHandle {
   owner.disposed.connect(close);
   owner.sessionContext?.kernelChanged.connect(close);
   owner.sessionContext?.statusChanged.connect((_, status) => {
-    if (['restarting', 'autorestarting', 'dead'].includes(status)) {
+    if (KERNEL_GONE.includes(status)) {
       close();
     }
   });
@@ -172,7 +162,6 @@ export const queryTabsPlugin: JupyterFrontEndPlugin<void> = {
   description: "Opens Storage Explorer's views in tabs of their own.",
   autoStart: true,
   activate: (app: JupyterFrontEnd) => {
-    const registry = ((globalThis as Record<symbol, any>)[REGISTRY] ??= {});
-    registry.openViewTab = (tab: IViewTab) => openTab(app, tab);
+    registry().openViewTab = (tab: IViewTab) => openTab(app, tab);
   }
 };
