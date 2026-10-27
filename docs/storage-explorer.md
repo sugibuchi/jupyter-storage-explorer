@@ -474,7 +474,7 @@ StorageExplorer(
 | `dask`               | `parquet`, `csv`, `json-lines`                           | dask-support's [Engine options](../plugins/dask-support/README.md#engine-options)             |
 | `python`             | `json`, `text` (also Markdown's and code files' code), `image` | `storage_options`: `fsspec.open`'s keyword arguments, in the code                             |
 
-Options that look like credentials are left out of the code. An engine, format or option name that no action takes is
+An engine, format or option name that no action takes is
 an error.
 
 Options that depend on where the data is, e.g. one key per Azure storage account, are given by a function of the item's
@@ -492,6 +492,29 @@ StorageExplorer(
 ```
 
 The location's fields depend on the storage, e.g. `account_name` on Azure, `bucket` on S3.
+
+`by_protocol` gives options by the protocol of the item's URL, e.g. a credential provider for each cloud:
+
+```python
+import polars as pl
+from jupyter_storage_explorer.engine import by_protocol
+
+StorageExplorer(
+    filesystems={"Lake": "abfs://lake@account.dfs.core.windows.net", "Personal": "s3://my-bucket"},
+    engine_options={
+        "polars": {
+            "*": by_protocol({
+                "abfs": {"credential_provider": pl.CredentialProviderAzure()},
+                "s3": {"credential_provider": pl.CredentialProviderAWS(profile_name="personal")},
+            }),
+        },
+    },
+)
+```
+
+- The protocols are `abfs`, `s3`, `gs`, `sftp`, `file`, `memory` and `dbfs`, or that of another storage's URL.
+- `"*"` gives the options of every protocol. A protocol's own options override them.
+- A protocol's options may be a function of the item's location too.
 
 ## Working with the explorer from Python
 

@@ -46,10 +46,22 @@ An installation from a terminal is not kept in some environments:
 
 - **JupyterLab in a virtual environment**, e.g. a venv or a conda environment: the installation stays in it.
 - **A [Jupyter Docker Stacks](https://jupyter-docker-stacks.readthedocs.io/) image**, e.g. `quay.io/jupyter/scipy-notebook`:
-  the package is gone once the container is removed. To keep it, install it into the image's Python environment, in
-  `/opt/conda`: `RUN pip install ...` in a Dockerfile starting `FROM` the image.
+  the package is gone once the container is removed. To keep it, install it into the image's Python environment: see
+  the example below.
 - **JupyterHub**: a user's server often runs in a container, e.g. a Docker Stacks image as above. Administrators
   install the launcher in the single-user environment.
+
+For a Docker Stacks image, a `Dockerfile` like this one builds an image with the launcher:
+
+```dockerfile
+FROM quay.io/jupyter/scipy-notebook
+
+RUN pip install --no-cache-dir "jupyter-storage-explorer-launcher[polars]" && \
+    fix-permissions "${CONDA_DIR}" && \
+    fix-permissions "/home/${NB_USER}"
+```
+
+`fix-permissions` is the images' own script. It keeps the installed files writable by the notebook user.
 
 ### Extras
 

@@ -34,8 +34,12 @@ from jupyter_storage_explorer.actions.python import (
     text_code,
     text_view,
 )
-from jupyter_storage_explorer.engine import Engine
-from jupyter_storage_explorer.filesystems.locations import AbfsLocation, S3Location
+from jupyter_storage_explorer.engine import Engine, by_protocol
+from jupyter_storage_explorer.filesystems.locations import (
+    AbfsLocation,
+    LocalLocation,
+    S3Location,
+)
 from jupyter_storage_explorer.formats import (
     Csv,
     DeltaLake,
@@ -297,6 +301,65 @@ class TestOptionsByLocation:
         )
         chain.recipes(Csv(), make_item("/a.csv", b"", location=ACCOUNT_B))
         assert seen == [FsspecOptions(storage_options={"at": ACCOUNT_B.url})]
+
+
+class TestByProtocol:
+    """by_protocol: options by the protocol of the item's URL."""
+
+    def engine_options(self):
+        return {
+            "polars": {
+                "*": by_protocol(
+                    {
+                        "*": {"storage_options": {"region": "eu"}},
+                        "abfs": lambda location: {
+                            "storage_options": {
+                                "account_key": ACCOUNT_KEYS[location.account_name]
+                            }
+                        },
+                        "s3": {"credential_provider": "s3-provider"},
+                    }
+                ),
+            }
+        }
+
+    def test_by_protocol(self):
+        # A protocol's own options over those of all.
+        options = options_by_action(self.engine_options(), ACCOUNT_B)
+        assert options[csv_view].storage_options == {"account_key": "key-b"}
+        assert options[csv_view].credential_provider == "auto"
+        options = options_by_action(self.engine_options(), on_s3("a.csv"))
+        assert options[csv_view].storage_options == {"region": "eu"}
+        assert options[csv_view].credential_provider == "s3-provider"
+
+    def test_protocols_not_given(self):
+        options = options_by_action(
+            self.engine_options(), LocalLocation(hostname="", path="/a")
+        )
+        assert options[csv_view].storage_options == {"region": "eu"}
+        # Without "*", none.
+        options = options_by_action(
+            {"polars": {"*": by_protocol({"s3": {"storage_options": {"a": 1}}})}},
+            ACCOUNT_A,
+        )
+        assert options[csv_view] == CsvByPolarsOptions()
+
+    def test_dicts_checked_at_once(self):
+        with pytest.raises(
+            ValueError, match=r"by_protocol 's3': unknown options \['storge_options'\]"
+        ):
+            ActionChain(
+                ALL_ACTIONS,
+                {"polars": {"*": by_protocol({"s3": {"storge_options": {}}})}},
+            )
+
+    def test_functions_checked_when_called(self):
+        chain = ActionChain(
+            ALL_ACTIONS,
+            {"polars": {"csv": by_protocol({"abfs": lambda location: {"x": 1}})}},
+        )
+        with pytest.raises(ValueError, match=r"unknown options \['x'\]"):
+            chain.options_of(csv_view, ACCOUNT_A)
 
 
 class TestSecretsInCode:

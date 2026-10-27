@@ -12,6 +12,7 @@ from jupyter_storage_explorer._errors import error_text
 from jupyter_storage_explorer.actions import Action, CodeAction, ViewAction
 from jupyter_storage_explorer.actions.base import check_actions
 from jupyter_storage_explorer.actions.python import PythonEngine
+from jupyter_storage_explorer.engine import _ByProtocol
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
@@ -348,6 +349,16 @@ def _check_engine_options(
         raise ValueError(
             f"{where}: unknown format; choose from {[ALL_FORMATS, *format_names]}"
         )
+    if isinstance(values, _ByProtocol):
+        for protocol, options in values.options.items():
+            _check_engine_options(
+                f"{where}, by_protocol {protocol!r}",
+                name,
+                options,
+                actions,
+                format_names,
+            )
+        return
     if callable(values):
         return  # checked when called, by ActionChain.options_of
     if not isinstance(values, dict):

@@ -77,8 +77,6 @@ Every format takes:
 The other options are each format's reader's arguments, of the same names, with their descriptions from pandas' API
 documentation. Those not set are not passed, so pandas' defaults, shown below, apply, except where the explorer sets
 its own. The data browser reads at most `max_memory_rows` rows (see `view_limits`), of each sheet of a workbook.
-Values that are Python objects are used in the data browser but left out of the code, as are options that look like
-credentials. Data types such as `np.float64` in `dtype` are such objects; strings such as `"Int64"` are fine.
 
 ### CSV (`csv`)
 
