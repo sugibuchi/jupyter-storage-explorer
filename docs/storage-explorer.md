@@ -108,7 +108,6 @@ StorageExplorer(
 - Click a folder in the tree to show it. Double-click it, or click ▸, to expand it.
 - Double-click a folder in the list to go into it. ↑ goes up, ⟳ refreshes and ◀ ▶ page through the list.
 - Ctrl+click (⌘+click) selects several items.
-- Hover over an item for its size, times, format and URL.
 - The tree button, first in the toolbar, hides or shows the tree.
 - ⚙ → **Columns** chooses the list's columns.
 
@@ -212,10 +211,6 @@ Folder operations need **Unsafe mode**, turned on with the slider at the right o
 | Copy and paste folders | Right-click → **Copy**, then **Paste** … on a folder.                                              |
 | Rename folders         | Right-click → **Rename** (on most storages, a move of everything in it).                     |
 | Delete folders         | Right-click → **Delete** (with everything in it).                                            |
-
-`unsafe_mode` changes this, without the slider: `"always"` offers folder operations at all times, and `"blocked"`
-never does. With `"blocked"`, the kernel refuses them whatever the page asks. For the launcher's tabs, an
-administrator can make it final (see [Layers](../launcher/README.md#layers-of-the-configuration-file)).
 
 ## File transfers between storages
 
