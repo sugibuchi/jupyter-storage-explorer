@@ -69,6 +69,9 @@ class FakeService:
             async def rename_file(self, new_name: str) -> None:
                 calls.append(("rename_file", container, self.key, new_name))
 
+            async def delete_directory(self) -> None:
+                calls.append(("delete_directory", container, self.key))
+
         class FileSystem:
             get_directory_client = get_file_client = Path
 
@@ -146,6 +149,32 @@ class TestMove:
         ]:
             with pytest.raises(FileSystemOperations.NotSupported):
                 ops.move(*args, JobProgress(), same=same)
+        assert service.calls == []
+
+
+class TestDelete:
+    def test_folder_deleted_in_one_request(self, lake, service, monkeypatch, caplog):
+        caplog.set_level(logging.INFO)
+        is_dir(monkeypatch, lake, True)
+        AzureDataLakeGen2Operation().delete(lake, "data/raw/2026", JobProgress())
+        assert service.calls == [
+            ("delete_directory", "data", "raw/2026"),
+            ("closed",),
+        ]
+        assert any(
+            r.getMessage().startswith("Deleted data/raw/2026 with the Data Lake")
+            for r in caplog.records
+        )
+
+    def test_left_to_the_next(self, lake, service, memfs, monkeypatch):
+        ops = AzureDataLakeGen2Operation()
+        is_dir(monkeypatch, lake, False)
+        with pytest.raises(FileSystemOperations.NotSupported):
+            ops.delete(lake, "data/a.csv", JobProgress())  # a file
+        is_dir(monkeypatch, lake, True)
+        for fs, path in [(lake, "data"), (memfs, "/a")]:  # a container, not adlfs
+            with pytest.raises(FileSystemOperations.NotSupported):
+                ops.delete(fs, path, JobProgress())
         assert service.calls == []
 
 

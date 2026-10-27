@@ -33,14 +33,17 @@ log = get_logger(__name__)
 
 
 class AzureDataLakeGen2Operation(FileSystemOperations):
-    """Moves, copies and folder creation on Azure Data Lake Storage Gen2:
-    storage accounts with a hierarchical namespace, browsed with adlfs.
+    """Moves, copies, folder deletion and folder creation on Azure Data Lake
+    Storage Gen2: storage accounts with a hierarchical namespace, browsed
+    with adlfs.
 
-    There, folders exist of their own and a file or folder is renamed in one
-    request, whatever its size, and never left half moved; adlfs, made for
-    Blob Storage, moves file by file (copy, then delete) and does not create
-    empty folders. This object does both with the Data Lake SDK, connected
-    with the adlfs filesystem's own account URL and credential.
+    There, folders exist of their own. A file or folder is renamed in one
+    request, whatever its size, and never left half moved. A folder is
+    deleted in one request too, with everything in it. adlfs, made for Blob
+    Storage, moves and deletes file by file and does not create empty
+    folders. This object does these with the Data Lake SDK, connected with
+    the adlfs filesystem's own account URL and credential. Its progress then
+    shows no file until the end.
 
     Copies within an account are done by the storage itself (Blob Storage's
     Copy Blob, started with ``start_copy_from_url`` and polled until it
@@ -54,7 +57,7 @@ class AzureDataLakeGen2Operation(FileSystemOperations):
     ``FileSystemOperations.NotSupported``, for the next operations object:
     other operations and filesystems, moves and copies between accounts (copies between accounts have prerequisites of
     their own, e.g. the source readable by the target's credential),
-    containers themselves, and accounts without a hierarchical namespace
+    deletions of files (one request with adlfs too), containers themselves, and accounts without a hierarchical namespace
     (checked once per account; if it cannot be checked, e.g. for lack of
     permission, the account is taken to have none).
 
@@ -140,6 +143,27 @@ class AzureDataLakeGen2Operation(FileSystemOperations):
             "Copied %s to %s within the account (Copy Blob) in %.1f s",
             source,
             target,
+            time.monotonic() - started,
+        )
+
+    def delete(self, fs: AbstractFileSystem, path: str, progress: Progress) -> None:
+        fs = self._gen2(fs)
+        container, key = _split(path)
+        if not key:
+            raise self.NotSupported  # a container: adlfs's own
+        if not fs.isdir(path):
+            raise self.NotSupported  # a file: one request with adlfs too
+        progress.working_on(_paths.basename(path))
+        started = time.monotonic()
+        try:
+            self._run_with_datalake_service(
+                fs, lambda service: self._delete_directory(service, container, key)
+            )
+        finally:
+            fs.invalidate_cache(path)
+        log.info(
+            "Deleted %s with the Data Lake API in %.1f s",
+            path,
             time.monotonic() - started,
         )
 
@@ -244,6 +268,16 @@ class AzureDataLakeGen2Operation(FileSystemOperations):
             await file_system.get_directory_client(key).rename_directory(new_name)
         else:
             await file_system.get_file_client(key).rename_file(new_name)
+
+    @staticmethod
+    async def _delete_directory(
+        service: DataLakeServiceClient, container: str, key: str
+    ) -> None:
+        """Delete directory ``key`` of ``container``, with all it holds. With
+        OAuth, the storage may check ACLs in several requests (a paginated
+        delete), which the SDK sends until the directory is gone."""
+        file_system = service.get_file_system_client(container)
+        await file_system.get_directory_client(key).delete_directory()
 
     @staticmethod
     async def _create_directory(

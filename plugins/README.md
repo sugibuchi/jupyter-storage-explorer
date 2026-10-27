@@ -22,10 +22,10 @@ run the queries on Spark. Dask reads the data lazily, a partition at a time, on 
 
 A storage plugin makes the explorer work better with one storage service.
 
-| Plugin                                             | Storage                      | What it adds                                                   | Status       |
-|----------------------------------------------------|------------------------------|----------------------------------------------------------------|--------------|
-| [abfs-support](abfs-support/README.md)             | Azure Data Lake Storage Gen2 | Folders moved in one step, copies on the server, empty folders | Beta         |
-| [databricks-support](databricks-support/README.md) | Databricks                   | Volumes, workspace files and legacy DBFS, by workspace         | Experimental |
+| Plugin                                             | Storage                      | What it adds                                                               | Status       |
+|----------------------------------------------------|------------------------------|----------------------------------------------------------------------------|--------------|
+| [abfs-support](abfs-support/README.md)             | Azure Data Lake Storage Gen2 | Folders moved and deleted in one step, copies on the server, empty folders | Beta         |
+| [databricks-support](databricks-support/README.md) | Databricks                   | Volumes, workspace files and legacy DBFS, by workspace                     | Experimental |
 
 Status:
 

@@ -2,7 +2,8 @@
 
 Azure Data Lake Storage support for Storage Explorer,
 the [Jupyter Storage Explorer](https://github.com/sugibuchi/jupyter-storage-explorer) plugin for
-Azure Data Lake Storage Gen2: folders moved in one step, copies within an account on the server, empty folders.
+Azure Data Lake Storage Gen2: folders moved and deleted in one step, copies within an account on the server, empty
+folders.
 
 ## Installation
 
@@ -34,6 +35,8 @@ operation, `AzureDataLakeGen2Operation`, uses the Data Lake SDK with the adlfs f
 
 - **Moves and renames** within an account in one request, however large the folder, never left half moved (adlfs alone
   copies then deletes file by file).
+- **Folder deletions** in one request, however large the folder, never left half deleted. adlfs alone deletes file by
+  file.
 - **Copies** within an account by the storage itself (Copy Blob): no byte goes through the kernel. A file whose copy
   fails or is cancelled is deleted, never left partly copied.
 - **Empty folders**, which adlfs alone cannot create.
