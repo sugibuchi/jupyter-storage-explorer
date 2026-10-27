@@ -33,7 +33,7 @@ with `duckdb.install_extension("delta")` where the kernel cannot download it.
   [azure](https://duckdb.org/docs/stable/core_extensions/azure) extensions and their
   [secrets](https://duckdb.org/docs/stable/configuration/secrets_manager). Every view opens a connection of its own,
   so give the secrets as persistent secrets, which every connection loads.
-- Once DuckDB reaches a storage, list its URL scheme in the `url_schemes` [engine option](#engine-options), e.g.
+- Once DuckDB reaches a storage, list its URL scheme in the `url_schemes` [engine option](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/plugins/duckdb-support/README.md#engine-options), e.g.
   `["s3"]`. The views then read it by URL.
 - Delta Lake tables are read only by URL: on local disks and the storages of `url_schemes`. DuckDB cannot read them
   through the explorer's filesystem.

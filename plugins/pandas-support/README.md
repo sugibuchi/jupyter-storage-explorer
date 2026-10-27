@@ -26,7 +26,7 @@ Without `pyarrow` or `openpyxl`, the other formats still work.
 ### Prerequisites
 
 - The plugin expects pandas to reach your storage already, as configured in the environment: pandas reads the data
-  without options. You can still give options in [Engine options](#engine-options).
+  without options. You can still give options in [Engine options](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/plugins/pandas-support/README.md#engine-options).
 - pandas reads cloud storage through fsspec, with the storage's package, e.g. `s3fs` or `adlfs`, and its credentials.
 
 ## Plugin options

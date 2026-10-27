@@ -14,7 +14,7 @@ It also adds a **side panel**, a narrow explorer next to your notebooks:
 - The same storages as the tab; a folder's list, without the tree or the preview panel.
 - Files you view (**View**, a double-click) open in new tabs.
 - The filter button, left of ⚙, shows the filter.
-- If it stops responding, see [Restart the side panel](#restart-the-side-panel).
+- If it stops responding, see [Restart the side panel](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/launcher/README.md#restart-the-side-panel).
 
 <img src="https://raw.githubusercontent.com/sugibuchi/jupyter-storage-explorer/main/launcher/figs/side-panel.png" width="867" alt="The side panel in JupyterLab's left side bar, a Parquet file selected, beside the tab its View button opened in the data browser">
 
@@ -198,7 +198,7 @@ def final():
 Final settings are not a security boundary: users can still create explorers in notebooks.
 
 An error in any file other than the user's stops the tab: it shows only the error, naming the file. Users' files are
-left out instead (see [Configuration details](#configuration-details)).
+left out instead (see [Configuration details](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/launcher/README.md#configuration-details)).
 
 ### Other configuration files
 

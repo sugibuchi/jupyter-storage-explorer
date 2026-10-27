@@ -39,7 +39,7 @@ The plugin is not in the explorer's `all` and `all-supports` extras: install it 
 
 Each page of the data browser reads only the first partitions it needs. A Parquet file's partitions are its row
 groups, and a folder's are its files. CSV and JSON Lines files are cut into blocks of about `max_whole_file_bytes`,
-10 MB by default. The `blocksize` [engine option](#engine-options) sets another size. A filter matching few rows, or a
+10 MB by default. The `blocksize` [engine option](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/plugins/dask-support/README.md#engine-options) sets another size. A filter matching few rows, or a
 sort, reads every partition.
 
 Dask guesses a CSV file's column types from its beginning, so a later value of another type fails the page. Set
