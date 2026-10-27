@@ -1,10 +1,5 @@
 /* Table Set Tab: a table set (query.css: .jse-table-set) under a title bar,
-   filling the tab. */
-.jse-table-set-view-tab {
-  display: flex;
-  flex-direction: column;
-}
-
+   filling the tab. A column, as every .jse-widget. */
 .jse-table-set-view-tab .jse-table-set-view-tab-body {
   display: flex;
   flex-direction: column;

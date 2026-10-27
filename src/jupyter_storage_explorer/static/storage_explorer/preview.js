@@ -12,7 +12,7 @@ function createPreview(x) {
   const button = h("button", { className: "jse-btn jse-preview-btn" }, icon("eye"), label);
   const head = h("div", { className: "jse-dialog-head" });
   const body = h("div", { className: "jse-dialog-body" });
-  // On the panel's top edge: moves the boundary with the tree and list (see render()).
+  // On the panel's top edge: moves the boundary with the tree and list (storage_explorer.js' onDragY).
   const splitter = h("div", { className: "jse-splitter", title: "Drag to resize" });
   // tabIndex makes the panel focusable, so it receives Escape.
   const el = h("div", { className: "jse-preview-panel", tabIndex: -1, hidden: true }, splitter, head, body);

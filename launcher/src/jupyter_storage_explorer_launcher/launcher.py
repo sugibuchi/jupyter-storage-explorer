@@ -140,6 +140,8 @@ ALIASES = {"format_options": "engine_options"}
 # Functions launcher.py files may still have, no longer used: they are
 # ignored (and their names in final()), with a warning shown in the tab.
 RETIRED = {
+    # The whole configuration, before the functions above.
+    "launch": "set filesystems(), parameters() etc. instead (see the launcher's README)",
     # CSS applied to the page while the tab was open: not to explorers in
     # notebooks, which JupyterLab's custom.css reaches.
     "style": "use JupyterLab's custom.css instead, for every page (see Icons in the project's DEVELOPMENT.md)",
@@ -343,12 +345,6 @@ def _read_layer(path: pathlib.Path) -> tuple[dict[str, Any], list[str]]:
     loaded, or a function fails."""
     module = _load(path)
     warnings = []
-    if callable(getattr(module, "launch", None)):
-        # The launcher's configuration before 0.6.0: now ignored.
-        warnings.append(
-            f"{path}: launch() is no longer used; set filesystems(), "
-            f"parameters() etc. instead (see the launcher's README)"
-        )
     for name, instead in RETIRED.items():
         if callable(getattr(module, name, None)):
             warnings.append(
@@ -568,12 +564,6 @@ def _check_final_name(name: str, path: pathlib.Path) -> None:
             f"{path}: final(): unknown setting {name!r} (a function name other "
             f"than parameters, or a parameter name)"
         )
-
-
-def create_widget(sidebar: bool = False) -> Any:
-    """The explorer the launcher.py files describe (see the module docstring);
-    with ``sidebar``, the side panel's (``SIDEBAR``)."""
-    return load_settings().create_widget(sidebar)
 
 
 @dataclasses.dataclass

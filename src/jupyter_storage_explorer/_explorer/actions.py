@@ -242,14 +242,6 @@ class ActionChain:
             return None
         raise LookupError(engine)
 
-    def views_of(
-        self, fmt: DataFormat, ctx: ItemContext, engine: str | None
-    ) -> list[ViewAction]:
-        """The view actions of ``engine`` (a key; None for the built-in
-        views) that do the item as ``fmt``, in order: the first is its
-        default (see ``views_by_engine``)."""
-        return self.views_by_engine(fmt, ctx).get(engine, [])
-
     def view(
         self,
         fmt: DataFormat,

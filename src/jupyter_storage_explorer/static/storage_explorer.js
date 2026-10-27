@@ -1,7 +1,7 @@
 // Storage Explorer: directory tree (left) and file list (right), with a
 // preview panel below them. Its features are in storage_explorer/, each a
 // create function given the explorer, `x` below; they are joined before this
-// file, after icons.js, common.js and query.js (see _static.py).
+// file, after icons.js, common.js, query.js and sections.js (see _static.py).
 
 function render({ model, el }) {
   // Requests answered by a {"type": "reply", "rid"} message.

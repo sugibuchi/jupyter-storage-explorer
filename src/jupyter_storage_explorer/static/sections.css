@@ -59,8 +59,7 @@
 .jse-highlight .mh,
 .jse-highlight .mi,
 .jse-highlight .mo,
-.jse-highlight .il,
-.jse-highlight .kc {
+.jse-highlight .il {
   color: var(--jp-mirror-editor-number-color, #080);
 }
 
