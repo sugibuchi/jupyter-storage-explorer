@@ -4,7 +4,7 @@
 # demo.ipynb and docs/scripts/demo_data.py) are those of that release: pin
 # the same version here.
 jupyterlab>=4.2
-jupyter-storage-explorer-launcher[polars,pandas]==0.25.1
+jupyter-storage-explorer-launcher[polars,pandas]==0.25.2
 polars
 deltalake
 pyarrow
