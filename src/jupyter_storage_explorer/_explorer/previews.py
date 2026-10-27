@@ -1,5 +1,7 @@
-"""StorageExplorer's previews, views in tabs of their own and the right-click
-menu's formats and code (a mixin of the class)."""
+"""StorageExplorer's previews (a mixin of the class): items detected, viewed
+and shown in the preview panel. The data browser's queries, view tabs and
+the right-click menu build on them, in queries.py, view_tabs.py and
+item_menu.py."""
 
 from __future__ import annotations
 
@@ -9,20 +11,15 @@ import concurrent.futures
 import dataclasses
 import logging
 import time
-from functools import partial
 from typing import TYPE_CHECKING, Any, NamedTuple
 
 from jupyter_storage_explorer import _paths
 from jupyter_storage_explorer._errors import error_text
 from jupyter_storage_explorer._explorer.common import explorers
-from jupyter_storage_explorer._explorer.table_set_tab import TableSetTab
-from jupyter_storage_explorer._explorer.view_tab import ViewTab
 from jupyter_storage_explorer._json import jsonable
-from jupyter_storage_explorer._query.data_query import DataQuery, read_again
-from jupyter_storage_explorer._query.table_set import SEPARATOR, TableSet
-from jupyter_storage_explorer.actions.python import PythonEngine
+from jupyter_storage_explorer._query.data_query import DataQuery
+from jupyter_storage_explorer._query.table_set import TableSet
 from jupyter_storage_explorer.base import ItemContext
-from jupyter_storage_explorer.data_explorer import DataExplorer
 from jupyter_storage_explorer.formats.base import matching_formats
 from jupyter_storage_explorer.views import (
     JupyterWidgetView,
@@ -41,9 +38,6 @@ if TYPE_CHECKING:
 
     from fsspec import AbstractFileSystem
 
-    from jupyter_storage_explorer._explorer.actions import Recipe
-    from jupyter_storage_explorer.actions import ViewAction
-    from jupyter_storage_explorer.base import Location
     from jupyter_storage_explorer.formats import DataFormat
 
 log = logging.getLogger(__name__)
@@ -146,70 +140,6 @@ class _Asking(NamedTuple):
         return {**section(self.view), "prompt": self.id}
 
 
-def _layered_fetch(
-    user: Callable[[Any, int, int], Any] | None,
-    view_fetch: Callable[[], Callable[[Any, int, int], Any] | None],
-) -> Callable[[Any, int, int], Any]:
-    """The data browser's ``fetch`` of a view's data: the explorer's
-    ``fetch_rows`` (the user's), then the view's ``fetch`` (an action's), the
-    one of the view now shown, as a reload's may differ; None where neither
-    reads, for the default (``DataQuery``)."""
-
-    def fetch(lf: Any, offset: int, length: int) -> Any:
-        for read in (user, view_fetch()):
-            if read is not None and (df := read(lf, offset, length)) is not None:
-                return df
-        return None
-
-    return fetch
-
-
-class _ViewRead:
-    """How the data browser reads its data: with ``load(again)``, which gives
-    the data or a ``QueryView`` of it, e.g. a table set's loader. The
-    ``QueryView`` given last, if any, tells whether its rows are cut short
-    (``more``) and how to read them (``fetch``), and is closed once replaced
-    or no longer shown. ``first``: a ``QueryView`` just viewed, whose data
-    is read first rather than loaded twice."""
-
-    def __init__(
-        self, load: Callable[[bool], Any], first: QueryView | None = None
-    ) -> None:
-        self._load = load
-        self._first = first
-        self.loaded = first
-        # Whether the data was read: the next read is a reload.
-        self.read = False
-
-    def source(self) -> Any:
-        if self._first is not None and not self.read:
-            self.read = True
-            return self._first.data
-        data = self._load(self.read)
-        self.read = True
-        if isinstance(data, QueryView):
-            previous, self.loaded, self._first = self.loaded, data, None
-            if previous is not None:
-                previous.close()
-            return data.data
-        return data
-
-    def rewind(self) -> None:
-        """Make the next read the first again, of the same data: after a
-        query that could not open with it."""
-        self.read = False
-
-    def cut(self) -> bool:
-        return self.loaded is not None and self.loaded.more
-
-    def view_fetch(self) -> Any:
-        return self.loaded.fetch if self.loaded is not None else None
-
-    def close(self) -> None:
-        if self.loaded is not None:
-            self.loaded.close()
-
-
 class _Loaded(NamedTuple):
     """What a preview's load read (see ``PreviewsMixin._open_preview``): what
     shows it (None if nothing does) and the ``_preview`` to show."""
@@ -301,12 +231,6 @@ def action_id(value: Any) -> int | None:
     return value if isinstance(value, int) and not isinstance(value, bool) else None
 
 
-def _recipe_engine(recipe: Recipe) -> str:
-    """The key of a recipe's engine, as ``code_snippet`` names it: "python"
-    for the built-in code (``PythonEngine``)."""
-    return recipe.engine.key if recipe.engine is not None else PythonEngine.key
-
-
 def _rows_note(table: TableView) -> str:
     """How many rows a table view shows, e.g. "First 100 of 1,234 rows"."""
     count, unit = len(table.rows), table.unit
@@ -319,8 +243,42 @@ def _rows_note(table: TableView) -> str:
 
 class PreviewsMixin:
     """Previews (``_preview``): the item's view in the preview panel, the data
-    browser for a ``QueryView``; views in tabs of their own ("View in a new
-    tab"); and the right-click menu's formats and code."""
+    browser for a ``QueryView`` (see ``QueriesMixin``); the items' detection,
+    which view tabs and the right-click menu share; and the Preview button's
+    format (``_selected_format``)."""
+
+    def _show_selected_format(self) -> None:
+        """Set ``_selected_format`` for the items selected: the item's best
+        format, if the engine chosen can view it (the Preview button).
+
+        The item's detection may read it, so it runs as a load, sharing the
+        click's detection (``_detection``): until it ends, the frontend
+        offers no Preview for the item. A later selection cancels it."""
+        if self._selection_load is not None:
+            self._selection_load.cancel()
+            self._selection_load = None
+        selected = list(self._selected)
+        if len(selected) != 1:
+            self._selected_format = {}
+            return
+        path = selected[0]
+        detection = self._detection(path, self._fs)
+
+        def work() -> _Detected | None:
+            try:
+                return detection.result()
+            except Exception:
+                return None  # detection is best-effort; a failure just means no preview
+
+        def done(item: _Detected | None) -> None:
+            formats = item.formats if item is not None else []
+            viewable = bool(formats) and self._viewable(formats[0], item.ctx)
+            self._selected_format = {
+                "path": path,
+                "format": formats[0].name if viewable else "",
+            }
+
+        self._selection_load = self._loader.submit(work, done, lambda _: None)
 
     def _detection(
         self, path: str, fs: AbstractFileSystem
@@ -736,430 +694,3 @@ class PreviewsMixin:
         self._cancel_view_tab_loads()
         for widget in list(self._view_tabs.values()):
             widget._release(now=True)
-
-    def _release_view_tabs(self) -> None:
-        """Close the widgets of the explorer's view tabs, and cancel those
-        loading: when it closes, and when the launcher shows it again after a
-        page reload, which closed the tabs without telling the kernel."""
-        self._cancel_view_tab_loads()
-        tabs, self._view_tabs = list(self._view_tabs.values()), {}
-        for widget in tabs:
-            widget.close()
-
-    def _cancel_view_tab_loads(self) -> None:
-        """Cancel the view tabs' loads still running: what they read is
-        closed when they end."""
-        loads, self._view_tab_loads = list(self._view_tab_loads.values()), {}
-        for load in loads:
-            load.cancel()
-
-    # --- The query in the preview panel, for query_result() and
-    # on_query_change() ---
-
-    def _shown_query(self) -> DataQuery | None:
-        """The query the preview panel shows in the data browser, or None
-        (closed, loading, or showing something else)."""
-        preview = self._preview
-        if preview.get("loading"):
-            return None
-        if preview.get("table_set"):
-            # The table chosen's.
-            tables = self._table_sets.get(preview.get("path"))
-            return tables.query if tables is not None else None
-        if not preview.get("query"):
-            return None
-        return self._queries.get(preview.get("path"))
-
-    def _query_changed(self, *, reloaded: bool = False) -> None:
-        """Call the ``on_query_change`` functions if ``query_result()`` has
-        changed since they last were: another query shown (or none), other
-        filters, sort or columns, or the data read again (``reloaded``)."""
-        if self._query_watch.changed(self._shown_query(), reloaded=reloaded):
-            self._query_callbacks(self)
-
-    def _new_query(
-        self, view: QueryView, viewer: Callable[[], View], item: _Detected
-    ) -> DataQuery:
-        """The data browser's query of ``view``, the view ``viewer`` gave of
-        ``item``: read again with ``viewer`` (reload).
-
-        Settings are remembered by location, so they follow the data across
-        explorers and tabs, with the mode last chosen for it. The query owns
-        the view its data came from: each reload's view replaces it (closed
-        once the new one is open), and closing the query closes the last.
-        """
-
-        def load(_again: bool) -> QueryView:
-            again = viewer()
-            if not isinstance(again, QueryView):
-                again.close()
-                raise ValueError(f"{item.ctx.name} cannot be queried now")
-            return again
-
-        return self._data_query(item.ctx.location, _ViewRead(load, view))
-
-    def _data_query(self, key: Location | str, reading: _ViewRead) -> DataQuery:
-        """The data browser's query of what ``reading`` reads, its settings
-        remembered under ``key``, with the mode last chosen for it."""
-        state = self._states.query(key)
-        mode = state.mode if state is not None else "auto"
-        limits = self._view_limits
-        options = {
-            "fetch": _layered_fetch(self._fetch_rows, reading.view_fetch),
-            "cut": reading.cut,
-            "max_live_rows": limits.max_live_rows,
-            "max_memory_rows": limits.max_memory_rows,
-            "page_rows": limits.max_display_rows,
-            "on_close": reading.close,
-        }
-        try:
-            return DataQuery(reading.source, key, self._states, mode=mode, **options)
-        except ValueError:
-            if mode != "live":
-                raise
-            # "live" chosen when the data was lazy, and no longer is: read
-            # again from the same view, not a reload.
-            reading.rewind()
-            return DataQuery(reading.source, key, self._states, **options)
-
-    def _table_set(
-        self, view: TableSetView, viewer: Callable[[], View], item: _Detected
-    ) -> TableSet:
-        """The data browser's tables of ``view``, the view ``viewer`` gave of
-        ``item``.
-
-        Each table chosen is read by the view's ``loader`` (a ``QueryView`` it
-        gives tells whether the rows are cut short, and is closed with the
-        table's query). A reload views the item again with ``viewer`` and reads
-        the table from that view, which replaces the previous one (closed), so
-        a loader's data read with the view (e.g. a workbook's bytes) is read
-        again too (``TableSet._load``). Its settings are remembered by the
-        item's URL and the table's id, as a ``QueryView``'s by location, with
-        the mode last chosen for it.
-        """
-        url = item.ctx.location.url
-
-        def make_query(table: str, load: Callable[[bool], Any]) -> DataQuery:
-            return self._data_query(f"{url}#{table}", _ViewRead(load))
-
-        return TableSet(view, make_query, viewer)
-
-    # --- Views in tabs of their own ("View in a new tab"), which the
-    # launcher's JupyterLab extension shows: a DataExplorer of the data for
-    # a QueryView, else a ViewTab of the view ---
-
-    def _view_tab_request(self, content: dict[str, Any]) -> dict[str, Any]:
-        """Answer "view_tab": view ``path`` (as ``format``, else its best
-        format) in a new widget, a ``DataExplorer``, a ``TableSetTab`` or a
-        ``ViewTab``, kept until the tab closes ("view_tab_closed").
-
-        Answers at once, {"load_id", "title", "url"} or {"error"}, so that
-        the tab opens showing that it loads. The reads run in a worker thread
-        (``_loader``), as a preview's; then {"type": "view_tab", "load_id"}
-        is sent, with the widget's "model_id" or an "error". Closing the tab
-        before cancels the load: what it read is closed.
-
-        A prompt (``ViewWithPrompt``) is shown in a ``ViewTab`` first, sent
-        as the view is, with "asking": the tab keeps waiting. The view of the
-        answer is read as the first, then sent for the same "load_id": the
-        tab shows its widget instead, and lets the prompt's go. The prompt's
-        widget shows the errors after an answer, and that it was cancelled.
-        """
-        path = content.get("path")
-        location = self._location_of(path)
-        if location is None:
-            return {"error": f"{path} has no URL, so it cannot be viewed"}
-        load_id = f"view-{next(self._view_tab_ids)}"
-        title = _paths.basename(path)
-        action = action_id(content.get("action"))
-        work = self._preview_work(
-            _empty_preview(path, action),
-            content.get("format") or None,
-            content.get("engine", ...),
-            action,
-            verb="viewed",
-        )
-        self._submit_view_tab(load_id, title, work)
-        return {"load_id": load_id, "title": title, "url": location.url}
-
-    def _submit_view_tab(
-        self,
-        load_id: str,
-        title: str,
-        work: Callable[[], _Loaded],
-        asked: ViewTab | None = None,
-    ) -> None:
-        """Run a view tab's reads, ``work``, as a load, then send what it
-        read (see ``_view_tab_request``). ``asked``: the widget of the prompt
-        whose answer is read, which shows the errors and a next prompt."""
-
-        def done(loaded: _Loaded) -> None:
-            self._view_tab_loads.pop(load_id, None)
-            if isinstance(loaded.shown, _Asking):
-                self._view_tab_ask(load_id, title, loaded, asked)
-                return
-            try:
-                widget = self._view_tab_widget(loaded, title)
-            except Exception as exc:
-                discard(loaded, popped=True)
-                if asked is not None:
-                    asked._show({"kind": "error", "text": error_text(exc)})
-                    return
-                self.send(
-                    {"type": "view_tab", "load_id": load_id, "error": error_text(exc)}
-                )
-                return
-            self._view_tabs[widget.model_id] = widget
-            self.send(
-                {"type": "view_tab", "load_id": load_id, "model_id": widget.model_id}
-            )
-
-        def discard(loaded: _Loaded, popped: bool = False) -> None:
-            if not popped:
-                self._view_tab_loads.pop(load_id, None)
-            if loaded.shown is not None:
-                loaded.shown.close()
-
-        load = self._loader.submit(work, done, discard)
-        if not load.ended:  # without a loop, it has ended already
-            self._view_tab_loads[load_id] = load
-
-    def _view_tab_ask(
-        self, load_id: str, title: str, loaded: _Loaded, asked: ViewTab | None
-    ) -> None:
-        """Show the prompt a view tab's load read, in the widget of the
-        previous prompt, ``asked``, else in a new one sent to the tab."""
-        asking = loaded.shown
-        assert isinstance(asking, _Asking)
-        widget = (
-            asked
-            if asked is not None
-            else ViewTab(_LOADING, title=title, label=self._tab_label(loaded.preview))
-        )
-
-        def answered(content: dict[str, Any]) -> None:
-            self._view_tab_answer(
-                load_id,
-                title,
-                loaded.preview,
-                asking=asking,
-                widget=widget,
-                content=content,
-            )
-
-        widget._show(asking.section(), on_close=asking.close, on_answer=answered)
-        if asked is not None:
-            return
-        self._view_tabs[widget.model_id] = widget
-        self.send(
-            {
-                "type": "view_tab",
-                "load_id": load_id,
-                "model_id": widget.model_id,
-                "asking": True,
-            }
-        )
-
-    def _view_tab_answer(
-        self,
-        load_id: str,
-        title: str,
-        preview: dict[str, Any],
-        *,
-        asking: _Asking,
-        widget: ViewTab,
-        content: dict[str, Any],
-    ) -> None:
-        """The user answered the prompt of a view tab, which ``widget``
-        shows: read the view of the answer for the tab (see
-        ``_view_tab_request``). Ignored if the widget no longer shows it."""
-        if (
-            content.get("prompt") != asking.id
-            or widget._view.get("prompt") != asking.id
-        ):
-            return
-        if content.get("cancel"):
-            widget._show(_not_viewed("viewed"))
-            asking.close()
-            return
-        # The load owns the prompt now: the widget no longer closes it.
-        widget._show(_LOADING)
-        base = {**preview, "sections": [], "error": ""}
-        value = content.get("value")
-        self._submit_view_tab(
-            load_id,
-            title,
-            lambda: self._read_answer(dict(base), asking, value),
-            asked=widget,
-        )
-
-    def _tab_label(self, preview: dict[str, Any]) -> str:
-        """A view tab's label: the format's, and the engine's."""
-        fmt = next(f for f in self._formats if f.name == preview["format"])
-        return " · ".join(filter(None, [fmt.label, preview["engine_label"]]))
-
-    def _view_tab_widget(
-        self, loaded: _Loaded, title: str
-    ) -> DataExplorer | TableSetTab | ViewTab:
-        """The widget of a view tab's load (see ``_view_tab_request``), on
-        the main thread; ValueError if the item could not be viewed."""
-        preview, shown = loaded.preview, loaded.shown
-        if preview["error"]:
-            raise ValueError(preview["error"])
-        if shown is None:
-            raise ValueError(f"{title} cannot be viewed in any format")
-        label = self._tab_label(preview)
-        if isinstance(shown, DataQuery):
-            return DataExplorer._of_query(
-                shown, self._states, shown.key, title=title, label=label, height="fill"
-            )
-        if isinstance(shown, TableSet):
-            return TableSetTab(shown, title=title, label=label)
-        return ViewTab(
-            preview["sections"][0], title=title, label=label, on_close=shown.close
-        )
-
-    def _view_tab_closed(self, content: dict[str, Any]) -> None:
-        """The tab of a "view_tab" closed: its widget ("model_id") is no
-        longer kept, and closing it closes its view; a load still running
-        ("load_id") is cancelled."""
-        load = self._view_tab_loads.pop(content.get("load_id"), None)
-        if load is not None:
-            load.cancel()
-        widget = self._view_tabs.pop(content.get("model_id"), None)
-        if widget is not None:
-            widget.close()
-
-    def _answer_query(self, content: dict[str, Any]) -> None:
-        """Answer the data browser's requests ("query_rows", "query_check",
-        "query_save", "query_reload", "query_mode") on the data previewed,
-        and "table_set_open" (``TableSet.choose``); for a table set's table,
-        "path" also names the table (see ``table_set.query_path``).
-
-        They may read the data (e.g. a Spark job for each page), so they run
-        in a worker thread (``_loader``), in the lane of their query or
-        tables: in order, never two at once on the same data. Then, on the
-        main thread, the reply is sent, and the ``on_query_change`` functions
-        are told if ``query_result()`` changed: after the reply, so the
-        widget does not wait for them."""
-        kind = content["type"]
-
-        def reply(answer: dict[str, Any]) -> None:
-            self._reply(content, answer)
-            self._query_changed(reloaded=read_again(content, answer))
-
-        path, separator, _ = content["path"].partition(SEPARATOR)
-        if kind == "table_set_open" or separator:
-            tables = self._table_sets.get(path)
-            if tables is None:
-                reply({"error": "the tables are no longer open; preview them again"})
-            else:
-                self._loader.answer(tables, lambda: tables.answer(content), reply)
-            return
-        data = self._queries.get(path)
-        if data is None:
-            reply({"error": "the data is no longer open; preview it again"})
-        else:
-            self._loader.answer(data, lambda: data.handle(content) or {}, reply)
-
-    def _answer_menu_info(self, content: dict[str, Any]) -> None:
-        """Answer "menu_info", the right-click menu's (see ``_menu_info``).
-        The item's detection and its recipes may read it (e.g. a CSV file's
-        separator), so they run as a load (``_loader``), sharing the click's
-        detection (``_detection``); the reply is made on the main thread."""
-        detection = self._detection(content["path"], self._fs)
-        engines = self._code_engines
-        chosen = self._engine or None
-
-        def work() -> dict[str, Any]:
-            try:
-                item = detection.result()
-                if item is None:
-                    return self._menu_info([], [], None, chosen)
-                formats = item.formats
-                recipes = (
-                    self._actions.recipes(formats[0], item.ctx)
-                    if formats and engines != frozenset()
-                    else []
-                )
-                # Only the engines code_snippet names, if it names some.
-                if engines is not None:
-                    recipes = [r for r in recipes if _recipe_engine(r) in engines]
-                return self._menu_info(formats, recipes, item.ctx, chosen)
-            except Exception as exc:
-                return {"error": error_text(exc)}
-
-        reply = partial(self._reply, content)
-        self._loader.submit(work, reply, reply)
-
-    def _view_entries(
-        self, fmt: DataFormat, key: str | None, views: list[ViewAction]
-    ) -> list[dict[str, Any]]:
-        """The entries of "Preview as" for an item viewed as ``fmt`` with the
-        engine of ``key`` by its ``views``: one, e.g. "CSV (Polars)"; or, for
-        several, one per view, by its id, labelled with its label, e.g.
-        "View as CSV (Polars)" and "CSV in a widget (Polars)"."""
-        if len(views) <= 1:
-            engine = f"({self._engine_label(key)})" if key else ""
-            label = " ".join(filter(None, [fmt.label, engine]))
-            return [{"format": fmt.name, "engine": key, "label": label}]
-        return [
-            {"format": fmt.name, "engine": key, "action": v.id, "label": v.label}
-            for v in views
-        ]
-
-    def _menu_info(
-        self,
-        formats: list[DataFormat],
-        recipes: list[Recipe],
-        ctx: ItemContext | None,
-        chosen: str | None,
-    ) -> dict[str, Any]:
-        """The reply to "menu_info" for the item of ``ctx`` matching
-        ``formats``, best first, with ``recipes`` the best format's, and
-        ``chosen`` the engine chosen: "formats", the names of those matching;
-        "view", the best format and the engine viewing it ("Preview", "View
-        in a new tab"; None if the engine chosen cannot); "views", each
-        format and engine that can ("Preview as", "View in new tab as"),
-        each of the engine's views by name if it has several;
-        "recipes", the load code ("Python code"), with their engine's label,
-        or the error of an action's. Safe in a worker thread."""
-        # A view of a format the item also matches is listed under that
-        # format only, e.g. the Text view of a Markdown file under Text, not
-        # under Markdown too (a view does its format's subclasses).
-        matched = {type(f) for f in formats}
-
-        def own(f: DataFormat, views: list[ViewAction]) -> list[ViewAction]:
-            return [v for v in views if v.format is type(f) or v.format not in matched]
-
-        default_view = None
-        if formats and ctx is not None:
-            try:
-                key = self._actions.engine_for(formats[0], ctx, chosen)
-            except LookupError:
-                pass
-            else:
-                default_view = {"format": formats[0].name, "engine": key}
-        return {
-            "formats": [f.name for f in formats],
-            "view": default_view,
-            "views": [
-                entry
-                for f in formats
-                if ctx is not None
-                for key, views in self._actions.views_by_engine(f, ctx).items()
-                if (shown := own(f, views))
-                for entry in self._view_entries(f, key, shown)
-            ],
-            # The frontend gets the packages' names, listed under the code.
-            "recipes": [
-                {
-                    "title": r.title,
-                    "engine": r.engine.label if r.engine is not None else "Python",
-                    "packages": [p.package for p in r.requirements],
-                    "code": r.code,
-                    **({"error": r.error} if r.error else {}),
-                }
-                for r in recipes
-            ],
-        }

@@ -42,6 +42,12 @@ class BookmarksMixin:
         self._states.add_bookmark(self._filesystem, path, self._location_of(path))
         return self._bookmark_list()
 
+    def _exists_folder(self, path: str) -> bool:
+        try:
+            return self._isdir(path)
+        except Exception:
+            return False  # cannot tell: not bookmarked
+
     def _remove_bookmark(self, filesystem: str, path: str) -> dict[str, Any]:
         self._states.remove_bookmark(filesystem, path)
         return self._bookmark_list()

@@ -57,7 +57,7 @@ class TableSetTab(anywidget.AnyWidget):
         """Answer the panel's requests: "table_set_open", and the data
         browser's on the table chosen, whose "path" names it (see
         ``table_set.query_path``). In a worker thread, one at a time, as
-        the preview panel's (see ``PreviewsMixin._answer_query``)."""
+        the preview panel's (see ``QueriesMixin._answer_query``)."""
         tables = self._table_set
         if tables is None or "rid" not in content:
             return
