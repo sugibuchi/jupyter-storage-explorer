@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
 
 class ViewTab(anywidget.AnyWidget):
-    """A view's section (``PreviewsMixin``'s ``section``) under a title bar,
+    """A view's section (``section`` of previews.py) under a title bar,
     filling the tab. Its frontend asks for the libraries Markdown views
     need ("vendor"), as the explorer's does.
 

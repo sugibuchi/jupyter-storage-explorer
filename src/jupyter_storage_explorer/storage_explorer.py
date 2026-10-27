@@ -18,28 +18,26 @@ import traitlets
 from jupyter_storage_explorer import _logs, _paths, _static
 from jupyter_storage_explorer._callbacks import Callbacks
 from jupyter_storage_explorer._errors import error_text
+from jupyter_storage_explorer._explorer import options
 from jupyter_storage_explorer._explorer.about import AboutMixin, _explorer_version
 from jupyter_storage_explorer._explorer.bookmarks import BookmarksMixin
 from jupyter_storage_explorer._explorer.common import (
     explorers,
     open_storage,
-    within_top,
 )
 from jupyter_storage_explorer._explorer.folders import FoldersMixin
+from jupyter_storage_explorer._explorer.item_menu import ItemMenuMixin
 from jupyter_storage_explorer._explorer.jobs import JobsMixin
 from jupyter_storage_explorer._explorer.jupyterlab import JupyterLabFilesMixin
 from jupyter_storage_explorer._explorer.listing import Listing
 from jupyter_storage_explorer._explorer.mapper_css import mapper_key, mapper_styles
 from jupyter_storage_explorer._explorer.previews import PreviewsMixin, action_id
+from jupyter_storage_explorer._explorer.queries import QueriesMixin
 from jupyter_storage_explorer._explorer.requests import FileRequestsMixin
 from jupyter_storage_explorer._explorer.states import ExplorerStates, explorer_states
 from jupyter_storage_explorer._explorer.user_actions import UserActionsMixin
+from jupyter_storage_explorer._explorer.view_tabs import ViewTabsMixin
 from jupyter_storage_explorer._extensions.plugins import PluginComponents, load_plugins
-from jupyter_storage_explorer._extensions.user_actions import (
-    create_user_actions_file,
-    user_actions_file,
-    users_actions_warned,
-)
 from jupyter_storage_explorer._jobs.incoming import IncomingFiles
 from jupyter_storage_explorer._jobs.loader import Loader
 from jupyter_storage_explorer._jobs.operation_chain import OperationChain
@@ -65,7 +63,6 @@ if TYPE_CHECKING:
     import narwhals as nw
     from fsspec import AbstractFileSystem
 
-    from jupyter_storage_explorer._explorer.actions import ActionChain
     from jupyter_storage_explorer._explorer.previews import _Asking, _Detected
     from jupyter_storage_explorer._explorer.table_set_tab import TableSetTab
     from jupyter_storage_explorer._explorer.view_tab import ViewTab
@@ -90,81 +87,6 @@ log = logging.getLogger(__name__)
 # choose a table (see TableSet), after which query_result() may have changed.
 _QUERY_REQUESTS = QUERY_REQUESTS | {"table_set_open"}
 
-# The values of tree_view and preview_panel, and of layout.
-_PANEL_STATES = ("open", "closed", "disabled")
-_LAYOUTS = ("standard", "sidebar")
-
-# The values of unsafe_mode: offered by the user's switch, always, or never.
-_UNSAFE_MODES = ("on_demand", "always", "blocked")
-
-# The values of user_actions: the actions of the user's files used, or not.
-_USER_ACTIONS = ("enabled", "disabled")
-
-# The values of logging_menu: the settings menu's Logging, and log files, or
-# neither.
-_LOGGING_MENUS = ("enabled", "disabled")
-
-
-def _code_engines(
-    code_snippet: str | Sequence[str], actions: ActionChain
-) -> frozenset[str] | None:
-    """The engines' keys whose code "Python code" shows: None for all
-    ("enabled"), none for "disabled", else those named that an action has
-    (its engine's key, "python" for the built-in code); names no
-    action has are left out with a warning, as a launcher shared by
-    environments with other plugins may name them."""
-    if code_snippet == "enabled":
-        return None
-    if code_snippet == "disabled":
-        return frozenset()
-    if isinstance(code_snippet, str) or not all(
-        isinstance(key, str) for key in code_snippet
-    ):
-        raise ValueError(
-            f'code_snippet must be "enabled", "disabled" or a list of engine keys, '
-            f"not {code_snippet!r}"
-        )
-    known = actions.engine_keys()
-    if unknown := sorted(set(code_snippet) - known):
-        warnings.warn(
-            f"code_snippet: no action of {', '.join(unknown)} (left out); "
-            f"engines: {', '.join(sorted(known))}",
-            RuntimeWarning,
-            stacklevel=3,
-        )
-    return frozenset(code_snippet) & known
-
-
-# The file list's columns the user can show besides Name (the settings menu's
-# Columns), in their order; and those shown by default, per layout.
-_LIST_COLUMNS = ("size", "mtime", "ctime", "format")
-_DEFAULT_COLUMNS = {"standard": ["size", "mtime"], "sidebar": ["size"]}
-
-
-def _known_columns(columns: Sequence[str]) -> list[str]:
-    """``columns`` that the list has, in its order (a file written by another
-    version may name others)."""
-    return [c for c in _LIST_COLUMNS if c in columns]
-
-
-def _check_choice(name: str, value: Any, choices: Sequence[str]) -> None:
-    if value not in choices:
-        raise ValueError(
-            f"{name} must be one of {', '.join(map(repr, choices))}, not {value!r}"
-        )
-
-
-def _engine_options(
-    engine_options: EngineOptions | None, format_options: EngineOptions | None
-) -> EngineOptions | None:
-    """``engine_options``, or ``format_options``, its former name, given
-    instead. To be removed in the major release, with ``format_options``."""
-    if format_options is None:
-        return engine_options
-    if engine_options is not None:
-        raise ValueError("give engine_options only: format_options is its former name")
-    return format_options
-
 
 # Its features are mixins (in _explorer/), each a group of the methods below
 # working on the state the class sets up; what the class keeps is that state,
@@ -173,6 +95,9 @@ class StorageExplorer(
     AboutMixin,
     FoldersMixin,
     PreviewsMixin,
+    QueriesMixin,
+    ViewTabsMixin,
+    ItemMenuMixin,
     BookmarksMixin,
     JupyterLabFilesMixin,
     JobsMixin,
@@ -455,7 +380,7 @@ class StorageExplorer(
     _preview_panel = traitlets.Unicode("closed").tag(sync=True)
     # "standard", or "sidebar": the narrow layout of the launcher's side panel.
     _layout = traitlets.Unicode("standard").tag(sync=True)
-    # The file list's columns besides Name (keys of _LIST_COLUMNS), set by the
+    # The file list's columns besides Name (options.LIST_COLUMNS), set by the
     # settings menu's Columns and remembered by layout in ExplorerStates.
     _columns = traitlets.List(traitlets.Unicode()).tag(sync=True)
     # Format name -> label shown to the user, e.g. {"delta": "Delta Lake table"}.
@@ -567,7 +492,7 @@ class StorageExplorer(
         **storage_options: Any,
     ) -> None:
         started = time.monotonic()
-        engine_options = _engine_options(engine_options, format_options)
+        engine_options = options.engine_options(engine_options, format_options)
         if open_preview is not None:
             warnings.warn(
                 'open_preview is deprecated: use preview_panel="open" (or "closed")',
@@ -576,10 +501,10 @@ class StorageExplorer(
             )
             if open_preview:
                 preview_panel = "open"
-        _check_choice("tree_view", tree_view, _PANEL_STATES)
-        _check_choice("preview_panel", preview_panel, _PANEL_STATES)
-        _check_choice("layout", layout, _LAYOUTS)
-        _check_choice("unsafe_mode", unsafe_mode, _UNSAFE_MODES)
+        options.check_choice("tree_view", tree_view, options.PANEL_STATES)
+        options.check_choice("preview_panel", preview_panel, options.PANEL_STATES)
+        options.check_choice("layout", layout, options.LAYOUTS)
+        options.check_choice("unsafe_mode", unsafe_mode, options.UNSAFE_MODES)
         # Fixed: the frontend only opens and closes the tree (_validate_tree_view).
         self._tree_disabled = tree_view == "disabled"
         # Whether the explorer is set up: the observers of the user's choices
@@ -690,7 +615,7 @@ class StorageExplorer(
         self._actions = self._chain_of(mine)
         self._formats = self._actions.formats
         # The engines whose code "Python code" shows (None: all).
-        self._code_engines = _code_engines(code_snippet, self._actions)
+        self._code_engines = options.code_engines(code_snippet, self._actions)
         # unsafe_mode as given, which the kernel decides by (see _unsafe):
         # not the trait, which the page could set.
         self._unsafe_setting = unsafe_mode
@@ -730,7 +655,7 @@ class StorageExplorer(
             _logging_level=logging_level,
             # The user's last choice for this layout (the validator keeps the
             # columns the list has), else its default.
-            _columns=_DEFAULT_COLUMNS[layout]
+            _columns=options.DEFAULT_COLUMNS[layout]
             if (remembered := self._states.columns(layout)) is None
             else remembered,
             **self._format_traits(),
@@ -796,7 +721,7 @@ class StorageExplorer(
         file, kept with ``backups`` days' before (``_log_backups``; None: the
         console). The level logged: the user's last choice in the menu, if
         any, else ``level``."""
-        _check_choice("logging_menu", menu, _LOGGING_MENUS)
+        options.check_choice("logging_menu", menu, options.LOGGING_MENUS)
         level = _logs.level_name(level)
         if isinstance(backups, bool) or not isinstance(backups, int) or backups < 0:
             raise ValueError(
@@ -812,24 +737,6 @@ class StorageExplorer(
             )
         _logs.configure(level, self._log_backups)
         return level
-
-    def _users_actions(
-        self, setting: str, others: Sequence[Action[Any]]
-    ) -> list[Action[Any]]:
-        """The actions of the user's files, with ``user_actions="enabled"``,
-        each file left out with a warning if it cannot be used with
-        ``others``; and the user's ``actions.py`` offered in the settings
-        menu. None with ``"disabled"``."""
-        if setting not in _USER_ACTIONS:
-            raise ValueError(
-                f"user_actions must be one of {_USER_ACTIONS}, not {setting!r}"
-            )
-        if setting == "disabled":
-            return []
-        self._offer_config_file(
-            "actions", user_actions_file(), create_user_actions_file
-        )
-        return users_actions_warned(others)
 
     @staticmethod
     def default_actions() -> list[Action[Any]]:
@@ -882,55 +789,6 @@ class StorageExplorer(
             self._show_dir(path)
             self._list(path, fallback=root)
         self._changed()
-
-    def _level_of(self, path: str, fs: AbstractFileSystem | None = None) -> str | None:
-        """What the storage makes of folder ``path`` of ``fs``, by default the
-        one shown (e.g. "container"), for its icon:
-        ``FileSystemMapper.level``; None for a plain folder."""
-        try:
-            return self._mappers.level_of(fs or self._fs, path)
-        except Exception:
-            return None  # a mapper's error only costs an icon
-
-    def _restore_view(self, filesystem: Any, folders: Any) -> None:
-        """Show storage ``filesystem`` at its folder in ``folders`` ({storage
-        name: folder}), and remember the others' for when they are shown: a
-        view saved by the launcher's tab, to reopen where it was.
-
-        Saved views may be stale or edited: storages no longer offered,
-        folders outside a storage's top folder and values of the wrong type
-        are ignored, and a folder that is gone gives the top folder (see
-        ``_on_filesystem``).
-        """
-        folders = folders if isinstance(folders, dict) else {}
-        wanted = {
-            name: folder
-            for name, folder in folders.items()
-            if name in self._filesystems
-            and isinstance(folder, str)
-            and within_top(folder, self._filesystems[name].root)
-        }
-        if filesystem not in self._filesystems:
-            filesystem = self._filesystem
-        if filesystem != self._filesystem:
-            if filesystem in wanted:
-                self._remembered[filesystem] = wanted[filesystem]
-            self._filesystem = filesystem  # shows its remembered folder
-        elif filesystem in wanted and wanted[filesystem] != self._current_dir:
-            # The folder shown stays if the saved one is gone.
-            shown = self._current_dir
-            self._show_dir(wanted[filesystem])
-            self._list(wanted[filesystem], fallback=shown)
-        # Set last: switching remembers the folder left (the top one).
-        self._remembered.update(
-            {name: f for name, f in wanted.items() if name != self._filesystem}
-        )
-
-    def _exists_folder(self, path: str) -> bool:
-        try:
-            return self._isdir(path)
-        except Exception:
-            return False  # cannot tell: not bookmarked
 
     # --- Public interface ---
 
@@ -1311,39 +1169,6 @@ class StorageExplorer(
         self._show_selected_format()
         self._changed()
 
-    def _show_selected_format(self) -> None:
-        """Set ``_selected_format`` for the items selected: the item's best
-        format, if the engine chosen can view it (the Preview button).
-
-        The item's detection may read it, so it runs as a load, sharing the
-        click's detection (``_detection``): until it ends, the frontend
-        offers no Preview for the item. A later selection cancels it."""
-        if self._selection_load is not None:
-            self._selection_load.cancel()
-            self._selection_load = None
-        selected = list(self._selected)
-        if len(selected) != 1:
-            self._selected_format = {}
-            return
-        path = selected[0]
-        detection = self._detection(path, self._fs)
-
-        def work() -> _Detected | None:
-            try:
-                return detection.result()
-            except Exception:
-                return None  # detection is best-effort; a failure just means no preview
-
-        def done(item: _Detected | None) -> None:
-            formats = item.formats if item is not None else []
-            viewable = bool(formats) and self._viewable(formats[0], item.ctx)
-            self._selected_format = {
-                "path": path,
-                "format": formats[0].name if viewable else "",
-            }
-
-        self._selection_load = self._loader.submit(work, done, lambda _: None)
-
     @traitlets.validate("_engine")
     def _validate_engine(self, proposal: dict[str, Any]) -> str:
         keys = [e["key"] for e in self._engines]
@@ -1359,14 +1184,17 @@ class StorageExplorer(
         # is one at all is the explorer's argument (_tree_disabled). Not the
         # trait's value: ipywidgets validates after setting it.
         value = proposal["value"]
-        if value not in _PANEL_STATES or (value == "disabled") != self._tree_disabled:
+        if (
+            value not in options.PANEL_STATES
+            or (value == "disabled") != self._tree_disabled
+        ):
             state = "has no tree" if self._tree_disabled else "has a tree"
             raise traitlets.TraitError(f"the explorer {state}: not {value!r}")
         return value
 
     @traitlets.validate("_columns")
     def _validate_columns(self, proposal: dict[str, Any]) -> list[str]:
-        return _known_columns(proposal["value"])
+        return options.known_columns(proposal["value"])
 
     @traitlets.observe("_columns")
     def _on_columns(self, change: dict[str, Any]) -> None:

@@ -8,9 +8,15 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from jupyter_storage_explorer._errors import error_text
+from jupyter_storage_explorer._explorer import options
 from jupyter_storage_explorer._explorer.actions import ActionChain
 from jupyter_storage_explorer._explorer.icons import format_icons
-from jupyter_storage_explorer._extensions.user_actions import load_user_actions
+from jupyter_storage_explorer._extensions.user_actions import (
+    create_user_actions_file,
+    load_user_actions,
+    user_actions_file,
+    users_actions_warned,
+)
 from jupyter_storage_explorer.formats import Text
 
 if TYPE_CHECKING:
@@ -53,6 +59,21 @@ class UserActionsMixin:
             formats=self._chain_formats,
             engine_preference=engine_preference,
         )
+
+    def _users_actions(
+        self, setting: str, others: Sequence[Action[Any]]
+    ) -> list[Action[Any]]:
+        """The actions of the user's files, with ``user_actions="enabled"``,
+        each file left out with a warning if it cannot be used with
+        ``others``; and the user's ``actions.py`` offered in the settings
+        menu. None with ``"disabled"``."""
+        options.check_choice("user_actions", setting, options.USER_ACTIONS)
+        if setting == "disabled":
+            return []
+        self._offer_config_file(
+            "actions", user_actions_file(), create_user_actions_file
+        )
+        return users_actions_warned(others)
 
     def _format_traits(self) -> dict[str, Any]:
         """The traits telling the page of the chain's formats."""

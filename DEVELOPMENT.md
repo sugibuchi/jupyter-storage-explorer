@@ -402,18 +402,21 @@ make one call, however many views answer.
 - the only calls to fsspec on the storage shown, in its last block, *File operations*.
 
 Its features are mixins in `_explorer/`, listed before `AnyWidget` in its bases. They hold only methods. What they
-share is in `_explorer/common.py`.
+share is in `_explorer/common.py`. The values its arguments take, and their checks, are in `_explorer/options.py`.
 
-| Mixin                  | File            | Feature                                                                  |
-|------------------------|-----------------|--------------------------------------------------------------------------|
-| `FoldersMixin`         | `folders.py`    | The list and the tree.                                                   |
-| `PreviewsMixin`        | `previews.py`   | Previews, the data browser, view tabs, and the formats in the menu.      |
-| `BookmarksMixin`       | `bookmarks.py`  | Bookmarks.                                                               |
-| `JupyterLabFilesMixin` | `jupyterlab.py` | Files opened in JupyterLab's editors.                                    |
-| `JobsMixin`            | `jobs.py`       | Running file operations as jobs, and showing what they change.           |
-| `FileRequestsMixin`    | `requests.py`   | The requests for file operations.                                        |
-| `AboutMixin`           | `about.py`      | The settings menu's About: the versions of the explorer and the plugins. |
-| `UserActionsMixin`     | `user_actions.py` | The action chain, and the settings menu's Actions > Reload.           |
+| Mixin                  | File              | Feature                                                                  |
+|------------------------|-------------------|--------------------------------------------------------------------------|
+| `FoldersMixin`         | `folders.py`      | The list and the tree.                                                   |
+| `PreviewsMixin`        | `previews.py`     | Items detected and viewed, the preview panel, and the Preview button.    |
+| `QueriesMixin`         | `queries.py`      | The data browser in the preview panel, and `query_result()`.             |
+| `ViewTabsMixin`        | `view_tabs.py`    | Views in tabs of their own: "View in a new tab".                         |
+| `ItemMenuMixin`        | `item_menu.py`    | The right-click menu's formats, views and code.                          |
+| `BookmarksMixin`       | `bookmarks.py`    | Bookmarks.                                                               |
+| `JupyterLabFilesMixin` | `jupyterlab.py`   | Files opened in JupyterLab's editors.                                    |
+| `JobsMixin`            | `jobs.py`         | Running file operations as jobs, and showing what they change.           |
+| `FileRequestsMixin`    | `requests.py`     | The requests for file operations.                                        |
+| `AboutMixin`           | `about.py`        | The settings menu's About: the versions of the explorer and the plugins. |
+| `UserActionsMixin`     | `user_actions.py` | The action chain, with the user's actions, and Actions > Reload.         |
 
 ### Frontend
 

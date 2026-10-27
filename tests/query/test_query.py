@@ -13,7 +13,7 @@ import polars as pl
 import pytest
 from sqlframe.duckdb import DuckDBSession
 
-from jupyter_storage_explorer._explorer.previews import _layered_fetch
+from jupyter_storage_explorer._explorer.queries import _layered_fetch
 from jupyter_storage_explorer._explorer.states import ExplorerStates
 from jupyter_storage_explorer._json import jsonable
 from jupyter_storage_explorer._query import data_query

@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from jupyter_storage_explorer import _infos, _paths
+from jupyter_storage_explorer._explorer.common import within_top
 from jupyter_storage_explorer._explorer.listing import Listing
 from jupyter_storage_explorer.base import ItemContext
 from jupyter_storage_explorer.formats.base import detect as detect_format
@@ -177,6 +178,49 @@ class FoldersMixin:
             self._current_dir = path
         finally:
             self._dir_listed_by_caller = False
+
+    def _restore_view(self, filesystem: Any, folders: Any) -> None:
+        """Show storage ``filesystem`` at its folder in ``folders`` ({storage
+        name: folder}), and remember the others' for when they are shown: a
+        view saved by the launcher's tab, to reopen where it was.
+
+        Saved views may be stale or edited: storages no longer offered,
+        folders outside a storage's top folder and values of the wrong type
+        are ignored, and a folder that is gone gives the top folder (see
+        ``_on_filesystem``).
+        """
+        folders = folders if isinstance(folders, dict) else {}
+        wanted = {
+            name: folder
+            for name, folder in folders.items()
+            if name in self._filesystems
+            and isinstance(folder, str)
+            and within_top(folder, self._filesystems[name].root)
+        }
+        if filesystem not in self._filesystems:
+            filesystem = self._filesystem
+        if filesystem != self._filesystem:
+            if filesystem in wanted:
+                self._remembered[filesystem] = wanted[filesystem]
+            self._filesystem = filesystem  # shows its remembered folder
+        elif filesystem in wanted and wanted[filesystem] != self._current_dir:
+            # The folder shown stays if the saved one is gone.
+            shown = self._current_dir
+            self._show_dir(wanted[filesystem])
+            self._list(wanted[filesystem], fallback=shown)
+        # Set last: switching remembers the folder left (the top one).
+        self._remembered.update(
+            {name: f for name, f in wanted.items() if name != self._filesystem}
+        )
+
+    def _level_of(self, path: str, fs: AbstractFileSystem | None = None) -> str | None:
+        """What the storage makes of folder ``path`` of ``fs``, by default the
+        one shown (e.g. "container"), for its icon:
+        ``FileSystemMapper.level``; None for a plain folder."""
+        try:
+            return self._mappers.level_of(fs or self._fs, path)
+        except Exception:
+            return None  # a mapper's error only costs an icon
 
     def _ancestors(self, path: str) -> list[str]:
         """Directories from the root down to (but excluding) ``path``."""
