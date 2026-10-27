@@ -444,15 +444,7 @@ To view or load a format your own way, see [Actions of your own](#actions-of-you
 
 ## Actions of your own
 
-Views and code of your own, called actions, go in `~/.jupyter/storage-explorer/actions.py`. The ⚙ menu's
-**Actions > Edit** opens it in JupyterLab's editor, created from a commented example if it is missing. The launcher's
-tabs and side panel then offer them in **Preview as** and **Python code**, beside their own. **Actions > Reload**, in
-the same menu, applies a change to the file.
-
-An explorer in a notebook reads no actions files, so it has only what the notebook gives it. `user_actions="enabled"`
-makes it read them.
-
-The [Action development guide](action-development-guide.md) shows how, step by step.
+You can add views and code of your own, called actions: see the [Action development guide](action-development-guide.md).
 
 ## Engine options
 
