@@ -734,8 +734,10 @@ nothing of what an instance reaches. The plugin is experimental, as fsspec-datab
 `all-supports`.
 
 abfs-support adds `AzureDataLakeGen2Operation`, in `plugins/abfs-support`. On accounts with a hierarchical namespace,
-it renames, deletes and creates folders with the Data Lake SDK. Within an account, it copies on the server with Copy Blob. Its
-tests fake the SDK and adlfs, which the plugin imports on first use.
+it renames, deletes and creates folders with the Data Lake SDK. Within an account, it copies on the server with Copy Blob.
+On other accounts, it deletes folders in batches with adlfs's `_rm`, without `expand_path`. adlfs would otherwise check
+each file with a request of its own, one after another, before deleting any. Its tests fake the SDK and adlfs, which
+the plugin imports on first use.
 
 Tests use fsspec's `AsyncFileSystemWrapper` around a memory filesystem as an async filesystem.
 

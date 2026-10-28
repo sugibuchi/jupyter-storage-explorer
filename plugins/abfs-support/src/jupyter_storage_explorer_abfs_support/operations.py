@@ -52,19 +52,30 @@ class AzureDataLakeGen2Operation(FileSystemOperations):
     ones too) created first. A file whose copy fails or is cancelled is
     deleted, never left partly copied.
 
+    On accounts without a hierarchical namespace, folders are deleted in
+    batches of ``delete_batch`` files, with adlfs's own ``_rm``. It is told
+    not to check that each file exists: the files come from the folder's
+    listing, and adlfs checks them one after another, a request each, before
+    deleting any. The progress then moves batch by batch, and a cancel stops
+    the deletion between two batches.
+
     Moves and copies are done only within one account (``same``, as the
     explorer's filesystem mappers tell). Everything else raises
     ``FileSystemOperations.NotSupported``, for the next operations object:
     other operations and filesystems, moves and copies between accounts (copies between accounts have prerequisites of
     their own, e.g. the source readable by the target's credential),
-    deletions of files (one request with adlfs too), containers themselves, and accounts without a hierarchical namespace
-    (checked once per account; if it cannot be checked, e.g. for lack of
-    permission, the account is taken to have none).
+    deletions of files (one request with adlfs too), containers themselves, and the moves, copies and folders of accounts
+    without a hierarchical namespace (checked once per account; if it cannot
+    be checked, e.g. for lack of permission, the account is taken to have
+    none).
 
     Parameters
     ----------
     concurrency : int, default 64
         Most files copied at once.
+    delete_batch : int, default 256
+        Files deleted per request to adlfs, on accounts without a
+        hierarchical namespace. adlfs deletes them all at once.
 
     Needs ``adlfs`` and ``azure-storage-file-datalake``, installed with
     ``pip install "jupyter-storage-explorer[abfs]"``; without them, it leaves
@@ -75,8 +86,9 @@ class AzureDataLakeGen2Operation(FileSystemOperations):
     # Seconds between two polls of a copy still pending, growing to the last.
     POLL_INTERVALS = (0.2, 0.5, 1.0, 2.0)
 
-    def __init__(self, concurrency: int = 64) -> None:
+    def __init__(self, concurrency: int = 64, delete_batch: int = 256) -> None:
         self.concurrency = concurrency
+        self.delete_batch = delete_batch
         # Account URL -> whether it has a hierarchical namespace.
         self._hierarchical: dict[str, bool] = {}
         self._lock = threading.Lock()
@@ -147,12 +159,15 @@ class AzureDataLakeGen2Operation(FileSystemOperations):
         )
 
     def delete(self, fs: AbstractFileSystem, path: str, progress: Progress) -> None:
-        fs = self._gen2(fs)
+        fs = self._adlfs(fs)
         container, key = _split(path)
         if not key:
             raise self.NotSupported  # a container: adlfs's own
         if not fs.isdir(path):
             raise self.NotSupported  # a file: one request with adlfs too
+        if not self._is_hierarchical(fs):
+            self._delete_in_batches(fs, path, progress)
+            return
         progress.working_on(_paths.basename(path))
         started = time.monotonic()
         try:
@@ -177,16 +192,59 @@ class AzureDataLakeGen2Operation(FileSystemOperations):
         )
         fs.invalidate_cache(path)
 
+    def _delete_in_batches(
+        self, fs: AzureBlobFileSystem, path: str, progress: Progress
+    ) -> None:
+        """Delete folder ``path`` on an account without a hierarchical
+        namespace: its files ``delete_batch`` at a time, then what is left of
+        it, such as folder markers."""
+        started = time.monotonic()
+        try:
+            files = fs.find(path, detail=True)
+            names = list(files)
+            for start in range(0, len(names), self.delete_batch):
+                progress.check()
+                batch = names[start : start + self.delete_batch]
+                progress.working_on(_paths.basename(batch[-1]))
+                fs.rm(batch, expand_path=False)
+                progress.advance(
+                    files=len(batch),
+                    bytes=sum(files[n].get("size") or 0 for n in batch),
+                )
+            if fs.exists(path):
+                fs.rm(path, recursive=True)
+        finally:
+            fs.invalidate_cache(path)
+        log.info(
+            "Deleted %s in batches of %d files in %.1f s",
+            path,
+            self.delete_batch,
+            time.monotonic() - started,
+        )
+
     def _gen2(self, fs: AbstractFileSystem) -> AzureBlobFileSystem:
         """``fs``, if an adlfs filesystem of an account with a hierarchical
         namespace, usable from this thread; else NotSupported (also without
         adlfs or the Data Lake SDK)."""
+        fs = self._adlfs(fs)
+        if not self._is_hierarchical(fs):
+            raise self.NotSupported
+        return fs
+
+    def _adlfs(self, fs: AbstractFileSystem) -> AzureBlobFileSystem:
+        """``fs``, if an adlfs filesystem usable from this thread; else
+        NotSupported (also without adlfs or the Data Lake SDK)."""
         try:
             azure = _azure()
         except ImportError:
             raise self.NotSupported from None
         if not isinstance(fs, azure.AzureBlobFileSystem) or fs.asynchronous:
             raise self.NotSupported
+        return fs
+
+    def _is_hierarchical(self, fs: AzureBlobFileSystem) -> bool:
+        """Whether ``fs``'s account has a hierarchical namespace, asked once
+        per account."""
         with self._lock:
             known = self._hierarchical.get(fs.account_url)
         if known is None:
@@ -200,9 +258,7 @@ class AzureDataLakeGen2Operation(FileSystemOperations):
                 if known
                 else "no hierarchical namespace, so adlfs moves and copies",
             )
-        if not known:
-            raise self.NotSupported
-        return fs
+        return known
 
     @staticmethod
     def _has_hierarchical_namespace(fs: AzureBlobFileSystem) -> bool:
