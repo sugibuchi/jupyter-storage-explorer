@@ -178,6 +178,75 @@ class TestDelete:
         assert service.calls == []
 
 
+@pytest.fixture
+def blob_account(monkeypatch):
+    """An adlfs filesystem of an account without a hierarchical namespace,
+    with folder ``data/raw`` of five files and a folder marker left after
+    them, recording its ``rm`` calls in ``fs.removed``."""
+    fs = AzureBlobFileSystem(account_name="blobs", account_key="a2V5")
+    monkeypatch.setattr(
+        AzureDataLakeGen2Operation,
+        "_has_hierarchical_namespace",
+        staticmethod(lambda fs: False),
+    )
+    files = {f"data/raw/{n}": {"name": f"data/raw/{n}", "size": 2} for n in "abcde"}
+    fs.removed = []
+    is_dir(monkeypatch, fs, True)
+    monkeypatch.setattr(fs, "find", lambda path, detail=False: dict(files))
+    monkeypatch.setattr(fs, "exists", lambda path: True)
+    monkeypatch.setattr(
+        fs, "rm", lambda path, **kwargs: fs.removed.append((path, kwargs))
+    )
+    return fs
+
+
+class TestDeleteInBatches:
+    """Folders of accounts without a hierarchical namespace."""
+
+    def test_without_checking_each_file(self, blob_account, service, caplog):
+        caplog.set_level(logging.INFO)
+        progress = JobProgress()
+        AzureDataLakeGen2Operation(delete_batch=2).delete(
+            blob_account, "data/raw", progress
+        )
+        assert blob_account.removed == [
+            (["data/raw/a", "data/raw/b"], {"expand_path": False}),
+            (["data/raw/c", "data/raw/d"], {"expand_path": False}),
+            (["data/raw/e"], {"expand_path": False}),
+            ("data/raw", {"recursive": True}),  # what is left, e.g. a folder marker
+        ]
+        snapshot = progress.snapshot()
+        assert (snapshot["files_done"], snapshot["bytes_done"]) == (5, 10)
+        assert service.calls == []  # no Data Lake API
+        assert any(
+            r.getMessage().startswith("Deleted data/raw in batches of 2 files")
+            for r in caplog.records
+        )
+
+    def test_cancelled_between_batches(self, blob_account, monkeypatch):
+        progress = JobProgress()
+
+        def rm_then_cancel(path: Any, **kwargs: Any) -> None:
+            blob_account.removed.append((path, kwargs))
+            progress.cancel()
+
+        monkeypatch.setattr(blob_account, "rm", rm_then_cancel)
+        with pytest.raises(OperationCancelled):
+            AzureDataLakeGen2Operation(delete_batch=2).delete(
+                blob_account, "data/raw", progress
+            )
+        assert len(blob_account.removed) == 1
+
+    def test_files_and_containers_left_to_adlfs(self, blob_account, monkeypatch):
+        ops = AzureDataLakeGen2Operation()
+        with pytest.raises(FileSystemOperations.NotSupported):
+            ops.delete(blob_account, "data", JobProgress())
+        is_dir(monkeypatch, blob_account, False)
+        with pytest.raises(FileSystemOperations.NotSupported):
+            ops.delete(blob_account, "data/a.csv", JobProgress())
+        assert blob_account.removed == []
+
+
 def test_mkdir(lake, service):
     AzureDataLakeGen2Operation().mkdir(lake, "data/raw/new")
     assert service.calls[0] == (

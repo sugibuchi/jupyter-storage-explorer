@@ -24,8 +24,8 @@ Without either, the explorer's default operations do everything, file by file.
 
 ### Prerequisites
 
-- The storage account has a hierarchical namespace (Data Lake Storage Gen2). On other accounts, the default
-  operations take over.
+- The storage account has a hierarchical namespace (Data Lake Storage Gen2). On other accounts, the plugin only
+  speeds up folder deletions.
 - The plugin uses the explorer's adlfs storage with its own account and credential: it needs no settings of its own.
 
 ## What it does
@@ -41,8 +41,14 @@ operation, `AzureDataLakeGen2Operation`, uses the Data Lake SDK with the adlfs f
   fails or is cancelled is deleted, never left partly copied.
 - **Empty folders**, which adlfs alone cannot create.
 
-Anything else (other storages, transfers between accounts, accounts without a hierarchical namespace) is left to the
-explorer's other operations.
+On accounts without a hierarchical namespace, it deletes folders in batches of files. Their progress moves batch by
+batch, and Cancel stops them between two batches. adlfs alone checks every file one by one before deleting any.
+
+Anything else is left to the explorer's other operations:
+
+- other storages;
+- transfers between accounts;
+- moves, copies and new folders on accounts without a hierarchical namespace.
 
 ## Plugin options
 
@@ -83,6 +89,7 @@ StorageExplorer(
 )
 ```
 
-| Parameter     | Default | Meaning                                                                                                                      |
-|---------------|---------|------------------------------------------------------------------------------------------------------------------------------|
-| `concurrency` | `64`    | The most files copied at once: a folder's files are copied a folder at a time, at most this many at once, its folders first. |
+| Parameter      | Default | Meaning                                                                                                                      |
+|----------------|---------|------------------------------------------------------------------------------------------------------------------------------|
+| `concurrency`  | `64`    | The most files copied at once: a folder's files are copied a folder at a time, at most this many at once, its folders first. |
+| `delete_batch` | `256`   | The files deleted at once on accounts without a hierarchical namespace.                                                      |
