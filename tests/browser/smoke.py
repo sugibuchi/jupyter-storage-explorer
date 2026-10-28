@@ -443,7 +443,8 @@ def python_code(x: Explorer) -> None:
     code.filter(has_text="Load as DataFrame (Polars)").click()
     dialog = x.el.locator(".jse-dialog:visible")
     expect(dialog).to_contain_text("Load as DataFrame (Polars)")
-    expect(dialog).to_contain_text("read_parquet")
+    # memory://, which polars cannot read: a PyArrow dataset over fsspec.
+    expect(dialog).to_contain_text("pl.scan_pyarrow_dataset(dataset).collect()")
     expect(dialog).to_contain_text("Needs polars")
     dialog.press("Escape")
     expect(dialog).to_be_hidden()

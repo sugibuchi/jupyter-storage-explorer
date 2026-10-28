@@ -218,23 +218,25 @@ class TestPartitionedParquet:
 
     def test_code(self, make_item, memfs):
         memfs.pipe_file("/t/year=2025/month=1/part-0.parquet", b"")
-        item = make_item("/t")
+        item = make_item("/t", location=on_s3("t"))
         options = ParquetByPolarsOptions()
         assert last_line(parquet_as_lazy_frame(Parquet(), item, options)) == (
-            "df = pl.scan_parquet('memory:///t/year=*/month=*/*.parquet', "
+            "df = pl.scan_parquet('s3://b/t/year=*/month=*/*.parquet', "
             "hive_partitioning=True)"
         )
         assert last_line(parquet_as_data_frame(Parquet(), item, options)) == (
-            "df = pl.read_parquet('memory:///t/year=*/month=*/*.parquet', "
+            "df = pl.read_parquet('s3://b/t/year=*/month=*/*.parquet', "
             "hive_partitioning=True)"
         )
 
     def test_code_for_hive_files(self, make_item, memfs):
         frame = parquet_bytes(pl.DataFrame({"a": [1]}))
         memfs.pipe_file("/t/dt=2026-10-01/000000_0", frame)
-        item = make_item("/t")
+        item = make_item("/t", location=on_s3("t"))
         options = ParquetByPolarsOptions()
-        arguments = "'memory:///t/dt=*/*', hive_partitioning=True, hidden_file_prefix=['.', '_'])"
+        arguments = (
+            "'s3://b/t/dt=*/*', hive_partitioning=True, hidden_file_prefix=['.', '_'])"
+        )
         assert last_line(parquet_as_lazy_frame(Parquet(), item, options)) == (
             f"df = pl.scan_parquet({arguments}"
         )
@@ -256,13 +258,13 @@ class TestCode:
 
     def test_lazy_and_eager(self, make_item, memfs):
         memfs.pipe_file("/d/part-0.parquet", b"")
-        folder = make_item("/d")
+        folder = make_item("/d", location=on_s3("d"))
         options = ParquetByPolarsOptions()
         assert last_line(parquet_as_lazy_frame(Parquet(), folder, options)) == (
-            "df = pl.scan_parquet('memory:///d/*.parquet')"
+            "df = pl.scan_parquet('s3://b/d/*.parquet')"
         )
         assert last_line(parquet_as_data_frame(Parquet(), folder, options)) == (
-            "df = pl.read_parquet('memory:///d/*.parquet')"
+            "df = pl.read_parquet('s3://b/d/*.parquet')"
         )
         lines = make_item("/a.jsonl", b"{}\n", location=on_s3("a.jsonl"))
         options = json_lines_view.options_model()
@@ -485,7 +487,6 @@ class TestStoragesPolarsCannotRead:
             (csv_as_data_frame, Csv, "a.csv", "read_csv(f)"),
             (json_lines_as_data_frame, JsonLines, "a.jsonl", "read_ndjson(f)"),
             (json_as_data_frame, Json, "a.json", "read_json(f)"),
-            (parquet_as_data_frame, Parquet, "a.parquet", "read_parquet(f)"),
         ],
     )
     def test_code_of_a_file_opened_with_fsspec(
@@ -508,11 +509,7 @@ class TestStoragesPolarsCannotRead:
             f"    df = pl.{reader}"
         )
 
-    def test_no_code_for_folders_and_delta(self, make_item, memfs):
-        memfs.pipe_file("/d/part-0.parquet", b"")
-        options = ParquetByPolarsOptions()
-        for action in (parquet_as_lazy_frame, parquet_as_data_frame):
-            assert not action.does(Parquet(), make_item("/d"), options)
+    def test_no_code_for_delta(self, make_item, memfs):
         memfs.pipe_file("/t/_delta_log/0.json", b"{}")
         options = DeltaLakeByPolarsOptions()
         for action in (delta_as_lazy_frame, delta_as_data_frame):
@@ -537,6 +534,41 @@ class TestStoragesPolarsCannotRead:
         assert fmt.matches(item)
         frame = data(parquet_view, fmt, item).collect()
         assert frame.to_dicts() == [{"a": 1, "year": 2026}]
+
+    def test_parquet_code_reads_a_pyarrow_dataset(self, make_item):
+        # As the data browser does: lazily, files and folders alike.
+        part = parquet_bytes(pl.DataFrame({"a": [1]}))
+        make_item("/ds/year=2026/part-0.parquet", part)
+        item = make_item("/ds")
+        options = ParquetByPolarsOptions(fsspec_storage_options={"skip": True})
+        code = parquet_as_lazy_frame(Parquet(), item, options)
+        assert code == (
+            "import fsspec\nimport polars as pl\nimport pyarrow.dataset as ds\n\n"
+            "fs, path = fsspec.url_to_fs('memory:///ds', skip=True)\n"
+            "dataset = ds.dataset(path, filesystem=fs, format='parquet', "
+            "partitioning='hive')\n"
+            "df = pl.scan_pyarrow_dataset(dataset)"
+        )
+        code = parquet_as_data_frame(Parquet(), item, ParquetByPolarsOptions())
+        assert code.endswith("df = pl.scan_pyarrow_dataset(dataset).collect()")
+        namespace: dict[str, object] = {}
+        exec(code, namespace)
+        assert namespace["df"].to_dicts() == [{"a": 1, "year": 2026}]
+
+    def test_parquet_code_without_pyarrow(self, make_item, memfs, monkeypatch):
+        # A file opened with fsspec, read whole; a folder has no code.
+        monkeypatch.setattr(PyArrow, "is_installed", lambda self: False)
+        item = make_item("/a.parquet", b"")
+        options = ParquetByPolarsOptions()
+        assert not parquet_as_lazy_frame.does(Parquet(), item, options)
+        assert parquet_as_data_frame(Parquet(), item, options) == (
+            "import fsspec\nimport polars as pl\n\n"
+            "with fsspec.open('memory:///a.parquet', 'rb') as f:\n"
+            "    df = pl.read_parquet(f)"
+        )
+        memfs.pipe_file("/d/part-0.parquet", b"")
+        for action in (parquet_as_lazy_frame, parquet_as_data_frame):
+            assert not action.does(Parquet(), make_item("/d"), options)
 
     def test_parquet_needs_pyarrow_there(self, make_item, tmp_path, monkeypatch):
         monkeypatch.setattr(PyArrow, "is_installed", lambda self: False)
