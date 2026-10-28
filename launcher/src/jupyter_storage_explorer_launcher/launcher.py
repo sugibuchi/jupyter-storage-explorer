@@ -41,7 +41,7 @@ final. Each file may have these functions, all optional:
     A ``by_protocol`` merged with dicts stays one, which the explorer checks.
 ``filesystem_operations()``
     ``[FileSystemOperations, ...]``: file operations of your own (see
-    ``StorageExplorer``'s ``operations``), tried before the plugins' and
+    ``StorageExplorer``'s ``filesystem_operations``), tried before the plugins' and
     ``StorageExplorer.default_operations()``; a later layer's come first.
 ``filesystem_mappers()``
     ``[FileSystemMapper, ...]``: how filesystems of your own are told apart
@@ -138,10 +138,6 @@ _MERGES = {
 # The functions a launcher.py may have, besides final().
 HOOKS = (*_MERGES, "parameters")
 
-# The StorageExplorer arguments of functions named otherwise: the functions
-# are named as the plugins' properties are.
-_ARGUMENTS = {"filesystem_operations": "operations"}
-
 # Former names of functions, taken for the new ones, also in final(). To be
 # removed in the major release.
 ALIASES = {"format_options": "engine_options"}
@@ -162,9 +158,7 @@ RETIRED = {
 
 # StorageExplorer arguments that are not "parameters": set by their own
 # function (or one of its former names, see ALIASES), or by the launcher.
-_NOT_PARAMETERS = frozenset(
-    {"self", "path", "fs", *_MERGES, *ALIASES, *_ARGUMENTS.values()}
-)
+_NOT_PARAMETERS = frozenset({"self", "path", "fs", *_MERGES, *ALIASES})
 
 
 class LauncherError(Exception):
@@ -216,14 +210,12 @@ class Settings:
             **self.parameters,
             **(SIDEBAR if sidebar else {}),
         }
-        # The functions' values, as the explorer's arguments of their names
-        # (or _ARGUMENTS'): lists copied, so that the explorer never changes
-        # the settings.
+        # The functions' values, as the explorer's arguments of their names:
+        # lists copied, so that the explorer never changes the settings.
         for name in _MERGES:
             value = getattr(self, name)
             if name != "filesystems" and value:
-                argument = _ARGUMENTS.get(name, name)
-                kwargs[argument] = list(value) if isinstance(value, list) else value
+                kwargs[name] = list(value) if isinstance(value, list) else value
         filesystems = {k: v for k, v in self.filesystems.items() if v is not None}
         if filesystems:
             return (), {"filesystems": filesystems, **kwargs}
@@ -509,7 +501,7 @@ def _check_parameter_name(name: str, path: pathlib.Path) -> None:
     if name in _NOT_PARAMETERS - {"self"}:
         raise LauncherError(
             f"{path}: parameters(): {name} is set by its own function, not parameters()"
-            if name in _MERGES or name in ALIASES or name in _ARGUMENTS.values()
+            if name in _MERGES or name in ALIASES
             else f"{path}: parameters(): {name} is set by the launcher (use filesystems())"
         )
     if name not in _parameter_names():

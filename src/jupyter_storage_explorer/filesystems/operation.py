@@ -1,7 +1,7 @@
 """File operations, run in the background with progress reports and cancellation.
 
 ``StorageExplorer`` moves, copies, deletes and downloads files through a list
-of ``FileSystemOperations`` objects (its ``operations`` argument): for each
+of ``FileSystemOperations`` objects (its ``filesystem_operations`` argument): for each
 operation it calls the first object's method, and the next object's if that
 raises ``FileSystemOperations.NotSupported`` (the explorer's chain,
 _jobs/operation_chain.py). Its

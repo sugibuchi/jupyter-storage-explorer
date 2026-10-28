@@ -686,7 +686,7 @@ Moving, copying, deleting, downloading and creating folders go through operation
 
 - Each method is tried on each object in order, until one does not raise `FileSystemOperations.NotSupported`.
 - A library's own `NotImplementedError` is an error, not a refusal. That is why the chain has an exception of its own.
-- The explorer's `operations=` come first, then the plugins', then `StorageExplorer.default_operations()`.
+- The explorer's `filesystem_operations=` come first, then the plugins', then `StorageExplorer.default_operations()`.
 
 The default operations, in `filesystems/operations.py`:
 

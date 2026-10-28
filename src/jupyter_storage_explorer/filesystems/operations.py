@@ -205,7 +205,7 @@ class AtomicMoveOperation(FileSystemOperations):
     --------
     >>> StorageExplorer(
     ...     filesystems={...},
-    ...     operations=[
+    ...     filesystem_operations=[
     ...         AtomicMoveOperation([*AtomicMoveOperation.PROTOCOLS, "sftp"]),
     ...         AsyncFsspecOperations(),
     ...         FsspecOperations(),
@@ -544,7 +544,7 @@ def _common_loop(
 
 
 def default_operations() -> list[FileSystemOperations]:
-    """The file operations tried after an explorer's ``operations``.
+    """The file operations tried after an explorer's ``filesystem_operations``.
 
     Returns
     -------

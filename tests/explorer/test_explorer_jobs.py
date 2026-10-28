@@ -63,7 +63,7 @@ class TestFollowingJobs:
             {"/src/n1.txt": b"", "/src/n2.txt": b"", "/d/a/x": b"", "/d/b/x": b""}
         )
         watch = Watch()
-        explorer = make("/", fs=memfs, operations=[watch])
+        explorer = make("/", fs=memfs, filesystem_operations=[watch])
         watch.explorer = explorer
         explorer._current_dir = "/d"
         return explorer, watch
@@ -182,7 +182,7 @@ class TestJobs:
         kinds = [type(o) for o in explorer._operations.operations]
         assert kinds == [AtomicMoveOperation, AsyncFsspecOperations, FsspecOperations]
         # Those given come first, then the plugins', then the defaults.
-        explorer = make("/", fs=memfs, operations=[FileSystemOperations()])
+        explorer = make("/", fs=memfs, filesystem_operations=[FileSystemOperations()])
         assert [type(o) for o in explorer._operations.operations] == [
             FileSystemOperations,
             AzureDataLakeGen2Operation,  # abfs-support's
@@ -197,7 +197,7 @@ class TestJobs:
                 fs.mv(path, "/trash/" + path.rsplit("/", 1)[-1])
 
         memfs.pipe({"/d/a.txt": b"a", "/d/b.txt": b"b"})
-        explorer = make("/d", fs=memfs, operations=[Trash()])
+        explorer = make("/d", fs=memfs, filesystem_operations=[Trash()])
         explorer.request({"type": "delete", "rid": 1, "paths": ["/d/a.txt"]})
         assert memfs.cat_file("/trash/a.txt") == b"a"
         explorer.request(
@@ -217,7 +217,7 @@ class TestJobs:
         explorer = make(
             "/d",
             fs=memfs,
-            operations=[CancelAfterOne()],
+            filesystem_operations=[CancelAfterOne()],
         )
         explorer.message(
             {
@@ -252,7 +252,7 @@ class TestJobs:
         explorer = make(
             "/d",
             fs=memfs,
-            operations=[CancelInside()],
+            filesystem_operations=[CancelInside()],
         )
         reply = explorer.request(
             {

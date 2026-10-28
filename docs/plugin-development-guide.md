@@ -1298,7 +1298,7 @@ from my_components import MyMapper, ServerSideCopy, parquet_as_relation, parquet
 StorageExplorer(
     "s3://bucket/data",
     actions=[parquet_view, parquet_as_relation],  # functions decorated with @view or @code: their formats come with them
-    operations=[ServerSideCopy()],  # FileSystemOperations objects
+    filesystem_operations=[ServerSideCopy()],  # FileSystemOperations objects
     filesystem_mappers=[MyMapper()],  # FileSystemMapper objects
 )
 ```
