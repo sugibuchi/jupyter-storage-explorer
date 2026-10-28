@@ -25,9 +25,55 @@ Without `pyarrow` or `openpyxl`, the other formats still work.
 
 ### Prerequisites
 
-- The plugin expects pandas to reach your storage already, as configured in the environment: pandas reads the data
-  without options. You can still give options in [Engine options](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/plugins/pandas-support/README.md#engine-options).
-- pandas reads cloud storage through fsspec, with the storage's package, e.g. `s3fs` or `adlfs`, and its credentials.
+- pandas reads cloud storage through fsspec, with the storage's package, e.g. `s3fs` or `adlfs`.
+- The code needs credentials for cloud storage: see [Authentication](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/plugins/pandas-support/README.md#authentication).
+
+### Authentication
+
+The data browser reads through the explorer's filesystems, with their credentials: it needs nothing more.
+
+The code reads with pandas, which opens its own fsspec filesystems. Give their credentials as `storage_options`, one
+per storage with `by_protocol`:
+
+```python
+from jupyter_storage_explorer import StorageExplorer
+from jupyter_storage_explorer.engine import by_protocol
+
+StorageExplorer(
+    filesystems={
+        "Lake": "abfs://lake@account.dfs.core.windows.net",
+        "Personal": "s3://my-bucket",
+    },
+    engine_options={
+        "pandas": {
+            "*": by_protocol(
+                {
+                    "abfs": {"storage_options": {"anon": False}},
+                    "s3": {"storage_options": {"profile": "personal"}},
+                }
+            ),
+        },
+    },
+)
+```
+
+The storage options are those of the storage's fsspec filesystem:
+
+- [`adlfs`](https://fsspec.github.io/adlfs/api/): Azure Storage. `anon: False` uses azure-identity's default
+  credential.
+- [`s3fs`](https://s3fs.readthedocs.io/en/latest/api.html#s3fs.core.S3FileSystem): S3, e.g. with an AWS profile.
+- [`gcsfs`](https://gcsfs.readthedocs.io/en/latest/api.html#gcsfs.core.GCSFileSystem): Google Cloud Storage.
+
+For the launcher's tabs, `engine_options()` in `launcher.py` returns the same engine options:
+
+```python
+def engine_options():
+    return {
+        "pandas": {
+            "*": by_protocol({"abfs": {"storage_options": {"anon": False}}}),
+        },
+    }
+```
 
 ## Plugin options
 

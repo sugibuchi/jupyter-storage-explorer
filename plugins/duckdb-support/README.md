@@ -28,15 +28,40 @@ with `duckdb.install_extension("delta")` where the kernel cannot download it.
 
 - DuckDB reads local files itself. On other storages, the plugin reads through the explorer's filesystem, with the
   explorer's credentials: DuckDB needs no configuration.
-- DuckDB can also read cloud storage itself, with its
-  [httpfs](https://duckdb.org/docs/stable/core_extensions/httpfs/overview) and
-  [azure](https://duckdb.org/docs/stable/core_extensions/azure) extensions and their
-  [secrets](https://duckdb.org/docs/stable/configuration/secrets_manager). Every view opens a connection of its own,
-  so give the secrets as persistent secrets, which every connection loads.
-- Once DuckDB reaches a storage, list its URL scheme in the `url_schemes` [engine option](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/plugins/duckdb-support/README.md#engine-options), e.g.
-  `["s3"]`. The views then read it by URL.
+- To read cloud storage itself, DuckDB needs credentials: see [Authentication](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/plugins/duckdb-support/README.md#authentication).
 - Delta Lake tables are read only by URL: on local disks and the storages of `url_schemes`. DuckDB cannot read them
   through the explorer's filesystem.
+
+### Authentication
+
+DuckDB reads cloud storage itself with its [httpfs](https://duckdb.org/docs/stable/core_extensions/httpfs/overview)
+and [azure](https://duckdb.org/docs/stable/core_extensions/azure) extensions. It is quicker than through the
+explorer's filesystem, and the only way to view Delta Lake tables there.
+
+Give the credentials as DuckDB [persistent secrets](https://duckdb.org/docs/stable/configuration/secrets_manager).
+Every view opens a connection of its own, and every connection loads them. The `credential_chain` provider finds the
+credentials as the cloud's SDK does:
+
+```python
+import duckdb
+
+duckdb.sql(
+    "CREATE PERSISTENT SECRET (TYPE s3, PROVIDER credential_chain, PROFILE 'personal')"
+)
+duckdb.sql(
+    "CREATE PERSISTENT SECRET (TYPE azure, PROVIDER credential_chain, ACCOUNT_NAME 'account')"
+)
+```
+
+Then list the storages' URL schemes in the `url_schemes` [engine option](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/plugins/duckdb-support/README.md#engine-options), so that the views read them
+by URL:
+
+```python
+StorageExplorer(
+    "abfs://lake@account.dfs.core.windows.net",
+    engine_options={"duckdb": {"*": {"url_schemes": ["s3", "abfs"]}}},
+)
+```
 
 ## How DuckDB reads your data
 
