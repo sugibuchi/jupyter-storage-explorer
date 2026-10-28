@@ -199,7 +199,7 @@ class TestRecords:
             {"type": "move", "rid": 1, "paths": ["/data/a.csv"], "dest": "/other"}
         )
         info = records(logging.INFO)
-        assert any(m.endswith("started: Moving a.csv to other") for m in info)
+        assert any(m.endswith("started: Moving a.csv into other") for m in info)
         done = next(m for m in info if " done in " in m)
         assert "1 moved, 1 files" in done
 
