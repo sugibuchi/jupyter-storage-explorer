@@ -166,7 +166,7 @@ class TestJobs:
         ]
         assert states[0] == "queued" and states[-1] == "done"
         final = mem_explorer.job(reply["job"])
-        assert final["title"] == "Moving a.csv to other"
+        assert final["title"] == "Moving a.csv into other"
         assert final["result"] == {"moved": ["a.csv"], "skipped": [], "errors": []}
         assert (final["files_total"], final["files_done"]) == (1, 1)
 

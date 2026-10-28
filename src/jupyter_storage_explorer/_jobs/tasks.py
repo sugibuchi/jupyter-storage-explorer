@@ -60,7 +60,7 @@ class Task:
     """
 
     kind: str  # "move", "delete", "paste", "upload", "download" or "properties"
-    title: str  # e.g. "Moving a.csv to data", shown with its progress
+    title: str  # e.g. "Moving a.csv into data", shown with its progress
     fs: AbstractFileSystem
     work: Callable[[JobProgress], dict[str, Any]] = lambda progress: {}
     cleanup: Callable[[], None] | None = None
@@ -146,6 +146,7 @@ class _Copy:
     fs: AbstractFileSystem
     source: str
     target: str
+    is_folder: bool = False
 
 
 class FileTasks:
@@ -220,65 +221,21 @@ class FileTasks:
         if_exists: str = "ask",
         folders: bool = False,
     ) -> Plan:
-        """Move ``paths`` into folder ``dest``, each with the operations' ``move``.
+        """Move ``paths`` of ``fs`` into folder ``dest``, each with the
+        operations' ``move``: a cut and paste within ``fs``, except that
+        items already in ``dest`` are left out without an error, as they
+        were dropped where they are.
 
         Result: {"moved", "skipped", "errors"}.
         """
-        moves, errors = self._plan_moves(paths, dest, folders)
-        existing = {target for _, target, _ in moves if self.fs.exists(target)}
-        if if_exists == "ask" and existing:
-            return _conflicts(existing)
-        fs, ops = self.fs, self.ops
-        title = f"Moving {_describe(t for _, t, _ in moves)} to {_paths.basename(dest)}"
-        task = Task("move", title, fs)
-
-        def work(progress: JobProgress) -> dict[str, Any]:
-            sizes = [self.measure(fs, s) if f else (1, 0) for s, _, f in moves]
-            skipped, failed = [], list(errors)
-
-            def move(item: tuple[str, str, bool]) -> None:
-                source, target, _ = item
-                if target in existing and if_exists == "skip":
-                    skipped.append(_paths.basename(target))
-                    return
-                if target in existing:
-                    # Renaming onto an existing file fails on some systems.
-                    ops.delete(fs, target, progress)
-                ops.move(fs, source, fs, target, progress, same=True)
-                task.record(
-                    moved=(source, target),
-                    changed=[_paths.parent(source, fs)],
-                    added_to=dest,
-                )
-
-            stop = _do_each(progress, moves, sizes, move, failed)
-            names = [_paths.basename(s) for s, _ in task.moved]
-            return _outcome(stop, moved=names, skipped=skipped, errors=failed)
-
-        task.work = work
-        return task
-
-    def _plan_moves(
-        self, paths: Sequence[str], dest: str, folders: bool
-    ) -> tuple[list[tuple[str, str, bool]], list[str]]:
-        """(source, target, is folder) for the items to move, and errors for the rest."""
-        moves, errors = [], []
-        for path in paths:
-            name = _paths.basename(path)
-            target = _paths.join(dest, name)
-            if _paths.norm(path) == _paths.norm(target):
-                continue  # already in that folder
-            refused = self._refused(self.fs, path, self.fs, target)
-            is_folder = refused is None and self.fs.isdir(path)
-            if is_folder:
-                refused = self._folder_refusal(
-                    path, "moved", folders, into=dest, target=target
-                )
-            if refused is not None:
-                errors.append(f"{name}: {refused}")
-            else:
-                moves.append((path, target, is_folder))
-        return moves, errors
+        copies = [
+            (self.fs, path, _paths.basename(path))
+            for path in paths
+            if _paths.parent(path, self.fs) != _paths.norm(dest)
+        ]
+        return self._copy_into(
+            copies, dest, if_exists=if_exists, folders=folders, errors=[], kind="move"
+        )
 
     def _folder_refusal(
         self,
@@ -484,8 +441,15 @@ class FileTasks:
         )
         task = Task(kind, title, fs)
 
+        def size(plan: _Copy) -> tuple[int, int]:
+            # A file's bytes matter only when they go through the kernel: a
+            # request per file, before anything is done, is otherwise wasted.
+            if plan.is_folder or not self.same_filesystem(plan.fs, fs):
+                return self.measure(plan.fs, plan.source)
+            return 1, 0
+
         def work(progress: JobProgress) -> dict[str, Any]:
-            sizes = [self.measure(p.fs, p.source) for p in plans]
+            sizes = [size(p) for p in plans]
             done, skipped, failed = [], [], list(errors)
 
             def copy(plan: _Copy) -> None:
@@ -532,6 +496,11 @@ class FileTasks:
         server's disk, dragged from JupyterLab's file browser (for ``check``)."""
         plans = []
         for source_fs, source, name in copies:
+            same = self.same_filesystem(source_fs, self.fs)
+            if same and _paths.norm(source) == _paths.norm(self.root):
+                # Before its name, which may be none, e.g. "/".
+                errors.append(f"{name}: the top folder is not {verb}")
+                continue
             try:
                 target = _paths.join(dest, _paths.safe_name(name))
                 is_folder = source_fs.isdir(source)
@@ -548,12 +517,12 @@ class FileTasks:
                     folders,
                     into=dest,
                     target=target,
-                    same=self.same_filesystem(source_fs, self.fs),
+                    same=same,
                 )
             if refused is not None:
                 errors.append(f"{name}: {refused}")
             else:
-                plans.append(_Copy(source_fs, source, target))
+                plans.append(_Copy(source_fs, source, target, is_folder))
         return plans
 
     def upload_file(self, local_path: str, target: str) -> Task:

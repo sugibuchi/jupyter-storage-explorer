@@ -35,10 +35,34 @@ def run(task: Task) -> dict:
 class TestFileTasks:
     def test_move_records_what_changed(self, tasks):
         task = tasks.move(["/d/a.txt"], "/e")
-        assert task.title == "Moving a.txt to e"
+        assert task.title == "Moving a.txt into e"
         assert run(task) == {"moved": ["a.txt"], "skipped": [], "errors": []}
         assert task.moved == [("/d/a.txt", "/e/a.txt")]
         assert task.changed == {"/d", "/e"}
+
+    def test_move_leaves_out_items_already_there(self, tasks):
+        # Dropped where they are: no error, unlike a paste into their folder.
+        task = tasks.move(["/e/b.txt", "/d/a.txt"], "/e")
+        assert run(task) == {"moved": ["a.txt"], "skipped": [], "errors": []}
+
+    def test_files_measured_only_between_filesystems(
+        self, tasks, tmp_path, monkeypatch
+    ):
+        measured = []
+        measure = tasks.measure
+        monkeypatch.setattr(
+            tasks,
+            "measure",
+            lambda fs, path: measured.append(path) or measure(fs, path),
+        )
+        tasks.fs.pipe_file("/d/sub/x.txt", b"x")
+        run(tasks.move(["/d/a.txt", "/d/sub"], "/e", folders=True))
+        assert measured == ["/d/sub"]
+        (tmp_path / "f.txt").write_bytes(b"f")
+        run(tasks.upload([str(tmp_path / "f.txt")], "/e"))
+        assert measured[1:] == [
+            fsspec.filesystem("file")._strip_protocol(str(tmp_path / "f.txt"))
+        ]
 
     def test_conflicts_asked_first(self, tasks):
         assert tasks.move(["/d/b.txt"], "/e") == {"conflicts": ["b.txt"]}
