@@ -654,8 +654,8 @@ Logs, see [Logs](#logs):
 
 For extending the explorer, tried before the defaults:
 
-| Option                     | Meaning                                                                                                               |
-|----------------------------|-----------------------------------------------------------------------------------------------------------------------|
-| `operations=[...]`         | File operations; see [File operations](plugin-development-guide.md#file-operations).                                     |
-| `actions=[...]`            | Views and code of formats with libraries, as functions; see [Actions](plugin-development-guide.md#actions).              |
-| `filesystem_mappers=[...]` | How storages are told apart; see [Filesystem mappers](plugin-development-guide.md#filesystem-mappers).                   |
+| Option                        | Meaning                                                                                                    |
+|-------------------------------|------------------------------------------------------------------------------------------------------------|
+| `filesystem_operations=[...]` | File operations; see [File operations](plugin-development-guide.md#file-operations).                       |
+| `actions=[...]`               | Views and code of formats with libraries, as functions; see [Actions](plugin-development-guide.md#actions). |
+| `filesystem_mappers=[...]`    | How storages are told apart; see [Filesystem mappers](plugin-development-guide.md#filesystem-mappers).      |

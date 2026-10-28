@@ -85,7 +85,7 @@ from jupyter_storage_explorer_abfs_support import AzureDataLakeGen2Operation
 StorageExplorer(
     "abfs://lake@myaccount.dfs.core.windows.net/raw",
     plugin_options={"abfs-support": {"enabled": False}},
-    operations=[AzureDataLakeGen2Operation(concurrency=16)],
+    filesystem_operations=[AzureDataLakeGen2Operation(concurrency=16)],
 )
 ```
 

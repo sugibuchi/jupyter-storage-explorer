@@ -278,13 +278,13 @@ class StorageExplorer(
         them all for; None to leave them to the view's ``fetch`` (an
         action's, see ``QueryView``), else the default, which skips rows
         where the library can and else drops them.
-    operations : sequence of FileSystemOperations, optional
+    filesystem_operations : sequence of FileSystemOperations, optional
         File operations of your own, tried before the plugins' and
-        ``default_operations()``,
-        e.g. ``[MyOps()]`` for server-side copies: for each operation (move,
-        copy, delete, ...), the first object that supports it does it (see
-        ``jupyter_storage_explorer.filesystems``). To change the defaults themselves, override
-        ``default_operations`` in a subclass.
+        ``default_operations()``, e.g. ``[MyOps()]`` for server-side copies:
+        for each operation (move, copy, delete, ...), the first object that
+        supports it does it (see ``jupyter_storage_explorer.filesystems``).
+        To change the defaults themselves, override ``default_operations``
+        in a subclass.
     filesystem_mappers : sequence of FileSystemMapper, optional
         Mappers of your own, tried before the plugins' and
         ``jupyter_storage_explorer.filesystems.default_mappers()``: for each
@@ -489,7 +489,7 @@ class StorageExplorer(
         max_browser_items: int | None = 20_000,
         fetch_rows: Callable[[nw.LazyFrame, int, int], nw.DataFrame | None]
         | None = None,
-        operations: Sequence[FileSystemOperations] | None = None,
+        filesystem_operations: Sequence[FileSystemOperations] | None = None,
         filesystem_mappers: Sequence[FileSystemMapper] | None = None,
         transfer_policy: Sequence[Mapping[str, str]] | None = None,
         # The former name of engine_options, kept as an alias. To be removed
@@ -554,7 +554,11 @@ class StorageExplorer(
         # How files are moved, copied, deleted and downloaded (see filesystems/),
         # and the jobs doing it in the background (see _jobs/runner.py).
         self._operations = OperationChain(
-            [*(operations or ()), *components.operations, *self.default_operations()]
+            [
+                *(filesystem_operations or ()),
+                *components.operations,
+                *self.default_operations(),
+            ]
         )
         self._jobs = JobRunner(self._send_job)
         # Set by close(): jobs ending afterwards only clean up.
@@ -728,7 +732,7 @@ class StorageExplorer(
 
     @staticmethod
     def default_operations() -> list[FileSystemOperations]:
-        """The file operations tried after those given as ``operations``;
+        """The file operations tried after those given as ``filesystem_operations``;
         override it in a subclass to change them.
 
         Returns

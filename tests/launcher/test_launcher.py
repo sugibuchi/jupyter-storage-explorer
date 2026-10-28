@@ -231,8 +231,7 @@ class TestMerging:
         # The user's first; the explorer tries the defaults after them.
         names = [a.__name__ for a in kwargs["actions"]]
         assert names == ["json_lines_view", "csv_view"]
-        # As the explorer's operations.
-        kinds = [type(o) for o in kwargs["operations"]]
+        kinds = [type(o) for o in kwargs["filesystem_operations"]]
         assert kinds == [FileSystemOperations, FsspecOperations]
         mappers = [type(m).__name__ for m in kwargs["filesystem_mappers"]]
         assert mappers == ["GCSMapper", "S3Mapper"]
@@ -567,8 +566,8 @@ class TestErrors:
                 "transfer_policy is set by its own function",
             ),
             (
-                "def parameters():\n    return {'operations': []}",
-                "operations is set by its own function",
+                "def parameters():\n    return {'filesystem_operations': []}",
+                "filesystem_operations is set by its own function",
             ),
             ("def parameters():\n    return {'path': '.'}", "set by the launcher"),
             ("def final():\n    return ['parameters']", "unknown setting 'parameters'"),

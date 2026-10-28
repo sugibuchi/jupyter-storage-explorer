@@ -6,7 +6,7 @@ they move, copy, delete, upload and download files (operations).
 locations (``Location`` subclasses), level_icons.py the CSS of folders'
 icons (``level_icon_css``), and mappers.py and operations.py the predefined
 ones, tried after an explorer's own (its ``filesystem_mappers``
-and ``operations`` arguments): ``default_mappers()`` and
+and ``filesystem_operations`` arguments): ``default_mappers()`` and
 ``default_operations()``. The predefined classes are imported from their
 modules. Operations and mappers for particular storages come with plugins,
 e.g. ``AzureDataLakeGen2Operation`` with abfs-support

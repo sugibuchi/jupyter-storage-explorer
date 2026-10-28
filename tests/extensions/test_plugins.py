@@ -260,7 +260,7 @@ class TestExplorer:
         explorer = make(
             "/",
             fs=memfs,
-            operations=[given],
+            filesystem_operations=[given],
             filesystem_mappers=[mapper],
             plugin_options={"sample-support": {"concurrency": 2}},
         )
