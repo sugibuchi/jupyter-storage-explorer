@@ -74,7 +74,9 @@ def check_plugin(
     - its components: actions registered together, ``DataFormat`` classes,
       ``FileSystemOperations`` and ``FileSystemMapper`` objects or classes;
     - its actions together with the explorer's own and those of the other
-      plugins installed, as an explorer checks them when it is created.
+      plugins installed, as an explorer checks them when it is created;
+    - its ``engine_options``, against those actions: explorers leave out
+      those they refuse, with a warning.
 
     What a component does, e.g. a ``check`` reading nothing, is for the
     plugin's own tests.
@@ -207,17 +209,25 @@ def _read(plugin: StorageExplorerPlugin, name: str, problems: list[str]) -> list
 
 def _chain_problems(plugins: list[StorageExplorerPlugin]) -> list[str]:
     """What keeps ``plugins``' actions and formats from an explorer, with its
-    own: what ``ActionChain`` refuses."""
+    own: what ``ActionChain`` refuses. Then the engine options of the plugin
+    checked, the last, which explorers would leave out with a warning."""
     components = PluginComponents(plugins)
+    others = ", ".join(p.key for p in plugins[:-1]) or "none"
     try:
-        ActionChain(
+        chain = ActionChain(
             [*components.actions, *StorageExplorer.default_actions()],
             formats=[*components.formats, *DEFAULT_FORMATS],
         )
     except (TypeError, ValueError) as exc:
-        others = ", ".join(p.key for p in plugins[:-1]) or "none"
         return [
             f"with the explorer's own actions and the other plugins' ({others}): {exc}"
+        ]
+    try:
+        chain.check_options(plugins[-1].engine_options)
+    except Exception as exc:
+        return [
+            f"engine_options, with the explorer's own actions and the other "
+            f"plugins' ({others}): {type(exc).__name__}: {exc}"
         ]
     return []
 

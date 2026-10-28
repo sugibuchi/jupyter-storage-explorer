@@ -39,10 +39,10 @@ final. Each file may have these functions, all optional:
     be a function of the item's location returning them: merged with
     another layer's, the later layer's options still win option by option.
     A ``by_protocol`` merged with dicts stays one, which the explorer checks.
-``operations()``
-    ``[FileSystemOperations, ...]``: file operations of your own, tried
-    before ``StorageExplorer.default_operations()``; a later layer's come
-    first.
+``filesystem_operations()``
+    ``[FileSystemOperations, ...]``: file operations of your own (see
+    ``StorageExplorer``'s ``operations``), tried before the plugins' and
+    ``StorageExplorer.default_operations()``; a later layer's come first.
 ``filesystem_mappers()``
     ``[FileSystemMapper, ...]``: how filesystems of your own are told apart
     and their paths become URLs (see ``jupyter_storage_explorer.filesystems``),
@@ -130,13 +130,17 @@ _MERGES = {
     "plugin_options": "by plugin",
     "actions": "first",
     "engine_options": "by option",
-    "operations": "first",
+    "filesystem_operations": "first",
     "filesystem_mappers": "first",
     "transfer_policy": "first",
 }
 
 # The functions a launcher.py may have, besides final().
 HOOKS = (*_MERGES, "parameters")
+
+# The StorageExplorer arguments of functions named otherwise: the functions
+# are named as the plugins' properties are.
+_ARGUMENTS = {"filesystem_operations": "operations"}
 
 # Former names of functions, taken for the new ones, also in final(). To be
 # removed in the major release.
@@ -158,7 +162,9 @@ RETIRED = {
 
 # StorageExplorer arguments that are not "parameters": set by their own
 # function (or one of its former names, see ALIASES), or by the launcher.
-_NOT_PARAMETERS = frozenset({"self", "path", "fs", *_MERGES, *ALIASES})
+_NOT_PARAMETERS = frozenset(
+    {"self", "path", "fs", *_MERGES, *ALIASES, *_ARGUMENTS.values()}
+)
 
 
 class LauncherError(Exception):
@@ -182,7 +188,7 @@ class Settings:
     actions: list[Any] = dataclasses.field(default_factory=list)
     # {engine key: {format or "*": a dict of options, or a function of the location}}
     engine_options: dict[str, dict[str, Any]] = dataclasses.field(default_factory=dict)
-    operations: list[Any] = dataclasses.field(default_factory=list)
+    filesystem_operations: list[Any] = dataclasses.field(default_factory=list)
     filesystem_mappers: list[Any] = dataclasses.field(default_factory=list)
     transfer_policy: list[Any] = dataclasses.field(default_factory=list)
     parameters: dict[str, Any] = dataclasses.field(default_factory=dict)
@@ -210,12 +216,14 @@ class Settings:
             **self.parameters,
             **(SIDEBAR if sidebar else {}),
         }
-        # The functions' values, as the explorer's arguments of their names:
-        # lists copied, so that the explorer never changes the settings.
+        # The functions' values, as the explorer's arguments of their names
+        # (or _ARGUMENTS'): lists copied, so that the explorer never changes
+        # the settings.
         for name in _MERGES:
             value = getattr(self, name)
             if name != "filesystems" and value:
-                kwargs[name] = list(value) if isinstance(value, list) else value
+                argument = _ARGUMENTS.get(name, name)
+                kwargs[argument] = list(value) if isinstance(value, list) else value
         filesystems = {k: v for k, v in self.filesystems.items() if v is not None}
         if filesystems:
             return (), {"filesystems": filesystems, **kwargs}
@@ -462,6 +470,8 @@ def _merge_engine_options(
     """Merge one layer's ``engine_options()`` into ``merged``: by engine,
     format, then option, so a layer changes one option of a format without
     restating the others. Whether the names exist is checked by the explorer."""
+    from jupyter_storage_explorer.engine import _merged_options  # noqa: PLC0415
+
     for library, by_format in _mapping(value, path, "engine_options").items():
         if not isinstance(by_format, dict) or not all(
             isinstance(options, dict) or callable(options)
@@ -475,61 +485,6 @@ def _merge_engine_options(
         formats = merged.setdefault(library, {})
         for name, options in by_format.items():
             formats[name] = _merged_options(formats.get(name), options)
-
-
-def _merged_options(earlier: Any, later: Any) -> Any:
-    """A later layer's options of a format over an earlier layer's, option by
-    option: a dict while both are dicts, else a function of the location
-    (as either may be) giving the earlier's options updated with the
-    later's.
-
-    Dicts and ``by_protocol``s merge into a ``by_protocol``, so that the
-    explorer still checks their dicts when it is created: a dict is then
-    the options of every protocol."""
-    if earlier is None:
-        return dict(later) if isinstance(later, dict) else later
-    if isinstance(earlier, dict) and isinstance(later, dict):
-        return {**earlier, **later}
-    from jupyter_storage_explorer.engine import _ByProtocol, by_protocol  # noqa: PLC0415
-
-    if all(isinstance(o, (dict, _ByProtocol)) for o in (earlier, later)):
-        return by_protocol(
-            _merged_by_protocol(_protocols_of(earlier), _protocols_of(later))
-        )
-
-    def options(location: Any) -> dict[str, Any]:
-        return {**_options_at(earlier, location), **_options_at(later, location)}
-
-    return options
-
-
-def _protocols_of(options: Any) -> dict[str, Any]:
-    """A dict or ``by_protocol``'s options by protocol, "*" for every one."""
-    return {"*": options} if isinstance(options, dict) else options.options
-
-
-def _merged_by_protocol(
-    earlier: dict[str, Any], later: dict[str, Any]
-) -> dict[str, Any]:
-    """Two layers' options by protocol as one. A protocol's are those of
-    every protocol, then its own, of the earlier layer, then the same of
-    the later: the later's "*" still overrides the earlier's protocol."""
-    merged = {}
-    for protocol in dict.fromkeys([*earlier, *later]):
-        parts = [earlier.get("*"), later.get("*")]
-        if protocol != "*":
-            parts = [parts[0], earlier.get(protocol), parts[1], later.get(protocol)]
-        result = None
-        for part in parts:
-            if part is not None:
-                result = _merged_options(result, part)
-        merged[protocol] = result
-    return merged
-
-
-def _options_at(options: Any, location: Any) -> dict[str, Any]:
-    """``options``, or what the function ``options`` gives for ``location``."""
-    return dict(options(location) if callable(options) else options)
 
 
 def _sequence(value: Any, path: pathlib.Path, name: str) -> list[Any]:
@@ -554,7 +509,7 @@ def _check_parameter_name(name: str, path: pathlib.Path) -> None:
     if name in _NOT_PARAMETERS - {"self"}:
         raise LauncherError(
             f"{path}: parameters(): {name} is set by its own function, not parameters()"
-            if name in _MERGES or name in ALIASES
+            if name in _MERGES or name in ALIASES or name in _ARGUMENTS.values()
             else f"{path}: parameters(): {name} is set by the launcher (use filesystems())"
         )
     if name not in _parameter_names():

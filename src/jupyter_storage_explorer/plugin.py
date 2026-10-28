@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from importlib.metadata import Distribution
 
     from jupyter_storage_explorer.actions import Action
+    from jupyter_storage_explorer.engine import EngineOptions
     from jupyter_storage_explorer.filesystems.mapper import FileSystemMapper
     from jupyter_storage_explorer.filesystems.operation import FileSystemOperations
     from jupyter_storage_explorer.formats.base import DataFormat
@@ -120,6 +121,13 @@ class StorageExplorerPlugin:
     filesystem_mappers : sequence of FileSystemMapper
         How the plugin's filesystems are told apart, tried before the
         default mappers.
+    engine_options : mapping
+        Engines' options, as ``StorageExplorer``'s ``engine_options`` takes
+        them, usually made from ``self.options``, e.g. credentials for a
+        storage. The explorer's own ``engine_options`` override them, option
+        by option, as a plugin's override those of plugins of a lower
+        priority. An engine whose options no action takes is left out, with
+        a warning.
 
     Examples
     --------
@@ -143,6 +151,22 @@ class StorageExplorerPlugin:
 
         [project.entry-points."jupyter_storage_explorer.plugins"]
         duckdb-support = "jupyter_storage_explorer_duckdb_support:DuckDBSupport"
+
+    A plugin giving engines' options from its own, e.g. a company's lake:
+
+    >>> @dataclass(frozen=True, kw_only=True)
+    ... class LakeSupportOptions(StorageExplorerPluginOptions):
+    ...     tenant_id: str | None = None
+    >>> class LakeSupport(StorageExplorerPlugin):
+    ...     key = "lake-support"
+    ...     options_model = LakeSupportOptions
+    ...
+    ...     @property
+    ...     def engine_options(self):
+    ...         import polars as pl
+    ...
+    ...         provider = pl.CredentialProviderAzure(tenant_id=self.options.tenant_id)
+    ...         return {"polars": {"*": by_protocol({"abfs": {"credential_provider": provider}})}}
 
     and an explorer giving it options, and disabling another plugin:
 
@@ -223,6 +247,10 @@ class StorageExplorerPlugin:
     @property
     def filesystem_mappers(self) -> Sequence[FileSystemMapper]:
         return ()
+
+    @property
+    def engine_options(self) -> EngineOptions:
+        return {}
 
 
 # What the package's metadata calls its home page, in order of preference.

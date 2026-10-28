@@ -474,7 +474,7 @@ The launcher, in `launcher/`, adds a JupyterLab launcher item. It opens a tab wh
 `launch()` merges every `storage-explorer/launcher.py` in Jupyter's configuration paths, as layers from system to
 user. `load_settings` does the merging. Each file may define these functions:
 
-- `filesystems()`, `operations()`, `filesystem_mappers()` and `transfer_policy()`;
+- `filesystems()`, `filesystem_operations()`, `filesystem_mappers()` and `transfer_policy()`;
 - `plugin_options()`, merged by plugin, then option;
 - `actions()`, concatenated, a later layer's first;
 - `engine_options()`, merged by engine, format, then option;

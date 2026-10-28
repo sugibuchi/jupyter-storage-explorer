@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from jupyter_storage_explorer import StorageExplorerPlugin, StorageExplorerPluginOptions
-from jupyter_storage_explorer.actions import code, register_actions
+from jupyter_storage_explorer.actions import ActionOptions, code, register_actions
 from jupyter_storage_explorer.engine import Engine
 from jupyter_storage_explorer.filesystems import FileSystemMapper
 from jupyter_storage_explorer.filesystems.operations import FsspecOperations
@@ -23,8 +23,14 @@ class SampleEngine(Engine):
     label = "Sample"
 
 
+@dataclass(frozen=True, kw_only=True)
+class SampleOptions(ActionOptions):
+    region: str | None = None
+    account: str | None = None
+
+
 @code(format=AvroFormat, engine=SampleEngine, label="Load")
-def avro_code(fmt, ctx, options):
+def avro_code(fmt, ctx, options: SampleOptions):
     return "sample"
 
 
@@ -62,6 +68,36 @@ class SampleSupport(StorageExplorerPlugin):
 
 class OtherSupport(StorageExplorerPlugin):
     key = "other-support"
+
+
+@dataclass(frozen=True, kw_only=True)
+class LakeSupportOptions(StorageExplorerPluginOptions):
+    region: str = "north"
+
+
+class LakeSupport(StorageExplorerPlugin):
+    """Engine options for another plugin's engine, from its own options, as
+    a company's plugin gives them."""
+
+    key = "lake-support"
+    options_model = LakeSupportOptions
+
+    @property
+    def engine_options(self):
+        return {"sample": {"*": {"region": self.options.region, "account": "lake"}}}
+
+
+class FarLakeSupport(StorageExplorerPlugin):
+    """Options for SampleSupport's engine, and for an engine not installed."""
+
+    key = "far-lake-support"
+
+    @property
+    def engine_options(self):
+        return {
+            "sample": {"avro": {"region": "far"}},
+            "nowhere": {"*": {"region": "far"}},
+        }
 
 
 @dataclass(frozen=True, kw_only=True)

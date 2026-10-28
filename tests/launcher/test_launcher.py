@@ -201,7 +201,7 @@ class TestMerging:
             def actions():
                 return [csv_view]
 
-            def operations():
+            def filesystem_operations():
                 return [FsspecOperations()]
 
             def filesystem_mappers():
@@ -219,7 +219,7 @@ class TestMerging:
             def actions():
                 return [json_lines_view]
 
-            def operations():
+            def filesystem_operations():
                 return [FileSystemOperations()]
 
             def filesystem_mappers():
@@ -231,6 +231,7 @@ class TestMerging:
         # The user's first; the explorer tries the defaults after them.
         names = [a.__name__ for a in kwargs["actions"]]
         assert names == ["json_lines_view", "csv_view"]
+        # As the explorer's operations.
         kinds = [type(o) for o in kwargs["operations"]]
         assert kinds == [FileSystemOperations, FsspecOperations]
         mappers = [type(m).__name__ for m in kwargs["filesystem_mappers"]]

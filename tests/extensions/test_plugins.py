@@ -302,6 +302,56 @@ class TestExplorer:
             explorer = make("/", fs=memfs)
         assert explorer._formats[0].name == "avro"  # the others are used
 
+    def test_engine_options_from_the_plugins_options(self, installed, make_item):
+        installed(**{"sample-support": "SampleSupport", "lake-support": "LakeSupport"})
+        item = make_item("/a.avro", b"x\n")
+        explorer = make(
+            "/", fs=item.fs, plugin_options={"lake-support": {"region": "south"}}
+        )
+        options = explorer._actions.options_of(avro_code, item.location)
+        assert (options.region, options.account) == ("south", "lake")
+
+    def test_engine_options_given_override_the_plugins(self, installed, make_item):
+        installed(**{"sample-support": "SampleSupport", "lake-support": "LakeSupport"})
+        item = make_item("/a.avro", b"x\n")
+        explorer = make(
+            "/", fs=item.fs, engine_options={"sample": {"avro": {"region": "given"}}}
+        )
+        # Option by option: the plugin's account stays.
+        options = explorer._actions.options_of(avro_code, item.location)
+        assert (options.region, options.account) == ("given", "lake")
+
+    def test_engine_options_by_priority(self, installed, make_item):
+        installed(
+            **{
+                "sample-support": "SampleSupport",
+                "lake-support": "LakeSupport",
+                "far-lake-support": "FarLakeSupport",
+            }
+        )
+        item = make_item("/a.avro", b"x\n")
+        with pytest.warns(RuntimeWarning, match="unknown engine 'nowhere'"):
+            explorer = make(
+                "/", fs=item.fs, plugin_options={"lake-support": {"priority": 1}}
+            )
+        # The higher priority's "*" over the lower's format: as the launcher's
+        # layers, a later "*" overrides an earlier format's options.
+        options = explorer._actions.options_of(avro_code, item.location)
+        assert options.region == "far"
+        explorer = make(
+            "/",
+            fs=item.fs,
+            plugin_options={"far-lake-support": {"enabled": False}},
+        )
+        assert explorer._actions.options_of(avro_code, item.location).region == "north"
+
+    def test_engine_options_of_an_engine_not_installed_left_out(self, installed, memfs):
+        # Its plugin disabled: the explorer opens, without them.
+        installed(**{"lake-support": "LakeSupport"})
+        with pytest.warns(RuntimeWarning, match="unknown engine 'sample'"):
+            explorer = make("/", fs=memfs)
+        assert "plugin 'lake-support': engine_options" in explorer._plugin_problems[0]
+
     def test_options_of_a_plugin_not_installed_warn(self, memfs):
         with pytest.warns(RuntimeWarning, match="'polars' is not installed"):
             make("/", fs=memfs, plugin_options={"polars": {"enabled": False}})
