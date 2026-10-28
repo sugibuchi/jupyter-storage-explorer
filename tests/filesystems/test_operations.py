@@ -453,11 +453,50 @@ class TestAsyncFsspecOperations:
         assert tree.cat_file("/a.txt") == b"aaaa"
         assert not (tmp_path / "moved" / "a.txt").exists()
 
-    def test_delete_folder_in_batches(self, tree, async_tree):
+    def test_delete_folder_in_batches(self, tree, async_tree, monkeypatch):
+        original = async_tree._rm
+        calls = []
+
+        async def rm(path: Any, **kwargs: Any) -> None:
+            calls.append(path)
+            await original(path, **kwargs)
+
+        monkeypatch.setattr(async_tree, "_rm", rm)
         progress = JobProgress()
         self.ops.delete(async_tree, "/src", progress)
         assert not tree.exists("/src")
-        assert progress.files_done == 3
+        batches = [call for call in calls if isinstance(call, list)]
+        assert [len(batch) for batch in batches] == [2, 1]
+        assert (progress.files_done, progress.bytes_done) == (3, 7)
+
+    def test_delete_one_file(self, tree, async_tree):
+        progress = Recorder()
+        self.ops.delete(async_tree, "/src/a.txt", progress)
+        assert not tree.exists("/src/a.txt")
+        assert tree.exists("/src/b.txt")
+        assert progress.names == ["a.txt"]
+
+    def test_delete_cancelled_between_batches(self, tree, async_tree, monkeypatch):
+        progress = JobProgress()
+        original = async_tree._rm
+
+        async def rm_then_cancel(path: Any, **kwargs: Any) -> None:
+            await original(path, **kwargs)
+            progress.cancel()
+
+        monkeypatch.setattr(async_tree, "_rm", rm_then_cancel)
+        with pytest.raises(OperationCancelled):
+            self.ops.delete(async_tree, "/src", progress)
+        assert len(tree.find("/src")) == 1
+
+    def test_delete_leaves_no_folders(self, tmp_path):
+        # Local disks have real folders: empty ones are left by the batches.
+        (tmp_path / "src" / "sub").mkdir(parents=True)
+        (tmp_path / "src" / "sub" / "c.txt").write_bytes(b"c")
+        (tmp_path / "src" / "empty").mkdir()
+        local = AsyncFileSystemWrapper(fsspec.filesystem("file"))
+        self.ops.delete(local, (tmp_path / "src").as_posix(), JobProgress())
+        assert not (tmp_path / "src").exists()
 
     def test_move_within_the_filesystem(self, tree, async_tree):
         self.ops.move(
@@ -552,20 +591,6 @@ class TestAtomicMoveOperation:
         self.ops.move(fs, "src", fs, "moved", JobProgress(), same=True)
         assert (tmp_path / "moved" / "a.txt").read_bytes() == b"a"
 
-
-def test_default_operations_on_a_dir_filesystem(tmp_path):
-    """A DirFileSystem over local files is async by its class: the async
-    operations leave it to fsspec's."""
-    (tmp_path / "src" / "sub").mkdir(parents=True)
-    (tmp_path / "src" / "sub" / "a.txt").write_bytes(b"aa")
-    fs = DirFileSystem(tmp_path.as_posix(), fsspec.filesystem("file"))
-    ops = OperationChain(StorageExplorer.default_operations())
-    assert ops.measure(fs, "src", JobProgress()).files == 1
-    ops.copy(fs, "src", fs, "copy", JobProgress(), same=True)
-    assert (tmp_path / "copy" / "sub" / "a.txt").read_bytes() == b"aa"
-    ops.delete(fs, "copy", JobProgress())
-    assert not (tmp_path / "copy").exists()
-
     def test_everything_else_left_to_the_next(self, tree, tmp_path):
         local = fsspec.filesystem("file")
         for ops, args in [
@@ -579,6 +604,20 @@ def test_default_operations_on_a_dir_filesystem(tmp_path):
         with pytest.raises(FileSystemOperations.NotSupported):
             self.ops.copy(tree, "/src", tree, "/copy", JobProgress(), same=True)
         assert tree.exists("/src/a.txt")
+
+
+def test_default_operations_on_a_dir_filesystem(tmp_path):
+    """A DirFileSystem over local files is async by its class: the async
+    operations leave it to fsspec's."""
+    (tmp_path / "src" / "sub").mkdir(parents=True)
+    (tmp_path / "src" / "sub" / "a.txt").write_bytes(b"aa")
+    fs = DirFileSystem(tmp_path.as_posix(), fsspec.filesystem("file"))
+    ops = OperationChain(StorageExplorer.default_operations())
+    assert ops.measure(fs, "src", JobProgress()).files == 1
+    ops.copy(fs, "src", fs, "copy", JobProgress(), same=True)
+    assert (tmp_path / "copy" / "sub" / "a.txt").read_bytes() == b"aa"
+    ops.delete(fs, "copy", JobProgress())
+    assert not (tmp_path / "copy").exists()
 
 
 class TestOperationChain:
