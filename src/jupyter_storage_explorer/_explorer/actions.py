@@ -194,6 +194,21 @@ class ActionChain:
         item."""
         return any(a.is_installed() for a in self._registered(fmt, kind))
 
+    def missing_packages(
+        self, fmt: DataFormat, kind: type[Action[Any]] = ViewAction
+    ) -> list[str]:
+        """The packages that the actions of ``kind`` for ``fmt`` need and that
+        are not installed, by distribution name: empty if it has no such
+        actions."""
+        return sorted(
+            {
+                p.package
+                for a in self._registered(fmt, kind)
+                for p in a.requirements()
+                if not p.is_installed()
+            }
+        )
+
     def of(
         self, fmt: DataFormat, ctx: ItemContext, kind: type[Action[Any]] = ViewAction
     ) -> list[Action[Any]]:

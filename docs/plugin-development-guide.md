@@ -722,7 +722,7 @@ from jupyter_storage_explorer.filesystems import FileSystemMapper
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
 class MyLocation(Location):
-    kind = "myfs"   # its name in JSON, unique
+    kind = "myfs"   # its name in JSON, unique: a kind taken is a TypeError
     server: str     # strings, integers and None only; never credentials
     path: str
 

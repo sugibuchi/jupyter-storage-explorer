@@ -375,6 +375,33 @@ def test_mappers_given_first(memfs):
     assert location_of(memfs, "/x").url == "memory:///x"
 
 
+def test_location_kinds_are_unique():
+    # Another class would read every kernel's JSON of the kind.
+    with pytest.raises(TypeError, match=r"location kind 's3' is taken by .*S3Location"):
+
+        @dataclasses.dataclass(frozen=True, kw_only=True)
+        class MyS3(Location):
+            kind = "s3"
+            url = property(lambda self: "s3://x")
+
+    assert Location.from_json({"kind": "s3", "endpoint": "", "bucket": "b"}).url == (
+        "s3://b"
+    )
+
+    # The same class defined again, e.g. a cell run again, replaces itself.
+    def define():
+        @dataclasses.dataclass(frozen=True, kw_only=True)
+        class Again(Location):
+            kind = "tests-again"
+            url = property(lambda self: "memory://again")
+
+        return Again
+
+    define()
+    again = define()
+    assert type(Location.from_json({"kind": "tests-again"})) is again
+
+
 class TestLevels:
     """What the storages make of their folders, for their icons."""
 
