@@ -1077,7 +1077,28 @@ A plugin's tests are in its own `tests/` and test its own code:
 
 - its actions: views, code and checks, with their options;
 - its engine, operations and mappers;
-- its entry point.
+- its entry point, with `check_plugin`.
+
+Explorers leave out a plugin they cannot load, with a warning only, so that a broken package never keeps them from
+opening. `check_plugin(key, options=None)`, from `jupyter_storage_explorer.testing`, fails instead. It loads the plugin
+from its entry point, as explorers do, and checks:
+
+- the entry point, the plugin's class and its `key`;
+- its options model, created with `options`;
+- its package's description;
+- its components' types, and its actions registered together;
+- its actions with the explorer's own and the other plugins installed, as an explorer checks them.
+
+It returns the plugin, for checks of your own. Call it in one test:
+
+```python
+from jupyter_storage_explorer.testing import check_plugin
+
+
+def test_plugin():
+    plugin = check_plugin("duckdb-support")
+    assert plugin.actions == DUCKDB_ACTIONS
+```
 
 They need no browser. Actions are called as their functions, with items as the explorer gives them, `ItemContext`.
 `jupyter_storage_explorer.testing` makes those on fsspec's memory filesystem, or from local files for libraries reading
@@ -1128,16 +1149,6 @@ def test_what_duckdb_reads(tmp_path, make_item):
     # does(): of the action's format, and its check agrees.
     assert parquet_view.does(Parquet(), local_item(tmp_path), DuckDBOptions())
     assert not parquet_view.does(Parquet(), make_item("/a.parquet", b""), DuckDBOptions())
-
-
-def test_plugin_registered():
-    from importlib.metadata import entry_points
-
-    [entry_point] = entry_points(group="jupyter_storage_explorer.plugins", name="duckdb-support")
-    plugin = entry_point.load()()  # loads without the backend library
-    assert plugin.key == "duckdb-support"
-    assert plugin.description == "DuckDB support for Storage Explorer"
-    assert plugin.actions == DUCKDB_ACTIONS
 ```
 
 A storage plugin's tests need no real storage either:
@@ -1269,7 +1280,8 @@ def filesystem_mappers():
 - [ ] Locations: frozen keyword-only dataclasses, normalized, without credentials.
 - [ ] Storage plugins: the questions of [Check the real filesystem first](#check-the-real-filesystem-first) answered on a
   real storage; real paths give locations whose paths are the same again; the engines read the locations' URLs.
-- [ ] Tests in the plugin's `tests/`, of its own code, run with `uv run pytest`; the plugin loads from its entry point.
+- [ ] Tests in the plugin's `tests/`, of its own code, run with `uv run pytest`.
+- [ ] A test calling `check_plugin` with the plugin's key passes.
 - [ ] README in the layout of [The README](#the-readme): Installation with the `full` extra's libraries,
   Prerequisites, Plugin options with both examples, and the engine options' tables.
 

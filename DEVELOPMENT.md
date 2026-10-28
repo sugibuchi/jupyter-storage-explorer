@@ -63,7 +63,8 @@ construct, subclass, call or annotate with.
 The explorer's machinery stays out of them, such as `ActionChain`, `OperationChain` and `detect`. The package and the
 tests import it from its modules.
 
-`jupyter_storage_explorer.testing` has the helpers plugins test with: items and pytest fixtures. It needs pytest.
+`jupyter_storage_explorer.testing` has the helpers plugins test with: `check_plugin`, items and pytest fixtures. It
+needs pytest.
 
 All Python commands go through [uv](https://docs.astral.sh/uv/). Node.js, for the extension and the JavaScript's checks,
 comes with the dev dependencies (`nodejs-wheel`), so `uv run node`, `uv run npx` and `uv run jlpm` work without
@@ -1330,7 +1331,9 @@ Two more points about the pair:
 - `databricks-connect` is in databricks-support's `full` extra. It replaces pyspark, so the two extras must not be
   installed together.
 
-Tests fake entry points to `tests/plugin_samples.py`. `tests/all_actions.py` has the actions of this repository's
+Tests fake entry points to `tests/plugin_samples.py`. `check_plugin`, in `testing.py`, loads a plugin with the same
+code as explorers, `_create`, and fails on what `load_plugins` only logs. It then checks the plugin's actions with the
+explorer's own and the other plugins', with `ActionChain`. `tests/all_actions.py` has the actions of this repository's
 plugins, which the other tests use, and `NO_PLUGINS`, options disabling them all.
 
 ### Engines in the explorer

@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import io
 import logging
-from importlib.metadata import entry_points
 
 import openpyxl
 import polars as pl
@@ -46,7 +45,7 @@ from jupyter_storage_explorer.formats import (
     Parquet,
 )
 from jupyter_storage_explorer.packages import PyArrow
-from jupyter_storage_explorer.testing import local_item
+from jupyter_storage_explorer.testing import check_plugin, local_item
 from jupyter_storage_explorer.views import (
     QueryView,
     TableSetView,
@@ -92,10 +91,7 @@ def data(action, fmt, item, options=None):
 
 
 def test_plugin_registered():
-    [entry_point] = entry_points(
-        group="jupyter_storage_explorer.plugins", name="polars-support"
-    )
-    plugin = entry_point.load()()
+    plugin = check_plugin("polars-support")
     assert isinstance(plugin, PolarsSupport)
     assert plugin.description == "Polars support for Storage Explorer"
     assert plugin.actions == POLARS_ACTIONS
