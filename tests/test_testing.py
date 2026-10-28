@@ -146,6 +146,17 @@ def test_every_broken_component_named(installed):
     assert "filesystem_mappers: FailingMapper() fails: RuntimeError" in message
 
 
+def test_options_described(installed):
+    # The READMEs' tables and settings show the descriptions.
+    installed(**{"undescribed-support": "UndescribedOptionsSupport"})
+    with pytest.raises(AssertionError) as raised:
+        check_plugin("undescribed-support")
+    message = str(raised.value)
+    assert "options without a description (option_field)" in message
+    assert "UndescribedActionOptions.rows" in message
+    assert "UndescribedOptions.commits" in message
+
+
 def test_engine_options(installed):
     # Explorers leave out options of an engine not installed: the check fails.
     installed(

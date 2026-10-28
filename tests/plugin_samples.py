@@ -10,6 +10,7 @@ from jupyter_storage_explorer.engine import Engine
 from jupyter_storage_explorer.filesystems import FileSystemMapper
 from jupyter_storage_explorer.filesystems.operations import FsspecOperations
 from jupyter_storage_explorer.formats import Csv
+from jupyter_storage_explorer.util import option_field
 
 
 class AvroFormat(Csv):
@@ -25,8 +26,8 @@ class SampleEngine(Engine):
 
 @dataclass(frozen=True, kw_only=True)
 class SampleOptions(ActionOptions):
-    region: str | None = None
-    account: str | None = None
+    region: str | None = option_field("The region.", default=None)
+    account: str | None = option_field("The account.", default=None)
 
 
 @code(format=AvroFormat, engine=SampleEngine, label="Load")
@@ -45,7 +46,7 @@ class SampleMapper(FileSystemMapper):
 
 @dataclass(frozen=True, kw_only=True)
 class SampleSupportOptions(StorageExplorerPluginOptions):
-    concurrency: int = 4
+    concurrency: int = option_field("The most files at once.", default=4)
 
 
 class SampleSupport(StorageExplorerPlugin):
@@ -72,7 +73,7 @@ class OtherSupport(StorageExplorerPlugin):
 
 @dataclass(frozen=True, kw_only=True)
 class LakeSupportOptions(StorageExplorerPluginOptions):
-    region: str = "north"
+    region: str = option_field("The lake's region.", default="north")
 
 
 class LakeSupport(StorageExplorerPlugin):
@@ -102,7 +103,7 @@ class FarLakeSupport(StorageExplorerPlugin):
 
 @dataclass(frozen=True, kw_only=True)
 class OptInOptions(StorageExplorerPluginOptions):
-    enabled: bool = False
+    enabled: bool = option_field("Whether explorers use the plugin.", default=False)
 
 
 class OptInSupport(StorageExplorerPlugin):
@@ -186,6 +187,32 @@ class BrokenComponentsSupport(StorageExplorerPlugin):
     @property
     def filesystem_mappers(self):
         return (FailingMapper,)
+
+
+@dataclass(frozen=True, kw_only=True)
+class UndescribedOptions(StorageExplorerPluginOptions):
+    commits: bool = True
+
+
+class UndescribedOptionsSupport(StorageExplorerPlugin):
+    """Its option, and its action's, have no description."""
+
+    key = "undescribed-support"
+    options_model = UndescribedOptions
+
+    @property
+    def actions(self):
+        return register_actions(csv_code_undescribed)
+
+
+@dataclass(frozen=True, kw_only=True)
+class UndescribedActionOptions(ActionOptions):
+    rows: int = 10
+
+
+@code(format=Csv, label="Load undescribed")
+def csv_code_undescribed(fmt, ctx, options: UndescribedActionOptions):
+    return "rows"
 
 
 class UndecoratedOptions(SampleSupportOptions):

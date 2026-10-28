@@ -1377,7 +1377,14 @@ credentials, as a safety net.
 Spark reads with its own storage settings. PySpark's actions take `session_options`, for the session, and
 `reader_options`, for `spark.read.option`. A subclass per format has Spark's documented reader options, in snake case.
 
-The options of each library are listed in its plugin's README only.
+Each field of options has its description, given with `option_field`, or `description=` of the secret fields. The
+plugins' READMEs show them in tables:
+
+- A table follows a marker naming the classes whose fields it lists, e.g.
+  `<!-- options: jupyter_storage_explorer_polars_support.CsvByPolarsOptions -->`.
+- `uv run docs/scripts/option_tables.py` writes the tables. `tests/test_plugin_readmes.py` fails while one is out of
+  date.
+- A field whose value does not show its default, e.g. `LIBRARY_DEFAULT`, gives it as `shown_default`.
 
 ## The JupyterLab extension
 

@@ -43,6 +43,7 @@ from jupyter_storage_explorer.formats.delta import DeltaLake
 from jupyter_storage_explorer.formats.parquet import Parquet
 from jupyter_storage_explorer.formats.text import Csv, JsonLines
 from jupyter_storage_explorer.packages import PythonPackage
+from jupyter_storage_explorer.util import option_field
 from jupyter_storage_explorer.views import View, ViewLimits
 from jupyter_storage_explorer_databricks_support.mapper import (
     DatabricksWorkspaceMapper,
@@ -151,22 +152,50 @@ DATABRICKS_PROTOCOLS = ("dbfs", "s3a", "abfss", "abfs", "wasbs", "wasb", "gs")
 
 @dataclass(frozen=True, kw_only=True)
 class CsvByDatabricksConnectOptions(CsvByPySparkOptions):
-    supported_protocols: Sequence[str] | None = DATABRICKS_PROTOCOLS
+    supported_protocols: Sequence[str] | None = option_field(
+        (
+            "The URL schemes of the files viewed and given code: those the "
+            "cluster reads. Not the kernel's local files, which the cluster "
+            "cannot read."
+        ),
+        default=DATABRICKS_PROTOCOLS,
+    )
 
 
 @dataclass(frozen=True, kw_only=True)
 class JsonLinesByDatabricksConnectOptions(JsonLinesByPySparkOptions):
-    supported_protocols: Sequence[str] | None = DATABRICKS_PROTOCOLS
+    supported_protocols: Sequence[str] | None = option_field(
+        (
+            "The URL schemes of the files viewed and given code: those the "
+            "cluster reads. Not the kernel's local files, which the cluster "
+            "cannot read."
+        ),
+        default=DATABRICKS_PROTOCOLS,
+    )
 
 
 @dataclass(frozen=True, kw_only=True)
 class ParquetByDatabricksConnectOptions(ParquetByPySparkOptions):
-    supported_protocols: Sequence[str] | None = DATABRICKS_PROTOCOLS
+    supported_protocols: Sequence[str] | None = option_field(
+        (
+            "The URL schemes of the files viewed and given code: those the "
+            "cluster reads. Not the kernel's local files, which the cluster "
+            "cannot read."
+        ),
+        default=DATABRICKS_PROTOCOLS,
+    )
 
 
 @dataclass(frozen=True, kw_only=True)
 class DeltaLakeByDatabricksConnectOptions(DeltaLakeByPySparkOptions):
-    supported_protocols: Sequence[str] | None = DATABRICKS_PROTOCOLS
+    supported_protocols: Sequence[str] | None = option_field(
+        (
+            "The URL schemes of the files viewed and given code: those the "
+            "cluster reads. Not the kernel's local files, which the cluster "
+            "cannot read."
+        ),
+        default=DATABRICKS_PROTOCOLS,
+    )
 
 
 # Delta Lake: Databricks has it, so no delta-spark, which is for local

@@ -135,7 +135,8 @@ the code. The traps:
 - Generated code gets options only through `ActionOptions.code_value`, which leaves out secrets.
 - Plugins never depend on their libraries: their `full` extra installs them. A new dependency of a plugin goes in its
   `hatch_build.py`.
-- Each library's options are listed in its plugin's README only. Update it when an options model changes.
+- Each field of options has its description: `option_field`, or the secret fields' `description=`. The plugins'
+  READMEs show them in tables written by `uv run docs/scripts/option_tables.py`: run it when an options model changes.
 - A plugin's README follows "The README" in docs/plugin-development-guide.md, which `tests/test_plugin_readmes.py` checks.
   The table in the plugin README's own Installation section lists exactly its `full` extra's libraries.
 

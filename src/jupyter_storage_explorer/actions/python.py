@@ -105,16 +105,13 @@ OPEN_IMAGE = "Open the image"
 
 @dataclass(frozen=True, kw_only=True)
 class FsspecOptions(ActionOptions):
-    """The options of code opening the file with ``fsspec.open``.
-
-    Attributes
-    ----------
-    storage_options : mapping or None, default None
-        ``fsspec.open``'s keyword arguments in the code; those that look like
-        credentials are left out.
-    """
+    """The options of code opening the file with ``fsspec.open``."""
 
     storage_options: Mapping[str, Any] | None = secret_dict_field(
+        description=(
+            "`fsspec.open`'s keyword arguments, in the code. Those that look "
+            "like credentials are left out."
+        ),
         default=None,
         secret_keys=[
             "account_key",

@@ -12,7 +12,7 @@ plugin loads without it."""
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, fields
 from inspect import cleandoc
 from typing import TYPE_CHECKING, Any
 
@@ -31,7 +31,7 @@ from jupyter_storage_explorer.formats.delta import DeltaLake
 from jupyter_storage_explorer.formats.parquet import Parquet
 from jupyter_storage_explorer.formats.text import Csv, JsonLines
 from jupyter_storage_explorer.packages import PyArrow, PythonPackage
-from jupyter_storage_explorer.util import format_kwargs
+from jupyter_storage_explorer.util import format_kwargs, option_field
 from jupyter_storage_explorer.views import QueryView, View, ViewLimits
 
 if TYPE_CHECKING:
@@ -208,31 +208,36 @@ class PySparkOptions(ActionOptions):
     code. Each format's subclass adds its reader options as fields
     (``CsvByPySparkOptions``, ...): None, their default, leaves the option to
     Spark.
-
-    Attributes
-    ----------
-    session_options : mapping or None, default None
-        Spark configuration given to ``SparkSession.builder.config(key,
-        value)``, e.g. Delta Lake's ``{"spark.sql.extensions":
-        "io.delta.sql.DeltaSparkSessionExtension", ...}`` or storage access
-        (``"spark.hadoop.fs.azure.account.key.<account>.dfs.core.windows.net"``).
-        With a session already running, only what Spark can change at run time
-        applies. In the code, those that look like credentials are left out.
-    reader_options : mapping or None, default None
-        Options given to the reader, ``spark.read.option(key, value)``, e.g.
-        Spark's generic file source options (``{"recursiveFileLookup":
-        True}``) or those of a newer Spark; they override the fields and the
-        defaults (for CSV, the separator detected).
-    supported_protocols : sequence of str or None, default SPARK_PROTOCOLS
-        The URL schemes Spark reads, as Spark names them (e.g. "s3a",
-        "abfss", "dbfs"): items elsewhere, e.g. on SFTP or in fsspec's memory
-        filesystem, are neither viewed nor given code with Spark. None for
-        any.
     """
 
-    session_options: Mapping[str, Any] | None = None
-    reader_options: Mapping[str, Any] | None = None
-    supported_protocols: Sequence[str] | None = SPARK_PROTOCOLS
+    session_options: Mapping[str, Any] | None = option_field(
+        (
+            "Spark configuration, `SparkSession.builder.config(key, value)` for"
+            " each. With a session already running in the kernel, only what "
+            "Spark can change at run time applies."
+        ),
+        default=None,
+    )
+    reader_options: Mapping[str, Any] | None = option_field(
+        (
+            "`spark.read.option(key, value)` for each: options not listed "
+            "below, e.g. Spark's [generic file source "
+            "options](https://spark.apache.org/docs/latest/sql-data-sources-"
+            'generic-options.html) (`{"recursiveFileLookup": True}`). They '
+            "override the options below."
+        ),
+        default=None,
+    )
+    supported_protocols: Sequence[str] | None = option_field(
+        (
+            "The URL schemes Spark reads, as Spark names them: by default "
+            "`file`, `hdfs`, `s3a`, `gs`, `abfss`, `abfs`, `wasbs`, `wasb` and "
+            "`dbfs`. Items elsewhere, e.g. on SFTP, are neither viewed nor "
+            "given code with Spark. `None`: any."
+        ),
+        default=SPARK_PROTOCOLS,
+        shown_default="`SPARK_PROTOCOLS`",
+    )
 
     def format_options(self, *, in_code: bool = False) -> dict[str, Any]:
         """The format's reader options the fields set, by Spark's names: the
@@ -351,8 +356,8 @@ def spark_reader_code(
 # (https://spark.apache.org/docs/latest/sql-data-sources.html, "Data Source
 # Option", those read; generic file source options go in reader_options) and
 # Delta Lake's (https://docs.delta.io/delta-batch/, time travel). Each field
-# is the option of its name in camel case unless SPARK_NAME says otherwise;
-# the plugin's README has their tables: keep them in step.
+# is the option of its name in camel case unless SPARK_NAME says otherwise.
+# The plugin's README shows their descriptions, by docs/scripts/option_tables.py.
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -364,52 +369,289 @@ class CsvByPySparkOptions(PySparkOptions):
     ``nullValue``; ``timestamp_ntz_format``, ``timestampNTZFormat``),
     documented in Spark's "CSV Files"; None leaves it to Spark. The plugin's
     README lists them.
-
-    Attributes
-    ----------
-    sep : str or None, default None
-        The separator; None for the one detected from the file's beginning
-        (and its extension, e.g. tabs for ".tsv").
-    header : bool, default True
-        Whether the first line names the columns (Spark's default is False).
-    infer_schema : bool, default True
-        Whether the columns' types are inferred, an extra pass over the data
-        (Spark's default is False: strings).
     """
 
-    sep: str | None = None
-    encoding: str | None = None
-    quote: str | None = None
-    escape: str | None = None
-    comment: str | None = None
-    header: bool | None = True
-    infer_schema: bool | None = True
-    prefer_date: bool | None = None
-    enforce_schema: bool | None = None
-    ignore_leading_white_space: bool | None = None
-    ignore_trailing_white_space: bool | None = None
-    null_value: str | None = None
-    nan_value: str | None = None
-    positive_inf: str | None = None
-    negative_inf: str | None = None
-    date_format: str | None = None
-    timestamp_format: str | None = None
-    timestamp_ntz_format: str | None = field(
-        default=None, metadata={SPARK_NAME: "timestampNTZFormat"}
+    sep: str | None = option_field(
+        (
+            "Sets a separator for each field and value. This separator can be "
+            "one or more characters. By default, the one detected from the "
+            "file's beginning."
+        ),
+        default=None,
+        shown_default="detected",
     )
-    enable_date_time_parsing_fallback: bool | None = None
-    max_columns: int | None = None
-    max_chars_per_column: int | None = None
-    mode: str | None = None
-    column_name_of_corrupt_record: str | None = None
-    multi_line: bool | None = None
-    char_to_escape_quote_escaping: str | None = None
-    sampling_ratio: float | None = None
-    empty_value: str | None = None
-    locale: str | None = None
-    line_sep: str | None = None
-    unescaped_quote_handling: str | None = None
-    time_zone: str | None = None
+    encoding: str | None = option_field(
+        "Decodes the CSV files by the given encoding type.",
+        default=None,
+        shown_default="`UTF-8`",
+    )
+    quote: str | None = option_field(
+        (
+            "Sets a single character used for escaping quoted values where the "
+            "separator can be part of the value. To turn off quotations, set "
+            "not None but an empty string."
+        ),
+        default=None,
+        shown_default='`"`',
+    )
+    escape: str | None = option_field(
+        (
+            "Sets a single character used for escaping quotes inside an already"
+            " quoted value."
+        ),
+        default=None,
+        shown_default="`\\`",
+    )
+    comment: str | None = option_field(
+        (
+            "Sets a single character used for skipping lines beginning with "
+            "this character. By default, it is disabled."
+        ),
+        default=None,
+        shown_default="(none)",
+    )
+    header: bool | None = option_field(
+        "Uses the first line as names of columns.", default=True
+    )
+    infer_schema: bool | None = option_field(
+        (
+            "Infers the input schema automatically from data. It requires one "
+            "extra pass over the data."
+        ),
+        default=True,
+    )
+    prefer_date: bool | None = option_field(
+        (
+            "During schema inference (`infer_schema`), attempts to infer string"
+            " columns that contain dates as `Date` if the values satisfy the "
+            "`date_format` option or default date format. For columns that "
+            "contain a mixture of dates and timestamps, try inferring them as "
+            "`TimestampType` if timestamp format not specified, otherwise infer"
+            " them as `StringType`."
+        ),
+        default=None,
+        shown_default="`True`",
+    )
+    enforce_schema: bool | None = option_field(
+        (
+            "If `True`, the specified or inferred schema will be forcibly "
+            "applied to datasource files, and headers in CSV files will be "
+            "ignored. If `False`, the schema will be validated against all "
+            "headers in CSV files when `header` is `True`. Field names in the "
+            "schema and column names in CSV headers are checked by their "
+            "positions taking into account `spark.sql.caseSensitive`."
+        ),
+        default=None,
+        shown_default="`True`",
+    )
+    ignore_leading_white_space: bool | None = option_field(
+        (
+            "Whether or not leading whitespaces from values being read should "
+            "be skipped."
+        ),
+        default=None,
+        shown_default="`False`",
+    )
+    ignore_trailing_white_space: bool | None = option_field(
+        (
+            "Whether or not trailing whitespaces from values being read should "
+            "be skipped."
+        ),
+        default=None,
+        shown_default="`False`",
+    )
+    null_value: str | None = option_field(
+        (
+            "Sets the string representation of a null value. It applies to all "
+            "supported types including the string type."
+        ),
+        default=None,
+        shown_default="(none)",
+    )
+    nan_value: str | None = option_field(
+        "Sets the string representation of a non-number value.",
+        default=None,
+        shown_default="`NaN`",
+    )
+    positive_inf: str | None = option_field(
+        "Sets the string representation of a positive infinity value.",
+        default=None,
+        shown_default="`Inf`",
+    )
+    negative_inf: str | None = option_field(
+        "Sets the string representation of a negative infinity value.",
+        default=None,
+        shown_default="`-Inf`",
+    )
+    date_format: str | None = option_field(
+        (
+            "Sets the string that indicates a date format. Custom date formats "
+            "follow the formats at [Datetime "
+            "Patterns](https://spark.apache.org/docs/latest/sql-ref-datetime-"
+            "pattern.html). This applies to date type."
+        ),
+        default=None,
+        shown_default="`yyyy-MM-dd`",
+    )
+    timestamp_format: str | None = option_field(
+        (
+            "Sets the string that indicates a timestamp format. Custom date "
+            "formats follow the formats at [Datetime "
+            "Patterns](https://spark.apache.org/docs/latest/sql-ref-datetime-"
+            "pattern.html). This applies to timestamp type."
+        ),
+        default=None,
+        shown_default="`yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]`",
+    )
+    timestamp_ntz_format: str | None = option_field(
+        (
+            "Sets the string that indicates a timestamp without timezone "
+            "format. Custom date formats follow the formats at [Datetime "
+            "Patterns](https://spark.apache.org/docs/latest/sql-ref-datetime-"
+            "pattern.html). This applies to timestamp without timezone type; "
+            "zone-offset and time-zone components are not supported when "
+            "reading this data type."
+        ),
+        default=None,
+        metadata={SPARK_NAME: "timestampNTZFormat"},
+        shown_default="`yyyy-MM-dd'T'HH:mm:ss[.SSS]`",
+    )
+    enable_date_time_parsing_fallback: bool | None = option_field(
+        (
+            "Allows falling back to the backward compatible (Spark 1.x and 2.0)"
+            " behavior of parsing dates and timestamps if values do not match "
+            "the set patterns."
+        ),
+        default=None,
+        shown_default=(
+            "Enabled if the time parser policy has legacy settings or if no "
+            "custom date or timestamp pattern was provided"
+        ),
+    )
+    max_columns: int | None = option_field(
+        "Defines a hard limit of how many columns a record can have.",
+        default=None,
+        shown_default="`20480`",
+    )
+    max_chars_per_column: int | None = option_field(
+        (
+            "Defines the maximum number of characters allowed for any given "
+            "value being read. By default, it is -1 meaning unlimited length."
+        ),
+        default=None,
+        shown_default="`-1`",
+    )
+    mode: str | None = option_field(
+        (
+            "Allows a mode for dealing with corrupt records during parsing "
+            "(case-insensitive). Spark tries to parse only required columns in "
+            "CSV under column pruning, so corrupt records can be different "
+            "based on required set of fields "
+            "(`spark.sql.csv.parser.columnPruning.enabled`, enabled by "
+            "default).\n• `PERMISSIVE`: when it meets a corrupted record, "
+            "puts the malformed string into a field configured by "
+            "`column_name_of_corrupt_record`, and sets malformed fields to "
+            "null. To keep corrupt records, set a string type field named "
+            "`column_name_of_corrupt_record` in a user-defined schema; if a "
+            "schema does not have the field, it drops corrupt records during "
+            "parsing. A record with less or more tokens than the schema is not "
+            "a corrupted record: fewer tokens set nulls to the extra fields, "
+            "more tokens are dropped.\n• `DROPMALFORMED`: ignores the whole "
+            "corrupted records.\n• `FAILFAST`: throws an exception when it "
+            "meets corrupted records."
+        ),
+        default=None,
+        shown_default="`PERMISSIVE`",
+    )
+    column_name_of_corrupt_record: str | None = option_field(
+        (
+            "Allows renaming the new field having malformed string created by "
+            "`PERMISSIVE` mode. This overrides "
+            "`spark.sql.columnNameOfCorruptRecord`."
+        ),
+        default=None,
+        shown_default="the value of `spark.sql.columnNameOfCorruptRecord`",
+    )
+    multi_line: bool | None = option_field(
+        (
+            "Allows a row to span multiple lines, by parsing line breaks within"
+            " quoted values as part of the value itself."
+        ),
+        default=None,
+        shown_default="`False`",
+    )
+    char_to_escape_quote_escaping: str | None = option_field(
+        (
+            "Sets a single character used for escaping the escape for the quote"
+            " character. The default value is the escape character when escape "
+            "and quote characters are different, `\\0` otherwise."
+        ),
+        default=None,
+        shown_default="`escape` or `\\0`",
+    )
+    sampling_ratio: float | None = option_field(
+        "Defines fraction of rows used for schema inferring.",
+        default=None,
+        shown_default="`1.0`",
+    )
+    empty_value: str | None = option_field(
+        "Sets the string representation of an empty value.",
+        default=None,
+        shown_default="(none)",
+    )
+    locale: str | None = option_field(
+        (
+            "Sets a locale as language tag in IETF BCP 47 format. For instance,"
+            " this is used while parsing dates and timestamps."
+        ),
+        default=None,
+        shown_default="`en-US`",
+    )
+    line_sep: str | None = option_field(
+        (
+            "Defines the line separator that should be used for parsing. "
+            "Maximum length is 1 character."
+        ),
+        default=None,
+        shown_default="`\\r`, `\\r\\n` and `\\n`",
+    )
+    unescaped_quote_handling: str | None = option_field(
+        (
+            "Defines how the CSV parser will handle values with unescaped "
+            "quotes.\n• `STOP_AT_CLOSING_QUOTE`: if unescaped quotes are "
+            "found in the input, accumulate the quote character and proceed "
+            "parsing the value as a quoted value, until a closing quote is "
+            "found.\n• `BACK_TO_DELIMITER`: if unescaped quotes are found in "
+            "the input, consider the value as an unquoted value. The parser "
+            "accumulates all characters of the current parsed value until the "
+            "delimiter is found. If no delimiter is found in the value, it "
+            "continues accumulating characters from the input until a delimiter"
+            " or line ending is found.\n• `STOP_AT_DELIMITER`: if unescaped "
+            "quotes are found in the input, consider the value as an unquoted "
+            "value. The parser accumulates all characters until the delimiter "
+            "or a line ending is found in the input.\n• `SKIP_VALUE`: if "
+            "unescaped quotes are found in the input, the content parsed for "
+            "the given value will be skipped and the value set in `null_value` "
+            "will be produced instead.\n• `RAISE_ERROR`: if unescaped quotes "
+            "are found in the input, a `TextParsingException` will be thrown."
+        ),
+        default=None,
+        shown_default="`STOP_AT_DELIMITER`",
+    )
+    time_zone: str | None = option_field(
+        (
+            "Sets the string that indicates a time zone ID to be used to format"
+            " timestamps or partition values.\n• Region-based zone ID: it "
+            "should have the form 'area/city', such as "
+            "'America/Los_Angeles'.\n• Zone offset: it should be in the "
+            "format '(+|-)HH:mm', for example '-08:00' or '+01:00'. Also 'UTC'"
+            " and 'Z' are supported as aliases of '+00:00'.\nOther short "
+            "names like 'CST' are not recommended to use because they can be "
+            "ambiguous."
+        ),
+        default=None,
+        shown_default="the value of `spark.sql.session.timeZone`",
+    )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -423,31 +665,194 @@ class JsonLinesByPySparkOptions(PySparkOptions):
     "JSON Files"; None leaves it to Spark. The plugin's README lists them.
     """
 
-    time_zone: str | None = None
-    primitives_as_string: bool | None = None
-    prefers_decimal: bool | None = None
-    allow_comments: bool | None = None
-    allow_unquoted_field_names: bool | None = None
-    allow_single_quotes: bool | None = None
-    allow_numeric_leading_zeros: bool | None = None
-    allow_backslash_escaping_any_character: bool | None = None
-    mode: str | None = None
-    column_name_of_corrupt_record: str | None = None
-    date_format: str | None = None
-    timestamp_format: str | None = None
-    timestamp_ntz_format: str | None = field(
-        default=None, metadata={SPARK_NAME: "timestampNTZFormat"}
+    time_zone: str | None = option_field(
+        (
+            "Sets the string that indicates a time zone ID to be used to format"
+            " timestamps or partition values.\n• Region-based zone ID: it "
+            "should have the form 'area/city', such as "
+            "'America/Los_Angeles'.\n• Zone offset: it should be in the "
+            "format '(+|-)HH:mm', for example '-08:00' or '+01:00'. Also 'UTC'"
+            " and 'Z' are supported as aliases of '+00:00'.\nOther short "
+            "names like 'CST' are not recommended to use because they can be "
+            "ambiguous."
+        ),
+        default=None,
+        shown_default="the value of `spark.sql.session.timeZone`",
     )
-    enable_date_time_parsing_fallback: bool | None = None
-    multi_line: bool | None = None
-    allow_unquoted_control_chars: bool | None = None
-    encoding: str | None = None
-    line_sep: str | None = None
-    sampling_ratio: float | None = None
-    drop_field_if_all_null: bool | None = None
-    locale: str | None = None
-    allow_non_numeric_numbers: bool | None = None
-    use_unsafe_row: bool | None = None
+    primitives_as_string: bool | None = option_field(
+        "Infers all primitive values as a string type.",
+        default=None,
+        shown_default="`False`",
+    )
+    prefers_decimal: bool | None = option_field(
+        (
+            "Infers all floating-point values as a decimal type. If the values "
+            "do not fit in decimal, then it infers them as doubles."
+        ),
+        default=None,
+        shown_default="`False`",
+    )
+    allow_comments: bool | None = option_field(
+        "Ignores Java/C++ style comment in JSON records.",
+        default=None,
+        shown_default="`False`",
+    )
+    allow_unquoted_field_names: bool | None = option_field(
+        "Allows unquoted JSON field names.", default=None, shown_default="`False`"
+    )
+    allow_single_quotes: bool | None = option_field(
+        "Allows single quotes in addition to double quotes.",
+        default=None,
+        shown_default="`True`",
+    )
+    allow_numeric_leading_zeros: bool | None = option_field(
+        "Allows leading zeros in numbers (e.g. 00012).",
+        default=None,
+        shown_default="`False`",
+    )
+    allow_backslash_escaping_any_character: bool | None = option_field(
+        (
+            "Allows accepting quoting of all character using backslash quoting "
+            "mechanism."
+        ),
+        default=None,
+        shown_default="`False`",
+    )
+    mode: str | None = option_field(
+        (
+            "Allows a mode for dealing with corrupt records during "
+            "parsing.\n• `PERMISSIVE`: when it meets a corrupted record, puts"
+            " the malformed string into a field configured by "
+            "`column_name_of_corrupt_record`, and sets malformed fields to "
+            "null. To keep corrupt records, set a string type field named "
+            "`column_name_of_corrupt_record` in a user-defined schema; if a "
+            "schema does not have the field, it drops corrupt records during "
+            "parsing. When inferring a schema, it implicitly adds a "
+            "`column_name_of_corrupt_record` field in an output schema.\n• "
+            "`DROPMALFORMED`: ignores the whole corrupted records.\n• "
+            "`FAILFAST`: throws an exception when it meets corrupted records."
+        ),
+        default=None,
+        shown_default="`PERMISSIVE`",
+    )
+    column_name_of_corrupt_record: str | None = option_field(
+        (
+            "Allows renaming the new field having malformed string created by "
+            "`PERMISSIVE` mode. This overrides "
+            "`spark.sql.columnNameOfCorruptRecord`."
+        ),
+        default=None,
+        shown_default="the value of `spark.sql.columnNameOfCorruptRecord`",
+    )
+    date_format: str | None = option_field(
+        (
+            "Sets the string that indicates a date format. Custom date formats "
+            "follow the formats at [Datetime "
+            "Patterns](https://spark.apache.org/docs/latest/sql-ref-datetime-"
+            "pattern.html). This applies to date type."
+        ),
+        default=None,
+        shown_default="`yyyy-MM-dd`",
+    )
+    timestamp_format: str | None = option_field(
+        (
+            "Sets the string that indicates a timestamp format. Custom date "
+            "formats follow the formats at [Datetime "
+            "Patterns](https://spark.apache.org/docs/latest/sql-ref-datetime-"
+            "pattern.html). This applies to timestamp type."
+        ),
+        default=None,
+        shown_default="`yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]`",
+    )
+    timestamp_ntz_format: str | None = option_field(
+        (
+            "Sets the string that indicates a timestamp without timezone "
+            "format. Custom date formats follow the formats at [Datetime "
+            "Patterns](https://spark.apache.org/docs/latest/sql-ref-datetime-"
+            "pattern.html). This applies to timestamp without timezone type; "
+            "zone-offset and time-zone components are not supported when "
+            "reading this data type."
+        ),
+        default=None,
+        metadata={SPARK_NAME: "timestampNTZFormat"},
+        shown_default="`yyyy-MM-dd'T'HH:mm:ss[.SSS]`",
+    )
+    enable_date_time_parsing_fallback: bool | None = option_field(
+        (
+            "Allows falling back to the backward compatible (Spark 1.x and 2.0)"
+            " behavior of parsing dates and timestamps if values do not match "
+            "the set patterns."
+        ),
+        default=None,
+        shown_default=(
+            "Enabled if the time parser policy has legacy settings or if no "
+            "custom date or timestamp pattern was provided"
+        ),
+    )
+    multi_line: bool | None = option_field(
+        "Parse one record, which may span multiple lines, per file.",
+        default=None,
+        shown_default="`False`",
+    )
+    allow_unquoted_control_chars: bool | None = option_field(
+        (
+            "Allows JSON Strings to contain unquoted control characters (ASCII "
+            "characters with value less than 32, including tab and line feed "
+            "characters) or not."
+        ),
+        default=None,
+        shown_default="`False`",
+    )
+    encoding: str | None = option_field(
+        (
+            "Allows to forcibly set one of standard basic or extended encoding "
+            "for the JSON files. For example UTF-16BE, UTF-32LE."
+        ),
+        default=None,
+        shown_default="detected automatically when `multi_line` is `True`",
+    )
+    line_sep: str | None = option_field(
+        "Defines the line separator that should be used for parsing.",
+        default=None,
+        shown_default="`\\r`, `\\r\\n` and `\\n`",
+    )
+    sampling_ratio: float | None = option_field(
+        "Defines fraction of input JSON objects used for schema inferring.",
+        default=None,
+        shown_default="`1.0`",
+    )
+    drop_field_if_all_null: bool | None = option_field(
+        (
+            "Whether to ignore column of all null values or empty array during "
+            "schema inference."
+        ),
+        default=None,
+        shown_default="`False`",
+    )
+    locale: str | None = option_field(
+        (
+            "Sets a locale as language tag in IETF BCP 47 format. For instance,"
+            " it is used while parsing dates and timestamps."
+        ),
+        default=None,
+        shown_default="`en-US`",
+    )
+    allow_non_numeric_numbers: bool | None = option_field(
+        (
+            'Allows JSON parser to recognize set of "Not-a-Number" (NaN) tokens'
+            " as legal floating number values.\n• `+INF`: for positive "
+            "infinity, as well as alias of `+Infinity` and `Infinity`.\n• "
+            "`-INF`: for negative infinity, alias `-Infinity`.\n• `NaN`: for "
+            "other not-a-numbers, like result of division by zero."
+        ),
+        default=None,
+        shown_default="`True`",
+    )
+    use_unsafe_row: bool | None = option_field(
+        ("Whether to use UnsafeRow to represent struct result in the JSON parser."),
+        default=None,
+        shown_default="the value of `spark.sql.json.useUnsafeRow`",
+    )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -460,28 +865,64 @@ class ParquetByPySparkOptions(PySparkOptions):
     to Spark (its session's configuration). The plugin's README lists them.
     """
 
-    datetime_rebase_mode: str | None = None
-    int96_rebase_mode: str | None = None
-    merge_schema: bool | None = None
+    datetime_rebase_mode: str | None = option_field(
+        (
+            "Specifies the rebasing mode for the values of the `DATE`, "
+            "`TIMESTAMP_MILLIS`, `TIMESTAMP_MICROS` logical types from the "
+            "Julian to Proleptic Gregorian calendar.\n• `EXCEPTION`: fails in"
+            " reads of ancient dates/timestamps that are ambiguous between the "
+            "two calendars.\n• `CORRECTED`: loads dates/timestamps without "
+            "rebasing.\n• `LEGACY`: performs rebasing of ancient "
+            "dates/timestamps from the Julian to Proleptic Gregorian calendar."
+        ),
+        default=None,
+        shown_default="the value of `spark.sql.parquet.datetimeRebaseModeInRead`",
+    )
+    int96_rebase_mode: str | None = option_field(
+        (
+            "Specifies the rebasing mode for INT96 timestamps from the Julian "
+            "to Proleptic Gregorian calendar.\n• `EXCEPTION`: fails in reads "
+            "of ancient INT96 timestamps that are ambiguous between the two "
+            "calendars.\n• `CORRECTED`: loads INT96 timestamps without "
+            "rebasing.\n• `LEGACY`: performs rebasing of ancient timestamps "
+            "from the Julian to Proleptic Gregorian calendar."
+        ),
+        default=None,
+        shown_default="the value of `spark.sql.parquet.int96RebaseModeInRead`",
+    )
+    merge_schema: bool | None = option_field(
+        (
+            "Sets whether we should merge schemas collected from all Parquet "
+            "part-files. This overrides `spark.sql.parquet.mergeSchema`."
+        ),
+        default=None,
+        shown_default="the value of `spark.sql.parquet.mergeSchema`",
+    )
 
 
 @dataclass(frozen=True, kw_only=True)
 class DeltaLakeByPySparkOptions(PySparkOptions):
     """Delta Lake's reader options for time travel, besides the session's and
     ``reader_options``: a table's earlier version.
-
-    Attributes
-    ----------
-    timestamp_as_of : str or None, default None
-        ``timestampAsOf``: the table as of a date or a timestamp, e.g.
-        "2019-01-01" or "2019-01-01T00:00:00.000Z".
-    version_as_of : int or None, default None
-        ``versionAsOf``: the table's version of that number (``DESCRIBE
-        HISTORY`` lists them).
     """
 
-    timestamp_as_of: str | None = None
-    version_as_of: int | None = None
+    timestamp_as_of: str | None = option_field(
+        (
+            "Loads the table as it was at a point in time. Only date or "
+            'timestamp strings are accepted, e.g. `"2019-01-01"` or '
+            '`"2019-01-01T00:00:00.000Z"`.'
+        ),
+        default=None,
+        shown_default="(none)",
+    )
+    version_as_of: int | None = option_field(
+        (
+            "Loads the table at a version, a number; `DESCRIBE HISTORY` on the "
+            "table lists them."
+        ),
+        default=None,
+        shown_default="(none)",
+    )
 
 
 # How the actions make Spark sessions: pyspark-support's with pyspark's

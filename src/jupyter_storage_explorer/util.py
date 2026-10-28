@@ -28,6 +28,7 @@ __all__ = [
     "format_kwargs",
     "format_size",
     "get_logger",
+    "option_field",
     "secret_dict_field",
     "secret_field",
 ]
@@ -172,21 +173,32 @@ def _shown_options(
     return out
 
 
-# Field metadata of options: the whole value is a secret (``secret_field``),
-# or these keys of a mapping are (``secret_dict_field``).
+# Field metadata of options: what the option is for (``option_field``), how
+# its default is shown, the whole value is a secret (``secret_field``), or
+# these keys of a mapping are (``secret_dict_field``).
+DESCRIPTION = "description"
+SHOWN_DEFAULT = "shown_default"
 IS_SECRET = "is_secret"
 SECRET_KEYS = "secret_keys"
 
 
-def secret_field(**kwargs: Any) -> Any:
-    """A field of options whose value is a secret, e.g. a password or a
-    credential object: ``dataclasses.field(**kwargs)``, marked so, and left
-    out of the options' ``repr``.
+def option_field(
+    description: str, *, shown_default: str | None = None, **kwargs: Any
+) -> Any:
+    """A field of options, with its description: ``dataclasses.field(**kwargs)``.
 
-    Generated code never shows it (``ActionOptions.code_value`` gives None).
+    Every field of actions' and plugins' options has one. The plugins'
+    READMEs show it in their tables of options, and settings forms may too.
 
     Parameters
     ----------
+    description : str
+        What the option does, in Markdown: one or a few sentences, lines
+        separated by ``"\\n"``.
+    shown_default : str, optional
+        The default as the docs show it, in Markdown, where its value does
+        not say it, e.g. "``True``" for ``LIBRARY_DEFAULT`` left to a library
+        defaulting to True, or "detected". By default the value itself.
     **kwargs
         ``dataclasses.field``'s, e.g. ``default=None``.
 
@@ -194,17 +206,69 @@ def secret_field(**kwargs: Any) -> Any:
     --------
     >>> @dataclass(frozen=True, kw_only=True)
     ... class MyOptions(ActionOptions):
-    ...     password: str | None = secret_field(default=None)
+    ...     header: bool | LibraryDefault = option_field(
+    ...         "Whether the first row names the columns.",
+    ...         default=LIBRARY_DEFAULT,
+    ...         shown_default="`True`",
+    ...     )
     """
-    metadata = {**kwargs.pop("metadata", {}), IS_SECRET: True}
-    kwargs.setdefault("repr", False)
+    metadata = _described(kwargs.pop("metadata", {}), description, shown_default)
     return dataclasses.field(**kwargs, metadata=metadata)
 
 
-def secret_dict_field(*, secret_keys: Iterable[str], **kwargs: Any) -> Any:
+def _described(
+    metadata: Mapping[str, Any], description: str | None, shown_default: str | None
+) -> dict[str, Any]:
+    """``metadata`` with the description and shown default given."""
+    described = dict(metadata)
+    if description is not None:
+        described[DESCRIPTION] = description
+    if shown_default is not None:
+        described[SHOWN_DEFAULT] = shown_default
+    return described
+
+
+def secret_field(
+    *, description: str | None = None, shown_default: str | None = None, **kwargs: Any
+) -> Any:
+    """A field of options whose value is a secret, e.g. a password or a
+    credential object: ``option_field``'s, marked so, and left out of the
+    options' ``repr``.
+
+    Generated code never shows it (``ActionOptions.code_value`` gives None).
+
+    Parameters
+    ----------
+    description, shown_default : str, optional
+        As for ``option_field``: a plugin's options need a description.
+    **kwargs
+        ``dataclasses.field``'s, e.g. ``default=None``.
+
+    Examples
+    --------
+    >>> @dataclass(frozen=True, kw_only=True)
+    ... class MyOptions(ActionOptions):
+    ...     password: str | None = secret_field(
+    ...         description="The database's password.", default=None
+    ...     )
+    """
+    metadata = {**kwargs.pop("metadata", {}), IS_SECRET: True}
+    kwargs.setdefault("repr", False)
+    return dataclasses.field(
+        **kwargs, metadata=_described(metadata, description, shown_default)
+    )
+
+
+def secret_dict_field(
+    *,
+    secret_keys: Iterable[str],
+    description: str | None = None,
+    shown_default: str | None = None,
+    **kwargs: Any,
+) -> Any:
     """A field of options holding a mapping some of whose keys are secrets,
-    e.g. storage options with an account key: ``dataclasses.field(**kwargs)``,
-    naming them.
+    e.g. storage options with an account key: ``option_field``'s, naming
+    them.
 
     Generated code shows the mapping without them, at any depth
     (``ActionOptions.code_value``), nor keys that look like credentials
@@ -215,6 +279,8 @@ def secret_dict_field(*, secret_keys: Iterable[str], **kwargs: Any) -> Any:
     secret_keys : iterable of str
         The keys whose values are secrets, e.g. ``["connection_string",
         "shared_key"]``.
+    description, shown_default : str, optional
+        As for ``option_field``: a plugin's options need a description.
     **kwargs
         ``dataclasses.field``'s, e.g. ``default=None``.
 
@@ -223,11 +289,15 @@ def secret_dict_field(*, secret_keys: Iterable[str], **kwargs: Any) -> Any:
     >>> @dataclass(frozen=True, kw_only=True)
     ... class MyOptions(ActionOptions):
     ...     storage_options: Mapping[str, Any] | None = secret_dict_field(
-    ...         default=None, secret_keys=["connection_string", "shared_key"]
+    ...         description="The storage's options.",
+    ...         default=None,
+    ...         secret_keys=["connection_string", "shared_key"],
     ...     )
     """
     metadata = {**kwargs.pop("metadata", {}), SECRET_KEYS: tuple(secret_keys)}
-    return dataclasses.field(**kwargs, metadata=metadata)
+    return dataclasses.field(
+        **kwargs, metadata=_described(metadata, description, shown_default)
+    )
 
 
 class LibraryDefault:

@@ -91,10 +91,11 @@ def plugin_options():
     return {"databricks-support": {"enabled": False}}
 ```
 
-| Option     | Default | Meaning                                                                                                 |
-|------------|---------|---------------------------------------------------------------------------------------------------------|
-| `enabled`  | `True`  | Whether explorers use the plugin. `False`: not even imported.                                           |
-| `priority` | lowest  | Plugins of a higher priority come first: their mappers are tried before the others'. Equal ones by key. |
+<!-- options: jupyter_storage_explorer.StorageExplorerPluginOptions -->
+| Option     | Default | Meaning                                                                                                                         |
+|------------|---------|---------------------------------------------------------------------------------------------------------------------------------|
+| `enabled`  | `True`  | Whether explorers use the plugin. `False`: not even imported.                                                                   |
+| `priority` | lowest  | Plugins of a higher priority come first: their actions, operations and mappers are tried before the others'. Equal ones by key. |
 
 ## Engine options
 
