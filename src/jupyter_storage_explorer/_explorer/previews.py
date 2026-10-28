@@ -19,8 +19,10 @@ from jupyter_storage_explorer._explorer.common import explorers
 from jupyter_storage_explorer._json import jsonable
 from jupyter_storage_explorer._query.data_query import DataQuery
 from jupyter_storage_explorer._query.table_set import TableSet
+from jupyter_storage_explorer.actions.base import CodeAction
 from jupyter_storage_explorer.base import ItemContext
 from jupyter_storage_explorer.formats.base import matching_formats
+from jupyter_storage_explorer.formats.defaults import DEFAULT_FORMATS
 from jupyter_storage_explorer.views import (
     JupyterWidgetView,
     MediaView,
@@ -383,12 +385,7 @@ class PreviewsMixin:
             return self._actions.engine_for(fmt, ctx, chosen)
         except LookupError:
             if not self._actions.installed(fmt):
-                # Nothing installed views it: the engines come with plugins.
-                raise ValueError(
-                    f"{name} cannot be viewed as {fmt.label}: no library viewing "
-                    f"it is installed, e.g. pip install "
-                    f'"jupyter-storage-explorer[polars]"'
-                ) from None
+                raise ValueError(self._not_viewable(fmt, name)) from None
             if not viewers:
                 # The actions installed refuse it, e.g. on a storage their
                 # libraries cannot read.
@@ -401,6 +398,27 @@ class PreviewsMixin:
                 f"{self._engine_label(chosen)}: choose another engine in "
                 f'"Preview as"'
             ) from None
+
+    def _not_viewable(self, fmt: DataFormat, name: str) -> str:
+        """Why the item ``name`` cannot be viewed as ``fmt``, which no view
+        installed handles: the packages its views need; for the explorer's
+        own formats without views, the engines that plugins bring; for a
+        plugin's format without views, where its code is."""
+        missing = self._actions.missing_packages(fmt)
+        if missing:
+            return (
+                f"{name} cannot be viewed as {fmt.label}: its views need "
+                f"{', '.join(missing)}, not installed"
+            )
+        if type(fmt) in DEFAULT_FORMATS:
+            # Their views come with the engines' plugins.
+            return (
+                f"{name} cannot be viewed as {fmt.label}: no library viewing it "
+                'is installed, e.g. pip install "jupyter-storage-explorer[polars]"'
+            )
+        if self._actions.installed(fmt, CodeAction):
+            return f"{fmt.label} has no preview: see its code in Python code"
+        return f"{fmt.label} has no preview"
 
     def _viewable(self, fmt: DataFormat, ctx: ItemContext) -> bool:
         """Whether the item of ``ctx`` can be viewed as ``fmt`` with the

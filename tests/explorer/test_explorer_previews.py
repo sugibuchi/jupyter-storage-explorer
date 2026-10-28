@@ -167,13 +167,36 @@ class TestPreview:
         mem_explorer = make("/", fs=memfs)
         assert mem_explorer._engines == []
         mem_explorer._open_preview("/data/a.csv")
-        # The engines come with plugins: which to install.
-        assert mem_explorer._preview["error"] == (
-            "a.csv cannot be viewed as CSV: no library viewing it is installed, "
-            'e.g. pip install "jupyter-storage-explorer[polars]"'
-        )
+        # The plugins are installed without their libraries: which to install.
+        error = mem_explorer._preview["error"]
+        assert error.startswith("a.csv cannot be viewed as CSV: its views need ")
+        assert "pandas, polars" in error
         reply = mem_explorer.view_tab("/data/a.csv")
-        assert "no library viewing it is installed" in reply["error"]
+        assert "its views need" in reply["error"]
+        # Without plugins, Parquet has no view (CSV has Text's): the engines
+        # come with plugins.
+        memfs.pipe_file("/data/a.parquet", b"PAR1" + b"\0" * 8 + b"PAR1")
+        bare = make("/", fs=memfs, plugin_options=NO_PLUGINS)
+        bare._open_preview("/data/a.parquet")
+        assert bare._preview["error"] == (
+            "a.parquet cannot be viewed as Parquet: no library viewing it is "
+            'installed, e.g. pip install "jupyter-storage-explorer[polars]"'
+        )
+
+    def test_a_format_with_code_only(self, memfs):
+        # A plugin's format may have code and no view: no library to install.
+        hub = file_format(".hub", name="hub", label="Hub dataset")
+
+        @code(hub, engine=PythonEngine, label="Load dataset")
+        def load(fmt, ctx, options):
+            return "load()"
+
+        memfs.pipe_file("/data/a.hub", b"")
+        explorer = make("/data", fs=memfs, actions=[load])
+        explorer._open_preview("/data/a.hub")
+        assert explorer._preview["error"] == (
+            "Hub dataset has no preview: see its code in Python code"
+        )
 
     def test_query_after_close(self, local):
         reply = local.request({"type": "query_rows", "rid": 1, "path": "gone"})

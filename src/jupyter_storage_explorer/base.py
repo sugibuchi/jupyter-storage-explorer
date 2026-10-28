@@ -52,7 +52,8 @@ class Location:
     Attributes
     ----------
     kind : str
-        The kind's name in JSON (``to_json``), e.g. "s3". Unique.
+        The kind's name in JSON (``to_json``), e.g. "s3". Unique: defining
+        a subclass with a kind another class has raises TypeError.
     url : str
         The URL in its most common form, which the fsspec implementation of
         its protocol also reads, e.g.
@@ -68,6 +69,19 @@ class Location:
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
         if "kind" in cls.__dict__:
+            known = Location._kinds.get(cls.kind)
+            # The same class again, e.g. its module reloaded or a notebook
+            # cell run again, replaces itself; another would take over the
+            # kind's JSON from every kernel reading it.
+            if known is not None and (known.__module__, known.__qualname__) != (
+                cls.__module__,
+                cls.__qualname__,
+            ):
+                raise TypeError(
+                    f"{cls.__module__}.{cls.__qualname__}: location kind "
+                    f"{cls.kind!r} is taken by {known.__module__}."
+                    f"{known.__qualname__}; give it another kind"
+                )
             Location._kinds[cls.kind] = cls
 
     @property
