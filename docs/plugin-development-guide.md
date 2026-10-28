@@ -897,7 +897,7 @@ license = "MIT"  # shown in "About", with the authors
 authors = [{ name = "Your Name" }]
 requires-python = ">=3.11"
 # The explorer only: never the backend library (see "full").
-dependencies = ["jupyter-storage-explorer>=0.27,<0.28"]
+dependencies = ["jupyter-storage-explorer>=0.28,<0.29"]
 
 # The libraries it uses: installed only on request, so that installing the
 # plugin never changes those of a shared environment.
@@ -1180,8 +1180,8 @@ To develop against the explorer's `main` branch before its release, add a source
 jupyter-storage-explorer = { git = "https://github.com/sugibuchi/jupyter-storage-explorer" }
 ```
 
-- Its version is the last release's with a suffix, e.g. `0.26.0.post8`. Until the release, widen the requirement to
-  accept it, e.g. `>=0.26,<0.28`.
+- Its version is the last release's with a suffix, e.g. `0.28.0.post8`. Until the release, widen the requirement to
+  accept it, e.g. `>=0.28,<0.30`.
 - This repository's plugins cannot be installed from git, and each requires the explorer of exactly its own version.
   Test against them with releases only.
 
