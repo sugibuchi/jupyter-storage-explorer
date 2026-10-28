@@ -1,16 +1,20 @@
-"""testing.py's check_plugin: a plugin checked as explorers load it, on the
-sample plugins of plugin_samples.py, through fake entry points."""
+"""testing.py: check_plugin, a plugin checked as explorers load it, on the
+sample plugins of plugin_samples.py, through fake entry points; and items
+located by a plugin's mappers."""
 
 from __future__ import annotations
 
+import dataclasses
 from importlib.metadata import EntryPoint
 
 import pytest
 from plugin_samples import SampleOperations, SampleSupport
 
+from jupyter_storage_explorer import Location
 from jupyter_storage_explorer._extensions import plugins as _plugins
+from jupyter_storage_explorer.filesystems import FileSystemMapper
 from jupyter_storage_explorer.plugin import ENTRY_POINT_GROUP, StorageExplorerPlugin
-from jupyter_storage_explorer.testing import check_plugin
+from jupyter_storage_explorer.testing import check_plugin, item_of
 
 
 @pytest.fixture
@@ -31,6 +35,28 @@ def installed(monkeypatch):
         monkeypatch.setattr(_plugins, "entry_points", lambda group: points)
 
     return install
+
+
+def test_items_located_by_a_plugin_mapper(make_item, memfs):
+    # A storage plugin's tests get its own locations, as explorers would.
+    @dataclasses.dataclass(frozen=True, kw_only=True)
+    class ItemsLocation(Location):
+        kind = "tests-items"
+        path: str
+        url = property(lambda self: f"items://{self.path}")
+
+    class ItemsMapper(FileSystemMapper):
+        classes = ("fsspec.implementations.memory.MemoryFileSystem",)
+
+        def to_location(self, fs, path):
+            return ItemsLocation(path=path)
+
+    item = make_item("/a.csv", b"x\n", mappers=[ItemsMapper()])
+    assert item.location == ItemsLocation(path="/a.csv")
+    assert item_of(memfs, "/a.csv", mappers=[ItemsMapper()]).location.url == (
+        "items:///a.csv"
+    )
+    assert make_item("/a.csv").location.url == "memory:///a.csv"
 
 
 def test_the_repository_plugins():

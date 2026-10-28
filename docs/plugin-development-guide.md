@@ -165,6 +165,8 @@ formats of their actions: a new format comes with an action of it, or with a plu
 are always detected: Delta Lake, Parquet, CSV, JSON Lines, JSON, Excel, Markdown, text and images. An action can handle
 one of them with another engine.
 
+A plugin's format may have code actions only. Its items then have no preview, and **Python code** offers their code.
+
 ## Engines and packages
 
 A `PythonPackage` names a package a component needs, without importing it. An `Engine` is the library users choose,
@@ -204,6 +206,9 @@ an error. The predefined engines come from their plugins' packages, e.g. `jupyte
 
 `PythonEngine`, in `jupyter_storage_explorer.actions.python`, is the engine of the built-in actions: Python alone, with
 the explorer's own packages. The explorer offers the engines installed that view something, never `PythonEngine`.
+
+A library used only in generated code, e.g. Hugging Face's `datasets`, gets an engine of its own with code actions
+only. The engine menu leaves it out, as it views nothing. **Python code** still shows its code, under its label.
 
 Packages are defined where they belong: an engine's own (`Polars`, `Pandas`, `PySpark`, `DatabricksConnect`) and
 the libraries only that engine uses (`Fastexcel` for polars, `DeltaSpark` for Spark) by the engine's plugin, beside
@@ -303,6 +308,9 @@ The rules for the functions:
 - They take the parameters they name, in any order: `fmt`, `ctx`, `options`, and `limits` for a view, or parts of
   the item, `url`, `url_or_local_path`, `name`, `path`, `size`, `is_dir` and `fs`. The decorator checks them; another needs a default.
   Name only those the function uses, as this repository's plugins do.
+- Whatever their functions name, explorers call actions by position: `view(fmt, ctx, options, limits)`,
+  `code(fmt, ctx, options)` and `does(fmt, ctx, options)`. Call them so in tests too. `action.options_model()` gives
+  an action's default options, `ActionOptions()` for one without an options class.
 - Keep `options` with its annotation, used or not, when it names an options class: it is the action's options model,
   which a view and its code share.
 - A view returns a `View`. A user's may also return other values, made views:
@@ -493,6 +501,8 @@ Code reads options with `options.code_value(name)`: `None` for a secret field, a
 - Each defaults to `LIBRARY_DEFAULT`: not passed, so the library's own default applies. `None` would not do, as some
   arguments take it as a value.
 - Leave out the source, functions and arguments that change what the reader returns, e.g. iterators or chunks.
+- An argument the code needs to return one dataframe is the exception: keep it, with the value that does. For example,
+  `datasets`' `load_dataset` returns a `DatasetDict` of tables without `split`, so its model keeps `split="train"`.
 - A reader passing arguments on to another library's, as Dask's `read_csv` does to pandas', takes those too, less
   those it refuses: check them with the installed library.
 - A reader taking `**kwargs` shows none in its signature, and may take an unknown name given `None`: check each with a
@@ -646,6 +656,14 @@ work file by file:
 Override the operations of a storage where each call is costly, e.g. a commit. Do a whole folder in one call when the
 library allows it.
 
+On a storage where each write is a commit, such as the Hugging Face Hub:
+
+- a move, copy or delete of a folder can be one commit, through the storage's own API;
+- uploads stay one call of `upload` per file, so one commit each: the explorer has no upload of a folder.
+
+After writing through the storage's own API rather than fsspec, call `fs.invalidate_cache(path)` for what changed.
+Otherwise the filesystem's cached listings do not show the change.
+
 ```python
 from jupyter_storage_explorer.filesystems import FileSystemOperations
 
@@ -699,7 +717,7 @@ Before writing a mapper or operations, try the filesystem on a real storage, rea
 - **Can its top folder be listed?** Some cannot, e.g. a hub listing no repositories. Users then open the explorer
   below it, and levels only apply from there.
 - **What do its paths hold besides folders?** Versions, revisions or encoded characters, e.g. `@refs%2Fpr%2F1`. Check
-  that each real path listed gives a location whose path is the same path again.
+  that each real path listed gives a location whose path names the same item again.
 - **Does one class reach several kinds of storage?** Then the location must tell them apart.
 - **What does each write cost?** It could be a request, or a commit. Look for the library's calls that do many at once.
 - **What does `info` give?** Note the names of the size, type and modified-time fields.
@@ -746,6 +764,14 @@ class MyMapper(FileSystemMapper):
 
 Normalize locations when they are made, e.g. lower-case hosts and no trailing "/". Equal locations must name the same
 item.
+
+A filesystem may take two spellings of one path, e.g. a revision URL-encoded or not. Both then give one location, in
+the spelling the filesystem reads unambiguously. A path listed in the other spelling comes back in that one, which
+names the same item.
+
+`to_location` runs for every item listed, as `level` does. Decide from the path and the instance's settings, never by
+reading the storage. It also runs for the filesystem's top folder, `""`, which `same_filesystem` compares. That folder
+needs a location even where it cannot be listed.
 
 The predefined mappers cover:
 
@@ -846,7 +872,7 @@ license = "MIT"  # shown in "About", with the authors
 authors = [{ name = "Your Name" }]
 requires-python = ">=3.11"
 # The explorer only: never the backend library (see "full").
-dependencies = ["jupyter-storage-explorer>=0.17,<0.18"]
+dependencies = ["jupyter-storage-explorer>=0.27,<0.28"]
 
 # The libraries it uses: installed only on request, so that installing the
 # plugin never changes those of a shared environment.
@@ -862,7 +888,8 @@ Homepage = "https://github.com/you/jupyter-storage-explorer-duckdb-support"
 duckdb-support = "jupyter_storage_explorer_duckdb_support:DuckDBSupport"
 
 [dependency-groups]
-dev = ["duckdb>=1.0", "pytest>=8"]  # the libraries, and what the tests need
+# The libraries, what the tests need, and JupyterLab to try the plugin in.
+dev = ["duckdb>=1.0", "jupyterlab>=4", "pytest>=8"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -878,7 +905,8 @@ packages = ["src/jupyter_storage_explorer_duckdb_support"]
 - `name`: `jupyter-storage-explorer-<name>-support`; the module `jupyter_storage_explorer_<name>_support`.
 - `description`: "<Name> support for Storage Explorer". It is the plugin's name for users ("About" shows it).
 - `dependencies`: the explorer, within the minor version you test with (the plugin API may change between minor
-  versions).
+  versions). This guide describes the explorer's `main` branch, which may be ahead of its last release: see
+  [Develop and install](#develop-and-install) to develop against it.
 - `full`: the backend libraries. Users install `pip install "jupyter-storage-explorer-duckdb-support[full]"` to get
   them, or the plugin alone to use those already installed.
 - The entry point's name is the plugin's `key`: `<name>-support`.
@@ -1049,27 +1077,52 @@ format: each option, its default and its meaning, from the library's documentati
 - **Plugin options** shows one example for `StorageExplorer` and one for `launcher.py`, then the options' table.
 - Links, also to the README's own sections, are absolute URLs: PyPI shows the README, but resolves neither relative
   paths nor `#` anchors of its headings.
-- Code blocks are formatted as ruff formats Python. `uvx ruff format` formats the README's blocks too, and CI checks
-  them with the plugins' code.
+- Code blocks are formatted as ruff formats Python, at its default line length of 88. `uvx ruff format` formats the
+  README's blocks too, and `uvx ruff format --check` checks them.
 - A note on how the data browser behaves with the library, e.g. what it reads, goes in a section of its own after
   Prerequisites.
 
 This repository's plugins publish the extras through the explorer, e.g. `jupyter-storage-explorer[polars]`. Their
 READMEs show those commands instead. `tests/test_plugin_readmes.py` checks this layout for them, and that the table
-lists exactly the `full` extra's libraries.
+lists exactly the `full` extra's libraries. It is not part of the explorer's package: other plugins follow the layout
+by hand.
 
 ### Develop and install
 
 ```bash
-uv init --lib jupyter-storage-explorer-duckdb-support   # or copy the layout above
+uv init --lib --build-backend hatch jupyter-storage-explorer-duckdb-support   # then edit pyproject.toml as above
 uv sync                      # the plugin (editable), the explorer, the dev group
 uv run pytest
 uv build                     # dist/: the wheel and sdist
 uv publish                   # to PyPI (or --publish-url for another index)
 ```
 
+`uv init` sets `requires-python` to the Python it runs with: lower it to the explorer's, `>=3.11`.
+
 `uv sync` installs the plugin editable, with its entry point: explorers in `uv run jupyter lab` use it at once. After
 changing `pyproject.toml` (the description, the entry point), run `uv sync` again.
+
+To develop against the explorer's `main` branch before its release, add a source to `pyproject.toml`:
+
+```toml
+# Until the release: remove this table before publishing, then run uv lock.
+[tool.uv.sources]
+jupyter-storage-explorer = { git = "https://github.com/sugibuchi/jupyter-storage-explorer" }
+```
+
+- Its version is the last release's with a suffix, e.g. `0.26.0.post8`. Until the release, widen the requirement to
+  accept it, e.g. `>=0.26,<0.28`.
+- This repository's plugins cannot be installed from git, and each requires the explorer of exactly its own version.
+  Test against them with releases only.
+
+Run the checks a plugin's CI needs on each pull request:
+
+- `uvx ruff check` and `uvx ruff format --check`;
+- `uv run pytest`, including the `check_plugin` test.
+
+Publish from a version tag, e.g. with PyPI's
+[trusted publishing](https://docs.pypi.org/trusted-publishers/), which needs no token: `uv publish` reads it from the
+workflow.
 
 ## Testing
 
@@ -1111,10 +1164,12 @@ from jupyter_storage_explorer.testing import make_item, memfs  # noqa: F401
 ```
 
 - `memfs`: fsspec's memory filesystem, emptied.
-- `make_item(path, data=None, location=None)`: writes `data` there (or lists the folder) and returns the item;
-  `location` gives it another, e.g. an `S3Location` for the code of an S3 file.
-- `item_of(fs, path, location=None)` and `local_item(path)`: an item of any filesystem, or a local file (e.g. in
-  `tmp_path`).
+- `make_item(path, data=None, location=None, *, mappers=())`: writes `data` there (or lists the folder) and returns
+  the item; `location` gives it another, e.g. an `S3Location` for the code of an S3 file.
+- `item_of(fs, path, location=None, *, mappers=())` and `local_item(path)`: an item of any filesystem, or a local file
+  (e.g. in `tmp_path`).
+- `mappers` are tried before the default ones, as explorers try a plugin's. A storage plugin passes its own, so that
+  its items get its locations.
 
 A test needing what the library downloads on first use, e.g. a DuckDB extension, skips when it cannot get it. The tests
 then run offline.
@@ -1161,8 +1216,11 @@ A storage plugin's tests need no real storage either:
 - Take the fakes' paths and answers from real listings, as [Check the real filesystem first](#check-the-real-filesystem-first)
   says.
 
-Try it in a browser with `uv run jupyter lab`: the plugin's engine is in the status bar's engine menu, and ⚙ → **About**
-lists the plugin with its version.
+Try it in a browser with `uv run jupyter lab`:
+
+- ⚙ → **About** lists the plugin with its version;
+- an engine viewing something is in the status bar's engine menu;
+- code actions are in an item's right-click menu, under **Python code**.
 
 This repository's plugins also get a check in `tests/browser/smoke.py` for what users see:
 
@@ -1279,7 +1337,7 @@ def filesystem_mappers():
 - [ ] Operations do a folder in one call where each call of the library is costly.
 - [ ] Locations: frozen keyword-only dataclasses, normalized, without credentials.
 - [ ] Storage plugins: the questions of [Check the real filesystem first](#check-the-real-filesystem-first) answered on a
-  real storage; real paths give locations whose paths are the same again; the engines read the locations' URLs.
+  real storage; real paths give locations whose paths name the same items again; the engines read the locations' URLs.
 - [ ] Tests in the plugin's `tests/`, of its own code, run with `uv run pytest`.
 - [ ] A test calling `check_plugin` with the plugin's key passes.
 - [ ] README in the layout of [The README](#the-readme): Installation with the `full` extra's libraries,
