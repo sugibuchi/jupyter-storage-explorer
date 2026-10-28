@@ -384,6 +384,8 @@ StorageExplorer("s3://bucket/notes", engine_options={"python": {"text": {"charac
 - `PythonEngine`'s key is `"python"`. A format of yours is named by its `name`.
 - An engine's options also reach its other actions of that format, the explorer's or the plugins'. A field of the same
   name must have the same type there.
+- Describe an option with `option_field("...", default=...)`, from `jupyter_storage_explorer.util`, if you like.
+  Plugins must.
 - Mark a credential with `secret_field()` or `secret_dict_field()`, from `jupyter_storage_explorer.util`.
 - Code shows options only through `options.code_value(name)`, which leaves secrets out.
 

@@ -68,11 +68,12 @@ def plugin_options():
     return {"abfs-support": {"concurrency": 16}}
 ```
 
-| Option        | Default | Meaning                                                                                                    |
-|---------------|---------|------------------------------------------------------------------------------------------------------------|
-| `enabled`     | `True`  | Whether explorers use the plugin. `False`: not even imported.                                              |
-| `priority`    | lowest  | Plugins of a higher priority come first: their operations are tried before the others'. Equal ones by key. |
-| `concurrency` | `64`    | The most files copied at once on the server (`AzureDataLakeGen2Operation`'s `concurrency`).                |
+<!-- options: jupyter_storage_explorer.StorageExplorerPluginOptions, jupyter_storage_explorer_abfs_support.AbfsSupportOptions -->
+| Option        | Default | Meaning                                                                                                                         |
+|---------------|---------|---------------------------------------------------------------------------------------------------------------------------------|
+| `enabled`     | `True`  | Whether explorers use the plugin. `False`: not even imported.                                                                   |
+| `priority`    | lowest  | Plugins of a higher priority come first: their actions, operations and mappers are tried before the others'. Equal ones by key. |
+| `concurrency` | `64`    | The most files copied at once on the server (`AzureDataLakeGen2Operation`'s `concurrency`).                                     |
 
 ## AzureDataLakeGen2Operation
 

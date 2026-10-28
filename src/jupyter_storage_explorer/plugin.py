@@ -12,6 +12,8 @@ from importlib.metadata import distribution, entry_points, packages_distribution
 from typing import TYPE_CHECKING, Any, ClassVar
 from urllib.parse import urlsplit
 
+from jupyter_storage_explorer.util import option_field
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
     from importlib.metadata import Distribution
@@ -35,20 +37,19 @@ class StorageExplorerPluginOptions:
     """The options of a plugin, from ``StorageExplorer(plugin_options=...)``
     (by plugin key, a dict of options): those of every plugin, and the
     fields of a subclass, a plugin's ``options_model``, each with a default.
-
-    Attributes
-    ----------
-    enabled : bool, default True
-        Whether the explorer uses the plugin; a plugin not enabled is not
-        even imported.
-    priority : int, default the lowest
-        Plugins of a higher priority come first: their actions, operations
-        and mappers are tried before the others'. Plugins of one priority
-        come by key.
     """
 
-    enabled: bool = True
-    priority: int = LOWEST_PRIORITY
+    enabled: bool = option_field(
+        "Whether explorers use the plugin. `False`: not even imported.", default=True
+    )
+    priority: int = option_field(
+        (
+            "Plugins of a higher priority come first: their actions, operations"
+            " and mappers are tried before the others'. Equal ones by key."
+        ),
+        default=LOWEST_PRIORITY,
+        shown_default="lowest",
+    )
 
     @classmethod
     def option_names(cls) -> frozenset[str]:

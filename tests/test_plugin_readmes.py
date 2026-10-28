@@ -4,11 +4,16 @@ Plugin options with examples for StorageExplorer and launcher.py."""
 
 from __future__ import annotations
 
+import dataclasses
+import importlib.util
 import pathlib
 import re
 import tomllib
 
 import pytest
+
+from jupyter_storage_explorer import StorageExplorer, StorageExplorerPluginOptions
+from jupyter_storage_explorer.util import DESCRIPTION
 
 ROOT = pathlib.Path(__file__).parents[1]
 PLUGINS = sorted((ROOT / "plugins").glob("*-support"))
@@ -35,6 +40,29 @@ def plugin(request) -> pathlib.Path:
 
 def readme(plugin: pathlib.Path) -> dict[str, str]:
     return sections((plugin / "README.md").read_text(encoding="utf-8"))
+
+
+def test_option_tables_up_to_date(capsys):
+    # Written from the options' descriptions by docs/scripts/option_tables.py.
+    spec = importlib.util.spec_from_file_location(
+        "option_tables", ROOT / "docs" / "scripts" / "option_tables.py"
+    )
+    option_tables = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(option_tables)
+    stale = option_tables.main(check=True)
+    assert stale == 0, (
+        f"{capsys.readouterr().out}run: uv run docs/scripts/option_tables.py"
+    )
+
+
+def test_the_explorers_options_described():
+    # The plugins' are checked by check_plugin, in their tests.
+    models = [StorageExplorerPluginOptions] + [
+        a.options_model for a in StorageExplorer.default_actions()
+    ]
+    for model in models:
+        for field in dataclasses.fields(model):
+            assert DESCRIPTION in field.metadata, f"{model.__qualname__}.{field.name}"
 
 
 def test_the_plugins_are_found():

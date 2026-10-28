@@ -20,6 +20,7 @@ then, in its tests::
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import pathlib
 from typing import TYPE_CHECKING, Any
@@ -47,6 +48,7 @@ from jupyter_storage_explorer.plugin import (
     StorageExplorerPluginOptions,
 )
 from jupyter_storage_explorer.storage_explorer import StorageExplorer
+from jupyter_storage_explorer.util import DESCRIPTION
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
@@ -71,6 +73,7 @@ def check_plugin(
       named by the plugin's ``key``, and the class it names;
     - its ``options_model``, created from ``options``;
     - its package's description, shown in "About";
+    - the descriptions of its options' fields and its actions' (``option_field``);
     - its components: actions registered together, ``DataFormat`` classes,
       ``FileSystemOperations`` and ``FileSystemMapper`` objects or classes;
     - its actions together with the explorer's own and those of the other
@@ -125,6 +128,7 @@ def check_plugin(
             "description, which About shows"
         )
     problems.extend(_component_problems(plugin))
+    problems.extend(_description_problems(plugin))
     if not problems:
         # As an explorer has them: with the other plugins enabled.
         others, _ = load_plugins()
@@ -194,6 +198,28 @@ def _component_problems(plugin: StorageExplorerPlugin) -> list[str]:
             elif not isinstance(component, kind):
                 problems.append(f"{name}: {component!r} is no {kind.__name__}")
     return problems
+
+
+def _description_problems(plugin: StorageExplorerPlugin) -> list[str]:
+    """The fields of ``plugin``'s options and of its actions' options without
+    a description (``option_field``), which the READMEs' tables and settings
+    show."""
+    models = [type(plugin).options_model]
+    # Reading the actions fails in _component_problems' report.
+    with contextlib.suppress(Exception):
+        models += [a.options_model for a in plugin.actions if isinstance(a, Action)]
+    undescribed = sorted(
+        {
+            f"{model.__qualname__}.{field.name}"
+            for model in models
+            if dataclasses.is_dataclass(model)
+            for field in dataclasses.fields(model)
+            if DESCRIPTION not in field.metadata
+        }
+    )
+    if not undescribed:
+        return []
+    return [f"options without a description (option_field): {', '.join(undescribed)}"]
 
 
 def _read(plugin: StorageExplorerPlugin, name: str, problems: list[str]) -> list[Any]:

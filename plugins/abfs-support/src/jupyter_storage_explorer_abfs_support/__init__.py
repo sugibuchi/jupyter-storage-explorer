@@ -8,6 +8,7 @@ The plugin, ``AbfsSupport``, is found by explorers through its entry point
 from dataclasses import dataclass
 
 from jupyter_storage_explorer import StorageExplorerPlugin, StorageExplorerPluginOptions
+from jupyter_storage_explorer.util import option_field
 from jupyter_storage_explorer_abfs_support.operations import (
     AzureDataLakeGen2Operation,
 )
@@ -15,15 +16,15 @@ from jupyter_storage_explorer_abfs_support.operations import (
 
 @dataclass(frozen=True, kw_only=True)
 class AbfsSupportOptions(StorageExplorerPluginOptions):
-    """abfs-support's options (``plugin_options={"abfs-support": {...}}``).
+    """abfs-support's options (``plugin_options={"abfs-support": {...}}``)."""
 
-    Attributes
-    ----------
-    concurrency : int, default 64
-        Most files copied at once on the server.
-    """
-
-    concurrency: int = 64
+    concurrency: int = option_field(
+        (
+            "The most files copied at once on the server "
+            "(`AzureDataLakeGen2Operation`'s `concurrency`)."
+        ),
+        default=64,
+    )
 
 
 class AbfsSupport(StorageExplorerPlugin):

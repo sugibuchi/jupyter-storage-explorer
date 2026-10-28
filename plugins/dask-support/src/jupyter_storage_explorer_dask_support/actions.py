@@ -67,6 +67,7 @@ from jupyter_storage_explorer.util import (
     format_arguments,
     format_kwargs,
     format_size,
+    option_field,
     secret_dict_field,
 )
 from jupyter_storage_explorer.views import (
@@ -115,17 +116,14 @@ class DaskEngine(Engine):
 
 @dataclass(frozen=True, kw_only=True)
 class DaskOptions(ActionOptions):
-    """The options of every Dask action.
-
-    Attributes
-    ----------
-    storage_options : mapping or None, default None
-        Dask's (fsspec's) ``storage_options`` in the code; those that look
-        like credentials are left out. The data browser reads through the
-        explorer's filesystem, with its own credentials.
-    """
+    """The options of every Dask action."""
 
     storage_options: Mapping[str, Any] | None = secret_dict_field(
+        description=(
+            "Dask's `storage_options`, fsspec's keyword arguments, in the code."
+            " The data browser reads through the explorer's filesystem, with "
+            "its own credentials."
+        ),
         default=None,
         secret_keys=[
             "account_key",
@@ -147,8 +145,8 @@ class DaskOptions(ActionOptions):
 # filesystem (the explorer's), functions, and arguments Dask refuses or that
 # change what is returned (index_col, nrows, iterator, chunksize,
 # memory_map; JSON's lines, orient, engine and nrows, which apply to each
-# block). LIBRARY_DEFAULT leaves one to Dask. The plugin's README has their
-# tables: keep them in step.
+# block). LIBRARY_DEFAULT leaves one to Dask. The plugin's README shows their
+# descriptions, by docs/scripts/option_tables.py.
 _Default = LibraryDefault
 
 
@@ -159,22 +157,159 @@ class ParquetByDaskOptions(DaskOptions):
     (True for a file, unless ``blocksize`` is given). The plugin's README
     lists them."""
 
-    columns: Sequence[str] | _Default | None = LIBRARY_DEFAULT
-    filters: Sequence[Any] | _Default | None = LIBRARY_DEFAULT
-    index: str | Sequence[str] | bool | _Default | None = LIBRARY_DEFAULT
-    categories: Sequence[str] | Mapping[str, int] | _Default | None = LIBRARY_DEFAULT
-    open_file_options: Mapping[str, Any] | _Default | None = LIBRARY_DEFAULT
-    dtype_backend: str | _Default | None = LIBRARY_DEFAULT
-    calculate_divisions: bool | _Default = LIBRARY_DEFAULT
-    ignore_metadata_file: bool | _Default = LIBRARY_DEFAULT
-    metadata_task_size: int | _Default | None = LIBRARY_DEFAULT
-    split_row_groups: str | bool | int | _Default = LIBRARY_DEFAULT
-    blocksize: str | int | _Default | None = LIBRARY_DEFAULT
-    aggregate_files: bool | str | _Default | None = LIBRARY_DEFAULT
-    parquet_file_extension: str | Sequence[str] | _Default | None = LIBRARY_DEFAULT
-    dataset: Mapping[str, Any] | _Default | None = LIBRARY_DEFAULT
-    read: Mapping[str, Any] | _Default | None = LIBRARY_DEFAULT
-    arrow_to_pandas: Mapping[str, Any] | _Default | None = LIBRARY_DEFAULT
+    columns: Sequence[str] | _Default | None = option_field(
+        (
+            "Field name(s) to read in as columns in the output. By default all "
+            "non-index fields will be read (as determined by the pandas parquet"
+            " metadata, if present)."
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="`None`",
+    )
+    filters: Sequence[Any] | _Default | None = option_field(
+        (
+            "List of filters to apply, like `[[('col1', '==', 0), ...], ...]`. "
+            "Using this argument will result in row-wise filtering of the final"
+            " partitions. Predicates can be expressed in disjunctive normal "
+            "form (DNF)."
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="`None`",
+    )
+    index: str | Sequence[str] | bool | _Default | None = option_field(
+        (
+            "Field name(s) to use as the output frame index. By default will be"
+            " inferred from the pandas parquet file metadata, if present. Use "
+            "`False` to read all fields as columns."
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="`None`",
+    )
+    categories: Sequence[str] | Mapping[str, int] | _Default | None = option_field(
+        (
+            "For any fields listed here, if the parquet encoding is Dictionary,"
+            " the column will be created with dtype category. Use only if it is"
+            " guaranteed that the column is encoded as dictionary in all row-"
+            "groups."
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="`None`",
+    )
+    open_file_options: Mapping[str, Any] | _Default | None = option_field(
+        (
+            "Key/value arguments to be passed along to "
+            "`AbstractFileSystem.open` when each parquet data file is open for "
+            'reading. Experimental (optimized) "precaching" for remote file '
+            'systems can be enabled by adding `{"method": "parquet"}` under the'
+            ' `"precache_options"` key.'
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="`None`",
+    )
+    dtype_backend: str | _Default | None = option_field(
+        (
+            "Which dtype_backend to use, e.g. whether a DataFrame should have "
+            "NumPy arrays, nullable dtypes are used for all dtypes that have a "
+            "nullable implementation when `'numpy_nullable'` is set, pyarrow is"
+            " used for all dtypes if `'pyarrow'` is set."
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="NumPy-backed",
+    )
+    calculate_divisions: bool | _Default = option_field(
+        (
+            "Whether to use min/max statistics from the footer metadata (or "
+            "global `_metadata` file) to calculate divisions for the output "
+            "DataFrame collection. May be extremely slow when no global "
+            "`_metadata` file is present, especially when reading from remote "
+            "storage."
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="`False`",
+    )
+    ignore_metadata_file: bool | _Default = option_field(
+        ("Whether to ignore the global `_metadata` file (when one is present)."),
+        default=LIBRARY_DEFAULT,
+        shown_default="`False`",
+    )
+    metadata_task_size: int | _Default | None = option_field(
+        (
+            "If parquet metadata is processed in parallel, the number of "
+            "dataset files to be processed by each task in the Dask graph. `0` "
+            "disables parallel metadata processing."
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="configurable",
+    )
+    split_row_groups: str | bool | int | _Default = option_field(
+        (
+            "If True, then each output dataframe partition will correspond to a"
+            " single parquet-file row-group. If False, each partition will "
+            "correspond to a complete file. If a positive integer value is "
+            "given, each dataframe partition will correspond to that number of "
+            "parquet row-groups (or fewer). If `'adaptive'`, the metadata of "
+            "each file will be used to ensure that every partition satisfies "
+            "`blocksize`."
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default=(
+            "`'infer'`; data browser: `True` for a file, unless `blocksize` is set"
+        ),
+    )
+    blocksize: str | int | _Default | None = option_field(
+        (
+            "The desired size of each output `DataFrame` partition in terms of "
+            "total (uncompressed) parquet storage space. Ignored if "
+            "`split_row_groups` is not set to `'infer'` or `'adaptive'`."
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="`'default'` (256 MiB)",
+    )
+    aggregate_files: bool | str | _Default | None = option_field(
+        (
+            "Whether distinct file paths may be aggregated into the same output"
+            " partition. Only used when `split_row_groups` is set to `'infer'`,"
+            " `'adaptive'` or to an integer >1. For \"hive-partitioned\" "
+            'datasets, a "partition"-column name can also be specified.'
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="`None`",
+    )
+    parquet_file_extension: str | Sequence[str] | _Default | None = option_field(
+        (
+            "A file extension or an iterable of extensions to use when "
+            "discovering parquet files in a directory. Files that don't match "
+            "these extensions will be ignored. `None` treats all files in the "
+            "directory as parquet files."
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default='`(".parq", ".parquet", ".pq")`',
+    )
+    dataset: Mapping[str, Any] | _Default | None = option_field(
+        (
+            "Dictionary of options to use when creating a "
+            '`pyarrow.dataset.Dataset` object, e.g. `{"partitioning": '
+            '{"flavor": "hive", "schema": ...}}`.'
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="`None`",
+    )
+    read: Mapping[str, Any] | _Default | None = option_field(
+        (
+            "Dictionary of options to pass through to `engine.read_partitions` "
+            "using the `read` key-word argument."
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="`None`",
+    )
+    arrow_to_pandas: Mapping[str, Any] | _Default | None = option_field(
+        (
+            "Dictionary of options to use when converting from `pyarrow.Table` "
+            "to a pandas `DataFrame` object."
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="`None`",
+    )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -186,46 +321,419 @@ class CsvByDaskOptions(DaskOptions):
     lists them."""
 
     # Dask's own.
-    blocksize: str | int | _Default | None = LIBRARY_DEFAULT
-    sample: int | _Default = LIBRARY_DEFAULT
-    sample_rows: int | _Default = LIBRARY_DEFAULT
-    enforce: bool | _Default = LIBRARY_DEFAULT
-    assume_missing: bool | _Default = LIBRARY_DEFAULT
-    include_path_column: bool | str | _Default = LIBRARY_DEFAULT
+    blocksize: str | int | _Default | None = option_field(
+        (
+            "Number of bytes by which to cut up larger files. Default value is "
+            "computed based on available physical memory and the number of "
+            "cores, up to a maximum of 64MB. Can be a number like `64000000` or"
+            ' a string like `"64MB"`. If `None`, a single block is used for '
+            "each file."
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default=(
+            "computed, at most 64 MB; data browser: half of `max_whole_file_bytes`"
+        ),
+    )
+    sample: int | _Default = option_field(
+        "Number of bytes to use when determining dtypes.",
+        default=LIBRARY_DEFAULT,
+        shown_default="`256000`",
+    )
+    sample_rows: int | _Default = option_field(
+        "Number of rows of the sample to use when determining dtypes.",
+        default=LIBRARY_DEFAULT,
+        shown_default="`10`",
+    )
+    enforce: bool | _Default = option_field(
+        (
+            "Whether to check that each partition's dtypes match those "
+            "determined from the sample."
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="`False`",
+    )
+    assume_missing: bool | _Default = option_field(
+        (
+            "If True, all integer columns that aren't specified in `dtype` are "
+            "assumed to contain missing values, and are converted to floats."
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="`False`",
+    )
+    include_path_column: bool | str | _Default = option_field(
+        (
+            "Whether or not to include the path to each particular file. If "
+            "True a new column is added to the dataframe called `path`. If str,"
+            " sets new column name."
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="`False`",
+    )
     # pandas' read_csv's.
-    sep: str | _Default | None = LIBRARY_DEFAULT
-    header: int | Sequence[int] | str | _Default | None = LIBRARY_DEFAULT
-    names: Sequence[str] | _Default = LIBRARY_DEFAULT
-    usecols: Sequence[int | str] | _Default | None = LIBRARY_DEFAULT
-    dtype: Any = LIBRARY_DEFAULT
-    engine: str | _Default | None = LIBRARY_DEFAULT
-    true_values: Sequence[Any] | _Default | None = LIBRARY_DEFAULT
-    false_values: Sequence[Any] | _Default | None = LIBRARY_DEFAULT
-    skipinitialspace: bool | _Default = LIBRARY_DEFAULT
-    skiprows: int | Sequence[int] | _Default | None = LIBRARY_DEFAULT
-    skipfooter: int | _Default = LIBRARY_DEFAULT
-    na_values: Any = LIBRARY_DEFAULT
-    keep_default_na: bool | _Default = LIBRARY_DEFAULT
-    na_filter: bool | _Default = LIBRARY_DEFAULT
-    skip_blank_lines: bool | _Default = LIBRARY_DEFAULT
-    parse_dates: bool | Sequence[int | str] | _Default | None = LIBRARY_DEFAULT
-    date_format: str | Mapping[str, str] | _Default | None = LIBRARY_DEFAULT
-    dayfirst: bool | _Default = LIBRARY_DEFAULT
-    cache_dates: bool | _Default = LIBRARY_DEFAULT
-    compression: str | Mapping[str, Any] | _Default | None = LIBRARY_DEFAULT
-    thousands: str | _Default | None = LIBRARY_DEFAULT
-    decimal: str | _Default = LIBRARY_DEFAULT
-    lineterminator: str | _Default | None = LIBRARY_DEFAULT
-    quotechar: str | _Default = LIBRARY_DEFAULT
-    quoting: int | _Default = LIBRARY_DEFAULT
-    doublequote: bool | _Default = LIBRARY_DEFAULT
-    escapechar: str | _Default | None = LIBRARY_DEFAULT
-    comment: str | _Default | None = LIBRARY_DEFAULT
-    encoding: str | _Default | None = LIBRARY_DEFAULT
-    encoding_errors: str | _Default | None = LIBRARY_DEFAULT
-    on_bad_lines: str | _Default = LIBRARY_DEFAULT
-    low_memory: bool | _Default = LIBRARY_DEFAULT
-    dtype_backend: str | _Default = LIBRARY_DEFAULT
+    sep: str | _Default | None = option_field(
+        (
+            "Character or regex pattern to treat as the delimiter. `sep=None` "
+            "detects the separator from the first valid row of the file with "
+            "Python's builtin sniffer tool, `csv.Sniffer`; it is supported only"
+            " by the Python parsing engine, which will be used automatically. "
+            "In addition, separators longer than 1 character and different from"
+            " `'\\s+'` will be interpreted as regular expressions and will also "
+            "force the use of the Python parsing engine. Note that regex "
+            "delimiters are prone to ignoring quoted data. Regex example: "
+            "`'\\r\\t'`."
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="detected",
+    )
+    header: int | Sequence[int] | str | _Default | None = option_field(
+        (
+            "Row number(s) containing column labels and marking the start of "
+            "the data (zero-indexed). Default behavior is to infer the column "
+            "names: if no `names` are passed the behavior is identical to "
+            "`header=0` and column names are inferred from the first line of "
+            "the file, if column names are passed explicitly to `names` then "
+            "the behavior is identical to `header=None`. Explicitly pass "
+            "`header=0` to be able to replace existing names. The header can be"
+            " a list of integers that specify row locations for a `MultiIndex` "
+            "on the columns e.g. `[0, 1, 3]`. Intervening rows that are not "
+            "specified will be skipped (e.g. 2 in this example is skipped). "
+            "Note that this parameter ignores commented lines and empty lines "
+            "if `skip_blank_lines=True`, so `header=0` denotes the first line "
+            "of data rather than the first line of the file.\nWhen inferred "
+            "from the file contents, headers are kept distinct from each other "
+            "by renaming duplicate names with a numeric suffix of the form "
+            '`".{count}"` starting from 1, e.g. `"foo"` and `"foo.1"`. Empty '
+            'headers are named `"Unnamed: {i}"` or ` "Unnamed: '
+            '{i}_level_{level}"` in the case of MultiIndex columns.'
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="`'infer'`",
+    )
+    names: Sequence[str] | _Default = option_field(
+        (
+            "Sequence of column labels to apply. If the file contains a header "
+            "row, then you should explicitly pass `header=0` to override the "
+            "column names. Duplicates in this list are not allowed."
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="(none)",
+    )
+    usecols: Sequence[int | str] | _Default | None = option_field(
+        (
+            "Subset of columns to select, denoted either by column labels or "
+            "column indices. If list-like, all elements must either be "
+            "positional (i.e. integer indices into the document columns) or "
+            "strings that correspond to column names provided either by the "
+            "user in `names` or inferred from the document header row(s). If "
+            "`names` are given, the document header row(s) are not taken into "
+            "account. For example, a valid list-like `usecols` parameter would "
+            "be `[0, 1, 2]` or `['foo', 'bar', 'baz']`. Element order is "
+            "ignored, so `usecols=[0, 1]` is the same as `[1, 0]`. To "
+            "instantiate a `DataFrame` from `data` with element order preserved"
+            " use `pd.read_csv(data, usecols=['foo', 'bar'])[['foo', 'bar']]` "
+            "for columns in `['foo', 'bar']` order or `pd.read_csv(data, "
+            "usecols=['foo', 'bar'])[['bar', 'foo']]` for `['bar', 'foo']` "
+            "order.\nIf callable, the callable function will be evaluated "
+            "against the column names, returning names where the callable "
+            "function evaluates to `True`. An example of a valid callable "
+            "argument would be `lambda x: x.upper() in ['AAA', 'BBB', 'DDD']`. "
+            "Using this parameter results in much faster parsing time and lower"
+            " memory usage."
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="`None`",
+    )
+    dtype: Any = option_field(
+        (
+            "Data type(s) to apply to either the whole dataset or individual "
+            "columns. E.g., `{'a': np.float64, 'b': np.int32, 'c': 'Int64'}` "
+            "Use `str` or `object` together with suitable `na_values` settings "
+            "to preserve and not interpret `dtype`. If `converters` are "
+            "specified, they will be applied INSTEAD of `dtype` conversion. "
+            "Specify a `defaultdict` as input where the default determines the "
+            "`dtype` of the columns which are not explicitly listed."
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="`None`",
+    )
+    engine: str | _Default | None = option_field(
+        (
+            "Parser engine to use. The C and pyarrow engines are faster, while "
+            "the python engine is currently more feature-complete. "
+            "Multithreading is currently only supported by the pyarrow engine. "
+            'Some features of the "pyarrow" engine are unsupported or may not '
+            "work correctly."
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="`None`",
+    )
+    true_values: Sequence[Any] | _Default | None = option_field(
+        (
+            "Values to consider as `True` in addition to case-insensitive "
+            "variants of 'True'."
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="`None`",
+    )
+    false_values: Sequence[Any] | _Default | None = option_field(
+        (
+            "Values to consider as `False` in addition to case-insensitive "
+            "variants of 'False'."
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="`None`",
+    )
+    skipinitialspace: bool | _Default = option_field(
+        "Skip spaces after delimiter.", default=LIBRARY_DEFAULT, shown_default="`False`"
+    )
+    skiprows: int | Sequence[int] | _Default | None = option_field(
+        (
+            "Line numbers to skip (0-indexed) or number of lines to skip "
+            "(`int`) at the start of the file.\nIf callable, the callable "
+            "function will be evaluated against the row indices, returning "
+            "`True` if the row should be skipped and `False` otherwise. An "
+            "example of a valid callable argument would be `lambda x: x in [0, "
+            "2]`."
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="`None`",
+    )
+    skipfooter: int | _Default = option_field(
+        ("Number of lines at bottom of file to skip (Unsupported with `engine='c'`)."),
+        default=LIBRARY_DEFAULT,
+        shown_default="`0`",
+    )
+    na_values: Any = option_field(
+        (
+            "Additional strings to recognize as `NA`/`NaN`. If `dict` passed, "
+            "specific per-column `NA` values.  By default the following values "
+            'are interpreted as `NaN`: empty string, "NaN", "N/A", "NULL", and '
+            "other common representations of missing data."
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="`None`",
+    )
+    keep_default_na: bool | _Default = option_field(
+        (
+            "Whether or not to include the default `NaN` values when parsing "
+            "the data. Depending on whether `na_values` is passed in, the "
+            "behavior is as follows:\n• If `keep_default_na` is `True`, and "
+            "`na_values` are specified, `na_values` is appended to the default "
+            "`NaN` values used for parsing.\n• If `keep_default_na` is "
+            "`True`, and `na_values` are not specified, only the default `NaN` "
+            "values are used for parsing.\n• If `keep_default_na` is `False`,"
+            " and `na_values` are specified, only the `NaN` values specified "
+            "`na_values` are used for parsing.\n• If `keep_default_na` is "
+            "`False`, and `na_values` are not specified, no strings will be "
+            "parsed as `NaN`.\nNote that if `na_filter` is passed in as "
+            "`False`, the `keep_default_na` and `na_values` parameters will be "
+            "ignored."
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="`True`",
+    )
+    na_filter: bool | _Default = option_field(
+        (
+            "Detect missing value markers (empty strings and the value of "
+            "`na_values`). In data without any `NA` values, passing "
+            "`na_filter=False` can improve the performance of reading a large "
+            "file."
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="`True`",
+    )
+    skip_blank_lines: bool | _Default = option_field(
+        ("If `True`, skip over blank lines rather than interpreting as `NaN` values."),
+        default=LIBRARY_DEFAULT,
+        shown_default="`True`",
+    )
+    parse_dates: bool | Sequence[int | str] | _Default | None = option_field(
+        (
+            "The behavior is as follows:\n• `bool`. If `True` -> try parsing "
+            "the index.\n• `None`. Behaves like `True` if `date_format` is "
+            "specified.\n• `list` of `int` or names. e.g. If `[1, 2, 3]` -> "
+            "try parsing columns 1, 2, 3 each as a separate date column.\nIf "
+            "a column or index cannot be represented as an array of `datetime`,"
+            " say because of an unparsable value or a mixture of timezones, the"
+            " column or index will be returned unaltered as an `object` data "
+            "type. For non-standard `datetime` parsing, use `to_datetime` after"
+            " `read_csv`.\nNote: A fast-path exists for iso8601-formatted "
+            "dates."
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="`None`",
+    )
+    date_format: str | Mapping[str, str] | _Default | None = option_field(
+        (
+            "Format to use for parsing dates and/or times when used in "
+            "conjunction with `parse_dates`. The strftime to parse time, e.g. "
+            '`"%d/%m/%Y"`. See [strftime documentation](https://docs.python.org'
+            "/3/library/datetime.html#strftime-and-strptime-behavior) for more "
+            'information on choices, though note that `"%f"` will parse all the'
+            ' way up to nanoseconds. You can also pass:\n• "ISO8601", to '
+            "parse any [ISO8601](https://en.wikipedia.org/wiki/ISO_8601) time "
+            'string (not necessarily in exactly the same format);\n• "mixed",'
+            " to infer the format for each element individually. This is risky,"
+            " and you should probably use it along with `dayfirst`."
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="`None`",
+    )
+    dayfirst: bool | _Default = option_field(
+        "DD/MM format dates, international and European format.",
+        default=LIBRARY_DEFAULT,
+        shown_default="`False`",
+    )
+    cache_dates: bool | _Default = option_field(
+        (
+            "If `True`, use a cache of unique, converted dates to apply the "
+            "`datetime` conversion. May produce significant speed-up when "
+            "parsing duplicate date strings, especially ones with timezone "
+            "offsets."
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="`True`",
+    )
+    compression: str | Mapping[str, Any] | _Default | None = option_field(
+        (
+            "For on-the-fly decompression of on-disk data. If 'infer' and "
+            "'filepath_or_buffer' is path-like, then detect compression from "
+            "the following extensions: '.gz', '.bz2', '.zip', '.xz', '.zst', "
+            "'.tar', '.tar.gz', '.tar.xz' or '.tar.bz2' (otherwise no "
+            "compression). If using 'zip' or 'tar', the ZIP file must contain "
+            "only one data file to be read in. Set to `None` for no "
+            "decompression. Can also be a dict with key `'method'` set to one "
+            "of {`'zip'`, `'gzip'`, `'bz2'`, `'zstd'`, `'xz'`, `'tar'`} and "
+            "other key-value pairs are forwarded to `zipfile.ZipFile`, "
+            "`gzip.GzipFile`, `bz2.BZ2File`, `zstandard.ZstdDecompressor`, "
+            "`lzma.LZMAFile` or `tarfile.TarFile`, respectively. As an example,"
+            " the following could be passed for Zstandard decompression using a"
+            " custom compression dictionary: `compression={'method': 'zstd', "
+            "'dict_data': my_compression_dict}`."
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="`'infer'`",
+    )
+    thousands: str | _Default | None = option_field(
+        "Character acting as the thousands separator in numerical values.",
+        default=LIBRARY_DEFAULT,
+        shown_default="`None`",
+    )
+    decimal: str | _Default = option_field(
+        ("Character to recognize as decimal point (e.g., use ',' for European data)."),
+        default=LIBRARY_DEFAULT,
+        shown_default="`'.'`",
+    )
+    lineterminator: str | _Default | None = option_field(
+        "Character used to denote a line break. Only valid with C parser.",
+        default=LIBRARY_DEFAULT,
+        shown_default="`None`",
+    )
+    quotechar: str | _Default = option_field(
+        (
+            "Character used to denote the start and end of a quoted item. "
+            "Quoted items can include the `delimiter` and it will be ignored."
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="`'\"'`",
+    )
+    quoting: int | _Default = option_field(
+        (
+            "Control field quoting behavior per `csv.QUOTE_*` constants: 0 "
+            "(`QUOTE_MINIMAL`, the default: only fields containing special "
+            "characters are quoted, e.g. characters defined in `quotechar`, "
+            "`delimiter`, or `lineterminator`), 1 (`QUOTE_ALL`), 2 "
+            "(`QUOTE_NONNUMERIC`) or 3 (`QUOTE_NONE`)."
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="`0`",
+    )
+    doublequote: bool | _Default = option_field(
+        (
+            "When `quotechar` is specified and `quoting` is not `QUOTE_NONE`, "
+            "indicate whether or not to interpret two consecutive `quotechar` "
+            "elements INSIDE a field as a single `quotechar` element."
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="`True`",
+    )
+    escapechar: str | _Default | None = option_field(
+        "Character used to escape other characters.",
+        default=LIBRARY_DEFAULT,
+        shown_default="`None`",
+    )
+    comment: str | _Default | None = option_field(
+        (
+            "Character indicating that the remainder of line should not be "
+            "parsed. If found at the beginning of a line, the line will be "
+            "ignored altogether. This parameter must be a single character. "
+            "Like empty lines (as long as `skip_blank_lines=True`), fully "
+            "commented lines are ignored by the parameter `header` but not by "
+            "`skiprows`. For example, if `comment='#'`, parsing "
+            "`#empty\\na,b,c\\n1,2,3` with `header=0` will result in `'a,b,c'` "
+            "being treated as the header."
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="`None`",
+    )
+    encoding: str | _Default | None = option_field(
+        (
+            "Encoding to use for UTF when reading/writing (ex. `'utf-8'`). "
+            "[List of Python standard "
+            "encodings](https://docs.python.org/3/library/codecs.html#standard-"
+            "encodings) ."
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="`None`",
+    )
+    encoding_errors: str | _Default | None = option_field(
+        (
+            "How encoding errors are treated. [List of possible "
+            "values](https://docs.python.org/3/library/codecs.html#error-"
+            "handlers) ."
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="`'strict'`",
+    )
+    on_bad_lines: str | _Default = option_field(
+        (
+            "Specifies what to do upon encountering a bad line (a line with too"
+            " many fields). Allowed values are:\n• `'error'`, raise an "
+            "Exception when a bad line is encountered.\n• `'warn'`, raise a "
+            "warning when a bad line is encountered and skip that line.\n• "
+            "`'skip'`, skip bad lines without raising or warning when they are "
+            "encountered.\n• Callable, function that will process a single "
+            "bad line.\n• With `engine='python'`, function with signature "
+            "`(bad_line: list[str]) -> list[str] \\"
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="`'error'`",
+    )
+    low_memory: bool | _Default = option_field(
+        (
+            "Internally process the file in chunks, resulting in lower memory "
+            "use while parsing, but possibly mixed type inference.  To ensure "
+            "no mixed types either set `False`, or specify the type with the "
+            "`dtype` parameter. Note that the entire file is read into a single"
+            " `DataFrame` regardless, use the `chunksize` or `iterator` "
+            "parameter to return the data in chunks. (Only valid with C "
+            "parser)."
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="`True`",
+    )
+    dtype_backend: str | _Default = option_field(
+        (
+            "Back-end data type applied to the resultant `DataFrame` (still "
+            "experimental). If not specified, the default behavior is to not "
+            "use nullable data types. If specified, the behavior is as "
+            'follows:\n• `"numpy_nullable"`: returns nullable-dtype-backed '
+            '`DataFrame`\n• `"pyarrow"`: returns pyarrow-backed nullable '
+            "`ArrowDtype` `DataFrame`"
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="(none)",
+    )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -236,20 +744,121 @@ class JsonLinesByDaskOptions(DaskOptions):
     ``max_whole_file_bytes``). The plugin's README lists them."""
 
     # Dask's own.
-    blocksize: int | _Default | None = LIBRARY_DEFAULT
-    sample: int | _Default = LIBRARY_DEFAULT
-    encoding: str | _Default = LIBRARY_DEFAULT
-    errors: str | _Default = LIBRARY_DEFAULT
-    compression: str | _Default | None = LIBRARY_DEFAULT
-    include_path_column: bool | str | _Default = LIBRARY_DEFAULT
+    blocksize: int | _Default | None = option_field(
+        (
+            "If None, files are not blocked, and you get one partition per "
+            "input file. If int, each partition will be approximately this size"
+            " in bytes, to the nearest newline character."
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="`None`; data browser: half of `max_whole_file_bytes`",
+    )
+    sample: int | _Default = option_field(
+        (
+            "Number of bytes to pre-load, to provide an empty dataframe "
+            "structure to any blocks without data. Only relevant when using "
+            "blocksize."
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="`1048576`",
+    )
+    encoding: str | _Default = option_field(
+        'The text encoding to implement, e.g. "utf-8".',
+        default=LIBRARY_DEFAULT,
+        shown_default="`'utf-8'`",
+    )
+    errors: str | _Default = option_field(
+        "How to respond to errors in the conversion (see `str.encode()`).",
+        default=LIBRARY_DEFAULT,
+        shown_default="`'strict'`",
+    )
+    compression: str | _Default | None = option_field(
+        "String like 'gzip' or 'xz'.",
+        default=LIBRARY_DEFAULT,
+        shown_default="`'infer'`",
+    )
+    include_path_column: bool | str | _Default = option_field(
+        (
+            "Include a column with the file path where each row in the "
+            "dataframe originated. If `True`, a new column is added to the "
+            "dataframe called `path`. If `str`, sets new column name."
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="`False`",
+    )
     # pandas' read_json's.
-    dtype: Any = LIBRARY_DEFAULT
-    convert_axes: bool | _Default | None = LIBRARY_DEFAULT
-    convert_dates: bool | Sequence[str] | _Default = LIBRARY_DEFAULT
-    keep_default_dates: bool | _Default = LIBRARY_DEFAULT
-    precise_float: bool | _Default = LIBRARY_DEFAULT
-    date_unit: str | _Default | None = LIBRARY_DEFAULT
-    dtype_backend: str | _Default = LIBRARY_DEFAULT
+    dtype: Any = option_field(
+        (
+            "If True, infer dtypes; if a dict of column to dtype, then use "
+            "those; if False, then don't infer dtypes at all, applies only to "
+            "the data.\nFor all `orient` values except `'table'`, default is "
+            "True."
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="`None`",
+    )
+    convert_axes: bool | _Default | None = option_field(
+        (
+            "Try to convert the axes to the proper dtypes.\nFor all `orient` "
+            "values except `'table'`, default is True."
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="`None`",
+    )
+    convert_dates: bool | Sequence[str] | _Default = option_field(
+        (
+            "If True then default datelike columns may be converted (depending "
+            "on keep_default_dates). If False, no dates will be converted. If a"
+            " list of column names, then those columns will be converted and "
+            "default datelike columns may also be converted (depending on "
+            "keep_default_dates)."
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="`True`",
+    )
+    keep_default_dates: bool | _Default = option_field(
+        (
+            "If parsing dates (convert_dates is not False), then try to parse "
+            "the default datelike columns. A column label is datelike if\n• "
+            "it ends with `'_at'`,\n• it ends with `'_time'`,\n• it begins "
+            "with `'timestamp'`,\n• it is `'modified'`, or\n• it is "
+            "`'date'`."
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="`True`",
+    )
+    precise_float: bool | _Default = option_field(
+        (
+            "Set to enable usage of higher precision (strtod) function when "
+            "decoding string to double values. Default (False) is to use fast "
+            "but less precise builtin functionality."
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="`False`",
+    )
+    date_unit: str | _Default | None = option_field(
+        (
+            "The timestamp unit to detect if converting dates. The default "
+            "behaviour is to try and detect the correct precision, but if this "
+            "is not desired then pass one of 's', 'ms', 'us' or 'ns' to force "
+            "parsing only seconds, milliseconds, microseconds or nanoseconds "
+            "respectively."
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="`None`",
+    )
+    dtype_backend: str | _Default = option_field(
+        (
+            "Back-end data type applied to the resultant `DataFrame` (still "
+            "experimental). If not specified, the default behavior is to not "
+            "use nullable data types. If specified, the behavior is as "
+            'follows:\n• `"numpy_nullable"`: returns nullable-dtype-backed '
+            '`DataFrame`\n• `"pyarrow"`: returns pyarrow-backed nullable '
+            "`ArrowDtype` `DataFrame`"
+        ),
+        default=LIBRARY_DEFAULT,
+        shown_default="(none)",
+    )
 
 
 def _unwrapped(fs: AbstractFileSystem, path: str) -> tuple[AbstractFileSystem, str]:
