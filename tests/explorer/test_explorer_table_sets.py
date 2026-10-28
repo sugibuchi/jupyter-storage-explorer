@@ -202,7 +202,7 @@ class TestPreview:
         )
         assert "error" not in reply
         assert (len(views), tables.closed) == (2, 1)  # the first view, closed
-        assert local._table_sets[path].view is views[1]
+        assert local._shown_tables().view is views[1]
         choose(local, path, "b")  # from the new view, not viewed again
         assert len(views) == 2
         local._close_preview()
@@ -276,7 +276,7 @@ class TestPreview:
         assert tables.closed == 0
         local._close_preview()
         assert tables.closed == 1
-        assert not local._table_sets
+        assert local._preview_data is None
 
 
 def test_excel_sheet_reloaded_from_the_file_as_it_is_now(tmp_path):

@@ -251,10 +251,6 @@
 }
 
 /* Filtered out by "Filter columns" (display: flex would otherwise show it). */
-.jse-query-cols label[hidden] {
-  display: none;
-}
-
 /* A table set (createTableSetPanel): its tables in a tree beside the data
    browser, or on tabs below it, as a spreadsheet's sheets. */
 .jse-table-set {

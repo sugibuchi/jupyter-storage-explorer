@@ -98,11 +98,13 @@
   color: var(--jse-icon);
 }
 
-/* Hidden buttons stay hidden whatever sets their display: this file is on
+/* Hidden elements stay hidden whatever sets their display: a rule's display
+   (e.g. flex) would win over the browser's for [hidden], and this file is on
    the page once per kind of widget, so a later copy's rules win over a
    widget's own of the same weight. */
-.jse-btn.jse-btn[hidden] {
-  display: none;
+.jse-widget[hidden],
+.jse-widget [hidden] {
+  display: none !important;
 }
 
 /* Buttons among labels (the pagers, the data browser's toolbar): filled, as
@@ -148,10 +150,6 @@
   justify-content: center;
   background: rgba(0, 0, 0, 0.35);
   outline: none;
-}
-
-.jse-dialog[hidden] {
-  display: none;
 }
 
 /* The page's layer of a dialog shown over the whole window (common.js'
@@ -272,10 +270,6 @@
 
 .jse-filter-clear:hover {
   background: var(--jse-fg);
-}
-
-.jse-filter-clear[hidden] {
-  display: none;
 }
 
 /* The search icon, drawn inside the field's left end; clicks go through to the field. */

@@ -38,8 +38,6 @@ def test_lazy_frame():
         "type": "reply",
         "rid": 1,
         "offset": 2,
-        "columns": ["a", "b"],
-        "dtypes": ["Int64", "String"],
         "rows": [[2, None]],
         "more": False,
         "limited": False,

@@ -463,8 +463,7 @@ class DataQuery:
         nan_missing = df.implementation.is_pandas_like()
         return {
             "offset": offset,
-            "columns": df.columns,
-            "dtypes": [str(t) for t in df.schema.values()],
+            # In the order of the columns shown, which the page knows.
             "rows": [
                 [None if nan_missing and _is_nan(v) else jsonable(v) for v in row]
                 for row in df.rows()
