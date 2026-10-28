@@ -143,6 +143,11 @@ class ActionChain:
         self.engines = _ordered_engines(self.actions, engine_preference)
         self._engine_preference = list(engine_preference)
 
+    def check_options(self, engine_options: EngineOptions) -> None:
+        """ValueError for ``engine_options`` that no action of the chain
+        takes, as for its own: e.g. a plugin's, before they are merged."""
+        _check_options(engine_options, self._by_engine, self._format_names)
+
     def engine_keys(self) -> set[str]:
         """The keys of the actions' engines, "python" for the built-in ones
         (``PythonEngine``)."""

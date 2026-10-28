@@ -13,6 +13,8 @@ from typing import TYPE_CHECKING, Any, ClassVar, TypeAlias
 from jupyter_storage_explorer.base import Location
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from jupyter_storage_explorer.packages import PythonPackage
 
 # StorageExplorer's engine_options: {engine key: {format name or "*": options}},
@@ -94,6 +96,82 @@ class _ByProtocol:
 
     def __repr__(self) -> str:
         return f"by_protocol({self.options!r})"
+
+
+def _merged_engine_options(layers: Iterable[EngineOptions]) -> dict[str, Any]:
+    """Several ``engine_options`` as one, each layer over those before: by
+    engine, format, then option, so that a layer changes one option of a
+    format without restating the others. The plugins' and the launcher's
+    files' layers are merged so. Whether the names exist is checked by the
+    explorer."""
+    merged: dict[str, Any] = {}
+    for layer in layers:
+        for key, by_format in layer.items():
+            if not isinstance(by_format, Mapping):
+                # Not merged, e.g. a typo: the explorer's check reports it.
+                merged[key] = by_format
+                continue
+            formats = merged.get(key)
+            if not isinstance(formats, dict):
+                formats = merged[key] = {}
+            for name, options in by_format.items():
+                formats[name] = _merged_options(formats.get(name), options)
+    return merged
+
+
+def _merged_options(earlier: Any, later: Any) -> Any:
+    """A later layer's options of a format over an earlier layer's, option by
+    option: a dict while both are dicts, else a function of the location
+    (as either may be) giving the earlier's options updated with the
+    later's.
+
+    Dicts and ``by_protocol``s merge into a ``by_protocol``, so that the
+    explorer still checks their dicts when it is created: a dict is then
+    the options of every protocol."""
+    if earlier is None:
+        return dict(later) if isinstance(later, Mapping) else later
+    if isinstance(earlier, Mapping) and isinstance(later, Mapping):
+        return {**earlier, **later}
+    if all(isinstance(o, (Mapping, _ByProtocol)) for o in (earlier, later)):
+        return by_protocol(
+            _merged_by_protocol(_protocols_of(earlier), _protocols_of(later))
+        )
+
+    def options(location: Location) -> dict[str, Any]:
+        return {**_options_at(earlier, location), **_options_at(later, location)}
+
+    return options
+
+
+def _protocols_of(options: Any) -> dict[str, Any]:
+    """A dict or ``by_protocol``'s options by protocol, "*" for every one."""
+    return (
+        {_ALL_PROTOCOLS: options} if isinstance(options, Mapping) else options.options
+    )
+
+
+def _merged_by_protocol(
+    earlier: dict[str, Any], later: dict[str, Any]
+) -> dict[str, Any]:
+    """Two layers' options by protocol as one. A protocol's are those of
+    every protocol, then its own, of the earlier layer, then the same of
+    the later: the later's "*" still overrides the earlier's protocol."""
+    merged = {}
+    for protocol in dict.fromkeys([*earlier, *later]):
+        parts = [earlier.get(_ALL_PROTOCOLS), later.get(_ALL_PROTOCOLS)]
+        if protocol != _ALL_PROTOCOLS:
+            parts = [parts[0], earlier.get(protocol), parts[1], later.get(protocol)]
+        result = None
+        for part in parts:
+            if part is not None:
+                result = _merged_options(result, part)
+        merged[protocol] = result
+    return merged
+
+
+def _options_at(options: Any, location: Location) -> dict[str, Any]:
+    """``options``, or what the function ``options`` gives for ``location``."""
+    return dict(options(location) if callable(options) else options)
 
 
 class Engine:

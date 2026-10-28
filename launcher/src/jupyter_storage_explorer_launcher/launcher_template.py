@@ -94,7 +94,7 @@ def filesystems():
 # File operations (FileSystemOperations subclasses), e.g. server-side copies
 # for a storage of your own, tried before the plugins' and the defaults.
 #
-# def operations():
+# def filesystem_operations():
 #     from my_operations import MyStorageOperations
 #
 #     return [MyStorageOperations()]

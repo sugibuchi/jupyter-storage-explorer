@@ -20,6 +20,7 @@ from jupyter_storage_explorer._callbacks import Callbacks
 from jupyter_storage_explorer._errors import error_text
 from jupyter_storage_explorer._explorer import options
 from jupyter_storage_explorer._explorer.about import AboutMixin, _explorer_version
+from jupyter_storage_explorer._explorer.actions import ActionChain
 from jupyter_storage_explorer._explorer.bookmarks import BookmarksMixin
 from jupyter_storage_explorer._explorer.common import (
     explorers,
@@ -37,7 +38,11 @@ from jupyter_storage_explorer._explorer.requests import FileRequestsMixin
 from jupyter_storage_explorer._explorer.states import ExplorerStates, explorer_states
 from jupyter_storage_explorer._explorer.user_actions import UserActionsMixin
 from jupyter_storage_explorer._explorer.view_tabs import ViewTabsMixin
-from jupyter_storage_explorer._extensions.plugins import PluginComponents, load_plugins
+from jupyter_storage_explorer._extensions.plugins import (
+    PluginComponents,
+    load_plugins,
+    plugins_engine_options,
+)
 from jupyter_storage_explorer._jobs.incoming import IncomingFiles
 from jupyter_storage_explorer._jobs.loader import Loader
 from jupyter_storage_explorer._jobs.operation_chain import OperationChain
@@ -46,6 +51,7 @@ from jupyter_storage_explorer._jobs.transfer_policy import TransferPolicy
 from jupyter_storage_explorer._query.data_query import REQUESTS as QUERY_REQUESTS
 from jupyter_storage_explorer._query.data_query import ResultWatch
 from jupyter_storage_explorer.actions.defaults import DEFAULT_ACTIONS
+from jupyter_storage_explorer.engine import _merged_engine_options
 from jupyter_storage_explorer.filesystems import MapperChain, default_mappers
 from jupyter_storage_explorer.filesystems import (
     default_operations as _default_operations,
@@ -611,7 +617,10 @@ class StorageExplorer(
         given = list(actions or ())
         self._other_actions = [*components.actions, *self.default_actions(), *given]
         self._chain_formats = [*components.formats, *DEFAULT_FORMATS]
-        self._chain_options = (engine_options, engine_preference)
+        self._chain_options = (
+            self._under_plugins_options(engine_options),
+            engine_preference,
+        )
         mine = self._users_actions(user_actions, self._other_actions)
         self._actions = self._chain_of(mine)
         self._formats = self._actions.formats
@@ -700,6 +709,22 @@ class StorageExplorer(
             ", ".join(e["key"] for e in self._engines) or "none",
             len(self._actions.actions),
         )
+
+    def _under_plugins_options(
+        self, engine_options: EngineOptions | None
+    ) -> dict[str, Any]:
+        """``engine_options`` over the plugins' (see plugin.py), option by
+        option. The plugins' are checked against the actions before the
+        user's, whose files do not define the plugins' engines: those
+        refused are left out, with a warning."""
+        plugins_options, problems = plugins_engine_options(
+            self._plugins,
+            ActionChain(self._other_actions, formats=self._chain_formats),
+        )
+        self._plugin_problems += problems
+        for problem in problems:
+            warnings.warn(problem, RuntimeWarning, stacklevel=3)
+        return _merged_engine_options([plugins_options, engine_options or {}])
 
     @staticmethod
     def default_operations() -> list[FileSystemOperations]:

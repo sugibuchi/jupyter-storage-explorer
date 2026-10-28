@@ -146,6 +146,17 @@ def test_every_broken_component_named(installed):
     assert "filesystem_mappers: FailingMapper() fails: RuntimeError" in message
 
 
+def test_engine_options(installed):
+    # Explorers leave out options of an engine not installed: the check fails.
+    installed(
+        **{"sample-support": "SampleSupport", "far-lake-support": "FarLakeSupport"}
+    )
+    with pytest.raises(AssertionError, match="unknown engine 'nowhere'"):
+        check_plugin("far-lake-support")
+    installed(**{"sample-support": "SampleSupport", "lake-support": "LakeSupport"})
+    check_plugin("lake-support", {"region": "south"})
+
+
 def test_with_the_other_plugins(installed):
     # Each loads alone; an explorer with both would fail: one engine key,
     # two classes.

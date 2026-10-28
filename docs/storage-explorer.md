@@ -474,8 +474,10 @@ StorageExplorer(
 | `dask`               | `parquet`, `csv`, `json-lines`                           | dask-support's [Engine options](../plugins/dask-support/README.md#engine-options)             |
 | `python`             | `json`, `text` (also Markdown's and code files' code), `image` | `storage_options`: `fsspec.open`'s keyword arguments, in the code                             |
 
-An engine, format or option name that no action takes is
-an error.
+An engine, format or option name that no action takes is an error.
+
+A plugin may give engine options too, from its own options, e.g. credentials for your company's storage. Those given
+here override them, option by option.
 
 Options that depend on where the data is, e.g. one key per Azure storage account, are given by a function of the item's
 location instead of a dict. It is called each time a file is viewed or its code shown:

@@ -7,6 +7,7 @@ import logging
 from importlib.metadata import entry_points
 from typing import TYPE_CHECKING, Any
 
+from jupyter_storage_explorer.engine import _merged_engine_options
 from jupyter_storage_explorer.plugin import ENTRY_POINT_GROUP, StorageExplorerPlugin
 
 if TYPE_CHECKING:
@@ -14,6 +15,7 @@ if TYPE_CHECKING:
     from importlib.metadata import EntryPoint
     from typing import Self
 
+    from jupyter_storage_explorer._explorer.actions import ActionChain
     from jupyter_storage_explorer.actions import Action
     from jupyter_storage_explorer.filesystems.mapper import FileSystemMapper
     from jupyter_storage_explorer.filesystems.operation import FileSystemOperations
@@ -144,6 +146,40 @@ class PluginComponents:
         self.mappers: list[FileSystemMapper] = [
             _created(m) for p in plugins for m in p.filesystem_mappers
         ]
+
+
+def plugins_engine_options(
+    plugins: Sequence[StorageExplorerPlugin], chain: ActionChain
+) -> tuple[dict[str, Any], list[str]]:
+    """The ``engine_options`` of ``plugins`` (highest priority first, as
+    ``load_plugins`` gives them) as one, each plugin's over those of lower
+    priority; and why some were left out. Each engine's options are checked
+    against ``chain``, the explorer's actions: those it refuses, e.g. of an
+    engine whose plugin is disabled, are left out, as a plugin must not keep
+    the explorer from opening."""
+    layers: list[dict[str, Any]] = []
+    problems: list[str] = []
+    for plugin in reversed(plugins):
+        try:
+            options = dict(plugin.engine_options)
+        except Exception as exc:
+            problems.append(
+                f"plugin {plugin.key!r}: engine_options left out: "
+                f"{type(exc).__name__}: {exc}"
+            )
+            continue
+        layer = {}
+        for key, by_format in options.items():
+            try:
+                chain.check_options({key: by_format})
+            except ValueError as exc:
+                problems.append(f"plugin {plugin.key!r}: {exc}")
+            else:
+                layer[key] = by_format
+        layers.append(layer)
+    for problem in problems:
+        log.warning("%s", problem)
+    return _merged_engine_options(layers), problems
 
 
 def _created(component: Any) -> Any:

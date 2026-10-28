@@ -965,6 +965,10 @@ class DuckDBSupport(StorageExplorerPlugin):
     def filesystem_mappers(self):  # objects (or classes, created without arguments)
         return ()
 
+    @property
+    def engine_options(self):  # as StorageExplorer's engine_options, under them
+        return {}
+
 
 __all__ = [
     "DUCKDB_ACTIONS",
@@ -982,11 +986,44 @@ __all__ = [
 - Every plugin has `enabled` and `priority`. `enabled=False`: not used, not even imported. Plugins of a higher
   `priority` come first, then by key.
 - An option the model lacks is an error.
-- Plugin options configure the components made with arguments, such as operations and mappers. For actions, they only
-  include or leave some out: actions get their own options from `engine_options`, by engine key.
+- Plugin options configure the components made with arguments, such as operations and mappers. For actions, they
+  include or leave some out.
+- Actions get their own options from `engine_options`, by engine key. A plugin may give them from its options with its
+  `engine_options` property, e.g. credentials for a company's storage. See the next section.
 - Export the actions, so that users and other plugins can import them, e.g. to give one before the others.
 - `name`, `description` and `version` come from the package's metadata (`[project]`): the class does not repeat them.
 - A plugin that cannot be imported or created is left out with a warning, and greyed out in "About".
+
+### Engine options
+
+A plugin's `engine_options` property gives engines' options as `StorageExplorer`'s `engine_options` takes them. Make
+them from the plugin's options, so that users set a few values rather than each engine's options:
+
+```python
+@dataclass(frozen=True, kw_only=True)
+class LakeSupportOptions(StorageExplorerPluginOptions):
+    tenant_id: str | None = None
+
+
+class LakeSupport(StorageExplorerPlugin):
+    key = "lake-support"
+    options_model = LakeSupportOptions
+
+    @property
+    def engine_options(self):
+        import polars as pl
+
+        provider = pl.CredentialProviderAzure(tenant_id=self.options.tenant_id)
+        return {"polars": {"*": by_protocol({"abfs": {"credential_provider": provider}})}}
+```
+
+- They may set the options of any engine installed, the plugin's own or another plugin's.
+- The explorer's `engine_options` override them, option by option. So do those of a plugin of a higher `priority`.
+- An engine they name that no action has, e.g. one whose plugin is disabled, is left out with a warning.
+- `check_plugin` fails on options no action takes, against the plugins installed.
+- Secrets in them stay out of generated code, as in `engine_options` given to the explorer.
+- Import the engine's library inside the property, as actions do. If the property raises, e.g. without the library,
+  its options are left out with a warning.
 
 ### Logging
 
@@ -1286,7 +1323,8 @@ configuration directory. Every explorer reads them when it is created: see the
 [Action development guide](action-development-guide.md). A changed file applies to the next explorer, without a
 restart. **Actions > Reload**, in the ⚙ menu, applies it to an explorer already open.
 
-The launcher's tab and side panel take the same components from functions of the same names in `launcher.py`:
+The launcher's tab and side panel take the same components from functions in `launcher.py`, named as a plugin's
+properties:
 
 ```python
 def actions():
@@ -1295,7 +1333,7 @@ def actions():
     return [parquet_view, parquet_as_relation]
 
 
-def operations():
+def filesystem_operations():
     from my_components import ServerSideCopy
 
     return [ServerSideCopy()]
