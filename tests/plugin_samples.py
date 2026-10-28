@@ -89,3 +89,79 @@ class WrongKey(StorageExplorerPlugin):
 
 class NotAPlugin:
     key = "not-a-plugin"
+
+
+# For check_plugin (tests/test_testing.py): plugins broken in ways explorers
+# only log, or fail on.
+
+
+class SampleEngineAgain(Engine):
+    """Another engine class of SampleEngine's key."""
+
+    key = "sample"
+    label = "Sample again"
+
+
+@code(format=Csv, engine=SampleEngineAgain, label="Load again")
+def csv_code_again(fmt, ctx, options):
+    return "again"
+
+
+class ClashingSupport(StorageExplorerPlugin):
+    """Fine alone, but not with SampleSupport: one engine key, two classes."""
+
+    key = "clashing-support"
+
+    @property
+    def actions(self):
+        return register_actions(csv_code_again)
+
+
+@dataclass(frozen=True)
+class PositionalOptions(StorageExplorerPluginOptions):
+    concurrency: int = 4
+
+
+class PositionalOptionsSupport(StorageExplorerPlugin):
+    key = "positional-support"
+    options_model = PositionalOptions
+
+
+class FailingMapper(FileSystemMapper):
+    def __init__(self) -> None:
+        raise RuntimeError("needs arguments")
+
+
+class BrokenComponentsSupport(StorageExplorerPlugin):
+    key = "broken-components-support"
+
+    @property
+    def actions(self):
+        return (avro_code, "not an action")
+
+    @property
+    def formats(self):
+        return (Csv(),)  # an object, not the class
+
+    @property
+    def filesystem_operations(self):
+        return (FsspecOperations, object())
+
+    @property
+    def filesystem_mappers(self):
+        return (FailingMapper,)
+
+
+class UndecoratedOptions(SampleSupportOptions):
+    """Not a dataclass of its own: its field is an ordinary attribute."""
+
+    commits: bool = True
+
+
+class UndecoratedOptionsSupport(StorageExplorerPlugin):
+    key = "undecorated-support"
+    options_model = UndecoratedOptions
+
+    @property
+    def filesystem_operations(self):
+        raise AttributeError("'UndecoratedOptions' object has no attribute 'x'")

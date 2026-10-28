@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from importlib.metadata import entry_points
 from typing import Any, Self
 
 import pytest
@@ -13,7 +12,6 @@ from adlfs import AzureBlobFileSystem
 from azure.core import MatchConditions
 from jupyter_storage_explorer_abfs_support import (
     AbfsSupport,
-    AbfsSupportOptions,
     AzureDataLakeGen2Operation,
     _azure,
 )
@@ -23,13 +21,11 @@ from jupyter_storage_explorer.filesystems.operation import (
     FileSystemOperations,
     OperationCancelled,
 )
+from jupyter_storage_explorer.testing import check_plugin
 
 
 def test_plugin_registered():
-    [entry_point] = entry_points(
-        group="jupyter_storage_explorer.plugins", name="abfs-support"
-    )
-    plugin = entry_point.load()(AbfsSupportOptions(concurrency=8))
+    plugin = check_plugin("abfs-support", {"concurrency": 8})
     assert isinstance(plugin, AbfsSupport)
     assert plugin.description == "Azure Data Lake Storage support for Storage Explorer"
     [operation] = plugin.filesystem_operations

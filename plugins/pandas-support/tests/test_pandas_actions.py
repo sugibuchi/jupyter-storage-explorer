@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import io
 import json
-from importlib.metadata import entry_points
 
 import pandas as pd
 import pytest
@@ -29,6 +28,7 @@ from jupyter_storage_explorer_pandas_support import (
 )
 
 from jupyter_storage_explorer.formats import Csv, Excel, Json, JsonLines, Parquet
+from jupyter_storage_explorer.testing import check_plugin
 from jupyter_storage_explorer.views import QueryView, TableSetView, ViewLimits
 
 LIMITS = ViewLimits(max_display_rows=2)
@@ -56,10 +56,7 @@ def last_line(code: str) -> str:
 
 
 def test_plugin_registered():
-    [entry_point] = entry_points(
-        group="jupyter_storage_explorer.plugins", name="pandas-support"
-    )
-    plugin = entry_point.load()()
+    plugin = check_plugin("pandas-support")
     assert isinstance(plugin, PandasSupport)
     assert plugin.description == "pandas support for Storage Explorer"
     assert plugin.actions == PANDAS_ACTIONS

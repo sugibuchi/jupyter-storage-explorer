@@ -11,7 +11,6 @@ import inspect
 import io
 import threading
 from dataclasses import fields
-from importlib.metadata import entry_points
 
 import fsspec
 import narwhals as nw
@@ -37,7 +36,7 @@ from jupyter_storage_explorer._query.data_query import fetch_rows
 from jupyter_storage_explorer.actions import local_file_cache
 from jupyter_storage_explorer.filesystems.locations import S3Location
 from jupyter_storage_explorer.formats import Csv, JsonLines, Parquet
-from jupyter_storage_explorer.testing import item_of, local_item
+from jupyter_storage_explorer.testing import check_plugin, item_of, local_item
 from jupyter_storage_explorer.views import QueryView, ViewLimits, ViewWithConfirmation
 
 dd = pytest.importorskip("dask.dataframe")
@@ -423,11 +422,7 @@ def test_parquet_keyword_options_are_taken(make_item):
 
 
 def test_plugin_registered():
-    [entry_point] = entry_points(
-        group="jupyter_storage_explorer.plugins", name="dask-support"
-    )
-    plugin = entry_point.load()()
-    assert plugin.key == "dask-support"
+    plugin = check_plugin("dask-support")
     assert plugin.description == "Dask support for Storage Explorer"
     assert plugin.actions == DASK_ACTIONS
     assert [a.label for a in DASK_ACTIONS] == [

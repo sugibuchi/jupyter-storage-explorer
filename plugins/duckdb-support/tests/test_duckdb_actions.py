@@ -7,7 +7,6 @@ from __future__ import annotations
 import dataclasses
 import logging
 import threading
-from importlib.metadata import entry_points
 
 import duckdb
 import narwhals as nw
@@ -49,7 +48,7 @@ from jupyter_storage_explorer.filesystems.locations import (
 )
 from jupyter_storage_explorer.formats import Csv, DeltaLake, JsonLines, Parquet
 from jupyter_storage_explorer.formats.base import detect
-from jupyter_storage_explorer.testing import item_of, local_item
+from jupyter_storage_explorer.testing import check_plugin, item_of, local_item
 from jupyter_storage_explorer.views import (
     QueryView,
     TableSetView,
@@ -96,10 +95,7 @@ def database(path, sql: str) -> None:
 
 
 def test_plugin_registered():
-    [entry_point] = entry_points(
-        group="jupyter_storage_explorer.plugins", name="duckdb-support"
-    )
-    plugin = entry_point.load()()
+    plugin = check_plugin("duckdb-support")
     assert isinstance(plugin, DuckDBSupport)
     assert plugin.description == "DuckDB support for Storage Explorer"
     assert plugin.actions == DUCKDB_ACTIONS

@@ -12,7 +12,6 @@ import os
 import shutil
 import sys
 from dataclasses import fields
-from importlib.metadata import entry_points
 from types import SimpleNamespace
 
 import narwhals as nw
@@ -42,7 +41,7 @@ from jupyter_storage_explorer._explorer.actions import ActionChain
 from jupyter_storage_explorer.actions import CodeAction
 from jupyter_storage_explorer.filesystems.locations import S3Location
 from jupyter_storage_explorer.formats import Csv, DeltaLake, JsonLines, Parquet
-from jupyter_storage_explorer.testing import local_item
+from jupyter_storage_explorer.testing import check_plugin, local_item
 from jupyter_storage_explorer.views import QueryView, ViewLimits
 
 LIMITS = ViewLimits()
@@ -110,10 +109,7 @@ def rows(view):
 
 
 def test_plugin_registered():
-    [entry_point] = entry_points(
-        group="jupyter_storage_explorer.plugins", name="pyspark-support"
-    )
-    plugin = entry_point.load()()
+    plugin = check_plugin("pyspark-support")
     assert isinstance(plugin, PySparkSupport)
     assert plugin.description == "PySpark support for Storage Explorer"
     assert plugin.actions == PYSPARK_ACTIONS

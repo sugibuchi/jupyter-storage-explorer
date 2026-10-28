@@ -4,7 +4,6 @@ point."""
 
 from __future__ import annotations
 
-from importlib.metadata import entry_points
 from types import SimpleNamespace
 
 import pytest
@@ -19,6 +18,7 @@ from jupyter_storage_explorer import Location
 from jupyter_storage_explorer.filesystems import MapperChain, default_mappers
 from jupyter_storage_explorer.filesystems.locations import FsspecLocation
 from jupyter_storage_explorer.filesystems.mappers import DatabricksMapper
+from jupyter_storage_explorer.testing import check_plugin
 
 HOST = "https://ADB-1234567890123456.7.azuredatabricks.net/"
 
@@ -129,10 +129,7 @@ def test_hosts_normalized(given, host):
 
 
 def test_plugin_registered():
-    [entry_point] = entry_points(
-        group="jupyter_storage_explorer.plugins", name="databricks-support"
-    )
-    plugin = entry_point.load()()  # loads without fsspec-databricks
+    plugin = check_plugin("databricks-support")  # loads without fsspec-databricks
     assert isinstance(plugin, DatabricksSupport)
     assert plugin.description == "Databricks support for Storage Explorer"
     [mapper] = plugin.filesystem_mappers
