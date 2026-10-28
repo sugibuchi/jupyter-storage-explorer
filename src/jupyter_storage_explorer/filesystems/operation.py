@@ -49,6 +49,10 @@ class Progress:
     the job, and when an item ends, what its method did not report is counted
     as done, so a folder moved by a single rename still counts all its files.
 
+    Deletions are not measured first. An operation deleting a folder file by
+    file reports the files it found (``add_total``), so that the progress
+    shows. A folder deleted in one request reports nothing.
+
     Thread-safe: the job's worker thread reports; the kernel's main thread
     reads and cancels. The explorer gives operations a subclass of its own
     (its job runner's), which also keeps the totals, reports to the page and
@@ -75,6 +79,24 @@ class Progress:
         self.files_done = 0
         self.bytes_done = 0
         self.current = ""  # the name of the file being worked on
+
+    def add_total(self, files: int = 0, bytes: int = 0) -> None:
+        """Add files and bytes to the totals.
+
+        The job adds those measured before it starts. A deletion adds those
+        it finds (see the class docstring).
+
+        Parameters
+        ----------
+        files : int, default 0
+            Files to add, e.g. those found in a folder to delete.
+        bytes : int, default 0
+            Bytes to add; none for deletions, counted by files.
+        """
+        with self._lock:
+            self.files_total += files
+            self.bytes_total += bytes
+        self._changed()
 
     def advance(self, files: int = 0, bytes: int = 0) -> None:
         """Report work done since the last report.
@@ -432,8 +454,10 @@ class FileSystemOperations:
         path : str
             The file or folder to delete (an fsspec path of ``fs``).
         progress : Progress
-            Where to report files deleted (``advance``) and check for a
-            cancel (``progress.check()``, e.g. between batches of files).
+            Where to report the files found in a folder (``add_total``) and
+            those deleted (``advance``), and check for a cancel
+            (``progress.check()``, e.g. between batches of files). The job
+            counts a file deleted when it ends, and measures no folder first.
 
         Raises
         ------

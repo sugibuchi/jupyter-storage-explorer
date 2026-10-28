@@ -16,8 +16,8 @@ class JobProgress(Progress):
     """The ``Progress`` the job runner gives a job's work, and so its
     operations.
 
-    The job sets the totals (``add_total``, from the operations' ``measure``)
-    and wraps each item in ``begin_item`` and ``end_item``, so that what an
+    The job sets the totals (``add_total``, from the operations' ``measure``,
+    or a deletion's own) and wraps each item in ``begin_item`` and ``end_item``, so that what an
     operation does not report (e.g. a folder moved by one rename) is counted
     when the item ends. ``on_change`` is called after each report, in the
     reporting thread (the runner sends progress to the page from it); the
@@ -29,13 +29,6 @@ class JobProgress(Progress):
         self._on_change = on_change
         # Counts when the current item started, and its totals.
         self._item: tuple[int, int, int, int] | None = None
-
-    def add_total(self, files: int = 0, bytes: int = 0) -> None:
-        """Add files and bytes to the totals (from ``measure``, before the work)."""
-        with self._lock:
-            self.files_total += files
-            self.bytes_total += bytes
-        self._changed()
 
     def begin_item(self, files: int, bytes: int) -> None:
         """An item of ``files`` files and ``bytes`` bytes (as measured) starts."""

@@ -80,8 +80,11 @@ class TestProgress:
         FsspecOperations().copy(tree, "/src", tree, "/dst", progress, same=True)
         assert progress.files_done == 3
         assert not progress.cancelled
-        for job_side in ("add_total", "begin_item", "end_item", "cancel", "snapshot"):
+        for job_side in ("begin_item", "end_item", "cancel", "snapshot"):
             assert not hasattr(progress, job_side)
+        # Deletions report the files they find: no total measured first.
+        FsspecOperations().delete(tree, "/dst", progress)
+        assert (progress.files_total, progress.files_done) == (3, 6)
 
     def test_on_change(self):
         calls = []
@@ -467,7 +470,8 @@ class TestAsyncFsspecOperations:
         assert not tree.exists("/src")
         batches = [call for call in calls if isinstance(call, list)]
         assert [len(batch) for batch in batches] == [2, 1]
-        assert (progress.files_done, progress.bytes_done) == (3, 7)
+        # Counted by files, found by the deletion itself.
+        assert (progress.files_total, progress.files_done) == (3, 3)
 
     def test_delete_one_file(self, tree, async_tree):
         progress = Recorder()

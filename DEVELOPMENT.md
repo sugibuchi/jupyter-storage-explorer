@@ -800,6 +800,9 @@ whether it is complete. The defaults measure in two ways:
 
 They do not use `fs.walk`, whose `on_error` misses subfolders.
 
+Deletions are not measured. A folder deleted in one request would wait for a listing as long as the deletion itself.
+A deletion in batches lists the folder anyway, and adds its files to the total with `Progress.add_total`.
+
 ### Unsafe mode
 
 Folder operations are offered only while the toolbar's "Unsafe mode" slider is on. They are move, copy, cut and paste,

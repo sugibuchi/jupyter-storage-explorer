@@ -317,8 +317,11 @@ class FileTasks:
         task = Task("delete", f"Deleting {_describe(p for p, _ in items)}", fs)
 
         def work(progress: JobProgress) -> dict[str, Any]:
-            # Counted by files only: deleting takes about as long whatever the size.
-            sizes = [(self.measure(fs, p)[0] if f else 1, 0) for p, f in items]
+            # Counted by files only: deleting takes about as long whatever the
+            # size. Folders are not measured: listing one takes as long as
+            # deleting it in one request, and a deletion file by file lists
+            # it anyway, adding its files to the total.
+            sizes = [(0 if f else 1, 0) for _, f in items]
             failed = list(errors)
 
             def delete(item: tuple[str, bool]) -> None:

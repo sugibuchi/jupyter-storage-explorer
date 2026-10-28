@@ -31,11 +31,12 @@ function createJobs(x) {
     return { row, parts: { title, detail, cancel: cancelBtn, bar, fill }, waiters: [] };
   }
 
-  // e.g. "12 / 340 files · 45 MB / 1.2 GB · a.csv"; "Counting files…".
+  // e.g. "12 / 340 files · 45 MB / 1.2 GB · a.csv"; "Counting files…". No
+  // total yet: the item worked on, e.g. a folder deleted in one request.
   function jobDetail(job) {
     const waiting = jobWaitText(job);
     if (waiting) return waiting;
-    if (!job.files_total) return "Counting files…";
+    if (!job.files_total) return job.current || "Counting files…";
     const parts = [`${job.files_done.toLocaleString()} / ${job.files_total.toLocaleString()} files`];
     if (job.bytes_total) parts.push(`${formatSize(job.bytes_done)} / ${formatSize(job.bytes_total)}`);
     if (job.current) parts.push(job.current);

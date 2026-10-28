@@ -653,6 +653,10 @@ work file by file:
 - a folder is deleted by passing its files' paths to `fs.rm`, in batches;
 - uploads are one `fs.put_file` per file.
 
+The explorer measures what it moves and copies first, for the progress bar, but not what it deletes. A `delete` going
+file by file reports the files it finds with `progress.add_total`, then those deleted with `progress.advance`. A folder
+deleted in one request reports nothing.
+
 Override the operations of a storage where each call is costly, e.g. a commit. Do a whole folder in one call when the
 library allows it.
 
