@@ -99,10 +99,11 @@ Hugging Face. On other storages, such as SFTP, the explorer reads through fsspec
 
 - CSV and JSON Lines files are read into memory. For files over `max_whole_file_bytes`, 10 MB by default, you choose
   between the whole file and its first 10 MB.
-- Parquet files and folders are read lazily as PyArrow datasets. The Parquet [engine options](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/plugins/polars-support/README.md#engine-options) do not
-  apply.
+- Parquet files and folders are read lazily as PyArrow datasets, in the data browser and in "Python code". The Parquet
+  [engine options](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/plugins/polars-support/README.md#engine-options) do not apply.
 - Delta Lake tables cannot be viewed.
-- "Python code" reads a file whole into a DataFrame, never a LazyFrame. Folders and Delta Lake tables get no code.
+- "Python code" reads other files whole into a DataFrame, never a LazyFrame. Other folders and Delta Lake tables get no
+  code.
 
 ## Plugin options
 

@@ -323,7 +323,8 @@ _READ_BY_POLARS = frozenset(
 # A LazyFrame's code reads the URL, so it is offered only where polars reads
 # the storage itself. Elsewhere, a file's DataFrame code opens it with
 # fsspec and gives polars the file, which it reads whole: no LazyFrame,
-# which would read it whole all the same. Folders have no code there.
+# which would read it whole all the same. Folders have no code there, but
+# Parquet's, which reads a PyArrow dataset as the data browser does.
 
 
 def _read_by_polars(fmt: DataFormat, ctx: ItemContext, options: ActionOptions) -> bool:
@@ -655,8 +656,43 @@ def _pyarrow_dataset(ctx: ItemContext, layout: ParquetLayout | None) -> Any:
 
 def _can_view_parquet(fmt: Parquet, ctx: ItemContext, options: ActionOptions) -> bool:
     """Whether polars reads the item itself, or PyArrow is installed to read
-    it through the explorer's filesystem."""
+    it through the explorer's filesystem; also the LazyFrame code's check."""
     return _read_by_polars(fmt, ctx, options) or PyArrow().is_installed()
+
+
+def _can_offer_parquet_recipe(
+    fmt: Parquet, ctx: ItemContext, options: ActionOptions
+) -> bool:
+    """Whether DataFrame code can load the item: as a LazyFrame's can, or a
+    file opened with fsspec."""
+    return _can_view_parquet(fmt, ctx, options) or not ctx.is_dir
+
+
+# The code of a PyArrow dataset over the storage's fsspec filesystem, as the
+# data browser reads Parquet on storages polars cannot read itself: lazy.
+_PYARROW_TEMPLATE = cleandoc("""
+    import fsspec
+    import polars as pl
+    import pyarrow.dataset as ds
+
+    fs, path = fsspec.url_to_fs({url}{fsspec_kwargs})
+    dataset = ds.dataset(path, filesystem=fs, format='parquet'{partitioning})
+    df = pl.scan_pyarrow_dataset(dataset){collect}
+    """)
+
+
+def _pyarrow_code(
+    fmt: Parquet, ctx: ItemContext, options: FsspecCodeOptions, *, collect: bool
+) -> str:
+    """``_PYARROW_TEMPLATE`` filled for the item: partition folders give
+    columns, as in the data browser (``_pyarrow_dataset``)."""
+    layout = fmt.layout(ctx) if ctx.is_dir else None
+    return _PYARROW_TEMPLATE.format(
+        url=repr(ctx.url_or_local_path),
+        fsspec_kwargs=options.fsspec_kwargs(),
+        partitioning=", partitioning='hive'" if layout and layout.keys else "",
+        collect=".collect()" if collect else "",
+    )
 
 
 def _parquet_code_kwargs(
@@ -676,20 +712,31 @@ def _parquet_code_kwargs(
     return _code_kwargs(options, defaults), scanned
 
 
-@code(format=Parquet, engine=PolarsEngine, label=AS_LAZY_FRAME, check=_read_by_polars)
+@code(format=Parquet, engine=PolarsEngine, label=AS_LAZY_FRAME, check=_can_view_parquet)
 def parquet_as_lazy_frame(
     fmt: Parquet, ctx: ItemContext, options: ParquetByPolarsOptions
 ) -> str:
-    """A LazyFrame, so only the needed rows and columns are read."""
+    """A LazyFrame, so only the needed rows and columns are read: of the
+    URL, or of a PyArrow dataset where polars cannot read the storage."""
+    if not _read_by_polars(fmt, ctx, options):
+        return _pyarrow_code(fmt, ctx, options, collect=False)
     kwargs, _ = _parquet_code_kwargs(fmt, ctx, options)
     return _polars_code("scan_parquet", fmt.data_url(ctx), kwargs)
 
 
-@code(format=Parquet, engine=PolarsEngine, label=AS_DATA_FRAME, check=_can_offer_recipe)
+@code(
+    format=Parquet,
+    engine=PolarsEngine,
+    label=AS_DATA_FRAME,
+    check=_can_offer_parquet_recipe,
+)
 def parquet_as_data_frame(
     fmt: Parquet, ctx: ItemContext, options: ParquetByPolarsOptions
 ) -> str:
-    """A DataFrame of the URL, or of the file opened with fsspec."""
+    """A DataFrame of the URL; where polars cannot read the storage, of a
+    PyArrow dataset, or without PyArrow, of the file opened with fsspec."""
+    if not _read_by_polars(fmt, ctx, options) and PyArrow().is_installed():
+        return _pyarrow_code(fmt, ctx, options, collect=True)
     if _opened_with_fsspec(fmt, ctx, options):
         # A file: none of scan_parquet's own arguments.
         arguments = {
