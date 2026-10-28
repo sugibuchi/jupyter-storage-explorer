@@ -1358,6 +1358,8 @@ then for its format's name. It gets only those its options class has, as an obje
 - An entry may instead be a function of the item's `Location`, returning the dict. It gives options per storage, e.g.
   by account. It is called at each view and each code action.
 - The launcher merges its layers option by option, even for such functions.
+- Merged with dicts, a `by_protocol` stays one, merged by protocol. The explorer then still checks its dicts when it is
+  created.
 - Unknown engines, formats and options are `ValueError`s.
 
 Secrets are declared on the options' fields, with `secret_field` and `secret_dict_field`. Generated code gets options

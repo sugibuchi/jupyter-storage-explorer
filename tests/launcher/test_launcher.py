@@ -151,6 +151,45 @@ class TestMerging:
         }
         assert settings.engine_options["polars"]["delta"] == {"use_pyarrow": True}
 
+    def test_by_protocol_stays_one(self, tmp_path, system):
+        # Merged with dicts, by protocol: the explorer still checks its
+        # dicts when it is created. The user's "*" overrides the team's
+        # protocol, as it would the team's function.
+        team = layer(
+            tmp_path,
+            "team",
+            """
+            from jupyter_storage_explorer.engine import by_protocol
+
+            def engine_options():
+                return {
+                    "polars": {
+                        "*": by_protocol({
+                            "s3": {"storage_options": {"s3": 1}},
+                            "abfs": {"x": "team"},
+                        }),
+                    },
+                }
+            """,
+        )
+        user = layer(
+            tmp_path,
+            "user",
+            """
+            def engine_options():
+                return {"polars": {"*": {"x": "user"}}}
+            """,
+        )
+        settings = load_settings([user, team, system])
+        merged = settings.engine_options["polars"]["*"]
+        assert merged.options == {
+            "*": {"storage_options": {"a": 1}, "x": "user"},
+            "s3": {"storage_options": {"s3": 1}, "x": "user"},
+            "abfs": {"storage_options": {"a": 1}, "x": "user"},
+        }
+        gs = type("Location", (), {"protocol": "gs"})()
+        assert merged(gs) == {"storage_options": {"a": 1}, "x": "user"}
+
     def test_lists_come_first_then_the_defaults(self, tmp_path):
         system = layer(
             tmp_path,
