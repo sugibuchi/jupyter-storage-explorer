@@ -166,6 +166,10 @@ The function takes the parameters it names, in any order, of these:
 
 Any other parameter needs a default, which it keeps.
 
+The decorated function is called differently: always with `(fmt, ctx, options)`, and `limits` for a view, by
+position. The decorator passes your function what it names. To try an action in a notebook, call it so, e.g.
+`csv_head(Csv(), item, csv_head.options_model(), ViewLimits())`.
+
 A code action returns its snippet, a `str`. The code must run as it is in a new notebook, with its imports first.
 Never put secrets in it: code gets copied and shared.
 

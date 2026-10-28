@@ -49,7 +49,7 @@ from jupyter_storage_explorer.plugin import (
 from jupyter_storage_explorer.storage_explorer import StorageExplorer
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
+    from collections.abc import Callable, Mapping, Sequence
 
     from jupyter_storage_explorer.base import Location
     from jupyter_storage_explorer.plugin import StorageExplorerPlugin
@@ -222,7 +222,13 @@ def _chain_problems(plugins: list[StorageExplorerPlugin]) -> list[str]:
     return []
 
 
-def item_of(fs: Any, path: str, location: Location | None = None) -> ItemContext:
+def item_of(
+    fs: Any,
+    path: str,
+    location: Location | None = None,
+    *,
+    mappers: Sequence[FileSystemMapper] = (),
+) -> ItemContext:
     """The item at ``path`` of ``fs``, as explorers detect and read it.
 
     Parameters
@@ -232,8 +238,11 @@ def item_of(fs: Any, path: str, location: Location | None = None) -> ItemContext
     path : str
         Its path there.
     location : Location, optional
-        Where it is; by default from the default mappers (e.g. an
-        ``S3Location`` to test code reading from S3).
+        Where it is, e.g. an ``S3Location`` to test code reading from S3;
+        by default from ``mappers``, then the default mappers.
+    mappers : sequence of FileSystemMapper, optional
+        Mappers tried before the default ones, as explorers try a plugin's:
+        e.g. a storage plugin's own, for its locations.
 
     Returns
     -------
@@ -243,7 +252,7 @@ def item_of(fs: Any, path: str, location: Location | None = None) -> ItemContext
     info: dict[str, Any] = fs.info(path)
     children = fs.ls(path, detail=True) if info["type"] == "directory" else None
     if location is None:
-        location = MapperChain(default_mappers()).location_of(fs, path)
+        location = MapperChain([*mappers, *default_mappers()]).location_of(fs, path)
     return ItemContext(
         location=location, fs=fs, path=path, info=info, children=children
     )
@@ -280,13 +289,18 @@ def memfs() -> MemoryFileSystem:
 def make_item(memfs: MemoryFileSystem) -> Callable[..., ItemContext]:
     """A function writing a file (``data``) or listing a folder on ``memfs``
     and returning it as an ``ItemContext``: ``make_item(path, data=None,
-    location=None)``, ``location`` instead of its own, e.g. an S3 one."""
+    location=None, *, mappers=())``, ``location`` instead of its own, e.g.
+    an S3 one, or from ``mappers`` (see ``item_of``)."""
 
     def make(
-        path: str, data: bytes | None = None, location: Location | None = None
+        path: str,
+        data: bytes | None = None,
+        location: Location | None = None,
+        *,
+        mappers: Sequence[FileSystemMapper] = (),
     ) -> ItemContext:
         if data is not None:
             memfs.pipe_file(path, data)
-        return item_of(memfs, path, location)
+        return item_of(memfs, path, location, mappers=mappers)
 
     return make
