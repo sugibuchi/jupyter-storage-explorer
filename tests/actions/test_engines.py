@@ -201,7 +201,7 @@ class TestExplorer:
         local._engine = "pandas"
         assert local._preview["engine"] == "pandas"
         assert "query" in local._preview  # the data browser, on pandas
-        query = next(iter(local._queries.values()))
+        query = local._shown_query()
         assert query.implementation.is_pandas()
 
     def test_preview_as(self, local):

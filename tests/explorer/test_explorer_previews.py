@@ -684,7 +684,7 @@ class TestClose:
         assert closed == ["1"]
         local.message({"type": "preview", "path": path_of(local, "notes.txt")})
         assert closed == ["1", "2"]  # the data browser's view, with its query
-        assert not local._queries
+        assert local._preview_data is None
 
     def test_panel_closed_by_the_frontend(self, local, closed):
         local.message({"type": "preview", "path": path_of(local, "data.parquet")})

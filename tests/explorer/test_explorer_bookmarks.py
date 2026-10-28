@@ -190,7 +190,7 @@ class TestStatesFile:
         explorer = make(str(tmp_path))
         path = path_of(explorer, "big.parquet")
         explorer.message({"type": "preview", "path": path})
-        assert explorer._queries[path].mode == "live"
+        assert explorer._shown_query().mode == "live"
         explorer.request(
             {
                 "type": "query_mode",
@@ -201,12 +201,12 @@ class TestStatesFile:
             }
         )
         explorer.message({"type": "preview", "path": path})  # opened again
-        assert explorer._queries[path].mode == "memory"
+        assert explorer._shown_query().mode == "memory"
         explorer._states.remember_query(
             explorer._location_of(path), QuerySettings(), "live"
         )
         explorer.message({"type": "preview", "path": path})
-        assert explorer._queries[path].mode == "live"
+        assert explorer._shown_query().mode == "live"
 
     def test_query_with_fetch_rows_given(self, tmp_path):
         fetched = []

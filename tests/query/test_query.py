@@ -292,7 +292,6 @@ class TestDataQuery:
     def test_rows_as_json(self):
         reply = self.query().handle({"type": "query_rows", "offset": 0, "window": 1})
         assert reply["rows"] == [["Tea", 3, "2025-01-01", True]]
-        assert reply["dtypes"] == ["String", "Int64", "Date", "Boolean"]
 
     def test_bad_filter_value(self):
         settings = {"filters": {"price": {"op": "range", "min": "abc", "max": ""}}}

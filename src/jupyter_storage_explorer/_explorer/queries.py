@@ -4,7 +4,7 @@ mixin of the class)."""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from jupyter_storage_explorer._query.data_query import DataQuery, read_again
 from jupyter_storage_explorer._query.table_set import SEPARATOR, TableSet
@@ -19,6 +19,9 @@ if TYPE_CHECKING:
 
     from jupyter_storage_explorer._explorer.previews import _Detected
     from jupyter_storage_explorer.base import Location
+
+# What the data browser may show in the preview panel (see _previewed).
+_Data = TypeVar("_Data", DataQuery, TableSet)
 
 
 def _layered_fetch(
@@ -90,6 +93,22 @@ class QueriesMixin:
     or of a table set's table, its requests, and ``query_result()``'s
     changes."""
 
+    def _previewed(self, path: str | None, kind: type[_Data]) -> _Data | None:
+        """What the data browser shows of ``path`` in the preview panel, if
+        it is a ``kind``: a ``DataQuery``, or a ``TableSet``; else None."""
+        if self._preview_data is None:
+            return None
+        shown_path, shown = self._preview_data
+        return shown if shown_path == path and isinstance(shown, kind) else None
+
+    def _shown_tables(self) -> TableSet | None:
+        """The tables the preview panel shows in the data browser, or None
+        (closed, loading, or showing something else)."""
+        preview = self._preview
+        if preview.get("loading") or not preview.get("table_set"):
+            return None
+        return self._previewed(preview.get("path"), TableSet)
+
     def _shown_query(self) -> DataQuery | None:
         """The query the preview panel shows in the data browser, or None
         (closed, loading, or showing something else)."""
@@ -98,11 +117,11 @@ class QueriesMixin:
             return None
         if preview.get("table_set"):
             # The table chosen's.
-            tables = self._table_sets.get(preview.get("path"))
+            tables = self._shown_tables()
             return tables.query if tables is not None else None
         if not preview.get("query"):
             return None
-        return self._queries.get(preview.get("path"))
+        return self._previewed(preview.get("path"), DataQuery)
 
     def _query_changed(self, *, reloaded: bool = False) -> None:
         """Call the ``on_query_change`` functions if ``query_result()`` has
@@ -198,13 +217,13 @@ class QueriesMixin:
 
         path, separator, _ = content["path"].partition(SEPARATOR)
         if kind == "table_set_open" or separator:
-            tables = self._table_sets.get(path)
+            tables = self._previewed(path, TableSet)
             if tables is None:
                 reply({"error": "the tables are no longer open; preview them again"})
             else:
                 self._loader.answer(tables, lambda: tables.answer(content), reply)
             return
-        data = self._queries.get(path)
+        data = self._previewed(path, DataQuery)
         if data is None:
             reply({"error": "the data is no longer open; preview it again"})
         else:

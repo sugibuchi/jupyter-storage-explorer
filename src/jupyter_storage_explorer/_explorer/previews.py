@@ -533,10 +533,8 @@ class PreviewsMixin:
             # The previous preview's, closed once the new one is open.
             self._release_preview()
             shown = loaded.shown
-            if isinstance(shown, DataQuery):
-                self._queries[path] = shown
-            elif isinstance(shown, TableSet):
-                self._table_sets[path] = shown
+            if isinstance(shown, (DataQuery, TableSet)):
+                self._preview_data = (path, shown)
             else:
                 self._preview_view = shown
             self._preview = loaded.preview
@@ -675,10 +673,10 @@ class PreviewsMixin:
         load, self._preview_load = self._preview_load, None
         if load is not None:
             load.cancel()
-        queries, self._queries = list(self._queries.values()), {}
-        table_sets, self._table_sets = list(self._table_sets.values()), {}
+        data, self._preview_data = self._preview_data, None
         view, self._preview_view = self._preview_view, None
-        for shown in [*queries, *table_sets]:
+        if data is not None:
+            shown = data[1]
             if now:
                 shown.close()
             else:

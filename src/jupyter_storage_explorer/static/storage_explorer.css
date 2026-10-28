@@ -21,10 +21,6 @@
   font: inherit;
 }
 
-.jse-fs-select[hidden] {
-  display: none;
-}
-
 /* In the list's bar while the tree is hidden: before the filter, which
    keeps most of the room. */
 .jse-list-pane .jse-fs-select {
@@ -155,11 +151,6 @@
   min-height: 0;
 }
 
-/* The tree closed (its button) or disabled (tree_view). */
-.jse-pane[hidden] {
-  display: none;
-}
-
 .jse-tree-pane {
   flex: none;
   max-width: 70%;
@@ -188,11 +179,6 @@
   margin-left: auto;
   font-size: 0.9em;
   white-space: nowrap;
-}
-
-.jse-pager[hidden],
-.jse-pane-bar[hidden] {
-  display: none;
 }
 
 .jse-tree {
@@ -355,10 +341,6 @@
   flex: 0 1 auto;
 }
 
-.jse-preview-panel[hidden] {
-  display: none;
-}
-
 /* The preview panel's top edge (its border), dragged to resize: it takes no
    room, its handle (::after) lies across the edge. */
 .jse-splitter {
@@ -423,10 +405,6 @@
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
-.jse-menu[hidden] {
-  display: none;
-}
-
 .jse-menu-item {
   display: flex;
   align-items: center;
@@ -474,10 +452,6 @@
 .jse-menu-item.jse-has-sub {
   position: relative;
   padding-right: 4px;
-}
-
-.jse-menu .jse-menu-item[hidden] {
-  display: none;
 }
 
 .jse-sub-arrow {
@@ -550,11 +524,6 @@
   color: var(--jse-fg-muted);
 }
 
-.jse-status-bar > .jse-engine-btn[hidden],
-.jse-status-bar > .jse-preview-btn[hidden] {
-  display: none;
-}
-
 /* Preview, in the link colour. */
 .jse-status-bar > .jse-preview-btn {
   width: 13em;
@@ -575,11 +544,6 @@
 .jse-status-bar > .jse-preview-btn:disabled {
   color: var(--jse-fg-faint);
   opacity: 1;
-}
-
-/* None with unsafe_mode "always" or "blocked". */
-.jse-unsafe[hidden] {
-  display: none;
 }
 
 /* At the toolbar's right end. */
@@ -736,10 +700,6 @@
   padding: 4px 8px;
   border-top: 1px solid var(--jse-border);
   background: var(--jse-bar-bg);
-}
-
-.jse-jobs[hidden] {
-  display: none;
 }
 
 .jse-job-head {

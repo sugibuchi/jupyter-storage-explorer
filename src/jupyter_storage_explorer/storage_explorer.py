@@ -584,10 +584,9 @@ class StorageExplorer(
         self._detections_running: dict[tuple[int, str], Future[Any]] = {}
         # The selection's detection, if running: cancelled by the next one.
         self._selection_load: Load[Any] | None = None
-        # Data browser: path -> the data being queried.
-        self._queries: dict[str, DataQuery] = {}
-        # A table set previewed (TableSetView): path -> its tables.
-        self._table_sets: dict[str, TableSet] = {}
+        # What the data browser shows in the preview panel, if anything: the
+        # path previewed, with its query, or its tables (a TableSetView).
+        self._preview_data: tuple[str, DataQuery | TableSet] | None = None
         # The view the preview panel shows, if not the data browser's (whose
         # query owns its view), or the prompt asking for it: closed when the
         # panel shows something else.
@@ -956,10 +955,7 @@ class StorageExplorer(
         ...     print(explorer.query_table, explorer.query_result())
         >>> explorer.on_query_change(show)  # also called when another table is chosen
         """
-        preview = self._preview
-        if preview.get("loading") or not preview.get("table_set"):
-            return None
-        tables = self._table_sets.get(preview.get("path"))
+        tables = self._shown_tables()
         return tables.table if tables is not None else None
 
     def on_query_change(
