@@ -200,17 +200,14 @@ class AzureDataLakeGen2Operation(FileSystemOperations):
         it, such as folder markers."""
         started = time.monotonic()
         try:
-            files = fs.find(path, detail=True)
-            names = list(files)
+            names = fs.find(path)
+            progress.add_total(files=len(names))
             for start in range(0, len(names), self.delete_batch):
                 progress.check()
                 batch = names[start : start + self.delete_batch]
                 progress.working_on(_paths.basename(batch[-1]))
                 fs.rm(batch, expand_path=False)
-                progress.advance(
-                    files=len(batch),
-                    bytes=sum(files[n].get("size") or 0 for n in batch),
-                )
+                progress.advance(files=len(batch))
             if fs.exists(path):
                 fs.rm(path, recursive=True)
         finally:

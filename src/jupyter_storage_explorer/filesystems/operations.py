@@ -143,16 +143,14 @@ class FsspecOperations(FileSystemOperations):
             progress.working_on(_paths.basename(path))
             fs.rm_file(path)
             return
-        files = fs.find(path, detail=True)
-        names = list(files)
+        names = fs.find(path)
+        progress.add_total(files=len(names))
         for start in range(0, len(names), self.DELETE_BATCH):
             progress.check()
             batch = names[start : start + self.DELETE_BATCH]
             progress.working_on(_paths.basename(batch[-1]))
             self._rm_batch(fs, batch)
-            progress.advance(
-                files=len(batch), bytes=sum(files[n].get("size") or 0 for n in batch)
-            )
+            progress.advance(files=len(batch))
         # The folders left, e.g. on local disks.
         if fs.exists(path):
             fs.rm(path, recursive=True)
@@ -383,16 +381,14 @@ class AsyncFsspecOperations(FileSystemOperations):
             progress.working_on(_paths.basename(path))
             sync(loop, fs._rm_file, path)
             return
-        files = sync(loop, fs._find, path, detail=True)
-        names = list(files)
+        names = sync(loop, fs._find, path)
+        progress.add_total(files=len(names))
         for start in range(0, len(names), self.delete_batch):
             progress.check()
             batch = names[start : start + self.delete_batch]
             progress.working_on(_paths.basename(batch[-1]))
             sync(loop, fs._rm, batch)
-            progress.advance(
-                files=len(batch), bytes=sum(files[n].get("size") or 0 for n in batch)
-            )
+            progress.advance(files=len(batch))
         # The folders left, e.g. on filesystems with real folders.
         if sync(loop, fs._exists, path):
             sync(loop, fs._rm, path, recursive=True)

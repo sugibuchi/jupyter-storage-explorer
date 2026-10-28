@@ -185,10 +185,10 @@ def blob_account(monkeypatch):
         "_has_hierarchical_namespace",
         staticmethod(lambda fs: False),
     )
-    files = {f"data/raw/{n}": {"name": f"data/raw/{n}", "size": 2} for n in "abcde"}
+    files = [f"data/raw/{n}" for n in "abcde"]
     fs.removed = []
     is_dir(monkeypatch, fs, True)
-    monkeypatch.setattr(fs, "find", lambda path, detail=False: dict(files))
+    monkeypatch.setattr(fs, "find", lambda path: list(files))
     monkeypatch.setattr(fs, "exists", lambda path: True)
     monkeypatch.setattr(
         fs, "rm", lambda path, **kwargs: fs.removed.append((path, kwargs))
@@ -212,7 +212,8 @@ class TestDeleteInBatches:
             ("data/raw", {"recursive": True}),  # what is left, e.g. a folder marker
         ]
         snapshot = progress.snapshot()
-        assert (snapshot["files_done"], snapshot["bytes_done"]) == (5, 10)
+        # Counted by files, found by the deletion itself.
+        assert (snapshot["files_total"], snapshot["files_done"]) == (5, 5)
         assert service.calls == []  # no Data Lake API
         assert any(
             r.getMessage().startswith("Deleted data/raw in batches of 2 files")
