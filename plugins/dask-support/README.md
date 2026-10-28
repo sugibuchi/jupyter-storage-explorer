@@ -27,13 +27,60 @@ The plugin is not in the explorer's `all` and `all-supports` extras: install it 
 
 ### Prerequisites
 
-- Dask reads every storage through fsspec. The data browser reads through the explorer's filesystem, with the
-  explorer's credentials: Dask needs no configuration.
+- Dask reads every storage through fsspec.
+- The code needs credentials for cloud storage: see [Authentication](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/plugins/dask-support/README.md#authentication).
 - The data browser computes on the Dask scheduler active in the kernel. By default, it is Dask's threads.
 - With a distributed `Client` active, the data browser runs its reads on the cluster. The explorer's filesystem, with
   its credentials, then goes to the workers, which must reach the storage. Local files and fsspec's memory filesystem
   are on the kernel's machine only. This setup is untested.
 - The plugin never changes Dask's settings, such as its scheduler. Set them in the kernel as usual.
+
+### Authentication
+
+The data browser reads through the explorer's filesystems, with their credentials: it needs nothing more.
+
+The code reads with Dask, which opens its own fsspec filesystems. Give their credentials as `storage_options`, one per
+storage with `by_protocol`:
+
+```python
+from jupyter_storage_explorer import StorageExplorer
+from jupyter_storage_explorer.engine import by_protocol
+
+StorageExplorer(
+    filesystems={
+        "Lake": "abfs://lake@account.dfs.core.windows.net",
+        "Personal": "s3://my-bucket",
+    },
+    engine_options={
+        "dask": {
+            "*": by_protocol(
+                {
+                    "abfs": {"storage_options": {"anon": False}},
+                    "s3": {"storage_options": {"profile": "personal"}},
+                }
+            ),
+        },
+    },
+)
+```
+
+The storage options are those of the storage's fsspec filesystem:
+
+- [`adlfs`](https://fsspec.github.io/adlfs/api/): Azure Storage. `anon: False` uses azure-identity's default
+  credential.
+- [`s3fs`](https://s3fs.readthedocs.io/en/latest/api.html#s3fs.core.S3FileSystem): S3, e.g. with an AWS profile.
+- [`gcsfs`](https://gcsfs.readthedocs.io/en/latest/api.html#gcsfs.core.GCSFileSystem): Google Cloud Storage.
+
+For the launcher's tabs, `engine_options()` in `launcher.py` returns the same engine options:
+
+```python
+def engine_options():
+    return {
+        "dask": {
+            "*": by_protocol({"abfs": {"storage_options": {"anon": False}}}),
+        },
+    }
+```
 
 ## How Dask reads your data
 
