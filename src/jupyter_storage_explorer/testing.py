@@ -159,7 +159,7 @@ def _options_model_problems(model: Any) -> list[str]:
 def _component_problems(plugin: StorageExplorerPlugin) -> list[str]:
     """What is wrong with ``plugin``'s components, each on its own."""
     problems: list[str] = []
-    actions = list(plugin.actions)
+    actions = _read(plugin, "actions", problems)
     if any(not isinstance(a, Action) for a in actions):
         problems.extend(
             f"actions: {a!r} is no action; decorate it with @view or @code"
@@ -173,18 +173,14 @@ def _component_problems(plugin: StorageExplorerPlugin) -> list[str]:
             problems.append(f"actions: {exc}")
     problems.extend(
         f"formats: {f!r} is no DataFormat class"
-        for f in plugin.formats
+        for f in _read(plugin, "formats", problems)
         if not (isinstance(f, type) and issubclass(f, DataFormat))
     )
-    for name, kind, components in [
-        (
-            "filesystem_operations",
-            FileSystemOperations,
-            plugin.filesystem_operations,
-        ),
-        ("filesystem_mappers", FileSystemMapper, plugin.filesystem_mappers),
+    for name, kind in [
+        ("filesystem_operations", FileSystemOperations),
+        ("filesystem_mappers", FileSystemMapper),
     ]:
-        for component in components:
+        for component in _read(plugin, name, problems):
             if isinstance(component, type) and issubclass(component, kind):
                 try:
                     component()  # as explorers create it
@@ -196,6 +192,17 @@ def _component_problems(plugin: StorageExplorerPlugin) -> list[str]:
             elif not isinstance(component, kind):
                 problems.append(f"{name}: {component!r} is no {kind.__name__}")
     return problems
+
+
+def _read(plugin: StorageExplorerPlugin, name: str, problems: list[str]) -> list[Any]:
+    """The components of ``plugin``'s property ``name``; none, with the
+    reason in ``problems``, if reading it fails, so that the other
+    properties are checked too."""
+    try:
+        return list(getattr(plugin, name))
+    except Exception as exc:
+        problems.append(f"{name}: reading it fails: {type(exc).__name__}: {exc}")
+        return []
 
 
 def _chain_problems(plugins: list[StorageExplorerPlugin]) -> list[str]:

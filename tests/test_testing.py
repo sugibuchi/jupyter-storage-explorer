@@ -90,6 +90,15 @@ def test_options_model(installed):
         check_plugin("positional-support")
 
 
+def test_a_failing_property_hides_no_other_problem(installed):
+    installed(**{"undecorated-support": "UndecoratedOptionsSupport"})
+    with pytest.raises(AssertionError) as raised:
+        check_plugin("undecorated-support")
+    message = str(raised.value)
+    assert "UndecoratedOptions must be @dataclass(frozen=True, kw_only=True)" in message
+    assert "filesystem_operations: reading it fails: AttributeError" in message
+
+
 def test_no_description(monkeypatch):
     point = EntryPoint(
         "sample-support", "plugin_samples:SampleSupport", ENTRY_POINT_GROUP

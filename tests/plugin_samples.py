@@ -150,3 +150,18 @@ class BrokenComponentsSupport(StorageExplorerPlugin):
     @property
     def filesystem_mappers(self):
         return (FailingMapper,)
+
+
+class UndecoratedOptions(SampleSupportOptions):
+    """Not a dataclass of its own: its field is an ordinary attribute."""
+
+    commits: bool = True
+
+
+class UndecoratedOptionsSupport(StorageExplorerPlugin):
+    key = "undecorated-support"
+    options_model = UndecoratedOptions
+
+    @property
+    def filesystem_operations(self):
+        raise AttributeError("'UndecoratedOptions' object has no attribute 'x'")
