@@ -796,7 +796,7 @@ def test_old_launch_function_is_reported(tmp_path):
     settings = load_settings([path])
     assert settings.warnings == [
         f"{path}: launch() is no longer used and is ignored; set filesystems(), "
-        "parameters() etc. instead (see the launcher's README)"
+        "parameters() etc. instead (see Configuration files in docs/storage-explorer.md)"
     ]
     assert settings.explorer_arguments() == defaults()
 

@@ -2129,7 +2129,7 @@ def launcher_settings_with_an_error(lab: Lab, page: Page) -> None:
     broken = _lab.LAUNCHER_PY + "\n\ndef parameters():\n    return {'hieght': 1}\n"
     with lab.launcher_settings(broken):
         tab = open_launcher_tab(lab, page)
-        warning = "Your launcher settings were left out"
+        warning = "Your settings were left out"
         expect(page.locator(".jse-launcher-panel").first).to_contain_text(warning)
         expect(tab.locator(".jse-status")).to_contain_text("unknown parameter 'hieght'")
         tab.locator(".jse-settings-btn").click()

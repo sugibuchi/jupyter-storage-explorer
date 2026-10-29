@@ -116,7 +116,7 @@ ALIASES = {"format_options": "engine_options"}
 # their names in final()), with a warning.
 RETIRED = {
     # The whole configuration, before the functions above.
-    "launch": "set filesystems(), parameters() etc. instead (see the launcher's README)",
+    "launch": "set filesystems(), parameters() etc. instead (see Configuration files in docs/storage-explorer.md)",
     # CSS applied to the page while the tab was open: not to explorers in
     # notebooks, which JupyterLab's custom.css reaches.
     "style": "use JupyterLab's custom.css instead, for every page (see Icons in the project's DEVELOPMENT.md)",
