@@ -604,6 +604,30 @@ chart
 Filter by channel in the data browser, and the chart shows that channel's sales. Without the data browser,
 `on_change` and `selected_urls` give the files themselves, e.g. `pl.read_csv(url)` for each one selected.
 
+## Settings for every explorer
+
+`storage-explorer/common.py`, in Jupyter's configuration directory, sets up every explorer you create.
+`jupyter --config-dir` prints that directory: `~/.jupyter` by default. The file has functions returning settings, e.g.:
+
+```python
+def engine_options():
+    return {"polars": {"*": {"storage_options": {"account_name": "myaccount"}}}}
+
+
+def parameters():
+    return {"preview_panel": "open", "engine_preference": ["pandas"]}
+```
+
+- It has the same functions as the launcher's `launcher.py`: see
+  [Configuration details](../launcher/README.md#configuration-details).
+- The arguments you give an explorer override its settings. `engine_options` and `plugin_options` are merged option by
+  option.
+- An explorer created without a path shows the storages of its `filesystems()`.
+- `common_config="disabled"` ignores it.
+
+Administrators can put one in the system's or the environment's configuration directory too. See
+[Layers of the configuration files](../launcher/README.md#layers-of-the-configuration-files).
+
 ## StorageExplorer options
 
 Storages and data:
@@ -613,6 +637,7 @@ Storages and data:
 | `filesystems={...}`       | Several named storages; see [Several storages in one explorer](#several-storages-in-one-explorer).         |
 | `plugin_options={...}`    | The plugins' options, by key, e.g. `{"pandas-support": {"enabled": False}}`; see each plugin's README. |
 | `user_actions="disabled"` | `"enabled"`: the actions of your files, as in the launcher's explorers; see [Actions of your own](#actions-of-your-own). |
+| `common_config="enabled"` | `"disabled"`: without the settings of `common.py`; see [Settings for every explorer](#settings-for-every-explorer). |
 | `engine_options={...}`    | The engines' options; see [Engine options](#engine-options).                                               |
 | `engine_preference=[...]` | The engines in the order they are offered, the first chosen until the user chooses; see [Engines](#engines). |
 

@@ -5,6 +5,9 @@
 # web browser, then open the explorer tab again to apply the changes; a tab
 # shows the error if this file cannot be used.
 #
+# common.py, beside this file, takes the same functions for every explorer,
+# in notebooks too. This file overrides it in the tabs.
+#
 # See https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/launcher/README.md#configuration-details
 
 from jupyter_storage_explorer.engine import by_protocol  # noqa: F401  # for engine_options()

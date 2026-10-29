@@ -22,6 +22,9 @@ UNSAFE_MODES = ("on_demand", "always", "blocked")
 # The values of user_actions: the actions of the user's files used, or not.
 USER_ACTIONS = ("enabled", "disabled")
 
+# The values of common_config: the settings of the common.py files taken, or not.
+COMMON_CONFIGS = ("enabled", "disabled")
+
 # The values of logging_menu: the settings menu's Logging, and log files, or
 # neither.
 LOGGING_MENUS = ("enabled", "disabled")
@@ -70,7 +73,7 @@ def code_engines(
             f"code_snippet: no action of {', '.join(unknown)} (left out); "
             f"engines: {', '.join(sorted(known))}",
             RuntimeWarning,
-            stacklevel=3,
+            stacklevel=4,  # the code creating the explorer
         )
     return frozenset(code_snippet) & known
 

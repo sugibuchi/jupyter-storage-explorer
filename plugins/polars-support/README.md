@@ -71,7 +71,8 @@ polars has these credential providers:
 - [`pl.CredentialProviderGCP`](https://docs.pola.rs/api/python/stable/reference/api/polars.CredentialProviderGCP.html):
   Google Cloud Storage.
 
-For the launcher's tabs, `engine_options()` in `launcher.py` returns the same engine options:
+In configuration files, `engine_options()` returns the same engine options: in `common.py` for every explorer, or in
+`launcher.py` for the launcher's tabs.
 
 ```python
 def engine_options():
@@ -115,7 +116,8 @@ StorageExplorer(
 )
 ```
 
-In the launcher's tabs, `plugin_options()` in `launcher.py` gives them:
+In configuration files, `plugin_options()` gives them: in `common.py` for every explorer, or in `launcher.py` for
+the launcher's tabs.
 
 ```python
 def plugin_options():

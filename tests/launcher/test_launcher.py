@@ -9,8 +9,9 @@ from typing import TYPE_CHECKING
 
 import pytest
 from jupyter_storage_explorer_launcher import launcher
-from jupyter_storage_explorer_launcher.launcher import LauncherError, load_settings
+from jupyter_storage_explorer_launcher.launcher import load_settings
 
+from jupyter_storage_explorer._extensions.config import ConfigError, user_common_file
 from jupyter_storage_explorer.filesystems.operation import FileSystemOperations
 from jupyter_storage_explorer.filesystems.operations import FsspecOperations
 
@@ -18,10 +19,12 @@ if TYPE_CHECKING:
     import pathlib
 
 
-def layer(tmp_path: pathlib.Path, name: str, code: str) -> pathlib.Path:
-    """A launcher.py in directory ``name``, with ``code``."""
-    path = tmp_path / name / "storage-explorer" / "launcher.py"
-    path.parent.mkdir(parents=True)
+def layer(
+    tmp_path: pathlib.Path, name: str, code: str, file: str = "launcher.py"
+) -> pathlib.Path:
+    """A launcher.py (or ``file``) in directory ``name``, with ``code``."""
+    path = tmp_path / name / "storage-explorer" / file
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(textwrap.dedent(code), encoding="utf-8")
     return path
 
@@ -49,6 +52,7 @@ def defaults() -> tuple:
         "user_actions": "enabled",
         "logging_menu": "enabled",
         "logging_level": "disabled",
+        "common_config": "disabled",
     }
 
 
@@ -322,6 +326,7 @@ class TestMerging:
             "logging_level": "disabled",
             "max_upload_bytes": 5,
             **launcher.SIDEBAR,
+            "common_config": "disabled",
         }
         # The tab's keeps the parameters.
         assert settings.explorer_arguments()[1]["tree_view"] == "closed"
@@ -506,7 +511,7 @@ class TestFinal:
                 return {}
             """,
         )
-        with pytest.raises(LauncherError, match="give engine_options\\(\\) only"):
+        with pytest.raises(ConfigError, match="give engine_options\\(\\) only"):
             load_settings([path])
 
     def test_unsafe_mode_blocked_for_everyone(self, tmp_path):
@@ -569,7 +574,10 @@ class TestErrors:
                 "def parameters():\n    return {'filesystem_operations': []}",
                 "filesystem_operations is set by its own function",
             ),
-            ("def parameters():\n    return {'path': '.'}", "set by the launcher"),
+            (
+                "def parameters():\n    return {'path': '.'}",
+                "path is set by filesystems()",
+            ),
             ("def final():\n    return ['parameters']", "unknown setting 'parameters'"),
             (
                 "def filesystems():\n    return ['a']",
@@ -600,7 +608,7 @@ class TestErrors:
     )
     def test_reported_with_the_file(self, tmp_path, code, message):
         path = layer(tmp_path, "user", code)
-        with pytest.raises(LauncherError, match=re.escape(message)) as info:
+        with pytest.raises(ConfigError, match=re.escape(message)) as info:
             load_settings([path])
         assert str(info.value).startswith(str(path))
 
@@ -630,8 +638,8 @@ class TestUserErrors:
             """,
         )
         settings = load_settings([user, system])
-        assert settings.user_error.startswith(str(user))
-        assert "unknown parameter 'hieght'" in settings.user_error
+        assert settings.user_errors[0].startswith(str(user))
+        assert "unknown parameter 'hieght'" in settings.user_errors[0]
         # None of it applied, its filesystems neither.
         assert list(settings.filesystems) == ["Lake", "Scratch"]
         assert settings.files == [system]
@@ -647,13 +655,13 @@ class TestUserErrors:
     def test_any_error_of_the_users_file(self, config_dir, code):
         user = user_layer(config_dir, code)
         settings = load_settings([user])
-        assert settings.user_error.startswith(str(user))
+        assert settings.user_errors[0].startswith(str(user))
         assert settings.explorer_arguments() == defaults()
 
     def test_another_files_error_stops(self, tmp_path, config_dir):
         user = user_layer(config_dir, "")
         system = layer(tmp_path, "system", "def parameters():\n    return {'x': 1}")
-        with pytest.raises(LauncherError, match="unknown parameter 'x'"):
+        with pytest.raises(ConfigError, match="unknown parameter 'x'"):
             load_settings([user, system])
 
     def test_explorer_created_without_the_users_file(self, config_dir, system):
@@ -664,15 +672,17 @@ class TestUserErrors:
         settings = load_settings([user, system])
         explorer = launcher._create_explorer(settings, None)
         assert explorer._filesystem_names == ["Lake", "Scratch"]
-        assert settings.user_error.startswith(f"{user}: the explorer cannot be created")
-        assert "Your launcher settings were left out" in explorer._error
+        assert settings.user_errors[0].startswith(
+            f"{user}: the explorer cannot be created"
+        )
+        assert "Your settings were left out" in explorer._error
         assert settings.files == [system]
 
     def test_explorer_not_created_without_the_users_file_either(self, tmp_path):
         system = layer(
             tmp_path, "system", "def parameters():\n    return {'layout': 'wide'}"
         )
-        with pytest.raises(LauncherError, match="the explorer cannot be created"):
+        with pytest.raises(ConfigError, match="the explorer cannot be created"):
             launcher._create_explorer(load_settings([system]), None)
 
     @pytest.fixture
@@ -687,7 +697,7 @@ class TestUserErrors:
         monkeypatch.setattr(launcher, "find_launcher_files", lambda: [user])
         launcher.launch()
         assert len(shown) == 1
-        assert "Your launcher settings were left out" in capsys.readouterr().err
+        assert "Your settings were left out" in capsys.readouterr().err
 
     def test_launch_logged(self, config_dir, monkeypatch, caplog, shown):
         # At the level the user's settings give, as no level was chosen in
@@ -836,6 +846,90 @@ def test_reopens_the_tabs_view(tmp_path, memfs, view, folder):
     assert explorer._current_dir == folder
 
 
+class TestCommon:
+    """common.py, which configures every explorer, under launcher.py in
+    each directory."""
+
+    def test_launcher_over_common_in_each_directory(self, tmp_path, monkeypatch):
+        system_common = layer(
+            tmp_path,
+            "system",
+            "def parameters():\n    return {'height': '1px', 'max_upload_bytes': 1}",
+            "common.py",
+        )
+        system = layer(
+            tmp_path,
+            "system",
+            "def parameters():\n    return {'height': '2px', 'tree_view': 'closed'}",
+        )
+        user_common = layer(
+            tmp_path,
+            "user",
+            "def parameters():\n    return {'height': '3px'}",
+            "common.py",
+        )
+        monkeypatch.setattr(
+            "jupyter_storage_explorer._extensions.config.jupyter_config_path",
+            lambda: [str(tmp_path / "user"), str(tmp_path / "system")],
+        )
+        files = launcher.find_launcher_files()
+        assert files == [user_common, system, system_common]
+        settings = load_settings(files)
+        # The user's common.py over the system's launcher.py.
+        assert settings.parameters == {
+            "height": "3px",
+            "max_upload_bytes": 1,
+            "tree_view": "closed",
+        }
+        assert settings.files == [system_common, system, user_common]
+
+    def test_taken_once(self, tmp_path, jupyter_config_dirs):
+        # The tab's explorer takes the files' settings from the launcher,
+        # common.py's among them: not again by itself, though it finds them.
+        common = layer(
+            tmp_path,
+            "system",
+            "def transfer_policy():\n    return [{'rule': 'deny', 'src': 's3://.*'}]",
+            "common.py",
+        )
+        jupyter_config_dirs.append(str(tmp_path / "system"))
+        explorer = load_settings([common]).create_widget()
+        assert len(explorer._transfer_policy.rules) == 1
+
+    def test_common_final_binds_launcher(self, tmp_path):
+        common = layer(
+            tmp_path,
+            "system",
+            """
+            def parameters():
+                return {"unsafe_mode": "blocked"}
+
+            def final():
+                return ["unsafe_mode"]
+            """,
+            "common.py",
+        )
+        system = layer(
+            tmp_path,
+            "system",
+            "def parameters():\n    return {'unsafe_mode': 'always'}",
+        )
+        settings = load_settings([system, common])
+        assert settings.parameters == {"unsafe_mode": "blocked"}
+        assert settings.warnings == [
+            f"{system}: unsafe_mode is ignored: it is final in {common}"
+        ]
+
+    def test_the_users_common_left_out(self, config_dir, system):
+        user = user_common_file()
+        user.parent.mkdir(parents=True)
+        user.write_text("def parameters():\n    return {'hieght': 1}", encoding="utf-8")
+        settings = load_settings([user, system])
+        [error] = settings.user_errors
+        assert error.startswith(str(user))
+        assert settings.files == [system]
+
+
 def test_files_found_in_jupyters_order(tmp_path, monkeypatch):
     user = layer(tmp_path, "user", "")
     system = layer(tmp_path, "system", "")
@@ -845,7 +939,10 @@ def test_files_found_in_jupyters_order(tmp_path, monkeypatch):
         str(tmp_path / "empty"),
         str(system.parent.parent),
     ]
-    monkeypatch.setattr(launcher, "jupyter_config_path", lambda: directories)
+    monkeypatch.setattr(
+        "jupyter_storage_explorer._extensions.config.jupyter_config_path",
+        lambda: directories,
+    )
     assert launcher.find_launcher_files() == [user, system]
 
 

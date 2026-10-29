@@ -160,13 +160,28 @@ If your file has an error, the tab still opens, without your settings. The error
 status bar. Fix the file with the ⚙ button, then open the tab again. This covers errors raised by the file, settings
 that do not exist, and values the explorer refuses.
 
-### Layers of the configuration file
+### Settings for every explorer
+
+`common.py`, in the same folder as `launcher.py`, has the same functions. Every Storage Explorer reads it, in a notebook
+as well as in the tab.
+
+- In the tab, `launcher.py` overrides it.
+- In a notebook, the explorer's arguments override it. The storages of its `filesystems()` show only in an explorer
+  created without a path.
+- `StorageExplorer(..., common_config="disabled")` ignores it.
+
+The ⚙ menu does not open it: create it by hand.
+
+### Layers of the configuration files
 
 Administrators can set up the tab for everyone: a `storage-explorer/launcher.py` in any of Jupyter's configuration
 directories (`jupyter --paths`, *config* section) is read, e.g. `/etc/jupyter/storage-explorer/launcher.py` for the
 whole system or `<environment>/etc/jupyter/storage-explorer/launcher.py` for one Python environment (e.g. a
-JupyterHub image). Each file is a layer, applied from the system's to the user's, so users' files usually come last.
-A later layer adds to an earlier one's settings or replaces them.
+JupyterHub image). A `storage-explorer/common.py` there sets up every explorer.
+
+Each file is a layer, applied from the system's directory to the user's, so users' files usually come last. In each
+directory, `common.py` comes first, then `launcher.py`. A later layer adds to an earlier one's settings or replaces
+them.
 
 `final()` returns the settings later layers cannot change: function names (except `parameters`) and parameter names.
 For example, `/etc/jupyter/storage-explorer/launcher.py`:
@@ -195,16 +210,18 @@ def final():
     return ["filesystems", "transfer_policy", "unsafe_mode"]  # users cannot change these
 ```
 
-Final settings are not a security boundary: users can still create explorers in notebooks.
+A final setting of `common.py` also binds explorers in notebooks: an argument changing it is ignored, with a warning.
 
-An error in any file other than the user's stops the tab: it shows only the error, naming the file. Users' files are
-left out instead (see [Configuration details](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/launcher/README.md#configuration-details)).
+Final settings are not a security boundary: users can still create explorers with `common_config="disabled"`.
+
+An error in any file other than the user's stops the tab, or the explorer in a notebook. The error names the file.
+Users' files are left out instead (see [Configuration details](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/launcher/README.md#configuration-details)).
 
 ### Other configuration files
 
 Your files are in Jupyter's configuration directory, which `jupyter --config-dir` prints: `~/.jupyter` by default (on
-Windows, `%USERPROFILE%\.jupyter`), or `$JUPYTER_CONFIG_DIR` where that is set. `launcher.py` is in its
-`storage-explorer` folder.
+Windows, `%USERPROFILE%\.jupyter`), or `$JUPYTER_CONFIG_DIR` where that is set. `launcher.py` and `common.py` are in
+its `storage-explorer` folder.
 
 #### Icons
 

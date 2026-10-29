@@ -1112,7 +1112,8 @@ StorageExplorer(
 )
 ```
 
-In the launcher's tabs, `plugin_options()` in `launcher.py` gives them:
+In configuration files, `plugin_options()` gives them: in `common.py` for every explorer, or in `launcher.py` for
+the launcher's tabs.
 
 ```python
 def plugin_options():
@@ -1144,7 +1145,7 @@ format: each option, its default and its meaning.
 - **Prerequisites** say what the environment must already provide, e.g. the library's access to storage. Link the
   configuration reference of a library that does not use fsspec, as polars-support links object_store's. Say which
   storages it reads itself, and how it reads the others, e.g. through the explorer's filesystem.
-- **Plugin options** shows one example for `StorageExplorer` and one for `launcher.py`, then the options' table.
+- **Plugin options** shows one example for `StorageExplorer` and one for the configuration files, then the options' table.
 - Links, also to the README's own sections, are absolute URLs: PyPI shows the README, but resolves neither relative
   paths nor `#` anchors of its headings.
 - Code blocks are formatted as ruff formats Python, at its default line length of 88. `uvx ruff format` formats the
@@ -1356,8 +1357,8 @@ configuration directory. Every explorer reads them when it is created: see the
 [Action development guide](action-development-guide.md). A changed file applies to the next explorer, without a
 restart. **Actions > Reload**, in the ⚙ menu, applies it to an explorer already open.
 
-The launcher's tab and side panel take the same components from functions in `launcher.py`, named as a plugin's
-properties:
+Configuration files take the same components from functions named as a plugin's properties. Every explorer reads
+`common.py`, and the launcher's tab and side panel also read `launcher.py`:
 
 ```python
 def actions():

@@ -111,7 +111,8 @@ def users_actions_warned(others: Sequence[Action[Any]]) -> list[Action[Any]]:
     pointing at the code creating the explorer."""
     actions, problems = load_user_actions(others)
     for problem in problems:
-        warnings.warn(problem, RuntimeWarning, stacklevel=3)
+        # Under _users_actions, __init__ and with_common_config.
+        warnings.warn(problem, RuntimeWarning, stacklevel=5)
     return actions
 
 

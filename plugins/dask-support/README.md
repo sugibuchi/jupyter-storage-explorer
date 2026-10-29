@@ -71,7 +71,8 @@ The storage options are those of the storage's fsspec filesystem:
 - [`s3fs`](https://s3fs.readthedocs.io/en/latest/api.html#s3fs.core.S3FileSystem): S3, e.g. with an AWS profile.
 - [`gcsfs`](https://gcsfs.readthedocs.io/en/latest/api.html#gcsfs.core.GCSFileSystem): Google Cloud Storage.
 
-For the launcher's tabs, `engine_options()` in `launcher.py` returns the same engine options:
+In configuration files, `engine_options()` returns the same engine options: in `common.py` for every explorer, or in
+`launcher.py` for the launcher's tabs.
 
 ```python
 def engine_options():
@@ -108,7 +109,8 @@ StorageExplorer(
 )
 ```
 
-In the launcher's tabs, `plugin_options()` in `launcher.py` gives them:
+In configuration files, `plugin_options()` gives them: in `common.py` for every explorer, or in `launcher.py` for
+the launcher's tabs.
 
 ```python
 def plugin_options():
