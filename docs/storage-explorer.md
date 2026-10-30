@@ -268,7 +268,7 @@ StorageExplorer(filesystems={...}, transfer_policy=[
 URLs are those of "Copy URL" (`file:///...` for local files); files through JupyterLab's file browser are `jupyterlab://<absolute path>`, e.g.
 `jupyterlab:///home/jovyan/x.csv`, and files on your computer `browser:///<name>`. A pattern left out matches any URL.
 A folder is checked as one item, by its own URL. The policy prevents mistakes; it is not a security boundary. For the launcher's
-tabs, use `transfer_policy()` in [its configuration](../launcher/README.md#configuration-details).
+tabs, use `transfer_policy()` in a [configuration file](#configuration-files).
 
 **Named groups** tie the two URLs together: `(?P<name>...)` in both patterns, and the rule matches only if each group
 captures the same text in both. Both patterns must have the same group names. With `L` for
@@ -344,6 +344,10 @@ from jupyter_storage_explorer import ExplorerStates, StorageExplorer
 StorageExplorer("s3://my-bucket/data", states="~/.jupyter/storage-explorer/states.json")  # the launcher's file
 StorageExplorer("s3://my-bucket/data", states=ExplorerStates("states.json", max_queries=50))
 ```
+
+The launcher's tabs keep them in `storage-explorer/states.json`, in Jupyter's configuration directory. The logging
+level chosen in their **Logging** menu is kept there too. `parameters()` in `launcher.py` can set `states` to another
+file's path, or to `None` to keep them in each tab's memory.
 
 ## Logs
 
@@ -604,6 +608,111 @@ chart
 Filter by channel in the data browser, and the chart shows that channel's sales. Without the data browser,
 `on_change` and `selected_urls` give the files themselves, e.g. `pl.read_csv(url)` for each one selected.
 
+## Configuration files
+
+Two Python files, in the `storage-explorer` folder of Jupyter's configuration directory, set up explorers:
+
+- `common.py` sets up every explorer, in a notebook as well as in the launcher's tabs.
+- `launcher.py` sets up the [launcher](../launcher/README.md#configuration)'s tabs and side panel.
+
+`jupyter --config-dir` prints that directory: `~/.jupyter` by default, or `%USERPROFILE%\.jupyter` on Windows.
+`$JUPYTER_CONFIG_DIR` changes it. The launcher's ⚙ menu opens `launcher.py`, and creates it from a template if needed.
+Create `common.py` by hand.
+
+### Functions
+
+Both files have some of these functions, all optional:
+
+| Function            | Returns                                                                                                         |
+|---------------------|-----------------------------------------------------------------------------------------------------------------|
+| `filesystems()`     | `{name: URL or fsspec filesystem}`                                                                              |
+| `plugin_options()`  | The plugins' options, by key, e.g. `{"pandas-support": {"enabled": False}}`; see each plugin's README.          |
+| `engine_options()`  | The engines' options, by engine and format; see [Engine options](#engine-options).                              |
+| `transfer_policy()` | Rules of a [transfer policy](#transfer-policy).                                                                 |
+| `parameters()`      | Other [StorageExplorer options](#storageexplorer-options), e.g. `{"engine_preference": ["pandas"]}`.            |
+
+For example, a `common.py`:
+
+```python
+def engine_options():
+    return {"polars": {"*": {"storage_options": {"account_name": "myaccount"}}}}
+
+
+def parameters():
+    return {"preview_panel": "open", "engine_preference": ["pandas"]}
+```
+
+### Settings for every explorer
+
+The settings of `common.py` apply to every explorer:
+
+- In the launcher's tabs, `launcher.py` overrides them.
+- In a notebook, the arguments you give an explorer override them. `engine_options` and `plugin_options` are merged
+  option by option.
+- An explorer created without a path shows the storages of its `filesystems()`.
+- `common_config="disabled"` ignores the file.
+
+### Errors
+
+If your `launcher.py` has an error, the launcher's tab still opens, without your settings. The error shows above the
+explorer and in its status bar. Fix the file with the ⚙ button, then open the tab again. This covers errors raised by
+the file, settings that do not exist, and values the explorer refuses.
+
+In a notebook, an explorer is created without your `common.py` if the file raises an error or has a setting that does
+not exist. A warning under the cell says why, starting with "Your common.py was left out". A value the explorer refuses
+is an error of the cell instead. Its message ends with "With the settings of" and the files used, so that you can find
+the setting.
+
+### Layers of the configuration files
+
+Administrators can set up explorers for everyone. A `storage-explorer/launcher.py` or `storage-explorer/common.py` in
+any of Jupyter's configuration directories is read. `jupyter --paths` lists them, in its *config* section. For example:
+
+- `/etc/jupyter/storage-explorer/` for the whole system;
+- `<environment>/etc/jupyter/storage-explorer/` for one Python environment, e.g. a JupyterHub image.
+
+Each file is a layer, applied from the system's directory to the user's, so users' files usually come last. In each
+directory, `common.py` comes first, then `launcher.py`. A later layer adds to an earlier one's settings or replaces
+them.
+
+`final()` returns the settings later layers cannot change: function names, except `parameters`, and parameter names.
+For example, `/etc/jupyter/storage-explorer/launcher.py`:
+
+```python
+def filesystems():
+    return {
+        "Here": ".",
+        "Data lake": "abfs://lake@myaccount.dfs.core.windows.net",
+    }
+
+
+def transfer_policy():
+    # No downloads from the lake to users' computers or to the Jupyter server.
+    return [
+        {"rule": "deny", "src": r"abfs://lake@.*", "dest": "browser:///.*"},
+        {"rule": "deny", "src": r"abfs://lake@.*", "dest": "jupyterlab://.*"},
+    ]
+
+
+def parameters():
+    return {"unsafe_mode": "blocked"}  # no folder operations
+
+
+def final():
+    return ["filesystems", "transfer_policy", "unsafe_mode"]  # users cannot change these
+```
+
+A final setting of `common.py` also binds explorers in notebooks: an argument changing it is ignored, with a warning.
+Final settings are not a security boundary: users can still create explorers with `common_config="disabled"`.
+
+An error in any file other than the user's stops the tab, or the explorer in a notebook. The error names the file.
+Users' files are left out instead, as in [Errors](#errors).
+
+### Icons
+
+To change the explorer's icons, use JupyterLab's `custom.css`: see [Icons](../DEVELOPMENT.md#icons). It applies to the
+launcher's tabs and to explorers in notebooks alike.
+
 ## StorageExplorer options
 
 Storages and data:
@@ -613,6 +722,7 @@ Storages and data:
 | `filesystems={...}`       | Several named storages; see [Several storages in one explorer](#several-storages-in-one-explorer).         |
 | `plugin_options={...}`    | The plugins' options, by key, e.g. `{"pandas-support": {"enabled": False}}`; see each plugin's README. |
 | `user_actions="disabled"` | `"enabled"`: the actions of your files, as in the launcher's explorers; see [Actions of your own](#actions-of-your-own). |
+| `common_config="enabled"` | `"disabled"`: without the settings of `common.py`; see [Configuration files](#configuration-files). |
 | `engine_options={...}`    | The engines' options; see [Engine options](#engine-options).                                               |
 | `engine_preference=[...]` | The engines in the order they are offered, the first chosen until the user chooses; see [Engines](#engines). |
 

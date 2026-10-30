@@ -115,6 +115,13 @@ def parameters():
     return {"preview_panel": "open"}
 ```
 
+[Configuration files](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#configuration-files)
+describes the settings:
+
+- each function of the file;
+- `common.py`, the settings of every explorer, in notebooks too;
+- the files administrators set up for everyone.
+
 ## Troubleshooting
 
 ### Restart the side panel
@@ -143,79 +150,3 @@ The tabs and the side panel log nothing by default. To see what goes wrong in th
 
 The files are in the `storage-explorer/logs` folder of Jupyter's configuration directory: see
 [Logs](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#logs).
-
-## Configuration details
-
-The configuration file, `launcher.py`, has some of these functions, all optional:
-
-| Function            | Returns                                                                                                                                                                                                                   |
-|---------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `filesystems()`     | `{name: URL or fsspec filesystem}`                                                                                                                                                                                        |
-| `plugin_options()`  | The plugins' options, by key, e.g. `{"pandas-support": {"enabled": False}}` (see each plugin's README)                                                                                                                    |
-| `engine_options()`  | The engines' options, by engine and format ([Engine options](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#engine-options))                                                       |
-| `transfer_policy()` | Rules of a [transfer policy](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#transfer-policy)                                                                                    |
-| `parameters()`      | Other `StorageExplorer` arguments ([StorageExplorer options](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#storageexplorer-options)), e.g. `{"engine_preference": ["pandas"]}` |
-
-If your file has an error, the tab still opens, without your settings. The error shows above the explorer and in its
-status bar. Fix the file with the ⚙ button, then open the tab again. This covers errors raised by the file, settings
-that do not exist, and values the explorer refuses.
-
-### Layers of the configuration file
-
-Administrators can set up the tab for everyone: a `storage-explorer/launcher.py` in any of Jupyter's configuration
-directories (`jupyter --paths`, *config* section) is read, e.g. `/etc/jupyter/storage-explorer/launcher.py` for the
-whole system or `<environment>/etc/jupyter/storage-explorer/launcher.py` for one Python environment (e.g. a
-JupyterHub image). Each file is a layer, applied from the system's to the user's, so users' files usually come last.
-A later layer adds to an earlier one's settings or replaces them.
-
-`final()` returns the settings later layers cannot change: function names (except `parameters`) and parameter names.
-For example, `/etc/jupyter/storage-explorer/launcher.py`:
-
-```python
-def filesystems():
-    return {
-        "Here": ".",
-        "Data lake": "abfs://lake@myaccount.dfs.core.windows.net",
-    }
-
-
-def transfer_policy():
-    # No downloads from the lake to users' computers or to the Jupyter server.
-    return [
-        {"rule": "deny", "src": r"abfs://lake@.*", "dest": "browser:///.*"},
-        {"rule": "deny", "src": r"abfs://lake@.*", "dest": "jupyterlab://.*"},
-    ]
-
-
-def parameters():
-    return {"unsafe_mode": "blocked"}  # no folder operations
-
-
-def final():
-    return ["filesystems", "transfer_policy", "unsafe_mode"]  # users cannot change these
-```
-
-Final settings are not a security boundary: users can still create explorers in notebooks.
-
-An error in any file other than the user's stops the tab: it shows only the error, naming the file. Users' files are
-left out instead (see [Configuration details](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/launcher/README.md#configuration-details)).
-
-### Other configuration files
-
-Your files are in Jupyter's configuration directory, which `jupyter --config-dir` prints: `~/.jupyter` by default (on
-Windows, `%USERPROFILE%\.jupyter`), or `$JUPYTER_CONFIG_DIR` where that is set. `launcher.py` is in its
-`storage-explorer` folder.
-
-#### Icons
-
-To change the explorer's icons, use JupyterLab's `custom.css` (see
-[Icons](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/DEVELOPMENT.md#icons)), which applies to the
-launcher's tabs and to explorers in notebooks alike.
-
-#### Bookmarks and query settings
-
-The tabs share bookmarks, the data browser's query settings, the engine chosen and the list's columns. They keep them
-in `storage-explorer/states.json` in the same directory, unless `parameters()` sets `states` (another file's path, or
-`None`: in each tab's memory).
-
-The logging level chosen in the **Logging** menu is kept there too.

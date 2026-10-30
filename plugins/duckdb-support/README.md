@@ -87,7 +87,8 @@ StorageExplorer(
 )
 ```
 
-In the launcher's tabs, `plugin_options()` in `launcher.py` gives them:
+In configuration files, `plugin_options()` gives them: in `common.py` for every explorer, or in `launcher.py` for
+the launcher's tabs.
 
 ```python
 def plugin_options():

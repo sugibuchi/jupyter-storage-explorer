@@ -24,12 +24,12 @@ explorer exactly, so an extra always installs the plugin of the explorer's versi
 | `src/jupyter_storage_explorer/formats/`                        | The formats files are previewed, queried and loaded as.                                              |
 | `src/jupyter_storage_explorer/actions/`                        | Actions, what explorers do with a format's data, and the built-in ones.                              |
 | `src/jupyter_storage_explorer/_explorer/`                      | `StorageExplorer`'s features, as mixins of the class.                                                |
-| `src/jupyter_storage_explorer/_extensions/`                    | What extends the explorer from outside: plugins installed and the user's action files.               |
+| `src/jupyter_storage_explorer/_extensions/`                    | What extends the explorer from outside: plugins, the user's action files and configuration files.     |
 | `src/jupyter_storage_explorer/_jobs/`                          | File operations planned and run as jobs, without the widget.                                         |
 | `src/jupyter_storage_explorer/_query/`                         | The data browser: filters, settings, and a dataset open in it.                                       |
 | `src/jupyter_storage_explorer/static/`                         | The widgets' JavaScript and CSS, loaded at run time (no build step).                                 |
 | `src/jupyter_storage_explorer/static/storage_explorer/`        | The storage explorer's JavaScript, a file per feature, joined at run time.                           |
-| `launcher/src/jupyter_storage_explorer_launcher/`              | `launch()`, which merges the `storage-explorer/launcher.py` files (layers).                          |
+| `launcher/src/jupyter_storage_explorer_launcher/`              | `launch()`, which opens explorers with the `launcher.py` and `common.py` files' settings.            |
 | `launcher/labextension/`                                       | The JupyterLab extension (TypeScript).                                                               |
 | `launcher/src/jupyter_storage_explorer_launcher/labextension/` | The extension built from `launcher/labextension/` (git-ignored).                                     |
 | `notebooks/`                                                   | Demo notebooks and `make_samples.py`, which writes the sample data they use.                         |
@@ -471,27 +471,34 @@ that way, with `resultFailed`.
 
 The launcher, in `launcher/`, adds a JupyterLab launcher item. It opens a tab whose kernel runs `launch()`.
 
-`launch()` merges every `storage-explorer/launcher.py` in Jupyter's configuration paths, as layers from system to
-user. `load_settings` does the merging. Each file may define these functions:
+Configuration files set up explorers, in `_extensions/config.py`:
+
+- `storage-explorer/common.py` sets up every `StorageExplorer`. `with_common_config`, around its `__init__`, merges the
+  arguments given over the files' settings.
+- `storage-explorer/launcher.py` sets up the launcher's explorers only. `launch()` reads both, `launcher.py` after
+  `common.py` in each directory, and creates the explorer with `common_config="disabled"`.
+
+The files in Jupyter's configuration paths are layers, from system to user. `load_settings` does the merging. Each
+file may define these functions:
 
 - `filesystems()`, `filesystem_operations()`, `filesystem_mappers()` and `transfer_policy()`;
 - `plugin_options()`, merged by plugin, then option;
 - `actions()`, concatenated, a later layer's first;
 - `engine_options()`, merged by engine, format, then option;
 - `parameters()`, the explorer's other arguments;
-- `final()`, which names what later layers cannot change.
+- `final()`, which names what later layers cannot change, nor the explorer's arguments.
 
 The retired `style()`, `formats()` and `supports()` are ignored with a warning.
 
 Errors are handled by whose file has them:
 
-- **The user's file** is left out, with a warning above the explorer and in its status bar, so that "Edit
-  configuration" can fix it. `load_settings` reads and checks each layer before applying it, so a bad file changes
+- **The user's file** is left out, with a warning, so that the user can fix it. In the launcher, the warning shows
+  above the explorer and in its status bar. `load_settings` reads and checks each layer before applying it, so a bad file changes
   nothing.
-- **Values the explorer refuses** show only when it is created. `_create_explorer` then creates it again without the
-  user's file.
+- **Values the explorer refuses** show only when it is created. The launcher's `_create_explorer` then creates it
+  again without the user's files. In a notebook, the error gets a note naming the `common.py` files.
 - **Another file's error**, or an explorer that cannot be created even then, stops the tab. `launch()` prints the error
-  alone, without a traceback.
+  alone, without a traceback. In a notebook, it is a `ConfigError`, a `ValueError`.
 
 The settings menu, ⚙, is on every explorer. Its "About" shows the versions of the explorer and of the plugins
 installed, with plugins not loaded greyed out and why. Its icon, `static/storage-explorer.svg`, is a copy of the
@@ -528,7 +535,7 @@ Each tab's view, its storage and folders, is restored with the workspace:
 3. A restored tab passes it back as `launch(view=...)`.
 
 A page reload keeps the tab's kernel, and runs `launch()` in it again. `launch()` then shows the explorer it made
-before, as it was: its folder, selection and preview. It makes a new one only if the `launcher.py` files changed, so
+before, as it was: its folder, selection and preview. It makes a new one only if the configuration files changed, so
 that a reload still applies new settings, or if the explorer was closed. The view tabs it had went with the page, so
 their widgets are released. The side panel's console works the same way. The saved view serves new kernels, e.g.
 after a server restart.

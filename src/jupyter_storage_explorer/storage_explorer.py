@@ -38,6 +38,7 @@ from jupyter_storage_explorer._explorer.requests import FileRequestsMixin
 from jupyter_storage_explorer._explorer.states import ExplorerStates, explorer_states
 from jupyter_storage_explorer._explorer.user_actions import UserActionsMixin
 from jupyter_storage_explorer._explorer.view_tabs import ViewTabsMixin
+from jupyter_storage_explorer._extensions.config import with_common_config
 from jupyter_storage_explorer._extensions.plugins import (
     PluginComponents,
     load_plugins,
@@ -133,7 +134,9 @@ class StorageExplorer(
     path : str, optional
         Where to start: a URL or path fsspec understands, e.g.
         ``"s3://my-bucket/data"``; with ``fs``, a path within that filesystem.
-        Default: the current folder (or the top of ``fs``).
+        Default: the storages of the common.py files' ``filesystems()``, if
+        any (see ``common_config``), else the current folder (or the top of
+        ``fs``).
     fs : AbstractFileSystem, optional
         An existing fsspec filesystem to browse, instead of one made from
         ``path`` and ``storage_options``.
@@ -204,6 +207,16 @@ class StorageExplorer(
         it is missing, and to reload the files' actions. Disabled by default,
         so that an explorer in a notebook has only what the notebook gives
         it: the launcher's tabs and side panel enable it.
+    common_config : {"enabled", "disabled"}, default "enabled"
+        Whether to take the settings of the files
+        ``storage-explorer/common.py`` in Jupyter's configuration
+        directories (``jupyter --paths``): functions such as
+        ``engine_options()`` and ``parameters()``, as in the launcher's
+        ``launcher.py`` (see ``_extensions/config.py``). The arguments given
+        are merged over them, as a later file's settings are: an argument
+        naming a setting a file made final is ignored, with a warning. The
+        user's common.py with an error is left out, with a warning; another
+        file's error is a ValueError naming it.
     logging_menu : {"enabled", "disabled"}, default "disabled"
         Where the explorer's logs go. Disabled, to the console: the
         kernel's stderr, which JupyterLab shows under the cell. Enabled, to
@@ -323,7 +336,8 @@ class StorageExplorer(
         of that form, ``tree_view``, ``preview_panel``, ``layout``,
         ``unsafe_mode``, ``code_snippet``, ``logging_menu`` or
         ``logging_level`` is none of its values, or ``log_file_backup`` is
-        negative.
+        negative. Also if a common.py file other than the user's cannot be
+        used (see ``common_config``).
 
     See Also
     --------
@@ -461,6 +475,7 @@ class StorageExplorer(
     _logging_menu = traitlets.Bool(False).tag(sync=True)
     _logging_level = traitlets.Unicode(_logs.DISABLED).tag(sync=True)
 
+    @with_common_config
     def __init__(
         self,
         path: str | None = None,
@@ -476,6 +491,7 @@ class StorageExplorer(
         code_snippet: str | Sequence[str] = "enabled",
         plugin_options: Mapping[str, Mapping[str, Any]] | None = None,
         user_actions: Literal["enabled", "disabled"] = "disabled",
+        common_config: Literal["enabled", "disabled"] = "enabled",
         logging_menu: Literal["enabled", "disabled"] = "disabled",
         logging_level: str = "WARNING",
         log_file_backup: int = 14,
@@ -503,10 +519,12 @@ class StorageExplorer(
             warnings.warn(
                 'open_preview is deprecated: use preview_panel="open" (or "closed")',
                 DeprecationWarning,
-                stacklevel=2,
+                stacklevel=3,  # under with_common_config
             )
             if open_preview:
                 preview_panel = "open"
+        # Taken by with_common_config: checked here.
+        options.check_choice("common_config", common_config, options.COMMON_CONFIGS)
         options.check_choice("tree_view", tree_view, options.PANEL_STATES)
         options.check_choice("preview_panel", preview_panel, options.PANEL_STATES)
         options.check_choice("layout", layout, options.LAYOUTS)
@@ -545,7 +563,7 @@ class StorageExplorer(
         # Also shown in "About", for the plugins left out.
         self._plugin_problems = problems
         for problem in problems:
-            warnings.warn(problem, RuntimeWarning, stacklevel=2)
+            warnings.warn(problem, RuntimeWarning, stacklevel=3)
         components = PluginComponents(self._plugins)
         # What filesystems reach, their URLs and back (see filesystems/).
         self._mappers = MapperChain(
@@ -727,7 +745,7 @@ class StorageExplorer(
         )
         self._plugin_problems += problems
         for problem in problems:
-            warnings.warn(problem, RuntimeWarning, stacklevel=3)
+            warnings.warn(problem, RuntimeWarning, stacklevel=4)
         return _merged_engine_options([plugins_options, engine_options or {}])
 
     @staticmethod
