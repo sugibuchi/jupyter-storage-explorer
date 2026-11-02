@@ -31,6 +31,13 @@ if TYPE_CHECKING:
 
 log = get_logger(__name__)
 
+# The Data Lake endpoint's errors for an account without a hierarchical
+# namespace: 400, or 409 on an account whose features that endpoint refuses,
+# such as soft delete.
+_NO_NAMESPACE = frozenset(
+    {"HierarchicalNamespaceNotEnabled", "EndpointUnsupportedAccountFeatures"}
+)
+
 
 class AzureDataLakeGen2Operation(FileSystemOperations):
     """Moves, copies, folder deletion and folder creation on Azure Data Lake
@@ -65,9 +72,11 @@ class AzureDataLakeGen2Operation(FileSystemOperations):
     other operations and filesystems, moves and copies between accounts (copies between accounts have prerequisites of
     their own, e.g. the source readable by the target's credential),
     deletions of files (one request with adlfs too), containers themselves, and the moves, copies and folders of accounts
-    without a hierarchical namespace (checked once per account; if it cannot
-    be checked, e.g. for lack of permission, the account is taken to have
-    none).
+    without a hierarchical namespace. The account's own information tells,
+    once per account. A role on a container alone may not read it: the
+    container's root then tells, by answering or by the storage's error code.
+    If neither can, the account is taken to have none until the next operation
+    asks again.
 
     Parameters
     ----------
@@ -105,7 +114,7 @@ class AzureDataLakeGen2Operation(FileSystemOperations):
     ) -> None:
         if not same:
             raise self.NotSupported  # between accounts (see the class docstring)
-        fs = self._gen2(source_fs)
+        fs = self._gen2(source_fs, source)
         container, key = _split(source)
         new_container, new_key = _split(target)
         if not key or not new_key:
@@ -139,7 +148,7 @@ class AzureDataLakeGen2Operation(FileSystemOperations):
     ) -> None:
         if not same:
             raise self.NotSupported  # between accounts (see the class docstring)
-        fs = self._gen2(source_fs)
+        fs = self._gen2(source_fs, source)
         if not _split(source)[1] or not _split(target)[1]:
             raise self.NotSupported  # containers: adlfs's own
         is_dir = fs.isdir(source)
@@ -165,7 +174,7 @@ class AzureDataLakeGen2Operation(FileSystemOperations):
             raise self.NotSupported  # a container: adlfs's own
         if not fs.isdir(path):
             raise self.NotSupported  # a file: one request with adlfs too
-        if not self._is_hierarchical(fs):
+        if not self._is_hierarchical(fs, path):
             self._delete_in_batches(fs, path, progress)
             return
         progress.working_on(_paths.basename(path))
@@ -183,7 +192,7 @@ class AzureDataLakeGen2Operation(FileSystemOperations):
         )
 
     def mkdir(self, fs: AbstractFileSystem, path: str) -> None:
-        fs = self._gen2(fs)
+        fs = self._gen2(fs, path)
         container, key = _split(path)
         if not key:
             raise self.NotSupported  # a container: adlfs's own
@@ -219,12 +228,12 @@ class AzureDataLakeGen2Operation(FileSystemOperations):
             time.monotonic() - started,
         )
 
-    def _gen2(self, fs: AbstractFileSystem) -> AzureBlobFileSystem:
+    def _gen2(self, fs: AbstractFileSystem, path: str) -> AzureBlobFileSystem:
         """``fs``, if an adlfs filesystem of an account with a hierarchical
         namespace, usable from this thread; else NotSupported (also without
-        adlfs or the Data Lake SDK)."""
+        adlfs or the Data Lake SDK). ``path`` is where the operation works."""
         fs = self._adlfs(fs)
-        if not self._is_hierarchical(fs):
+        if not self._is_hierarchical(fs, path):
             raise self.NotSupported
         return fs
 
@@ -239,13 +248,19 @@ class AzureDataLakeGen2Operation(FileSystemOperations):
             raise self.NotSupported
         return fs
 
-    def _is_hierarchical(self, fs: AzureBlobFileSystem) -> bool:
-        """Whether ``fs``'s account has a hierarchical namespace, asked once
-        per account."""
+    def _is_hierarchical(self, fs: AzureBlobFileSystem, path: str) -> bool:
+        """Whether ``fs``'s account has a hierarchical namespace. A sure answer
+        is kept for the account. Any other is asked again by the next
+        operation: a wrong one would last as long as the kernel, with folders
+        that are never created and moves that are not atomic."""
         with self._lock:
             known = self._hierarchical.get(fs.account_url)
         if known is None:
             known = self._has_hierarchical_namespace(fs)
+            if known is None:
+                known = self._ask_root(fs, _split(path)[0])
+            if known is None:
+                return False
             with self._lock:
                 self._hierarchical[fs.account_url] = known
             log.info(
@@ -258,21 +273,53 @@ class AzureDataLakeGen2Operation(FileSystemOperations):
         return known
 
     @staticmethod
-    def _has_hierarchical_namespace(fs: AzureBlobFileSystem) -> bool:
+    def _has_hierarchical_namespace(fs: AzureBlobFileSystem) -> bool | None:
         """Whether ``fs``'s account has a hierarchical namespace (Data Lake
-        Gen2), asked with adlfs's own Blob Storage client."""
+        Gen2), asked with adlfs's own Blob Storage client. None if it cannot
+        tell: reading this takes a role on the account, not on a container."""
         try:
             info = sync(fs.loop, fs.service_client.get_account_information)
         except Exception as exc:
             # The error's type only: Azure's messages may quote request URLs.
-            log.warning(
-                "%s: cannot tell whether it has a hierarchical namespace (%s), "
-                "e.g. for lack of permission: adlfs moves and copies",
+            log.info(
+                "%s: the account's information cannot be read (%s)",
                 fs.account_url,
                 type(exc).__name__,
             )
-            return False  # cannot tell: leave it to adlfs
+            return None
         return bool(info.get("is_hns_enabled"))
+
+    def _ask_root(self, fs: AzureBlobFileSystem, container: str) -> bool | None:
+        """Whether ``fs``'s account has a hierarchical namespace, from the
+        access control list of ``container``'s root, which only such an account
+        has. Other accounts refuse with an error code saying so (``_NO_NAMESPACE``).
+        None if it cannot tell: any other error, such as a role too narrow,
+        says nothing of the account."""
+        if not container:
+            return None
+
+        async def ask(service: DataLakeServiceClient) -> None:
+            file_system = service.get_file_system_client(container)
+            await file_system.get_directory_client("/").get_access_control()
+
+        try:
+            self._run_with_datalake_service(fs, ask)
+        except Exception as exc:
+            code = getattr(exc, "error_code", None)
+            if code in _NO_NAMESPACE:
+                return False
+            # The error's type, status and code only: Azure's messages may
+            # quote request URLs.
+            log.warning(
+                "%s: cannot tell whether it has a hierarchical namespace "
+                "(%s %s %s), e.g. for lack of permission: adlfs moves and copies",
+                fs.account_url,
+                type(exc).__name__,
+                getattr(exc, "status_code", None),
+                code,
+            )
+            return None
+        return True
 
     @staticmethod
     def _datalake_service_client(fs: AzureBlobFileSystem) -> DataLakeServiceClient:

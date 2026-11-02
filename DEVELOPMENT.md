@@ -747,6 +747,11 @@ On other accounts, it deletes folders in batches with adlfs's `_rm`, without `ex
 each file with a request of its own, one after another, before deleting any. Its tests fake the SDK and adlfs, which
 the plugin imports on first use.
 
+The account's own information tells whether it has a hierarchical namespace, but reading it takes a role on the account.
+When that is refused, the plugin asks for the access control list of the container's root. An answer means it has one,
+and a flat account refuses with an error code saying so. Only these sure answers are kept: after any other error, such
+as a role too narrow, the next operation asks again.
+
 Tests use fsspec's `AsyncFileSystemWrapper` around a memory filesystem as an async filesystem.
 
 ### Jobs

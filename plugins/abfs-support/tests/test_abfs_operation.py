@@ -10,6 +10,7 @@ from typing import Any, Self
 import pytest
 from adlfs import AzureBlobFileSystem
 from azure.core import MatchConditions
+from azure.core.exceptions import HttpResponseError
 from jupyter_storage_explorer_abfs_support import (
     AbfsSupport,
     AzureDataLakeGen2Operation,
@@ -68,6 +69,14 @@ class FakeService:
             async def delete_directory(self) -> None:
                 calls.append(("delete_directory", container, self.key))
 
+            async def get_access_control(self) -> dict[str, Any]:
+                calls.append(("get_access_control", container, self.key))
+                if FakeService.root_error is not None:
+                    error = HttpResponseError(message="?sig=secret")
+                    error.status_code, error.error_code = FakeService.root_error
+                    raise error
+                return {}
+
         class FileSystem:
             get_directory_client = get_file_client = Path
 
@@ -94,6 +103,7 @@ class FakeService:
 @pytest.fixture
 def service(monkeypatch):
     FakeService.made, FakeService.calls, FakeService.folders = [], [], {}
+    FakeService.root_error = None  # the container's root answers
     monkeypatch.setattr(_azure, "DataLakeServiceClient", FakeService)
     return FakeService
 
@@ -276,22 +286,84 @@ def test_without_a_hierarchical_namespace(service, monkeypatch):
     assert service.calls == []
 
 
-def test_namespace_not_told_is_a_warning(service, monkeypatch, caplog):
-    # Without the error's message, which may quote a request's URL.
-    fs = AzureBlobFileSystem(account_name="blobs", account_key="a2V5")
+@pytest.fixture
+def container_role(monkeypatch):
+    """An adlfs filesystem whose credential cannot read the account's
+    information, as with a role on a container alone."""
+    fs = AzureBlobFileSystem(account_name="lake", account_key="a2V5")
 
     async def account_information() -> dict[str, Any]:
-        raise PermissionError("https://blobs.blob.core.windows.net/?sig=secret")
+        raise PermissionError("https://lake.blob.core.windows.net/?sig=secret")
 
     monkeypatch.setattr(
         fs.service_client, "get_account_information", account_information
     )
-    with pytest.raises(FileSystemOperations.NotSupported):
-        AzureDataLakeGen2Operation().mkdir(fs, "data/new")
-    [record] = [r for r in caplog.records if r.levelname == "WARNING"]
-    assert "cannot tell whether it has a hierarchical namespace" in record.getMessage()
-    assert "(PermissionError)" in record.getMessage()
-    assert "secret" not in caplog.text
+    return fs
+
+
+def root_asked(service) -> list[tuple[Any, ...]]:
+    return [c for c in service.calls if c[0] == "get_access_control"]
+
+
+class TestRoleOnAContainer:
+    def test_the_root_tells_of_a_hierarchical_namespace(self, container_role, service):
+        ops = AzureDataLakeGen2Operation()
+        for name in ("new", "other"):
+            ops.mkdir(container_role, f"data/{name}")
+        # Asked once, as the answer is sure, of the container worked in.
+        assert root_asked(service) == [("get_access_control", "data", "/")]
+        assert [c[2] for c in service.calls if c[0] == "create_directory"] == [
+            "new",
+            "other",
+        ]
+
+    @pytest.mark.parametrize(
+        "error",
+        [
+            (400, "HierarchicalNamespaceNotEnabled"),
+            (409, "EndpointUnsupportedAccountFeatures"),
+        ],
+    )
+    def test_the_root_tells_of_none(self, container_role, service, caplog, error):
+        service.root_error = error
+        ops = AzureDataLakeGen2Operation()
+        for _ in range(2):
+            with pytest.raises(FileSystemOperations.NotSupported):
+                ops.mkdir(container_role, "data/new")
+        # A sure answer: no warning, and asked once.
+        assert not [r for r in caplog.records if r.levelname == "WARNING"]
+        assert len(root_asked(service)) == 1
+
+    @pytest.mark.parametrize(
+        ("error", "told"),
+        [
+            ((403, "AuthorizationPermissionMismatch"), "403 AuthorizationPermission"),
+            ((400, "InvalidInput"), "400 InvalidInput"),  # not the account's kind
+            ((None, None), "None None"),
+        ],
+    )
+    def test_not_told_is_a_warning_and_asked_again(
+        self, container_role, service, caplog, error, told
+    ):
+        # Without the error's message, which may quote a request's URL.
+        service.root_error = error
+        ops = AzureDataLakeGen2Operation()
+        with pytest.raises(FileSystemOperations.NotSupported):
+            ops.mkdir(container_role, "data/new")
+        [record] = [r for r in caplog.records if r.levelname == "WARNING"]
+        message = record.getMessage()
+        assert "cannot tell whether it has a hierarchical namespace" in message
+        assert f"(HttpResponseError {told}" in message
+        assert "secret" not in caplog.text
+        # A passing failure does not last as long as the kernel.
+        service.root_error = None
+        ops.mkdir(container_role, "data/new")
+        assert [c[2] for c in service.calls if c[0] == "create_directory"] == ["new"]
+
+    def test_no_container_to_ask(self, container_role, service):
+        with pytest.raises(FileSystemOperations.NotSupported):
+            AzureDataLakeGen2Operation().mkdir(container_role, "")
+        assert service.calls == []
 
 
 def test_rename_logged(lake, service, monkeypatch, caplog):
