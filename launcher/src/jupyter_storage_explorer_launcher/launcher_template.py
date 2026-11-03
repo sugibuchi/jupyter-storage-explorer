@@ -67,7 +67,7 @@ def filesystems():
 
 
 # Formats to detect, e.g. files that are JSON whatever their names say (see
-# "Files with other names" in docs/storage-explorer.md).
+# "Register new formats" in docs/storage-explorer.md).
 #
 # from jupyter_storage_explorer.formats import Json
 #

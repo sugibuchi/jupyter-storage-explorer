@@ -15,6 +15,7 @@ edit files.
 - [Data browser and view tabs](#data-browser-and-view-tabs)
 - [Remembered states](#remembered-states)
 - [Supported formats](#supported-formats)
+- [Register new formats](#register-new-formats)
 - [Engine options](#engine-options)
 - [Working with the explorer from Python](#working-with-the-explorer-from-python)
 - [StorageExplorer options](#storageexplorer-options)
@@ -446,7 +447,7 @@ installed in the kernel, each snippet under its engine.
 The name identifies the format in CSS (see [Icons](../DEVELOPMENT.md#icons)) and in [Engine options](#engine-options).
 To view or load a format your own way, see [Actions of your own](#actions-of-your-own).
 
-## Files with other names
+## Register new formats
 
 To give files a format by their names, add a format to `common.py` or `launcher.py`. This one makes some files JSON
 whatever their extensions:
@@ -656,7 +657,7 @@ Both files have some of these functions, all optional:
 | `filesystems()`     | `{name: URL or fsspec filesystem}`                                                                              |
 | `plugin_options()`  | The plugins' options, by key, e.g. `{"pandas-support": {"enabled": False}}`; see each plugin's README.          |
 | `engine_options()`  | The engines' options, by engine and format; see [Engine options](#engine-options).                              |
-| `formats()`         | Format classes to detect; see [Files with other names](#files-with-other-names).                                |
+| `formats()`         | Format classes to detect; see [Register new formats](#register-new-formats).                                    |
 | `transfer_policy()` | Rules of a [transfer policy](#transfer-policy).                                                                 |
 | `parameters()`      | Other [StorageExplorer options](#storageexplorer-options), e.g. `{"engine_preference": ["pandas"]}`.            |
 
@@ -797,5 +798,5 @@ For extending the explorer, tried before the defaults:
 |-------------------------------|------------------------------------------------------------------------------------------------------------|
 | `filesystem_operations=[...]` | File operations; see [File operations](plugin-development-guide.md#file-operations).                       |
 | `actions=[...]`               | Views and code of formats with libraries, as functions; see [Actions](plugin-development-guide.md#actions). |
-| `formats=[...]`               | Format classes to detect; see [Files with other names](#files-with-other-names).                           |
+| `formats=[...]`               | Format classes to detect; see [Register new formats](#register-new-formats).                               |
 | `filesystem_mappers=[...]`    | How storages are told apart; see [Filesystem mappers](plugin-development-guide.md#filesystem-mappers).      |
