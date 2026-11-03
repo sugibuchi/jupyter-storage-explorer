@@ -45,9 +45,9 @@ if TYPE_CHECKING:
     from playwright.sync_api import Locator, Page
 
 # The demo storages, with two more folders of Scratch for paging: "some" is
-# paged by the browser, "many" (over max_browser_items) by the kernel, one with
-# an image, a file JupyterLab has no text editor for by default, and one of JSON
-# files too long for a tree's single level.
+# paged by the browser, "many" (over max_browser_items) by the kernel, and
+# "samples", with an image, a file JupyterLab has no text editor for by default,
+# and JSON files too long for a tree's single level.
 EXPLORER = """\
 import base64
 import json
@@ -62,14 +62,14 @@ for i in range(150):
 for i in range(250):
     memory.pipe_file(f"/scratch/many/file_{i:03}.txt", b"x")
 memory.pipe_file(
-    "/scratch/images/pixel.png",
+    "/scratch/samples/pixel.png",
     base64.b64decode(
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk"
         "YPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
     ),
 )
-memory.pipe_file("/scratch/json/long.json", json.dumps(list(range(250))).encode())
-memory.pipe_file("/scratch/json/large.json", json.dumps(["x" * 100] * 95_000).encode())
+memory.pipe_file("/scratch/samples/long.json", json.dumps(list(range(250))).encode())
+memory.pipe_file("/scratch/samples/large.json", json.dumps(["x" * 100] * 95_000).encode())
 StorageExplorer(
     filesystems=storages,
     actions=demo_data.actions(),
@@ -384,7 +384,7 @@ def json_views(x: Explorer) -> None:
 @check
 def large_json(x: Explorer) -> None:
     # A long array comes in ranges, whose items are drawn when opened.
-    x.go("json", storage="Scratch")
+    x.go("samples", storage="Scratch")
     x.row("long.json").click()
     x.el.locator(".jse-status-bar .jse-preview-btn").click()
     tree = x.preview.locator(".jse-json")
@@ -958,7 +958,7 @@ def edit_or_view_in_jupyterlab(x: Explorer) -> None:
     expect(editor).to_contain_text("2026-08")
     x.back_to_notebook()
     # What is not text keeps its default: a text editor could not show it.
-    x.go("images", storage="Scratch")
+    x.go("samples", storage="Scratch")
     x.menu(x.row("pixel.png"), "Edit")
     expect(x.page.locator(".jp-ImageViewer:visible")).to_be_visible()
     expect(x.page.locator(".jp-FileEditor:visible")).to_have_count(0)
