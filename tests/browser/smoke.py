@@ -45,8 +45,10 @@ if TYPE_CHECKING:
     from playwright.sync_api import Locator, Page
 
 # The demo storages, with two more folders of Scratch for paging: "some" is
-# paged by the browser, "many" (over max_browser_items) by the kernel.
+# paged by the browser, "many" (over max_browser_items) by the kernel, and one
+# with an image, a file JupyterLab has no text editor for by default.
 EXPLORER = """\
+import base64
 import fsspec
 import demo_data
 from jupyter_storage_explorer import StorageExplorer
@@ -57,6 +59,13 @@ for i in range(150):
     memory.pipe_file(f"/scratch/some/file_{i:03}.txt", b"x")
 for i in range(250):
     memory.pipe_file(f"/scratch/many/file_{i:03}.txt", b"x")
+memory.pipe_file(
+    "/scratch/images/pixel.png",
+    base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk"
+        "YPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+    ),
+)
 StorageExplorer(
     filesystems=storages,
     actions=demo_data.actions(),
@@ -884,6 +893,32 @@ def open_in_jupyterlab(x: Explorer) -> None:
     x.back_to_notebook()
     expect(x.preview).to_contain_text("# edited")
     x.preview.press("Escape")
+
+
+@check
+def edit_or_view_in_jupyterlab(x: Explorer) -> None:
+    # JupyterLab's default for JSON is a viewer: a double-click opens that, and
+    # Edit the text editor.
+    x.storage("Sales lake")
+    x.el.locator(".jse-crumb", has_text="/sales-lake").click()
+    x.row("catalog.json").dblclick()
+    expect(x.page.locator(".jp-RenderedJSON:visible")).to_be_visible()
+    x.back_to_notebook()
+    x.menu(x.row("catalog.json"), "Edit")
+    editor = x.page.locator(".jp-FileEditor:visible .cm-content")
+    expect(editor).to_contain_text('"name": "orders"')
+    x.back_to_notebook()
+    # CSV's is a table viewer, likewise.
+    x.go("landing", "orders")
+    x.menu(x.row("orders_2026-08.csv"), "Edit")
+    expect(editor).to_contain_text("2026-08")
+    x.back_to_notebook()
+    # What is not text keeps its default: a text editor could not show it.
+    x.go("images", storage="Scratch")
+    x.menu(x.row("pixel.png"), "Edit")
+    expect(x.page.locator(".jp-ImageViewer:visible")).to_be_visible()
+    expect(x.page.locator(".jp-FileEditor:visible")).to_have_count(0)
+    x.back_to_notebook()
 
 
 # A notebook whose cell claims to be trusted, with outputs that run script

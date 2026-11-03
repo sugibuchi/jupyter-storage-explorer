@@ -135,8 +135,12 @@ Tables open in the [data browser](#data-browser-and-view-tabs).
 
 ### Edit files
 
-Double-click a file, or right-click → **Edit**, to open it in JupyterLab's editor. **Save** writes it back. This needs
-the [launcher](../launcher/README.md).
+Right-click → **Edit** opens a text file in JupyterLab's text editor, including JSON and CSV files. **Save** writes it
+back. Other files, such as notebooks and images, open as they do on a double-click.
+
+A double-click opens a file as JupyterLab's file browser does: JSON and CSV files open in their viewers, for example.
+
+Both need the [launcher](../launcher/README.md).
 
 ### Switch engine
 

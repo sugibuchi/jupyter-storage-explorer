@@ -42,23 +42,27 @@ function createJupyterLab(x) {
 
   // Opens `path` of `storage` in JupyterLab, read and saved through the
   // kernel with `names` added to the requests (what the file is to it);
-  // `failure` starts the message of an error.
-  function openInLab(storage, path, names, failure) {
+  // `failure` starts the message of an error; `opening` is how to open it,
+  // e.g. {edit: true} for a text file in the text editor, not a viewer.
+  function openInLab(storage, path, names, failure, opening) {
     const ask = (type, options) => askKernel({ ...options, type, ...names });
-    globalThis[JUPYTERLAB].open({
-      explorer: model.get("_explorer_id"),
-      storage,
-      path,
-      get: (options) => ask("jupyterlab_get", options),
-      save: (options) => ask("jupyterlab_save", options),
-    }).catch((err) => x.flash(`${failure}: ${err.message ?? err}`, { error: true }));
+    globalThis[JUPYTERLAB].open(
+      {
+        explorer: model.get("_explorer_id"),
+        storage,
+        path,
+        get: (options) => ask("jupyterlab_get", options),
+        save: (options) => ask("jupyterlab_save", options),
+      },
+      opening,
+    ).catch((err) => x.flash(`${failure}: ${err.message ?? err}`, { error: true }));
   }
 
-  function open(path) {
+  function open(path, opening) {
     x.unsafe.take(); // an operation, though not a risky one
     // The storage shown now: the file stays in it while the explorer moves on.
     const filesystem = model.get("_filesystem");
-    openInLab(filesystem, path, { filesystem, path }, "Cannot open in JupyterLab");
+    openInLab(filesystem, path, { filesystem, path }, "Cannot open in JupyterLab", opening);
   }
 
   // The configuration files of the settings menu, by key (the kernel's
