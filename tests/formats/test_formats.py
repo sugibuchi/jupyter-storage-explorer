@@ -41,6 +41,7 @@ from jupyter_storage_explorer.views import (
     TextView,
     TreeView,
     ViewLimits,
+    ViewWithConfirmation,
 )
 
 CHAIN = ActionChain(all_actions())
@@ -274,10 +275,41 @@ class TestViews:
 
     def test_json_too_large_for_a_tree(self, make_item):
         text = view(
-            Json(), make_item("/a.json", b'{"a": [1, 2]}'), ViewLimits(max_bytes=4)
+            Json(),
+            make_item("/a.json", b'{"a": [1, 2]}'),
+            ViewLimits(max_bytes=4, max_whole_file_bytes=5),
         )
         assert isinstance(text, TextView)
         assert text.note.endswith("too large to show as a tree")
+
+    def test_json_over_the_beginning_is_read_whole(self, make_item):
+        tree = view(
+            Json(), make_item("/a.json", b'{"a": [1, 2]}'), ViewLimits(max_bytes=4)
+        )
+        assert tree.value == {"a": [1, 2]}
+
+    def test_large_json_asks_first(self, make_item):
+        prompt = view(
+            Json(),
+            make_item("/a.json", b'{"a": [1, 2]}'),
+            ViewLimits(max_unasked_bytes=5),
+        )
+        assert isinstance(prompt, ViewWithConfirmation)
+        assert "13 B" in prompt.message
+        assert prompt.answer().value == {"a": [1, 2]}
+
+    def test_json_of_unknown_size(self, make_item):
+        item = make_item("/a.json", b'{"a": [1, 2]}')
+        item.info.pop("size")
+        assert view(Json(), item).value == {"a": [1, 2]}
+        prompt = view(Json(), item, ViewLimits(max_unasked_bytes=5))
+        assert "up to 10 MB" in prompt.message
+        assert prompt.answer().value == {"a": [1, 2]}
+        # Longer than even what can be read whole, as only the read tells.
+        prompt = view(
+            Json(), item, ViewLimits(max_unasked_bytes=5, max_whole_file_bytes=6)
+        )
+        assert prompt.answer().note.endswith("too large to show as a tree")
 
     def test_json_formatted(self, make_item):
         data = '{"b":[1,{"é":null}],"a":1.5}'.encode()
@@ -316,9 +348,23 @@ class TestViews:
             Json(),
             make_item("/a.json", b'{"a": [1, 2]}'),
             FsspecOptions(),
-            ViewLimits(max_bytes=4),
+            ViewLimits(max_bytes=4, max_whole_file_bytes=5),
         )
         assert shown.note.endswith("too large to format")
+
+    @pytest.mark.parametrize("data", [b'{"a": [1, 2]}', b"{oops, not json}"])
+    def test_large_json_formatted_is_not_highlighted(self, make_item, data):
+        prompt = json_formatted_view(
+            Json(),
+            make_item("/a.json", data),
+            FsspecOptions(),
+            ViewLimits(max_unasked_bytes=5),
+        )
+        assert isinstance(prompt, ViewWithConfirmation)
+        shown = prompt.answer()
+        assert isinstance(shown, TextView)
+        assert shown.html is None
+        assert shown.language == "json"
 
     def test_json_tree_is_the_default_view(self, make_item):
         views = CHAIN.of(Json(), make_item("/a.json", b"{}"))
