@@ -245,7 +245,14 @@ class StorageExplorer(
         it is its default, and "Preview as" offers the others. An action of
         the same kind, format, engine and label as another is a ValueError.
         The formats files are detected as are those of the actions (their
-        ``format``, one object of each), and the standard ones.
+        ``format``, one object of each), those of ``formats``, and the
+        standard ones.
+    formats : sequence of type of DataFormat, optional
+        Format classes to detect without an action of their own, e.g. a
+        subclass of ``Json`` recognising other file names. They get the
+        actions of the formats they subclass. Among formats of one priority,
+        those of actions come first: a file also matching one of them, e.g.
+        a ``.json`` file, needs a higher ``priority`` to be of this format.
     engine_options : mapping, optional
         The actions' options, by engine key (``"python"`` for
         ``PythonEngine``'s, the built-in ones), then format name or ``"*"``
@@ -496,6 +503,7 @@ class StorageExplorer(
         logging_level: str = "WARNING",
         log_file_backup: int = 14,
         actions: Sequence[Action[Any]] | None = None,
+        formats: Sequence[type[DataFormat]] | None = None,
         engine_options: EngineOptions | None = None,
         engine_preference: Sequence[str] | None = None,
         view_limits: ViewLimits | None = None,
@@ -630,7 +638,7 @@ class StorageExplorer(
         # What is done with the formats' data: the actions in order, the first
         # installed that does an item its default, with their options (see
         # _explorer/actions.py); the formats files are detected as are the
-        # actions', and the standard ones.
+        # actions', those given, and the standard ones.
         # Plugins, installed to enrich or change the explorer, come first;
         # then its own; then actions given and the user's files', additions
         # to them rather than replacements.
@@ -638,7 +646,7 @@ class StorageExplorer(
         # _explorer/user_actions.py), so the rest is kept.
         given = list(actions or ())
         self._other_actions = [*components.actions, *self.default_actions(), *given]
-        self._chain_formats = [*components.formats, *DEFAULT_FORMATS]
+        self._chain_formats = [*(formats or ()), *components.formats, *DEFAULT_FORMATS]
         self._chain_options = (
             self._under_plugins_options(engine_options),
             engine_preference,

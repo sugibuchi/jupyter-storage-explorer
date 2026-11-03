@@ -66,6 +66,22 @@ def filesystems():
 #     ]
 
 
+# Formats of your own, recognised by file name endings or patterns (see
+# "Register new formats" in docs/storage-explorer.md).
+#
+# from jupyter_storage_explorer.formats import Json
+#
+#
+# class GeoJson(Json):
+#     name = "geojson"
+#     label = "GeoJSON"
+#     extensions = (".geojson",)
+#
+#
+# def formats():
+#     return [GeoJson]
+
+
 # Other StorageExplorer arguments (see "StorageExplorer options" in
 # docs/storage-explorer.md).
 #

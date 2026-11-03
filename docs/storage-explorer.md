@@ -15,6 +15,7 @@ edit files.
 - [Data browser and view tabs](#data-browser-and-view-tabs)
 - [Remembered states](#remembered-states)
 - [Supported formats](#supported-formats)
+- [Register new formats](#register-new-formats)
 - [Engine options](#engine-options)
 - [Working with the explorer from Python](#working-with-the-explorer-from-python)
 - [StorageExplorer options](#storageexplorer-options)
@@ -446,6 +447,54 @@ installed in the kernel, each snippet under its engine.
 The name identifies the format in CSS (see [Icons](../DEVELOPMENT.md#icons)) and in [Engine options](#engine-options).
 To view or load a format your own way, see [Actions of your own](#actions-of-your-own).
 
+## Register new formats
+
+To register a format, define its class in `common.py` or `launcher.py`, and return it from `formats()`:
+
+```python
+from jupyter_storage_explorer.formats import Json
+
+
+class GeoJson(Json):
+    name = "geojson"
+    label = "GeoJSON"
+    extensions = (".geojson",)
+
+
+class NamedJson(Json):
+    name = "named-json"
+    label = "JSON by name"
+    extensions = ()  # Json's ".json" files stay Json's
+    name_patterns = (r"settings\.conf", r".*\.manifest")
+
+
+def formats():
+    return [GeoJson, NamedJson]
+```
+
+A format has these attributes:
+
+- `name` identifies it, and must be its own.
+- `label` is what the explorer shows.
+- `extensions` are file name endings, in lower case.
+- `name_patterns` are regular expressions of whole file names. Case matters: start one with `(?i)` to ignore it.
+- `priority` decides between formats matching one file: the highest wins.
+
+A format inherits its parent's attributes, so `NamedJson` sets `extensions` to `()` to leave out `.json` files.
+
+The class you subclass decides what the format's files can do:
+
+- A subclass of a format, here `Json`, is viewed and loaded as that format.
+- A subclass of `Text` is viewed and loaded as text.
+- A subclass of `DataFormat` has no preview or code until you give it [actions of your own](#actions-of-your-own).
+
+A file may also match a format that has its own views or code, e.g. `Csv`. Set a higher `priority` on your format for
+it to win, e.g. `priority = 1`.
+
+To use a format in one explorer only, give it the class: `StorageExplorer(path, formats=[GeoJson])`.
+
+Formats can do more, such as checking a file's contents: see [Formats](plugin-development-guide.md#formats).
+
 ## Actions of your own
 
 You can add views and code of your own, called actions: see the [Action development guide](action-development-guide.md).
@@ -628,6 +677,7 @@ Both files have some of these functions, all optional:
 | `filesystems()`     | `{name: URL or fsspec filesystem}`                                                                              |
 | `plugin_options()`  | The plugins' options, by key, e.g. `{"pandas-support": {"enabled": False}}`; see each plugin's README.          |
 | `engine_options()`  | The engines' options, by engine and format; see [Engine options](#engine-options).                              |
+| `formats()`         | Format classes to detect; see [Register new formats](#register-new-formats).                                    |
 | `transfer_policy()` | Rules of a [transfer policy](#transfer-policy).                                                                 |
 | `parameters()`      | Other [StorageExplorer options](#storageexplorer-options), e.g. `{"engine_preference": ["pandas"]}`.            |
 
@@ -768,4 +818,5 @@ For extending the explorer, tried before the defaults:
 |-------------------------------|------------------------------------------------------------------------------------------------------------|
 | `filesystem_operations=[...]` | File operations; see [File operations](plugin-development-guide.md#file-operations).                       |
 | `actions=[...]`               | Views and code of formats with libraries, as functions; see [Actions](plugin-development-guide.md#actions). |
+| `formats=[...]`               | Format classes to detect; see [Register new formats](#register-new-formats).                               |
 | `filesystem_mappers=[...]`    | How storages are told apart; see [Filesystem mappers](plugin-development-guide.md#filesystem-mappers).      |
