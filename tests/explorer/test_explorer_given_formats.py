@@ -20,9 +20,7 @@ class NamedJson(Json):
 
 
 class TestNamePatterns:
-    @pytest.mark.parametrize(
-        "path", ["/settings.conf", "/a/app.manifest", "/a/APP.Manifest"]
-    )
+    @pytest.mark.parametrize("path", ["/settings.conf", "/a/app.manifest"])
     def test_matching_names(self, make_item, path):
         assert NamedJson().matches(make_item(path, b"{}"))
 
@@ -31,6 +29,19 @@ class TestNamePatterns:
     )
     def test_whole_names_only(self, make_item, path):
         assert not NamedJson().matches(make_item(path, b"{}"))
+
+    @pytest.mark.parametrize("path", ["/Settings.conf", "/a/APP.Manifest"])
+    def test_case_matters(self, make_item, path):
+        assert not NamedJson().matches(make_item(path, b"{}"))
+
+    def test_case_ignored_by_the_pattern(self, make_item):
+        class AnyCase(DataFormat):
+            name = "any-case"
+            label = "Any case"
+            name_patterns = (r"(?i)readme",)
+
+        assert AnyCase().matches(make_item("/README", b""))
+        assert AnyCase().matches(make_item("/readme", b""))
 
     def test_besides_the_extensions(self, make_item):
         class Both(DataFormat):

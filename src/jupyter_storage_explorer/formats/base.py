@@ -67,8 +67,9 @@ class DataFormat:
     name_patterns : tuple of str
         Regular expressions of whole file names, e.g.
         ``(r"settings\\.conf", r".*\\.manifest")``, used by the default
-        ``matches`` besides ``extensions``. Case is ignored. An invalid one
-        is an error when the class is defined. A subclass inherits
+        ``matches`` besides ``extensions``. Case matters: start one with
+        ``(?i)`` to ignore it. An invalid one is an error when the class is
+        defined. A subclass inherits
         ``extensions``: set them to ``()`` to match by names alone.
     file_icon : str, tuple of (str, str), or None, default None
         The icon of the format's files in the explorer's list: one of
@@ -102,9 +103,7 @@ class DataFormat:
         if "name_patterns" in cls.__dict__:
             if isinstance(cls.name_patterns, str):
                 raise TypeError(f"{cls.__name__}.name_patterns must be a tuple")
-            cls._name_regexes = tuple(
-                re.compile(pattern, re.IGNORECASE) for pattern in cls.name_patterns
-            )
+            cls._name_regexes = tuple(map(re.compile, cls.name_patterns))
 
     def matches(self, ctx: ItemContext) -> bool:
         """Whether a file or folder is in this format.

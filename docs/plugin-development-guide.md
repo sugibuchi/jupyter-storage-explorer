@@ -135,8 +135,8 @@ menus. A subclass of a format, e.g. a TSV of `Csv`, takes a name of its own.
 A format of text files subclasses `Text`, e.g. `class GeoJson(Text)`. Its files can then always be viewed as plain
 text, in **Preview as**, and opened in JupyterLab's text editor. Its priority is 0 by default, not the fallback's -10.
 
-The default `matches(ctx)` checks `extensions`, and `name_patterns`: regular expressions of whole file names, ignoring
-case, e.g. `(r"settings\.conf",)`. A subclass inherits `extensions`, so set them to `()` to match by names alone. A
+The default `matches(ctx)` checks `extensions`, and `name_patterns`: regular expressions of whole file names, e.g.
+`(r"settings\.conf",)`. Case matters in them, unless one starts with `(?i)`. A subclass inherits `extensions`, so set them to `()` to match by names alone. A
 folder format (a table of files) overrides `matches` and looks at the folder's listing (`ctx.children`,
 `ctx.child_names`).
 

@@ -477,7 +477,7 @@ A format has these attributes:
 - `name` identifies it, and must be its own.
 - `label` is what the explorer shows.
 - `extensions` are file name endings, in lower case.
-- `name_patterns` are regular expressions of whole file names. Case is ignored.
+- `name_patterns` are regular expressions of whole file names. Case matters: start one with `(?i)` to ignore it.
 - `priority` decides between formats matching one file: the highest wins.
 
 A format inherits its parent's attributes, so `NamedJson` sets `extensions` to `()` to leave out `.json` files.
