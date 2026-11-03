@@ -275,7 +275,8 @@ class TestFileFormat:
         assert not abc().matches(make_item("/x.csv", b""))
         docker = file_format(names="Dockerfile", label="Dockerfiles", name="docker")
         assert (docker.name, docker.label) == ("docker", "Dockerfiles")
-        assert docker().matches(make_item("/app/dockerfile", b""))
+        assert docker().matches(make_item("/app/Dockerfile", b""))
+        assert not docker().matches(make_item("/app/dockerfile", b""))
 
     def test_folders(self, make_item, memfs):
         zarr = file_format(names="*.zarr", is_dir=True)

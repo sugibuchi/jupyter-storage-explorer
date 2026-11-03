@@ -146,7 +146,7 @@ file_format(names="*.zarr", is_dir=True)  # folders, by name
 file_format(".log", label="Logs", name="logs")  # with a label and a name of your own
 ```
 
-Case is ignored.
+Extensions ignore case. Case matters in `names`.
 
 ### The action function
 

@@ -32,13 +32,13 @@ _NUMBERS = itertools.count(1)
 
 class UserDefinedFormat(DataFormat):
     """A format made by ``file_format``: files, or folders, whose names end
-    with one of ``extensions`` or match one of ``names``, glob patterns, both
-    ignoring case.
+    with one of ``extensions``, ignoring case, or match one of ``names``, glob
+    patterns, in which case matters.
 
     Attributes
     ----------
     names : tuple of str
-        Glob patterns of whole names, lower case, e.g. ``("dockerfile",)``.
+        Glob patterns of whole names, e.g. ``("Dockerfile",)``.
     for_folders : bool
         Whether it is a format of folders rather than files.
     """
@@ -54,8 +54,8 @@ class UserDefinedFormat(DataFormat):
         name ends with one of ``extensions`` or matches one of ``names``."""
         if ctx.is_dir != self.for_folders:
             return False
-        name = ctx.name.lower()
-        return name.endswith(self.extensions) or any(
+        name = ctx.name
+        return name.lower().endswith(self.extensions) or any(
             fnmatch.fnmatchcase(name, pattern) for pattern in self.names
         )
 
@@ -83,7 +83,7 @@ def file_format(
         is added if missing. Case is ignored.
     names : str or iterable of str, optional
         Glob patterns of whole names, e.g. ``"Dockerfile"`` or
-        ``"*.zarr"``. Case is ignored.
+        ``"*.zarr"``. Case matters.
     is_dir : bool, default False
         A format of folders, e.g. ``file_format(names="*.zarr",
         is_dir=True)``, rather than files.
@@ -106,7 +106,8 @@ def file_format(
         Without ``extensions`` or ``names``.
     """
     endings = tuple(
-        e if e.startswith(".") else f".{e}" for e in _strings(extensions, "extensions")
+        e.lower() if e.startswith(".") else f".{e.lower()}"
+        for e in _strings(extensions, "extensions")
     )
     patterns = _strings(names, "names")
     if not endings and not patterns:
@@ -132,10 +133,10 @@ def file_format(
 
 
 def _strings(value: str | Iterable[str] | None, what: str) -> tuple[str, ...]:
-    """``value`` as a tuple of lower-case strings: one, several, or none."""
+    """``value`` as a tuple of strings: one, several, or none."""
     if value is None:
         return ()
     values = (value,) if isinstance(value, str) else tuple(value)
     if not all(isinstance(v, str) and v for v in values):
         raise TypeError(f"file_format: {what} must be strings, not {value!r}")
-    return tuple(v.lower() for v in values)
+    return values
