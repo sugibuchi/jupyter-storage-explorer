@@ -60,9 +60,6 @@ does: S3, Azure, Google Cloud Storage, SFTP, Hugging Face and many more. See
   - A complete extension, for another storage or data framework? Develop a
     [plugin](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/plugin-development-guide.md) with
     your AI assistant: its guide is written for both of you.
-  - Your storages, engine options and plugin options, set once in
-    [`common.py`](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#configuration-files)
-    for every explorer, in notebooks and in the launcher.
 - **Safe file operations**: keep calm and copy on.
   - Copy, move and delete large folders
     [in the background](https://github.com/sugibuchi/jupyter-storage-explorer/blob/main/docs/storage-explorer.md#background-operations),
