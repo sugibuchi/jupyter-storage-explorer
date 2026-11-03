@@ -470,14 +470,14 @@ def sqlite_tables(ctx):
         finally:
             con.close()
     finally:
-        cache.release(ctx.location, delay=600)
+        cache.release(ctx, delay=600)
     return [name for (name,) in rows]
 ```
 
 - `get(ctx)` downloads the file, and returns the path of its copy. A local file is its own copy.
 - The copy stays valid while the file is unchanged. Views of the same file share it, without downloading it again.
-- `release(ctx.location, delay=...)` says the view no longer uses the copy. The copy is deleted after the delay, in
-  seconds, unless a view uses it again meanwhile.
+- `release(ctx, delay=...)` says the view no longer uses the copy. The copy is deleted after the delay, in seconds,
+  unless a view uses it again meanwhile.
 - Release the copy also when reading it fails, as the `finally` above does.
 - Close what reads the copy before releasing it: on Windows, a file still open cannot be deleted.
 - `status(ctx)` says whether a valid copy is there: `"cached"`, `"invalid"` or `"not_cached"`. Before a large download,

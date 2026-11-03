@@ -116,6 +116,19 @@ def test_unknown_locations_ignored(cache, make_item):
     cache.release(remote(make_item).location)
 
 
+@pytest.mark.parametrize(
+    "named",
+    [lambda item: item, lambda item: item.location],
+    ids=["context", "location"],
+)
+def test_released_by_context_or_location(cache, make_item, named):
+    item = remote(make_item)
+    path = cache.get(item)
+    cache.release(named(item))
+    assert cache.status(item) == "not_cached"
+    assert not path.exists()
+
+
 def test_one_download_for_calls_at_once(cache, make_item, memfs, monkeypatch):
     started, release, got = threading.Event(), threading.Event(), []
     get_file = memfs.get_file

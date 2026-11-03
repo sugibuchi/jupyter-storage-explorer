@@ -618,8 +618,8 @@ its copy:
   own copy.
 - A copy stays valid while the remote file's modification time is the same; `get` downloads a changed file again.
 - `status(ctx)` says "cached", "invalid" (changed since) or "not_cached": ask before a large download unless "cached".
-- `get` counts the view as a user; release it in `on_close` with `release(ctx.location, delay=...)`. The copy is
-  deleted once no view uses it, after the delay, so that viewing the file again soon reuses it.
+- `get` counts the view as a user; release it in `on_close` with `release(ctx, delay=...)`. The copy is deleted once
+  no view uses it, after the delay, so that viewing the file again soon reuses it.
 - Release it also when what follows `get` fails, e.g. opening the copy.
 - Close what reads the copy before releasing it: on Windows, a file still open cannot be deleted. `on_close` calls
   its functions in the order given.
@@ -635,11 +635,11 @@ def open_copy():
     try:
         con = duckdb.connect(str(path), read_only=True)
     except Exception:
-        cache.release(ctx.location)  # get() counted this view
+        cache.release(ctx)  # get() counted this view
         raise
     view = TableSetView(...)
     view.on_close(lambda view: con.close())  # first
-    view.on_close(lambda view: cache.release(ctx.location, delay=600))
+    view.on_close(lambda view: cache.release(ctx, delay=600))
     return view
 
 
