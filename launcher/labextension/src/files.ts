@@ -24,6 +24,7 @@ import { ISignal, Signal } from '@lumino/signaling';
 import { registry } from './common';
 
 const DRIVE_NAME = 'StorageExplorer';
+const TEXT_EDITOR = 'Editor'; // the name of JupyterLab's widget factory
 const REFUSED = 'Files of Storage Explorer are opened, renamed and deleted in the explorer.';
 
 // The options JupyterLab reads a file with.
@@ -184,9 +185,18 @@ export const filesPlugin: JupyterFrontEndPlugin<void> = {
       canOpen(name: string): boolean {
         return app.docRegistry.getFileTypesForPath(name).length > 0;
       },
-      async open(file: IExplorerFile): Promise<void> {
+      // To edit, text files go to the text editor: JupyterLab's default for
+      // some (JSON, CSV, ...) is a viewer. Others keep their default, as a
+      // text editor cannot show an image, and a notebook's editor is its own.
+      async open(file: IExplorerFile, options?: { edit?: boolean }): Promise<void> {
         const path = drive.add(file);
-        await app.commands.execute('docmanager:open', { path: `${DRIVE_NAME}:${path}` });
+        const isText = app.docRegistry
+          .getFileTypesForPath(PathExt.basename(path))
+          .every(type => type.contentType === 'file' && type.fileFormat === 'text');
+        await app.commands.execute('docmanager:open', {
+          path: `${DRIVE_NAME}:${path}`,
+          ...(options?.edit && isText ? { factory: TEXT_EDITOR } : {})
+        });
       }
     });
   }
