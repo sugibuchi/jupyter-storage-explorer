@@ -6,7 +6,8 @@ actions' (the ``actions`` package)."""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar
+import re
+from typing import TYPE_CHECKING, Any, ClassVar
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -39,14 +40,15 @@ class DataFormat:
 
     Subclass it for a format of your own, and give ``StorageExplorer`` the
     actions of its data as ``actions``: views and code, whose ``format`` it
-    is. Explorers detect the formats of their actions, one object of each.
+    is. Explorers detect the formats of their actions, one object of each,
+    and those given as ``formats``.
 
-    File formats usually only set ``extensions``. Directory formats, e.g.
-    Delta Lake tables, Spark output or Hive-partitioned datasets, override
-    ``matches`` and inspect the folder's listing (``ctx.children``,
-    ``ctx.child_names``). What detection finds and actions need, e.g. a
-    Parquet dataset's partition layout, is kept by the format, by location:
-    actions are given the format.
+    File formats usually only set ``extensions`` or ``name_patterns``.
+    Directory formats, e.g. Delta Lake tables, Spark output or
+    Hive-partitioned datasets, override ``matches`` and inspect the folder's
+    listing (``ctx.children``, ``ctx.child_names``). What detection finds and
+    actions need, e.g. a Parquet dataset's partition layout, is kept by the
+    format, by location: actions are given the format.
 
     Attributes
     ----------
@@ -62,6 +64,12 @@ class DataFormat:
     extensions : tuple of str
         Lower-case file name endings, e.g. ``(".parquet",)``, used by the
         default ``matches``.
+    name_patterns : tuple of str
+        Regular expressions of whole file names, e.g.
+        ``(r"settings\\.conf", r".*\\.manifest")``, used by the default
+        ``matches`` besides ``extensions``. Case is ignored. An invalid one
+        is an error when the class is defined. A subclass inherits
+        ``extensions``: set them to ``()`` to match by names alone.
     file_icon : str, tuple of (str, str), or None, default None
         The icon of the format's files in the explorer's list: one of
         ``FILE_ICONS`` (JupyterLab's file icons), e.g. "spreadsheet"; or an
@@ -83,8 +91,20 @@ class DataFormat:
     label: ClassVar[str]
     priority: ClassVar[int] = 0
     extensions: ClassVar[tuple[str, ...]] = ()
+    name_patterns: ClassVar[tuple[str, ...]] = ()
     file_icon: ClassVar[str | tuple[str, str] | None] = None
     sniff_bytes: ClassVar[int] = 0
+    # name_patterns compiled once: matches runs for every file of a listing.
+    _name_regexes: ClassVar[tuple[re.Pattern[str], ...]] = ()
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        if "name_patterns" in cls.__dict__:
+            if isinstance(cls.name_patterns, str):
+                raise TypeError(f"{cls.__name__}.name_patterns must be a tuple")
+            cls._name_regexes = tuple(
+                re.compile(pattern, re.IGNORECASE) for pattern in cls.name_patterns
+            )
 
     def matches(self, ctx: ItemContext) -> bool:
         """Whether a file or folder is in this format.
@@ -103,9 +123,15 @@ class DataFormat:
         Returns
         -------
         bool
-            By default: a file whose name ends with one of ``extensions``.
+            By default: a file whose name ends with one of ``extensions``, or
+            matches one of ``name_patterns``.
         """
-        return not ctx.is_dir and ctx.name.lower().endswith(self.extensions)
+        if ctx.is_dir:
+            return False
+        name = ctx.name
+        return name.lower().endswith(self.extensions) or any(
+            regex.fullmatch(name) for regex in self._name_regexes
+        )
 
     def sniff(self, ctx: ItemContext, head: bytes) -> bool:
         """Whether a file this format ``matches`` is in it, by its contents:

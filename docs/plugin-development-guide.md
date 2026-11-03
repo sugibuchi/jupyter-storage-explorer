@@ -135,8 +135,10 @@ menus. A subclass of a format, e.g. a TSV of `Csv`, takes a name of its own.
 A format of text files subclasses `Text`, e.g. `class GeoJson(Text)`. Its files can then always be viewed as plain
 text, in **Preview as**, and opened in JupyterLab's text editor. Its priority is 0 by default, not the fallback's -10.
 
-The default `matches(ctx)` checks `extensions`. A folder format (a table of files) overrides it and looks at the
-folder's listing (`ctx.children`, `ctx.child_names`).
+The default `matches(ctx)` checks `extensions`, and `name_patterns`: regular expressions of whole file names, ignoring
+case, e.g. `(r"settings\.conf",)`. A subclass inherits `extensions`, so set them to `()` to match by names alone. A
+folder format (a table of files) overrides `matches` and looks at the folder's listing (`ctx.children`,
+`ctx.child_names`).
 
 A format whose files have a binary signature checks it with `sniff`, given the file's first `sniff_bytes` bytes. Give
 it to every format that has one, above all for a common extension (`.db`: SQLite's and DuckDB's): it is checked
@@ -162,8 +164,8 @@ class DuckDBDatabase(DataFormat):
 - `ctx.head(n)` and `ctx.head_text(n)`.
 
 A format keeps what detection found for its actions, by location, e.g. `Parquet.layout(ctx)`. Explorers detect the
-formats of their actions: a new format comes with an action of it, or with a plugin's `formats`. The standard formats
-are always detected: Delta Lake, Parquet, CSV, JSON Lines, JSON, Excel, Markdown, text and images. An action can handle
+formats of their actions: a new format comes with an action of it, with a plugin's `formats`, or with the explorer's
+`formats` argument. The standard formats are always detected: Delta Lake, Parquet, CSV, JSON Lines, JSON, Excel, Markdown, text and images. An action can handle
 one of them with another engine.
 
 A plugin's format may have code actions only. Its items then have no preview, and **Python code** offers their code.

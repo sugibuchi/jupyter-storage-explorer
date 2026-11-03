@@ -526,6 +526,12 @@ class TestChain:
         assert view_.data.collect()["a"].to_list() == [1, 2]
 
 
+@pytest.mark.parametrize("given", [Csv(), "csv"])
+def test_formats_must_be_classes(given):
+    with pytest.raises(TypeError, match="not a format"):
+        ActionChain(DEFAULT_ACTIONS, formats=[given])
+
+
 class TestExplorer:
     """``actions`` are tried before the plugins' and ``default_actions()``."""
 

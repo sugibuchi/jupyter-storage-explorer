@@ -446,6 +446,34 @@ installed in the kernel, each snippet under its engine.
 The name identifies the format in CSS (see [Icons](../DEVELOPMENT.md#icons)) and in [Engine options](#engine-options).
 To view or load a format your own way, see [Actions of your own](#actions-of-your-own).
 
+## Files with other names
+
+To give files a format by their names, add a format to `common.py` or `launcher.py`. This one makes some files JSON
+whatever their extensions:
+
+```python
+from jupyter_storage_explorer.formats import Json
+
+
+class NamedJson(Json):
+    name = "named-json"
+    label = "JSON by name"
+    extensions = ()  # Json's ".json" files stay Json's
+    name_patterns = (r"settings\.conf", r".*\.manifest")
+
+
+def formats():
+    return [NamedJson]
+```
+
+- `name_patterns` are regular expressions of whole file names. Case is ignored.
+- Files matching them are viewed and loaded as the format you subclass, here JSON.
+- Your format needs a `name` of its own.
+- A file also matching a format that has its own views or code, e.g. `Csv`, needs your format to set a higher `priority`,
+  e.g. `priority = 1`.
+
+To use it in one explorer only, give it the class: `StorageExplorer(path, formats=[NamedJson])`.
+
 ## Actions of your own
 
 You can add views and code of your own, called actions: see the [Action development guide](action-development-guide.md).
@@ -628,6 +656,7 @@ Both files have some of these functions, all optional:
 | `filesystems()`     | `{name: URL or fsspec filesystem}`                                                                              |
 | `plugin_options()`  | The plugins' options, by key, e.g. `{"pandas-support": {"enabled": False}}`; see each plugin's README.          |
 | `engine_options()`  | The engines' options, by engine and format; see [Engine options](#engine-options).                              |
+| `formats()`         | Format classes to detect; see [Files with other names](#files-with-other-names).                                |
 | `transfer_policy()` | Rules of a [transfer policy](#transfer-policy).                                                                 |
 | `parameters()`      | Other [StorageExplorer options](#storageexplorer-options), e.g. `{"engine_preference": ["pandas"]}`.            |
 
@@ -768,4 +797,5 @@ For extending the explorer, tried before the defaults:
 |-------------------------------|------------------------------------------------------------------------------------------------------------|
 | `filesystem_operations=[...]` | File operations; see [File operations](plugin-development-guide.md#file-operations).                       |
 | `actions=[...]`               | Views and code of formats with libraries, as functions; see [Actions](plugin-development-guide.md#actions). |
+| `formats=[...]`               | Format classes to detect; see [Files with other names](#files-with-other-names).                           |
 | `filesystem_mappers=[...]`    | How storages are told apart; see [Filesystem mappers](plugin-development-guide.md#filesystem-mappers).      |

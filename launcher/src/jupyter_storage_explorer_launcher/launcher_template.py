@@ -66,6 +66,23 @@ def filesystems():
 #     ]
 
 
+# Formats to detect, e.g. files that are JSON whatever their names say (see
+# "Files with other names" in docs/storage-explorer.md).
+#
+# from jupyter_storage_explorer.formats import Json
+#
+#
+# class NamedJson(Json):
+#     name = "named-json"
+#     label = "JSON by name"
+#     extensions = ()
+#     name_patterns = (r"settings\.conf", r".*\.manifest")
+#
+#
+# def formats():
+#     return [NamedJson]
+
+
 # Other StorageExplorer arguments (see "StorageExplorer options" in
 # docs/storage-explorer.md).
 #

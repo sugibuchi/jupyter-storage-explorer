@@ -13,6 +13,7 @@ from jupyter_storage_explorer.actions import Action, CodeAction, ViewAction
 from jupyter_storage_explorer.actions.base import check_actions
 from jupyter_storage_explorer.actions.python import PythonEngine
 from jupyter_storage_explorer.engine import _ByProtocol
+from jupyter_storage_explorer.formats.base import DataFormat
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
@@ -20,7 +21,6 @@ if TYPE_CHECKING:
     from jupyter_storage_explorer.actions import ActionOptions
     from jupyter_storage_explorer.base import ItemContext, Location
     from jupyter_storage_explorer.engine import Engine, EngineOptions
-    from jupyter_storage_explorer.formats.base import DataFormat
     from jupyter_storage_explorer.packages import PythonPackage
     from jupyter_storage_explorer.views import View, ViewLimits
 
@@ -96,7 +96,7 @@ class ActionChain:
     engine (for that format) takes: a typo would otherwise be ignored; and
     actions that cannot be used together (``actions.base.check_actions``).
     A function's options are checked when it is called. TypeError for an
-    item that is no action.
+    item that is no action, or a format that is no ``DataFormat`` class.
     """
 
     def __init__(
@@ -112,6 +112,13 @@ class ActionChain:
             if not isinstance(action, Action):
                 raise TypeError(
                     f"not an action: {action!r}; decorate it with @view or @code"
+                )
+        formats = list(formats)
+        for cls in formats:
+            if not (isinstance(cls, type) and issubclass(cls, DataFormat)):
+                raise TypeError(
+                    f"not a format: {cls!r}; give a subclass of DataFormat, "
+                    "not an object of it"
                 )
         self.engine_options = engine_options or {}
         # What takes options, by engine key ("python" for PythonEngine): what

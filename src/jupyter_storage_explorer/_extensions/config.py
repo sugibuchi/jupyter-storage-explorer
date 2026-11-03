@@ -35,6 +35,10 @@ Each file may have these functions, all optional:
     menus; a later layer's come first. Their formats are detected with the
     defaults'. Two actions of one kind, format, engine and label are an
     error: give yours another label.
+``formats()``
+    ``[DataFormat class, ...]``: formats to detect without an action of their
+    own (see ``StorageExplorer``'s ``formats``), e.g. a subclass of ``Json``
+    recognising other file names; a later layer's come first.
 ``engine_options()``
     ``{engine key: {format or "*": {option: value}}}`` for the actions (see
     ``StorageExplorer``'s ``engine_options``), merged option by option (a
@@ -99,6 +103,7 @@ MERGES = {
     "filesystems": "by name",
     "plugin_options": "by plugin",
     "actions": "first",
+    "formats": "first",
     "engine_options": "by option",
     "filesystem_operations": "first",
     "filesystem_mappers": "first",
@@ -120,8 +125,6 @@ RETIRED = {
     # CSS applied to the page while the tab was open: not to explorers in
     # notebooks, which JupyterLab's custom.css reaches.
     "style": "use JupyterLab's custom.css instead, for every page (see Icons in the project's DEVELOPMENT.md)",
-    # Formats are those of the actions.
-    "formats": "give actions() of your formats instead: explorers detect their formats",
     # FormatSupport classes, replaced by actions.
     "supports": "give actions() instead: functions decorated with @view or @code (see the plugin guide)",
 }
@@ -161,6 +164,7 @@ class Settings:
     # {plugin key: {option: value}}
     plugin_options: dict[str, dict[str, Any]] = dataclasses.field(default_factory=dict)
     actions: list[Any] = dataclasses.field(default_factory=list)
+    formats: list[Any] = dataclasses.field(default_factory=list)
     # {engine key: {format or "*": a dict of options, or a function of the location}}
     engine_options: dict[str, dict[str, Any]] = dataclasses.field(default_factory=dict)
     filesystem_operations: list[Any] = dataclasses.field(default_factory=list)

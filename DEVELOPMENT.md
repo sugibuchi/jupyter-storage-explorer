@@ -483,12 +483,12 @@ file may define these functions:
 
 - `filesystems()`, `filesystem_operations()`, `filesystem_mappers()` and `transfer_policy()`;
 - `plugin_options()`, merged by plugin, then option;
-- `actions()`, concatenated, a later layer's first;
+- `actions()` and `formats()`, concatenated, a later layer's first;
 - `engine_options()`, merged by engine, format, then option;
 - `parameters()`, the explorer's other arguments;
 - `final()`, which names what later layers cannot change, nor the explorer's arguments.
 
-The retired `style()`, `formats()` and `supports()` are ignored with a warning.
+The retired `style()` and `supports()` are ignored with a warning.
 
 Errors are handled by whose file has them:
 

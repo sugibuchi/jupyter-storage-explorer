@@ -431,21 +431,33 @@ class TestFinal:
         assert warning.startswith(f"{path}: style() is no longer used and is ignored")
         assert "custom.css" in warning
 
-    def test_retired_formats_is_ignored_with_a_warning(self, tmp_path):
-        """formats() is no longer used: formats are those of the actions."""
-        path = layer(
+    def test_formats_come_first_then_earlier_layers(self, tmp_path):
+        """The formats of each layer, a later layer's first, for the explorer
+        to detect."""
+        system = layer(
+            tmp_path,
+            "system",
+            """
+            from jupyter_storage_explorer.formats import Csv
+
+            def formats():
+                return [Csv]
+            """,
+        )
+        user = layer(
             tmp_path,
             "user",
             """
+            from jupyter_storage_explorer.formats import Json
+
             def formats():
-                return []
+                return [Json]
             """,
         )
-        settings = load_settings([path])
-        assert settings.explorer_arguments() == defaults()
-        [warning] = settings.warnings
-        assert warning.startswith(f"{path}: formats() is no longer used and is ignored")
-        assert "actions()" in warning
+        settings = load_settings([user, system])
+        assert settings.warnings == []
+        _, kwargs = settings.explorer_arguments()
+        assert [f.__name__ for f in kwargs["formats"]] == ["Json", "Csv"]
 
     def test_retired_supports_is_ignored_with_a_warning(self, tmp_path):
         """supports() is no longer used: FormatSupport classes gave way to
