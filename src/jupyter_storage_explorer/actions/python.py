@@ -38,7 +38,7 @@ from jupyter_storage_explorer.views import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Callable, Mapping
 
 __all__ = [
     "BUILT_IN_ACTIONS",
@@ -47,6 +47,7 @@ __all__ = [
     "image_code",
     "image_view",
     "json_code",
+    "json_formatted_view",
     "json_view",
     "markdown_view",
     "text_code",
@@ -197,17 +198,45 @@ def json_code(ctx: ItemContext, options: FsspecOptions) -> str:
     return _fsspec_code(JSON_TEMPLATE, ctx, options)
 
 
-@view(format=Json, engine=PythonEngine, code=json_code)
-def json_view(ctx: ItemContext, options: FsspecOptions, limits: ViewLimits) -> View:
-    """JSON as a tree, or as text if it is too large or invalid."""
+def _parsed_json(
+    ctx: ItemContext, limits: ViewLimits, shown_as: str, show: Callable[[Any], View]
+) -> View:
+    """``show`` of the file's JSON value, or its text as it is if it is too
+    large to read whole, or invalid: ``shown_as`` tells the note why."""
     text, truncated = ctx.head_text(limits.max_bytes)
     if truncated:
-        note = f"{_size_note(ctx, limits)}; too large to show as a tree"
+        note = f"{_size_note(ctx, limits)}; too large to {shown_as}"
         return _text_view(text, "json", note)
     try:
-        return TreeView(value=json.loads(text))
+        value = json.loads(text)
     except json.JSONDecodeError as exc:
         return _text_view(text, "json", f"Invalid JSON: {exc}")
+    return show(value)
+
+
+@view(format=Json, engine=PythonEngine, label="JSON tree", code=json_code)
+def json_view(ctx: ItemContext, options: FsspecOptions, limits: ViewLimits) -> View:
+    """JSON as a tree, or as text if it is too large or invalid."""
+    return _parsed_json(
+        ctx, limits, "show as a tree", lambda value: TreeView(value=value)
+    )
+
+
+@view(format=Json, engine=PythonEngine, label="Formatted JSON", code=json_code)
+def json_formatted_view(
+    ctx: ItemContext, options: FsspecOptions, limits: ViewLimits
+) -> View:
+    """JSON indented and highlighted, or as it is if it is too large or
+    invalid. Its keys stay in the file's order. It shows the value Python
+    reads: e.g. ``1.50`` as ``1.5``, and a repeated key once, the last."""
+    return _parsed_json(
+        ctx,
+        limits,
+        "format",
+        lambda value: _text_view(
+            json.dumps(value, indent=2, ensure_ascii=False), "json"
+        ),
+    )
 
 
 @view(format=Image, engine=PythonEngine)
@@ -249,6 +278,7 @@ def image_code(ctx: ItemContext, options: FsspecOptions) -> str:
 # format's own actions before its base classes', e.g. Markdown's before Text's.
 BUILT_IN_ACTIONS = register_actions(
     json_view,
+    json_formatted_view,
     json_code,
     markdown_view,
     text_view,

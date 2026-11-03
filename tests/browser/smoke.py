@@ -353,6 +353,22 @@ def preview(x: Explorer) -> None:
 
 
 @check
+def json_views(x: Explorer) -> None:
+    x.storage("Sales lake")
+    x.el.locator(".jse-crumb", has_text="/sales-lake").click()
+    x.row("catalog.json").click(button="right")
+    x.menu_item("Preview as").hover()
+    views = x.page.locator(".jse-submenu .jse-menu-item:visible")
+    expect(views).to_have_text(["JSON tree", "Formatted JSON", "Text"])
+    views.filter(has_text="Formatted JSON").click()
+    text = x.preview.locator(".jse-text")
+    # Pretty-printed: one key to a line, indented.
+    expect(text).to_contain_text('\n    "name": "orders"')
+    x.preview.press("Escape")
+    expect(x.preview).to_be_hidden()
+
+
+@check
 def preview_follows_clicks(x: Explorer) -> None:
     # While the panel is open, a click previews a file, and a data folder too
     # (a Delta table, a partitioned Parquet dataset), as the kernel finds its
