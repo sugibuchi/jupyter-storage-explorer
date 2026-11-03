@@ -449,11 +449,16 @@ To view or load a format your own way, see [Actions of your own](#actions-of-you
 
 ## Register new formats
 
-To give files a format by their names, add a format to `common.py` or `launcher.py`. This one makes some files JSON
-whatever their extensions:
+To register a format, define its class in `common.py` or `launcher.py`, and return it from `formats()`:
 
 ```python
 from jupyter_storage_explorer.formats import Json
+
+
+class GeoJson(Json):
+    name = "geojson"
+    label = "GeoJSON"
+    extensions = (".geojson",)
 
 
 class NamedJson(Json):
@@ -464,16 +469,31 @@ class NamedJson(Json):
 
 
 def formats():
-    return [NamedJson]
+    return [GeoJson, NamedJson]
 ```
 
-- `name_patterns` are regular expressions of whole file names. Case is ignored.
-- Files matching them are viewed and loaded as the format you subclass, here JSON.
-- Your format needs a `name` of its own.
-- A file also matching a format that has its own views or code, e.g. `Csv`, needs your format to set a higher `priority`,
-  e.g. `priority = 1`.
+A format has these attributes:
 
-To use it in one explorer only, give it the class: `StorageExplorer(path, formats=[NamedJson])`.
+- `name` identifies it, and must be its own.
+- `label` is what the explorer shows.
+- `extensions` are file name endings, in lower case.
+- `name_patterns` are regular expressions of whole file names. Case is ignored.
+- `priority` decides between formats matching one file: the highest wins.
+
+A format inherits its parent's attributes, so `NamedJson` sets `extensions` to `()` to leave out `.json` files.
+
+The class you subclass decides what the format's files can do:
+
+- A subclass of a format, here `Json`, is viewed and loaded as that format.
+- A subclass of `Text` is viewed and loaded as text.
+- A subclass of `DataFormat` has no preview or code until you give it [actions of your own](#actions-of-your-own).
+
+A file may also match a format that has its own views or code, e.g. `Csv`. Set a higher `priority` on your format for
+it to win, e.g. `priority = 1`.
+
+To use a format in one explorer only, give it the class: `StorageExplorer(path, formats=[GeoJson])`.
+
+Formats can do more, such as checking a file's contents: see [Formats](plugin-development-guide.md#formats).
 
 ## Actions of your own
 
