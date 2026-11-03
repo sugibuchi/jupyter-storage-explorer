@@ -120,7 +120,8 @@ class TestGivenFormats:
         info = explorer._menu_info(item.formats, [], item.ctx, None)
         assert info["view"]["format"] == "named-json"
         labels = [entry["label"] for entry in info["views"]]
-        assert labels.count(Json.label) == 1
+        assert labels.count("JSON tree") == 1
+        assert labels.count("Formatted JSON") == 1
         assert NamedJson.label not in labels
 
     def test_text_format(self, explorer):

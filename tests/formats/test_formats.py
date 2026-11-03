@@ -4,12 +4,19 @@ engines' are tested in their plugins, plugins/<name>-support/tests)."""
 from __future__ import annotations
 
 import io
+from inspect import cleandoc
 
 import polars as pl
 import pytest
 from all_actions import all_actions
 
 from jupyter_storage_explorer._explorer.actions import ActionChain
+from jupyter_storage_explorer.actions.python import (
+    FsspecOptions,
+    PythonEngine,
+    json_formatted_view,
+    json_view,
+)
 from jupyter_storage_explorer.formats import (
     Csv,
     DeltaLake,
@@ -264,6 +271,59 @@ class TestViews:
         text = view(Json(), make_item("/a.json", b"{oops"))
         assert isinstance(text, TextView)
         assert text.note.startswith("Invalid JSON")
+
+    def test_json_too_large_for_a_tree(self, make_item):
+        text = view(
+            Json(), make_item("/a.json", b'{"a": [1, 2]}'), ViewLimits(max_bytes=4)
+        )
+        assert isinstance(text, TextView)
+        assert text.note.endswith("too large to show as a tree")
+
+    def test_json_formatted(self, make_item):
+        data = '{"b":[1,{"é":null}],"a":1.5}'.encode()
+        shown = json_formatted_view(
+            Json(),
+            make_item("/a.json", data),
+            FsspecOptions(),
+            ViewLimits(),
+        )
+        assert isinstance(shown, TextView)
+        # Indented, the keys in the file's order, other alphabets as they are.
+        assert shown.text == cleandoc("""
+            {
+              "b": [
+                1,
+                {
+                  "é": null
+                }
+              ],
+              "a": 1.5
+            }
+            """)
+        assert shown.language == "json"
+        assert shown.html is not None
+        assert shown.note == ""
+
+    def test_json_formatted_invalid_shown_as_it_is(self, make_item):
+        shown = json_formatted_view(
+            Json(), make_item("/a.json", b"{oops"), FsspecOptions(), ViewLimits()
+        )
+        assert shown.text == "{oops"
+        assert shown.note.startswith("Invalid JSON")
+
+    def test_json_formatted_too_large_shown_as_it_is(self, make_item):
+        shown = json_formatted_view(
+            Json(),
+            make_item("/a.json", b'{"a": [1, 2]}'),
+            FsspecOptions(),
+            ViewLimits(max_bytes=4),
+        )
+        assert shown.note.endswith("too large to format")
+
+    def test_json_tree_is_the_default_view(self, make_item):
+        views = CHAIN.of(Json(), make_item("/a.json", b"{}"))
+        python = [v for v in views if v.engine is PythonEngine]
+        assert python[:2] == [json_view, json_formatted_view]
 
     def test_text_highlighted(self, make_item):
         text = view(Text(), make_item("/a.py", b"import os\n"))
