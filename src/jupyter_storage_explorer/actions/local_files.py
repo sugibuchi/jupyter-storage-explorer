@@ -19,10 +19,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Literal, TypeAlias
 
 from jupyter_storage_explorer import _infos
+from jupyter_storage_explorer.base import ItemContext
 from jupyter_storage_explorer.filesystems.locations import LocalLocation
 
 if TYPE_CHECKING:
-    from jupyter_storage_explorer.base import ItemContext, Location
+    from jupyter_storage_explorer.base import Location
 
 log = logging.getLogger(__name__)
 
@@ -84,12 +85,12 @@ class LocalFileCache:
     ...     try:
     ...         con = duckdb.connect(str(path), read_only=True)
     ...     except Exception:
-    ...         cache.release(ctx.location)  # get() counted this view
+    ...         cache.release(ctx)  # get() counted this view
     ...         raise
     ...     view = TableSetView(...)
     ...     # Closed first: a file still open cannot be deleted on Windows.
     ...     view.on_close(lambda view: con.close())
-    ...     view.on_close(lambda view: cache.release(ctx.location, delay=600))
+    ...     view.on_close(lambda view: cache.release(ctx, delay=600))
     ...     return view
     >>> large = ctx.size is None or ctx.size > limits.max_whole_file_bytes
     >>> if cache.status(ctx) != "cached" and large:
@@ -187,7 +188,7 @@ class LocalFileCache:
                 self._copies[ctx.location] = copy
                 return self._use(copy)
 
-    def release(self, location: Location, delay: float = 0) -> None:
+    def release(self, item: ItemContext | Location, delay: float = 0) -> None:
         """Release one use of the file's copy (see ``get``): once no caller
         uses it, the copy is deleted after ``delay`` seconds, unless ``get``
         takes it again meanwhile. Close what reads the copy first: on
@@ -195,12 +196,16 @@ class LocalFileCache:
 
         Parameters
         ----------
-        location : Location
-            The file's location (``ctx.location``).
+        item : ItemContext or Location
+            The file: the ``ctx`` given to ``get``, or its location, which
+            must be that ``ctx.location``. Only the location is used, so a
+            ``ctx`` read earlier will do. A location without a copy, such as
+            a local file's, is ignored.
         delay : float, default 0
             Seconds to keep the copy unused, so that viewing the file again
             soon reuses it; 0 deletes it at once.
         """
+        location = item.location if isinstance(item, ItemContext) else item
         with self._lock:
             copy = self._copies.get(location)
             if copy is None:
