@@ -14,6 +14,30 @@ function renderTable(section) {
   return h("div", { className: "jse-table-wrap" }, h("table", { className: "jse-data" }, thead, h("tbody", {}, ...body)));
 }
 
+// A tree's nodes are drawn when first opened, and a long array or object in
+// ranges of this many: a large file's nodes would freeze the page.
+const JSON_RANGE = 100;
+
+function jsonNode(summary, open, children) {
+  const box = h("details", { open }, h("summary", { textContent: summary }));
+  if (open) box.append(...children());
+  else box.addEventListener("toggle", () => box.append(...children()), { once: true });
+  return box;
+}
+
+function jsonEntries(entries, depth) {
+  if (entries.length <= JSON_RANGE) return entries.map(([k, v]) => renderJson(v, k, depth));
+  // Ranges of ranges, when even the ranges would be too many.
+  let size = JSON_RANGE;
+  while (size * JSON_RANGE < entries.length) size *= JSON_RANGE;
+  const ranges = [];
+  for (let from = 0; from < entries.length; from += size) {
+    const part = entries.slice(from, from + size);
+    ranges.push(jsonNode(`${part[0][0]} … ${part.at(-1)[0]}`, false, () => jsonEntries(part, depth)));
+  }
+  return ranges;
+}
+
 function renderJson(value, key, depth) {
   const label = key == null ? "" : `${key}: `;
   if (value === null || typeof value !== "object") {
@@ -22,7 +46,7 @@ function renderJson(value, key, depth) {
   const isArray = Array.isArray(value);
   const entries = isArray ? value.map((v, i) => [i, v]) : Object.entries(value);
   const summary = `${label}${isArray ? `[${entries.length}]` : `{${entries.length}}`}`;
-  return h("details", { open: depth < 2 }, h("summary", { textContent: summary }), ...entries.map(([k, v]) => renderJson(v, k, depth + 1)));
+  return jsonNode(summary, depth < 2, () => jsonEntries(entries, depth + 1));
 }
 
 function renderMedia(section) {

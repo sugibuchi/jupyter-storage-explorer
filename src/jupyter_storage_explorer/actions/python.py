@@ -35,6 +35,7 @@ from jupyter_storage_explorer.views import (
     TreeView,
     View,
     ViewLimits,
+    ViewWithConfirmation,
 )
 
 if TYPE_CHECKING:
@@ -198,27 +199,71 @@ def json_code(ctx: ItemContext, options: FsspecOptions) -> str:
     return _fsspec_code(JSON_TEMPLATE, ctx, options)
 
 
-def _parsed_json(
-    ctx: ItemContext, limits: ViewLimits, shown_as: str, show: Callable[[Any], View]
-) -> View:
-    """``show`` of the file's JSON value, or its text as it is if it is too
-    large to read whole, or invalid: ``shown_as`` tells the note why."""
-    text, truncated = ctx.head_text(limits.max_bytes)
-    if truncated:
-        note = f"{_size_note(ctx, limits)}; too large to {shown_as}"
+def _json_text(text: str, small: bool, note: str = "") -> TextView:
+    """JSON text, highlighted only if it comes from a small file: the HTML is
+    many times the size of the text, and takes seconds to make for a large one."""
+    if small:
         return _text_view(text, "json", note)
-    try:
-        value = json.loads(text)
-    except json.JSONDecodeError as exc:
-        return _text_view(text, "json", f"Invalid JSON: {exc}")
-    return show(value)
+    return TextView(text=text, language="json", note=note)
+
+
+def _parsed_json(
+    ctx: ItemContext,
+    limits: ViewLimits,
+    shown_as: str,
+    show: Callable[[Any, bool], View],
+) -> View:
+    """``show`` of the file's JSON value and whether the file is small.
+
+    A file over ``limits.max_unasked_bytes``, or of unknown size and longer
+    than that, is read whole only once the user agrees. One too large to read
+    whole shows its beginning as it is, and an invalid one its text:
+    ``shown_as`` tells the note why.
+    """
+
+    def beginning() -> View:
+        text, _ = ctx.head_text(limits.max_bytes)
+        note = f"{_size_note(ctx, limits)}; too large to {shown_as}"
+        return _json_text(text, True, note)
+
+    def shown(text: str) -> View:
+        small = len(text) <= limits.max_unasked_bytes
+        try:
+            value = json.loads(text)
+        except json.JSONDecodeError as exc:
+            return _json_text(text, small, f"Invalid JSON: {exc}")
+        return show(value, small)
+
+    def read_whole() -> View:
+        text, truncated = ctx.head_text(limits.max_whole_file_bytes)
+        return beginning() if truncated else shown(text)
+
+    size = ctx.size
+    if size is not None and size > limits.max_whole_file_bytes:
+        return beginning()
+    if size is None or size <= limits.max_unasked_bytes:
+        text, truncated = ctx.head_text(
+            min(limits.max_unasked_bytes, limits.max_whole_file_bytes)
+        )
+        if not truncated:
+            return shown(text)
+    amount = (
+        f"up to {format_size(limits.max_whole_file_bytes)}"
+        if size is None
+        else format_size(size)
+    )
+    return ViewWithConfirmation(
+        message=f"This reads the whole file ({amount}) and sends it to the browser.",
+        factory=read_whole,
+    )
 
 
 @view(format=Json, engine=PythonEngine, label="JSON tree", code=json_code)
 def json_view(ctx: ItemContext, options: FsspecOptions, limits: ViewLimits) -> View:
-    """JSON as a tree, or as text if it is too large or invalid."""
+    """JSON as a tree, or as text if it is too large or invalid. It asks first
+    if the file is large."""
     return _parsed_json(
-        ctx, limits, "show as a tree", lambda value: TreeView(value=value)
+        ctx, limits, "show as a tree", lambda value, small: TreeView(value=value)
     )
 
 
@@ -226,15 +271,16 @@ def json_view(ctx: ItemContext, options: FsspecOptions, limits: ViewLimits) -> V
 def json_formatted_view(
     ctx: ItemContext, options: FsspecOptions, limits: ViewLimits
 ) -> View:
-    """JSON indented and highlighted, or as it is if it is too large or
-    invalid. Its keys stay in the file's order. It shows the value Python
-    reads: e.g. ``1.50`` as ``1.5``, and a repeated key once, the last."""
+    """JSON indented, and highlighted if the file is small, or as it is if it
+    is too large or invalid. It asks first if the file is large. Its keys stay
+    in the file's order. It shows the value Python reads: e.g. ``1.50`` as
+    ``1.5``, and a repeated key once, the last."""
     return _parsed_json(
         ctx,
         limits,
         "format",
-        lambda value: _text_view(
-            json.dumps(value, indent=2, ensure_ascii=False), "json"
+        lambda value, small: _json_text(
+            json.dumps(value, indent=2, ensure_ascii=False), small
         ),
     )
 

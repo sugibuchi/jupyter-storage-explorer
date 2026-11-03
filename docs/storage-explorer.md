@@ -403,6 +403,9 @@ process id, e.g. `storage-explorer.2026-10-26.12345.log`. The files of the 14 da
 | Images (PNG, JPEG, GIF, …), see below                        | e.g. `png`   | Shown                           |              | Python (Pillow)                                                                        |
 | SVG images                                                   | `svg`        | Shown                           |              |                                                                                        |
 
+A JSON file over 1 MB asks before it is read whole, and is then not highlighted. Over 10 MB, you see its beginning as
+text.
+
 The formats of code and configuration files:
 
 | Format           | Name            | Files                  |
@@ -788,7 +791,7 @@ Views:
 | `tree_view="open"`            | The folder tree: `"open"`, `"closed"` (its button in the toolbar shows it) or `"disabled"` (no tree).                                |
 | `preview_panel="closed"`      | The preview panel: `"open"` starts with it open, so that clicking a file previews it; `"disabled"`: none, items open in new tabs (**View** in place of Preview). |
 | `layout="standard"`           | `"sidebar"`: a narrow layout, as in the launcher's side panel: Unsafe mode in the ⚙ menu, Up and the path on a bar of their own, the filter shown with its button (left of ⚙), the list with Size only by default, the pager below it. |
-| `view_limits=ViewLimits(...)` | How much views read and show (`views.ViewLimits`): `max_bytes`, `max_display_rows` (also the data browser's page size), `max_whole_file_bytes`, `max_live_rows`, `max_memory_rows`. |
+| `view_limits=ViewLimits(...)` | How much views read and show (`views.ViewLimits`): `max_bytes`, `max_display_rows` (also the data browser's page size), `max_whole_file_bytes`, `max_unasked_bytes`, `max_live_rows`, `max_memory_rows`. |
 | `max_browser_items=20_000`    | Folders with more items are filtered, sorted and paged by the kernel, one page at a time, instead of the browser (`None`: never).     |
 | `fetch_rows=...`              | How the data browser reads pages; see [Reading pages](#reading-pages).                                                                |
 

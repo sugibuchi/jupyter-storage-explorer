@@ -372,7 +372,7 @@ applied, and `fetch` returns rows `offset` to `offset + length` as a narwhals Da
    data in one pass), and reads all rows up to `offset + length` for others.
 
 Every view has `title` and `note`. `limits` (`ViewLimits`) says how much to read: `max_bytes`, `max_display_rows`,
-`max_whole_file_bytes`, `max_live_rows`, `max_memory_rows`. Lazy data (a polars LazyFrame, a DuckDB relation, a Spark
+`max_whole_file_bytes`, `max_unasked_bytes`, `max_live_rows`, `max_memory_rows`. Lazy data (a polars LazyFrame, a DuckDB relation, a Spark
 DataFrame) is queried as the browser pages; an eager library reads at most `max_memory_rows` rows and sets
 `more=True` when there were more.
 

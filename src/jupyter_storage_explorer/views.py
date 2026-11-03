@@ -52,6 +52,9 @@ class ViewLimits:
     max_whole_file_bytes : int, default 10 MiB
         Largest file read whole, e.g. images (sent to the browser) and Excel
         workbooks.
+    max_unasked_bytes : int, default 1 MiB
+        Largest JSON file viewed whole without asking first. Larger ones are
+        not highlighted, as the HTML is many times the size of the text.
     max_live_rows : int, default 5000
         The data browser (``QueryView``): in "auto" mode, data of at most
         this many rows is read once and kept in memory.
@@ -63,6 +66,7 @@ class ViewLimits:
     max_bytes: int = 64 * 1024
     max_display_rows: int = 100
     max_whole_file_bytes: int = 10 * 1024 * 1024
+    max_unasked_bytes: int = 1024 * 1024
     max_live_rows: int = 5000
     max_memory_rows: int = 100_000
 

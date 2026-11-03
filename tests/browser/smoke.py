@@ -45,10 +45,12 @@ if TYPE_CHECKING:
     from playwright.sync_api import Locator, Page
 
 # The demo storages, with two more folders of Scratch for paging: "some" is
-# paged by the browser, "many" (over max_browser_items) by the kernel, and one
-# with an image, a file JupyterLab has no text editor for by default.
+# paged by the browser, "many" (over max_browser_items) by the kernel, one with
+# an image, a file JupyterLab has no text editor for by default, and one of JSON
+# files too long for a tree's single level.
 EXPLORER = """\
 import base64
+import json
 import fsspec
 import demo_data
 from jupyter_storage_explorer import StorageExplorer
@@ -66,6 +68,8 @@ memory.pipe_file(
         "YPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
     ),
 )
+memory.pipe_file("/scratch/json/long.json", json.dumps(list(range(250))).encode())
+memory.pipe_file("/scratch/json/large.json", json.dumps(["x" * 100] * 95_000).encode())
 StorageExplorer(
     filesystems=storages,
     actions=demo_data.actions(),
@@ -373,6 +377,46 @@ def json_views(x: Explorer) -> None:
     text = x.preview.locator(".jse-text")
     # Pretty-printed: one key to a line, indented.
     expect(text).to_contain_text('\n    "name": "orders"')
+    x.preview.press("Escape")
+    expect(x.preview).to_be_hidden()
+
+
+@check
+def large_json(x: Explorer) -> None:
+    # A long array comes in ranges, whose items are drawn when opened.
+    x.go("json", storage="Scratch")
+    x.row("long.json").click()
+    x.el.locator(".jse-status-bar .jse-preview-btn").click()
+    tree = x.preview.locator(".jse-json")
+    expect(tree.locator("summary")).to_have_text(
+        ["[250]", "0 … 99", "100 … 199", "200 … 249"]
+    )
+    leaves = tree.locator(".jse-json-leaf")
+    expect(leaves).to_have_count(0)
+    tree.locator("summary", has_text="200 … 249").click()
+    expect(leaves).to_have_count(50)
+    # A large file asks first; then its ranges have ranges.
+    x.row("large.json").click()
+    prompt = x.preview.locator(".jse-prompt-message")
+    expect(prompt).to_contain_text("reads the whole file")
+    view = x.preview.get_by_role("button", name="View", exact=True)
+    view.click()
+    summaries = tree.locator("summary")
+    expect(summaries).to_have_count(11)
+    expect(summaries.first).to_have_text("[95000]")
+    expect(summaries.last).to_have_text("90000 … 94999")
+    # Formatted, it is indented without highlighting.
+    x.row("large.json").click(button="right")
+    x.menu_item("Preview as").hover()
+    x.page.locator(".jse-submenu .jse-menu-item:visible").filter(
+        has_text="Formatted JSON"
+    ).click()
+    expect(prompt).to_contain_text("reads the whole file")
+    view.click()
+    text = x.preview.locator(".jse-text")
+    expect(text).to_have_count(1)
+    expect(x.preview.locator(".jse-highlight")).to_have_count(0)
+    assert text.evaluate("e => e.textContent.startsWith('[\\n  \"xxx')")
     x.preview.press("Escape")
     expect(x.preview).to_be_hidden()
 
