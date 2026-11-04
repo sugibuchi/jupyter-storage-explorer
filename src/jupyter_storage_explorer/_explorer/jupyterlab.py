@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import TYPE_CHECKING, Any
 
 from fsspec.implementations.local import LocalFileSystem
 
-from jupyter_storage_explorer._errors import error_text
+from jupyter_storage_explorer._errors import error_text, log_failure
 from jupyter_storage_explorer._explorer import jupyterlab_files
 from jupyter_storage_explorer._explorer.common import within_top
 
@@ -19,6 +20,7 @@ if TYPE_CHECKING:
     # A configuration file's path, or a function giving it when opened.
     _Path = str | os.PathLike[str] | Callable[[], str | os.PathLike[str]]
 
+log = logging.getLogger(__name__)
 
 # The configuration files an explorer may offer in its settings menu, by key:
 # the launcher's settings (its tabs only), the user's actions, and the day's
@@ -126,7 +128,9 @@ class JupyterLabFilesMixin:
                 writable=content.get("settings") not in _READ_ONLY,
             )
         except Exception as exc:
-            return {"error": error_text(exc)}
+            error = error_text(exc)
+            log_failure(log, exc, "Cannot read %s: %s", content.get("path"), error)
+            return {"error": error}
         return {"model": model}
 
     def _jupyterlab_save(self, content: dict[str, Any]) -> dict[str, Any]:
@@ -154,7 +158,9 @@ class JupyterLabFilesMixin:
                 content=False,
             )
         except Exception as exc:
-            return {"error": error_text(exc)}
+            error = error_text(exc)
+            log_failure(log, exc, "Cannot save %s: %s", content.get("path"), error)
+            return {"error": error}
         if (
             not content.get("settings")
             and content.get("filesystem") == self._filesystem

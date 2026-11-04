@@ -12,6 +12,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from jupyter_storage_explorer import _infos, _paths
+from jupyter_storage_explorer._errors import reason
 from jupyter_storage_explorer._json import jsonable
 from jupyter_storage_explorer.filesystems.operation import (
     Measurement,
@@ -67,7 +68,7 @@ def scan(
                 if len(paths) > 1 and fs.isdir(path):
                     measurement.folders += 1
             except OSError as exc:
-                total.errors.append(f"{path}: {exc}")
+                total.errors.append(f"{path}: {reason(exc)}")
                 continue
             total.merge(measurement)
             if not measurement.complete:

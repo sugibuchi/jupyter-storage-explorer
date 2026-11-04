@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import contextlib
 import dataclasses
+import logging
 import os
 import tempfile
 import threading
@@ -26,6 +27,7 @@ from typing import TYPE_CHECKING, Any, TypeVar
 from fsspec.implementations.local import LocalFileSystem
 
 from jupyter_storage_explorer import _paths
+from jupyter_storage_explorer._errors import is_expected, log_failure, reason
 from jupyter_storage_explorer._jobs import properties
 from jupyter_storage_explorer.filesystems.mapper import MapperChain
 from jupyter_storage_explorer.filesystems.mappers import default_mappers
@@ -38,6 +40,8 @@ if TYPE_CHECKING:
 
     from jupyter_storage_explorer._jobs.operation_chain import OperationChain
     from jupyter_storage_explorer._jobs.progress import JobProgress
+
+log = logging.getLogger(__name__)
 
 
 @dataclasses.dataclass
@@ -498,6 +502,7 @@ class FileTasks:
         for the rest. ``from_jupyterlab``: the sources are on the Jupyter
         server's disk, dragged from JupyterLab's file browser (for ``check``)."""
         plans = []
+        traced = False
         for source_fs, source, name in copies:
             same = self.same_filesystem(source_fs, self.fs)
             if same and _paths.norm(source) == _paths.norm(self.root):
@@ -508,7 +513,7 @@ class FileTasks:
                 target = _paths.join(dest, _paths.safe_name(name))
                 is_folder = source_fs.isdir(source)
             except Exception as exc:
-                errors.append(f"{name}: {exc}")
+                traced = _add_error(errors, name, exc, traced)
                 continue
             refused = self._refused(
                 None if from_jupyterlab else source_fs, source, self.fs, target
@@ -634,6 +639,18 @@ class FileTasks:
 _Item = TypeVar("_Item")
 
 
+def _add_error(errors: list[str], name: str, exc: Exception, traced: bool) -> bool:
+    """Add an item's failure to ``errors``, and log it if it is the first
+    unexpected one, as ``traced`` tells: a lost connection can fail thousands
+    of items, and the stack trace of one says why. Returns the new ``traced``.
+    The job's end logs the first of its errors without a stack trace."""
+    errors.append(f"{name}: {reason(exc)}")
+    if traced or is_expected(exc):
+        return traced
+    log_failure(log, exc, "%s failed: %s", name, reason(exc))
+    return True
+
+
 def _do_each(
     progress: JobProgress,
     items: Sequence[_Item],
@@ -646,6 +663,7 @@ def _do_each(
     to ``errors`` ("name: reason") and the next item is done; a cancel stops
     at once. Returns None, or if the user cancelled, how it stopped."""
     progress.add_total(files=sum(n for n, _ in sizes), bytes=sum(b for _, b in sizes))
+    traced = False
     for item, size in zip(items, sizes, strict=True):
         name = _paths.basename(item.source if isinstance(item, _Copy) else item[0])
         started = False
@@ -659,7 +677,7 @@ def _do_each(
             # Stopped during an item: e.g. a folder partly copied or deleted.
             return _Stop(incomplete=name if started else None)
         except Exception as exc:
-            errors.append(f"{name}: {exc}")
+            traced = _add_error(errors, name, exc, traced)
     return None
 
 

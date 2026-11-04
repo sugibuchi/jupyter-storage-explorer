@@ -954,9 +954,10 @@ The tabs and the side panel are kernels of their own, each writing to files of i
 
 What each level logs, with a module's own `logging.getLogger(__name__)`:
 
-- ERROR: `log.exception` for the machinery's failures, e.g. a job's or a load's.
-- WARNING: errors the user sees too, e.g. a view refused, a listing failed, a transfer refused, a plugin or actions
-  file left out. A view's traceback is added at DEBUG only.
+- ERROR: `log.exception` for the machinery's failures, e.g. a job's or a load's. Also, with its stack trace, a storage
+  or a library failing while the user waits, e.g. a timeout.
+- WARNING: everyday conditions the user sees too, e.g. a view refused, a file gone, a folder without access, a transfer
+  refused, a plugin or actions file left out. Their stack traces are added at DEBUG only.
 - INFO: what the user does, with its time: an explorer created, plugins and the user's actions loaded or reloaded,
   views, the data browser's requests, jobs started and ended with their counts, and the launcher's tabs opened.
 - DEBUG: folders listed, items detected, jobs queued, and each message from the page with its time.
@@ -965,6 +966,10 @@ Rules for new records:
 
 - Never log storage options, credentials, options' values or file contents. Storages are named with their protocol.
 - A listing is logged with its count of items, never the items: folders may hold tens of thousands.
+- Log an operation's failure with `_errors.log_failure`, which picks the level by the exception's type.
+- It also masks the secrets of URLs, as error messages can hold a whole signed URL.
+- After a name, write `_errors.reason(exc)`, never `{exc}`: an exception such as `TimeoutError()` has no message.
+- A job logs one stack trace, of its first unexpected failure: a lost connection can fail thousands of items.
 - Plugins and users' actions files log through `util.get_logger(__name__)`, also exported by the top level and
   `actions`. It puts their loggers under `jupyter_storage_explorer`, which their packages' names are not.
 - The launcher's package logs to `jupyter_storage_explorer.launcher`, so that the Logging menu's level applies. It
