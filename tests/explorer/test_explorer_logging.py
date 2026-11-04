@@ -12,6 +12,9 @@ from explorers import make
 
 from jupyter_storage_explorer import _logs
 from jupyter_storage_explorer._explorer.states import ExplorerStates
+from jupyter_storage_explorer._jobs.progress import JobProgress
+from jupyter_storage_explorer._jobs.tasks import _do_each
+from jupyter_storage_explorer.base import ItemContext
 
 log = logging.getLogger("jupyter_storage_explorer.tests")
 
@@ -220,6 +223,65 @@ class TestRecords:
         mem_explorer._open_preview("/data/a.csv", "image")
         warnings = records(logging.WARNING)
         assert any(m.startswith("/data/a.csv cannot be previewed:") for m in warnings)
+
+    def test_a_listing_timing_out(self, mem_explorer, caplog, monkeypatch):
+        def timeout(*args, **kwargs):
+            raise TimeoutError
+
+        monkeypatch.setattr(mem_explorer, "_ls", timeout)
+        caplog.set_level(logging.WARNING, logger=_logs.LOGGER_NAME)
+        mem_explorer.message({"type": "refresh"})
+        record = next(r for r in caplog.records if "Cannot list" in r.getMessage())
+        assert record.levelname == "ERROR"
+        assert ": TimeoutError\n" in record.getMessage()
+        assert mem_explorer._error.endswith(": TimeoutError")
+
+    def test_a_view_timing_out(self, mem_explorer, caplog, monkeypatch):
+        def timeout(*args, **kwargs):
+            raise TimeoutError
+
+        monkeypatch.setattr(ItemContext, "head", timeout)
+        caplog.set_level(logging.WARNING, logger=_logs.LOGGER_NAME)
+        mem_explorer._open_preview("/data/notes.md")
+        record = next(r for r in caplog.records if "be previewed" in r.getMessage())
+        assert record.levelname == "ERROR"
+        assert "Traceback" in record.getMessage()
+
+    def test_a_download_failing(self, mem_explorer, caplog, monkeypatch):
+        def timeout(*args, **kwargs):
+            raise TimeoutError
+
+        sent = []
+        monkeypatch.setattr(mem_explorer, "_read_whole", timeout)
+        monkeypatch.setattr(mem_explorer, "send", lambda m, *a: sent.append(m))
+        caplog.set_level(logging.WARNING, logger=_logs.LOGGER_NAME)
+        mem_explorer._download(["/data/a.csv"])
+        assert sent[0]["error"] == "a.csv: TimeoutError"
+        [record] = [r for r in caplog.records if "Cannot download" in r.getMessage()]
+        assert record.levelname == "ERROR"
+
+    def test_a_job_logs_one_stack_trace(self, caplog):
+        def timeout(item):
+            raise TimeoutError
+
+        caplog.set_level(logging.WARNING, logger=_logs.LOGGER_NAME)
+        errors = []
+        items = [("/a",), ("/b",), ("/c",)]
+        _do_each(JobProgress(), items, [(1, 0)] * 3, timeout, errors)
+        assert errors == ["a: TimeoutError", "b: TimeoutError", "c: TimeoutError"]
+        [record] = caplog.records
+        assert record.levelname == "ERROR"
+        assert "Traceback" in record.getMessage()
+
+    def test_a_job_logs_no_stack_trace_of_an_expected_error(self, caplog):
+        def gone(item):
+            raise FileNotFoundError(item[0])
+
+        caplog.set_level(logging.WARNING, logger=_logs.LOGGER_NAME)
+        errors = []
+        _do_each(JobProgress(), [("/a",)], [(1, 0)], gone, errors)
+        assert errors == ["a: /a"]
+        assert not caplog.records
 
     def test_a_transfer_refused(self, memfs, records):
         memfs.pipe_file("/d/a.txt", b"a")

@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import TYPE_CHECKING, Any
 
 from jupyter_storage_explorer import _paths
-from jupyter_storage_explorer._errors import error_text
+from jupyter_storage_explorer._errors import error_text, log_failure, reason
 from jupyter_storage_explorer._explorer.common import explorers
 from jupyter_storage_explorer._jobs import properties
 from jupyter_storage_explorer._jobs.tasks import FileTasks, Plan
@@ -18,6 +19,7 @@ if TYPE_CHECKING:
 
     from fsspec import AbstractFileSystem
 
+log = logging.getLogger(__name__)
 
 # Largest file that can be downloaded: it passes through kernel memory and the
 # notebook's connection in one message.
@@ -51,7 +53,9 @@ class FileRequestsMixin:
                     path, _MAX_DOWNLOAD_BYTES, to="download", done="downloaded"
                 )
             except Exception as exc:
-                reply["error"] = f"{_paths.basename(path)}: {exc}"
+                why = reason(exc)
+                log_failure(log, exc, "Cannot download %s: %s", path, why)
+                reply["error"] = f"{_paths.basename(path)}: {why}"
                 self.send(reply)
             else:
                 self.send(reply, [data])
@@ -178,7 +182,7 @@ class FileRequestsMixin:
                 else:
                     fs, path = self._mappers.locate(location, [self._fs, *others])
             except Exception as exc:
-                errors.append(f"{_paths.basename(path or url or '')}: {exc}")
+                errors.append(f"{_paths.basename(path or url or '')}: {reason(exc)}")
                 continue
             sources.append((fs, path))
             if url is not None:
@@ -237,7 +241,9 @@ class FileRequestsMixin:
             incoming = self._incoming.pop(upload_id)
         except Exception as exc:
             self._incoming.discard(upload_id)
-            return {"error": f"{_paths.basename(content['name'])}: {exc}"}
+            why = reason(exc)
+            log_failure(log, exc, "Cannot upload %s: %s", content["name"], why)
+            return {"error": f"{_paths.basename(content['name'])}: {why}"}
         tasks = FileTasks(
             incoming.fs, self._root, self._operations, mappers=self._mappers
         )

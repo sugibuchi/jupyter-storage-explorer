@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from jupyter_storage_explorer import _infos, _paths
+from jupyter_storage_explorer._errors import log_failure, reason
 from jupyter_storage_explorer._explorer.common import within_top
 from jupyter_storage_explorer._explorer.listing import Listing
 from jupyter_storage_explorer.base import ItemContext
@@ -134,9 +135,10 @@ class FoldersMixin:
         try:
             infos = self._ls(path, fs)
         except Exception as exc:
-            log.warning("Cannot list %s: %s", path, exc)
+            why = reason(exc)
+            log_failure(log, exc, "Cannot list %s: %s", path, why)
             columns = self._make_listing(path, [], fs)
-            return _Listed(fs, path, columns, f"Cannot list {path}: {exc}", tree, None)
+            return _Listed(fs, path, columns, f"Cannot list {path}: {why}", tree, None)
         tree[path] = self._subfolders(infos, fs)
         columns = self._make_listing(path, infos, fs)
         dir_format = self._directory_format(path, infos, fs)
@@ -243,8 +245,9 @@ class FoldersMixin:
             try:
                 dirs = self._subfolders(self._ls(path, fs), fs)
             except Exception as exc:
-                log.warning("Cannot list %s for the tree: %s", path, exc)
-                return [], f"Cannot list {path}: {exc}"
+                why = reason(exc)
+                log_failure(log, exc, "Cannot list %s for the tree: %s", path, why)
+                return [], f"Cannot list {path}: {why}"
             log.debug("Listed %s for the tree: %d folders", path, len(dirs))
             return dirs, ""
 

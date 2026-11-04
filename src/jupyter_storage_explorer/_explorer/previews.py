@@ -14,7 +14,7 @@ import time
 from typing import TYPE_CHECKING, Any, NamedTuple
 
 from jupyter_storage_explorer import _paths
-from jupyter_storage_explorer._errors import error_text
+from jupyter_storage_explorer._errors import error_text, log_failure
 from jupyter_storage_explorer._explorer.common import explorers
 from jupyter_storage_explorer._json import jsonable
 from jupyter_storage_explorer._query.data_query import DataQuery
@@ -175,14 +175,7 @@ def _failed(
     error, logged as the item ``what`` (e.g. "cannot be previewed"), and
     ``shown``, what they made so far, closed."""
     preview["error"] = error_text(exc)
-    # The user sees the error; its traceback is for DEBUG.
-    log.warning(
-        "%s %s: %s",
-        preview["path"],
-        what,
-        preview["error"],
-        exc_info=log.isEnabledFor(logging.DEBUG),
-    )
+    log_failure(log, exc, "%s %s: %s", preview["path"], what, preview["error"])
     # Nothing shows it: released at once.
     if shown is not None:
         shown.close()

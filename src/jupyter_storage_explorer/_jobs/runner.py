@@ -25,7 +25,7 @@ import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from jupyter_storage_explorer._errors import error_text
+from jupyter_storage_explorer._errors import error_text, redacted
 from jupyter_storage_explorer._jobs.progress import JobProgress
 from jupyter_storage_explorer.filesystems.operation import OperationCancelled
 
@@ -275,5 +275,5 @@ def _log_end(job: Job, state: str, result: dict[str, Any], seconds: float) -> No
             job.id,
             job.title,
             len(errors),
-            errors[0],
+            redacted(errors[0]),
         )
