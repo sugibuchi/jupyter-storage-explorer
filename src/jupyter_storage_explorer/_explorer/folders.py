@@ -394,6 +394,7 @@ class FoldersMixin:
         return listing.query(
             text=content.get("text") or "",
             regex=bool(content.get("regex")),
+            case_sensitive=bool(content.get("case_sensitive")),
             sort=content.get("sort", "name"),
             asc=content.get("asc", True),
             page=int(content.get("page", 0)),

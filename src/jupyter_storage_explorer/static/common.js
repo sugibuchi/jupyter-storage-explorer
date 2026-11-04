@@ -189,28 +189,37 @@ function confirmButtons(label) {
 }
 
 // A one-line filter: a text field with a search icon (not a button) and a
-// clear button (✕, while it has text), and a ".*" toggle for regular expressions. Matching is always
-// case-insensitive. onChange() is called as it changes. test(text) tells
-// whether a name matches: everything matches while the field is empty, or
-// while its regular expression is invalid (marked in red). active() tells
-// whether it filters; clear() empties it. Esc in the field clears it too.
-// For filtering elsewhere (the kernel): query() gives {text, regex} while it
-// filters, else null, and invalid(message) marks the field as invalid until
-// it changes.
+// clear button (✕, while it has text), an "Aa" toggle for matching case, off at
+// first, and a ".*" toggle for regular expressions. onChange() is called as it
+// changes. test(text) tells whether a name matches: everything matches while
+// the field is empty, or while its regular expression is invalid (marked in
+// red). active() tells whether it filters; clear() empties it. Esc in the field
+// clears it too. For filtering elsewhere (the kernel): query() gives {text,
+// regex, caseSensitive} while it filters, else null, and invalid(message) marks
+// the field as invalid until it changes.
 function createFilter({ placeholder = "Filter", onChange = () => {} } = {}) {
   const input = h("input", { type: "text", className: "jse-filter-input", placeholder, spellcheck: false });
   const clearBtn = h("button", { type: "button", className: "jse-filter-clear", textContent: "✕", title: "Clear", hidden: true });
-  const regexBtn = h("button", {
-    type: "button",
-    className: "jse-btn jse-filter-regex",
-    textContent: ".*",
-    title: "Regular expression (case-insensitive)",
-  });
-  regexBtn.setAttribute("aria-pressed", "false");
+  // A toggle button, calling set(on) when clicked.
+  const toggle = (className, textContent, title, set) => {
+    const btn = h("button", { type: "button", className: `jse-btn jse-filter-toggle ${className}`, textContent, title });
+    btn.setAttribute("aria-pressed", "false");
+    btn.addEventListener("click", () => {
+      const on = !btn.classList.contains("jse-on");
+      btn.classList.toggle("jse-on", on);
+      btn.setAttribute("aria-pressed", String(on));
+      set(on);
+      update();
+    });
+    return btn;
+  };
+  let regex = false;
+  let caseSensitive = false;
+  const caseBtn = toggle("jse-filter-case", "Aa", "Match case", (on) => (caseSensitive = on));
+  const regexBtn = toggle("jse-filter-regex", ".*", "Regular expression", (on) => (regex = on));
   const searchIcon = icon("search");
   searchIcon.classList.add("jse-filter-icon");
-  const el = h("div", { className: "jse-filter" }, h("span", { className: "jse-filter-field" }, searchIcon, input, clearBtn), regexBtn);
-  let regex = false;
+  const el = h("div", { className: "jse-filter" }, h("span", { className: "jse-filter-field" }, searchIcon, input, clearBtn), caseBtn, regexBtn);
   let test = () => true;
   let active = false;
 
@@ -223,7 +232,7 @@ function createFilter({ placeholder = "Filter", onChange = () => {} } = {}) {
     active = false;
     if (text && regex) {
       try {
-        const re = new RegExp(text, "i");
+        const re = new RegExp(text, caseSensitive ? "" : "i");
         test = (name) => re.test(name);
         active = true;
       } catch (err) {
@@ -231,8 +240,8 @@ function createFilter({ placeholder = "Filter", onChange = () => {} } = {}) {
         input.title = err.message; // e.g. "Invalid regular expression: /a(/i: Unterminated group"
       }
     } else if (text) {
-      const needle = text.toLowerCase();
-      test = (name) => name.toLowerCase().includes(needle);
+      const needle = caseSensitive ? text : text.toLowerCase();
+      test = caseSensitive ? (name) => name.includes(needle) : (name) => name.toLowerCase().includes(needle);
       active = true;
     }
     if (notify) onChange();
@@ -256,12 +265,6 @@ function createFilter({ placeholder = "Filter", onChange = () => {} } = {}) {
     clear();
     input.focus({ preventScroll: true });
   });
-  regexBtn.addEventListener("click", () => {
-    regex = !regex;
-    regexBtn.classList.toggle("jse-on", regex);
-    regexBtn.setAttribute("aria-pressed", String(regex));
-    update();
-  });
   function invalid(message) {
     input.classList.add("jse-invalid");
     input.title = message;
@@ -271,7 +274,7 @@ function createFilter({ placeholder = "Filter", onChange = () => {} } = {}) {
     el,
     test: (name) => test(name),
     active: () => active,
-    query: () => (active ? { text: input.value, regex } : null),
+    query: () => (active ? { text: input.value, regex, caseSensitive } : null),
     invalid,
     clear,
     focus: () => input.focus({ preventScroll: true }),

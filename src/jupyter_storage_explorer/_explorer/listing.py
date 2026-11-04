@@ -82,6 +82,7 @@ class Listing:
         *,
         text: str = "",
         regex: bool = False,
+        case_sensitive: bool = False,
         sort: str = "name",
         asc: bool = True,
         page: int = 0,
@@ -89,9 +90,10 @@ class Listing:
         labels: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         """A page of the items whose names match ``text`` (a substring, or a
-        regular expression with ``regex``; case is ignored), sorted by
-        ``sort`` with folders first; "format" by the formats' ``labels``
-        (name -> label, as the list shows them; else their names).
+        regular expression with ``regex``; case is ignored unless
+        ``case_sensitive``), sorted by ``sort`` with folders first; "format" by
+        the formats' ``labels`` (name -> label, as the list shows them; else
+        their names).
 
         Returns {"listing": the page's columns, as ``_make_listing``'s,
         "matching", "total", "page"}, the page number limited to those there
@@ -104,12 +106,16 @@ class Listing:
         out: dict[str, Any] = {}
         if text and regex:
             try:
-                search = re.compile(text, re.IGNORECASE).search
+                flags = 0 if case_sensitive else re.IGNORECASE
+                search = re.compile(text, flags).search
             except re.error as exc:
                 out["filter_error"] = f"Invalid regular expression: {exc}"
             else:
                 names = self.columns["names"]
                 order = [i for i in order if search(names[i])]
+        elif text and case_sensitive:
+            names = self.columns["names"]
+            order = [i for i in order if text in names[i]]
         elif text:
             needle, lower = text.lower(), self._lower()
             order = [i for i in order if needle in lower[i]]

@@ -58,6 +58,11 @@
   margin-left: 2px;
 }
 
+/* There its bar holds only the filter: it takes the whole width. */
+.jse-sidebar .jse-filter {
+  max-width: none;
+}
+
 .jse-sidebar .jse-list-pane > .jse-pager {
   justify-content: center;
   margin-left: 0;

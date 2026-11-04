@@ -1,4 +1,4 @@
-// The toolbar: the tree's button, bookmarks, Up, Refresh, the folder's path,
+// The toolbar: the tree's button, bookmarks, Refresh, Up, the folder's path,
 // Unsafe mode, and the settings menu: the list's Columns, "Edit
 // configuration" in the launcher's tabs, "About". The sidebar layout has two narrower bars: the storage
 // chooser (slot), bookmarks, Refresh, the filter button (the list's filter,
@@ -21,7 +21,7 @@ function createToolbar(x) {
   const slot = h("div", { className: "jse-storage-slot" });
   const el = sidebar
     ? h("div", { className: "jse-toolbar" }, treeBtn, slot, x.bookmarks.button, refreshBtn, filterBtn, settingsBtn)
-    : h("div", { className: "jse-toolbar" }, treeBtn, x.bookmarks.button, upBtn, refreshBtn, pathEl, x.unsafe.el, settingsBtn);
+    : h("div", { className: "jse-toolbar" }, treeBtn, x.bookmarks.button, refreshBtn, upBtn, pathEl, x.unsafe.el, settingsBtn);
   const pathBar = sidebar ? h("div", { className: "jse-path-bar" }, upBtn, pathEl) : null;
 
   // In the sidebar layout, Unsafe mode is in the settings menu: while it is

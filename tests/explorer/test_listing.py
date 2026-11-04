@@ -153,6 +153,14 @@ class TestQuery:
             "File2.csv",
         ]
 
+    def test_text_filter_matching_case(self, listing):
+        assert names(listing.query(text="File", case_sensitive=True)) == ["File2.csv"]
+        assert names(listing.query(text="FILE", case_sensitive=True)) == []
+
+    def test_regex_filter_matching_case(self, listing):
+        page = listing.query(text=r"^F\w+\d\.", regex=True, case_sensitive=True)
+        assert names(page) == ["File2.csv"]
+
     def test_invalid_regex_filters_nothing(self, listing):
         page = listing.query(text="a(", regex=True)
         assert page["filter_error"].startswith("Invalid regular expression")
