@@ -116,8 +116,8 @@ StorageExplorer(
 
 ### Filter
 
-Type above the list to show the names containing the text. Text with **.\*** is a regular expression. ✕ or Esc clears
-the filter.
+Type above the list to show the names containing the text. Case is ignored unless **Aa** is on. Text with **.\*** is a
+regular expression. ✕ or Esc clears the filter.
 
 <img src="figs/using-filter.png" width="562" alt="The list filtered with a regular expression">
 

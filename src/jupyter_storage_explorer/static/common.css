@@ -301,12 +301,12 @@
   outline-color: var(--jse-error);
 }
 
-.jse-filter-regex {
+.jse-filter-toggle {
   font-family: var(--jp-code-font-family, monospace);
 }
 
-.jse-filter-regex.jse-on,
-.jse-filter-regex.jse-on:hover:not(:disabled) {
+.jse-filter-toggle.jse-on,
+.jse-filter-toggle.jse-on:hover:not(:disabled) {
   background: var(--jse-accent-bg);
 }
 

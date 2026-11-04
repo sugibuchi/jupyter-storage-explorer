@@ -213,6 +213,9 @@ def browse(x: Explorer) -> None:
     expect(x.el.locator(".jse-crumb")).to_have_text(
         ["/sales-lake", "curated", "customers"]
     )
+    # Up is right before the path.
+    path = x.el.locator(".jse-toolbar .jse-path")
+    assert path.evaluate("e => e.previousElementSibling.title") == "Parent directory"
     x.el.locator(".jse-toolbar button[title='Parent directory']").click()
     expect(x.el.locator(".jse-crumb").last).to_have_text("curated")
     x.el.locator(".jse-crumb", has_text="/sales-lake").click()
@@ -321,6 +324,17 @@ def filter_list(x: Explorer) -> None:
     expect(x.names).to_have_text(["orders_2026-07.csv", "orders_2026-09.csv"])
     field.press("Escape")  # clears it
     expect(x.names).to_have_text(months)
+    x.el.locator(".jse-list-pane .jse-filter-regex").click()
+    # Case is ignored, until the button says otherwise.
+    match_case = x.el.locator(".jse-list-pane .jse-filter-case")
+    field.fill("ORDERS")
+    expect(x.names).to_have_text(months)
+    match_case.click()
+    expect(x.names).to_have_count(0)
+    field.fill("orders_2026-08")
+    expect(x.names).to_have_text(["orders_2026-08.csv"])
+    match_case.click()
+    field.press("Escape")
 
 
 @check
@@ -340,9 +354,18 @@ def paging(x: Explorer) -> None:
     expect(x.names.first).to_have_text("file_100.txt")
     x.el.locator(".jse-list th", has_text="Name").click()
     expect(x.names.first).to_have_text("file_249.txt")
-    x.el.locator(".jse-list-pane .jse-filter-input").fill("file_24")
+    field = x.el.locator(".jse-list-pane .jse-filter-input")
+    field.fill("file_24")
     expect(label).to_be_hidden()  # one page
     expect(x.names).to_have_count(10)
+    # The kernel's filter matches case too, when asked.
+    field.fill("FILE_24")
+    expect(x.names).to_have_count(10)
+    match_case = x.el.locator(".jse-list-pane .jse-filter-case")
+    match_case.click()
+    expect(x.names).to_have_count(0)
+    match_case.click()
+    field.press("Escape")
 
 
 # --- Previews and data ---
@@ -2461,6 +2484,19 @@ def side_panel(lab: Lab, page: Page) -> None:
     expect(field).to_be_focused()
     field.press_sequentially("cur")
     expect(row).to_have_count(1)
+    # It takes the bar's whole width, with both of its buttons.
+    match_case = side.locator(".jse-list-pane .jse-filter-case")
+    expect(match_case).to_be_visible()
+    match_case.click()
+    field.fill("CUR")
+    curated = row.filter(has=page.get_by_text("curated", exact=True))
+    expect(curated).to_have_count(0)
+    match_case.click()
+    expect(curated).to_have_count(1)
+    bar_box = side.locator(".jse-list-pane .jse-pane-bar").bounding_box()
+    filter_box = side.locator(".jse-list-pane .jse-filter").bounding_box()
+    assert bar_box is not None and filter_box is not None
+    assert filter_box["width"] > bar_box["width"] - 20
     filter_btn.click()
     expect(field).to_be_hidden()
     expect(row.filter(has=page.get_by_text("landing", exact=True))).to_be_visible()

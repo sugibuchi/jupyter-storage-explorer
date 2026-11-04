@@ -165,6 +165,7 @@ function createList(x) {
       version: l.version,
       text: query?.text ?? "",
       regex: query?.regex ?? false,
+      case_sensitive: query?.caseSensitive ?? false,
       sort: sort.key,
       asc: sort.asc,
       page: wanted,
